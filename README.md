@@ -1,6 +1,8 @@
-# CodeFig
-
-A powerful Figma plugin for running TypeScript/JavaScript scripts with advanced variable management capabilities, built for modern design systems and enterprise environments.
+<div align="center">
+  <img src="icon-16x16@512px.png" alt="CodeFig Icon" width="64" height="64">
+  <h1>CodeFig</h1>
+  <p><em>A powerful Figma plugin for running TypeScript/JavaScript scripts with advanced variable management capabilities, built for modern design systems and enterprise environments.</em></p>
+</div>
 
 ## 🎯 What is CodeFig?
 
