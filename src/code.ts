@@ -1,3 +1,14 @@
+// Debug logging functions to remove source references
+function debugLog(message: string, ...args: any[]) {
+  const log = console.log.bind(console);
+  setTimeout(() => log('%cCodeFig: ' + message, 'color: #0066cc; font-weight: bold;', ...args), 0);
+}
+
+function debugError(message: string, ...args: any[]) {
+  const error = console.error.bind(console);
+  setTimeout(() => error('%cCodeFig: ' + message, 'color: #cc0000; font-weight: bold;', ...args), 0);
+}
+
 // Show the UI
 figma.showUI(__html__, { 
   width: 1000, 
@@ -8,6 +19,7 @@ figma.showUI(__html__, {
 
 // Handle messages from the UI
 figma.ui.onmessage = (msg) => {
+  debugLog('Backend: Received message type:', msg.type);
   if (msg.type === 'LIST') {
     // Get saved scripts and last opened script from client storage
     Promise.all([
@@ -22,27 +34,64 @@ figma.ui.onmessage = (msg) => {
     });
   }
 
-  if (msg.type === 'SAVE') {
-    // Save a script
-    figma.clientStorage.getAsync('userScripts').then((scripts) => {
-      const userScripts = scripts || [];
-      const existingIndex = userScripts.findIndex((s: any) => s.name === msg.name);
-      
-      const scriptData = {
+    if (msg.type === 'SAVE') {
+      // Save a script
+      debugLog('Backend: Received SAVE request for:', msg.name);
+      debugLog('Backend: SAVE request data:', {
         name: msg.name,
-        code: msg.code,
-        type: 'user'
-      };
+        codeLength: msg.code ? msg.code.length : 'undefined',
+        codePreview: msg.code ? msg.code.substring(0, 50) + '...' : 'undefined',
+        type: msg.type
+      });
+      
+      figma.clientStorage.getAsync('userScripts').then((scripts) => {
+        const userScripts = scripts || [];
+        
+        // If oldName is provided, look for the script by oldName (for renames)
+        // Otherwise, look for the script by current name
+        const searchName = msg.oldName || msg.name;
+        const existingIndex = userScripts.findIndex((s: any) => s.name === searchName);
+        
+        const scriptData = {
+          name: msg.name,
+          code: msg.code,
+          type: 'user'
+        };
 
-      if (existingIndex >= 0) {
-        userScripts[existingIndex] = scriptData;
-      } else {
-        userScripts.push(scriptData);
-      }
+        if (existingIndex >= 0) {
+          userScripts[existingIndex] = scriptData;
+          debugLog('Backend: Updated existing script' + (msg.oldName ? ` (renamed from ${msg.oldName} to ${msg.name})` : ''));
+        } else {
+          userScripts.push(scriptData);
+          debugLog('Backend: Added new script');
+        }
 
-      figma.clientStorage.setAsync('userScripts', userScripts);
-    });
-  }
+        debugLog('Backend: Saving to storage...');
+        
+        figma.clientStorage.setAsync('userScripts', userScripts).then(() => {
+          debugLog('Backend: Save successful, sending confirmation');
+          // Confirm save completed
+          figma.ui.postMessage({
+            type: 'SAVE_CONFIRMED',
+            scriptData: scriptData
+          });
+        }).catch((error) => {
+          debugError('Backend: Save failed:', error);
+          figma.ui.postMessage({
+            type: 'SAVE_FAILED',
+            error: error.message,
+            scriptName: msg.name
+          });
+        });
+      }).catch((error) => {
+        debugError('Backend: Failed to load user scripts:', error);
+        figma.ui.postMessage({
+          type: 'SAVE_FAILED',
+          error: error.message,
+          scriptName: msg.name
+        });
+      });
+    }
 
   if (msg.type === 'DELETE') {
     // Delete a script
@@ -73,7 +122,7 @@ figma.ui.onmessage = (msg) => {
         // Remove simple variable type annotations
         jsCode = jsCode.replace(/:\s*\w+(\s*=)/g, '$1');
         
-        console.log('Applied basic TypeScript transformations');
+        debugLog('Backend: Applied basic TypeScript transformations');
       }
       
       // Create a function that has access to Figma API
@@ -96,8 +145,8 @@ figma.ui.onmessage = (msg) => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       figma.notify(`Script error: ${errorMessage} 😳`, { error: true });
-      console.error('Script execution error:', error);
-      console.error('Code that failed:', msg.code);
+      debugError('Backend: Script execution error:', error);
+      debugError('Backend: Code that failed:', msg.code);
     }
   }
 

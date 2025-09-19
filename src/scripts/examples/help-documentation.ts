@@ -6,12 +6,11 @@
 // 2. Click "New Script" to create your own custom script
 // 3. Write TypeScript or JavaScript code in the editor
 // 4. Click "Run" or press Cmd/Ctrl+R to execute
-// 5. Save your scripts for future use
+// 5. Your scripts are automatically saved as you type!
 
 // === KEYBOARD SHORTCUTS ===
 // 🔍 Cmd/Ctrl + /: Search scripts (focus search bar)
 // ▶️ Cmd/Ctrl + R: Run current script
-// 💾 Cmd/Ctrl + S: Save current script
 // ⤵️ Cmd/Ctrl + E: Export current script as JSON file
 // ⤴️ Cmd/Ctrl + I: Import script from JSON file
 // ➕ Cmd/Ctrl + N: Create new script
@@ -36,6 +35,7 @@
 // 📁 Example Scripts: Pre-built scripts for common tasks
 // 📝 User Scripts: Your custom saved scripts
 // 🔄 Figcode remember your last opened script
+// 💾 Auto-save: Your work is automatically saved as you type
 // 📤 Export/Import: Share scripts as JSON files
 // ✏️ Rename: Click script titles to rename (user scripts only)
 
@@ -73,7 +73,7 @@ if (variable) {
 // 💡 Check Example Scripts for inspiration and ready-to-use code
 // 🐛 Use console.log() and check browser dev tools for debugging
 // 📋 Copy useful code snippets from examples to your scripts
-// 🔄 Scripts auto-save your progress - no need to worry about losing work
+// 💾 Your work is automatically saved - no need to manually save!
 // 📱 Use figma.notify() instead of alert() for better UX
 
 // === EXAMPLE: TypeScript-powered variable listing ===

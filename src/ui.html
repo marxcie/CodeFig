@@ -87,10 +87,6 @@
         border: none;
       }
       
-      .search-input:focus {
-        /* border-color: #e6e6e6; */
-        /* background: #f8f9fa; */
-      }
       
       .search-input::placeholder {
         color: #000;
@@ -394,7 +390,6 @@
               <div class="script-status" id="scriptStatus">Ready</div>
             </div>
             <div class="header-right">
-              <button class="btn secondary" id="saveBtn" disabled title="Save Script (⌘S)">Save</button>
               <button class="btn danger" id="deleteBtn" disabled title="Delete Script">Delete</button>
               <button class="btn primary" id="runBtn" title="Run Script (⌘R)">Run</button>
             </div>
@@ -432,6 +427,7 @@
       let originalCode = '';
       let isResizing = false;
       let startX, startWidth; // Global scope for resizing
+      let autosaveTimeout = null; // For debounced autosave
 
       // DOM elements
       const scriptList = document.getElementById('scriptList');
@@ -440,7 +436,6 @@
       const codeTextarea = document.getElementById('code');
       const newScriptBtn = document.getElementById('newScript');
       const runBtn = document.getElementById('runBtn');
-      const saveBtn = document.getElementById('saveBtn');
       const deleteBtn = document.getElementById('deleteBtn');
       const exportBtn = document.getElementById('exportBtn');
       const importBtn = document.getElementById('importBtn');
@@ -471,13 +466,30 @@
       }, 100);
 
       function post(type, data = {}) {
-        parent.postMessage({ pluginMessage: { type, ...data } }, '*');
+        // Ensure the message type doesn't get overwritten by data.type
+        const { type: dataType, ...cleanData } = data;
+        const message = { pluginMessage: { type, ...cleanData } };
+        debugLog('Posting message:', type, 'with data keys:', Object.keys(cleanData));
+        debugLog('Full message being sent:', JSON.stringify(message, null, 2));
+        parent.postMessage(message, '*');
+      }
+
+      // Debug logging functions to remove source references
+      function debugLog(message, ...args) {
+        const log = console.log.bind(console);
+        setTimeout(() => log('%cCodeFig: ' + message, 'color: #0066cc; font-weight: bold;', ...args), 0);
+      }
+
+      function debugError(message, ...args) {
+        const error = console.error.bind(console);
+        setTimeout(() => error('%cCodeFig: ' + message, 'color: #cc0000; font-weight: bold;', ...args), 0);
       }
 
       // Update script list in sidebar
       function updateScriptList(searchTerm = '') {
         const filteredScripts = allScripts.filter(script =>
-          script.name.toLowerCase().includes(searchTerm.toLowerCase())
+          script.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !script.isTemporary // Don't show temporary scripts in the list
         );
 
         if (filteredScripts.length === 0 && searchTerm) {
@@ -547,7 +559,7 @@
       }
 
       function selectScriptDirectly(script) {
-        console.log('Selecting script:', script);
+        debugLog('Selecting script:', script);
         currentScript = script;
         code.setValue(script.code || '');
         originalCode = script.code || '';
@@ -567,8 +579,12 @@
         } else {
           // Hide badge for user scripts (including new/temporary scripts)
           scriptStatus.style.display = 'none';
-          // Add editable class for user scripts
-          scriptTitle.classList.add('editable');
+          // Add editable class for user scripts (but not temporary ones)
+          if (!script.isTemporary) {
+            scriptTitle.classList.add('editable');
+          } else {
+            scriptTitle.classList.remove('editable');
+          }
         }
         
         // Save this as the last opened script (but not for temporary scripts)
@@ -609,34 +625,151 @@
       // Update button states
       function updateButtonStates() {
         const hasContent = code.getValue().trim().length > 0;
-        const hasChanged = code.getValue() !== originalCode;
         const isTemporary = currentScript && currentScript.isTemporary;
         const isPrebuilt = currentScript && (currentScript.type === 'prebuilt' || currentScript.type === 'help');
+        const isEmptyTemporary = isTemporary && !hasContent;
 
         // Run button: enabled if there's content
         runBtn.disabled = !hasContent;
-
-        // Save button: enabled if changed OR temporary, and has content
-        saveBtn.disabled = (!hasChanged && !isTemporary) || !hasContent;
         
-        // Delete button: enabled for user scripts that aren't temporary
-        deleteBtn.disabled = isTemporary || !currentScript || currentScript.type !== 'user';
+        // Delete button: enabled for user scripts that aren't empty temporary scripts
+        // - Disabled for empty temporary scripts (untitled with no content)
+        // - Enabled for temporary scripts with content (they become "real" scripts)
+        // - Enabled for all saved user scripts
+        deleteBtn.disabled = isEmptyTemporary || !currentScript || currentScript.type !== 'user';
 
-        // Hide Save/Delete buttons for prebuilt scripts
+        // Hide Delete button for prebuilt scripts
         if (isPrebuilt) {
-          saveBtn.style.display = 'none';
           deleteBtn.style.display = 'none';
         } else {
-          saveBtn.style.display = 'flex';
           deleteBtn.style.display = 'flex';
         }
       }
 
       // Create new script
       function createNewScript() {
-        console.log('Creating new script...');
+        debugLog('Creating new script...');
         
-        // Generate unique name
+        const newScript = {
+          name: 'Untitled',
+          type: 'user',
+          code: '',
+          isTemporary: true
+        };
+        
+        debugLog('Created script:', newScript);
+        
+        // Don't add to allScripts yet - will be added when it gets content
+        selectScriptDirectly(newScript);
+        
+        // Focus the editor
+        setTimeout(() => {
+          code.focus();
+        }, 100);
+        
+        post('NOTIFY', { message: 'Created new script - start typing to save it!' });
+      }
+
+      // Auto-save current script (silent, no prompts)
+      function autoSaveCurrentScript() {
+        debugLog('autoSaveCurrentScript called');
+        
+        if (!currentScript || currentScript.type !== 'user') {
+          debugLog('autoSaveCurrentScript - no current script or not user script');
+          return;
+        }
+        
+        const scriptCode = code.getValue();
+        debugLog('autoSaveCurrentScript - script code length:', scriptCode.length);
+        debugLog('autoSaveCurrentScript - script code preview:', scriptCode.substring(0, 50) + '...');
+        
+        // Don't save if there's no content
+        if (!scriptCode.trim()) {
+          debugLog('autoSaveCurrentScript - no content to save');
+          return;
+        }
+        
+        // Don't save if no changes
+        if (scriptCode === originalCode) {
+          debugLog('autoSaveCurrentScript - no changes detected');
+          return;
+        }
+        
+        debugLog('autoSaveCurrentScript - before update, currentScript.code length:', currentScript.code ? currentScript.code.length : 'undefined');
+        debugLog('autoSaveCurrentScript - currentScript.isTemporary:', currentScript.isTemporary);
+        
+        // Update current script code first
+        currentScript.code = scriptCode;
+        originalCode = scriptCode;
+        
+        debugLog('autoSaveCurrentScript - after update, currentScript.code length:', currentScript.code.length);
+        
+        // If this is a temporary script that now has content, activate it
+        if (currentScript.isTemporary) {
+          debugLog('autoSaveCurrentScript - activating temporary script');
+          activateUntitledScript();
+        }
+        
+        const scriptData = {
+          name: currentScript.name,
+          code: scriptCode,
+          type: 'user'
+        };
+        
+        debugLog('autoSaveCurrentScript - about to save scriptData:', {
+          name: scriptData.name,
+          codeLength: scriptData.code.length,
+          type: scriptData.type
+        });
+        
+        post('SAVE', scriptData);
+        updateButtonStates();
+        updateScriptList(searchInput.value);
+      }
+
+      // Activate an untitled script when it gets content
+      function activateUntitledScript() {
+        if (!currentScript || !currentScript.isTemporary) {
+          debugLog('activateUntitledScript - no current script or not temporary');
+          return;
+        }
+        
+        debugLog('Activating untitled script with code length:', currentScript.code ? currentScript.code.length : 'undefined');
+        debugLog('Activating untitled script with code preview:', currentScript.code ? currentScript.code.substring(0, 50) + '...' : 'undefined');
+        
+        // Generate a simple sequential name
+        const generatedName = generateUntitledName();
+        
+        debugLog('Generated name:', generatedName);
+        
+        // Update the script immediately
+        currentScript.name = generatedName;
+        currentScript.isTemporary = false;
+        
+        debugLog('Updated script name to:', currentScript.name, 'isTemporary:', currentScript.isTemporary);
+        
+        // Update UI immediately
+        scriptTitle.textContent = generatedName;
+        scriptTitle.classList.add('editable');
+        
+        // Add to allScripts if not already there
+        if (!allScripts.includes(currentScript)) {
+          allScripts.push(currentScript);
+          debugLog('Added script to allScripts. Total scripts:', allScripts.length);
+        } else {
+          debugLog('Script already in allScripts');
+        }
+        
+        // Update last opened script
+        post('SET_LAST_OPENED', { name: generatedName, scriptType: 'user' });
+        
+        // Update button states and sidebar
+        updateButtonStates();
+        updateScriptList(searchInput.value);
+      }
+
+      // Generate a simple sequential name: Untitled, Untitled 2, Untitled 3, etc.
+      function generateUntitledName() {
         let baseName = 'Untitled';
         let counter = 0;
         let scriptName = baseName;
@@ -646,25 +779,10 @@
           scriptName = `${baseName} ${counter}`;
         }
         
-        console.log('Generated name:', scriptName);
-        
-        const newScript = {
-          name: scriptName,
-          type: 'user',
-          code: '// Write your script here\n',
-          isTemporary: true
-        };
-        
-        console.log('Created script:', newScript);
-        
-        allScripts.push(newScript);
-        selectScriptDirectly(newScript);
-        updateScriptList(searchInput.value);
-        
-        post('NOTIFY', { message: `Created new script: ${scriptName}` });
+        return scriptName;
       }
 
-      // Save current script
+      // Save current script (with prompts for naming)
       function saveCurrentScript() {
         if (!currentScript) return;
         
@@ -709,10 +827,62 @@
         post('NOTIFY', { message: `Saved: ${scriptName}` });
       }
 
+      // Debounced autosave function
+      function scheduleAutosave() {
+        const currentCode = code.getValue();
+        debugLog('scheduleAutosave called, code length:', currentCode.length);
+        debugLog('scheduleAutosave - currentScript:', currentScript ? {name: currentScript.name, type: currentScript.type, isTemporary: currentScript.isTemporary} : 'null');
+        
+        // Don't schedule autosave for empty scripts
+        if (!currentCode.trim()) {
+          debugLog('scheduleAutosave - skipping: empty script');
+          return;
+        }
+        
+        // Clear any existing timeout
+        if (autosaveTimeout) {
+          clearTimeout(autosaveTimeout);
+          debugLog('scheduleAutosave - cleared existing timeout');
+        }
+        
+        debugLog('scheduleAutosave - scheduling autosave in 2 seconds...');
+        
+        // Schedule autosave after 2 seconds of inactivity
+        autosaveTimeout = setTimeout(() => {
+          debugLog('scheduleAutosave - timeout triggered, calling autoSaveCurrentScript');
+          autoSaveCurrentScript();
+        }, 2000);
+      }
+
       // Delete current script
       function deleteCurrentScript() {
-        if (!currentScript || currentScript.type !== 'user' || currentScript.isTemporary) return;
+        if (!currentScript || currentScript.type !== 'user') return;
         
+        // Handle temporary scripts with content differently
+        if (currentScript.isTemporary) {
+          // For temporary scripts, just clear and reset
+          currentScript = null;
+          code.setValue('');
+          originalCode = '';
+          scriptTitle.textContent = 'Select a script';
+          scriptTitle.classList.remove('editable');
+          scriptStatus.textContent = 'Ready';
+          scriptStatus.style.display = 'block';
+          
+          updateButtonStates();
+          updateScriptList(searchInput.value);
+          
+          // Open Help & Documentation after discarding temporary script
+          const helpScript = allScripts.find(s => s.name === 'Help & Documentation');
+          if (helpScript) {
+            selectScriptDirectly(helpScript);
+          }
+          
+          post('NOTIFY', { message: 'Discarded untitled script' });
+          return;
+        }
+        
+        // For saved scripts, confirm deletion
         if (confirm(`Delete "${currentScript.name}"?`)) {
           const scriptName = currentScript.name;
           post('DELETE', { name: scriptName });
@@ -731,6 +901,12 @@
           
           updateButtonStates();
           updateScriptList(searchInput.value);
+          
+          // Open Help & Documentation after deletion
+          const helpScript = allScripts.find(s => s.name === 'Help & Documentation');
+          if (helpScript) {
+            selectScriptDirectly(helpScript);
+          }
           
           post('NOTIFY', { message: `Deleted: ${scriptName}` });
         }
@@ -891,10 +1067,6 @@
                 e.preventDefault();
                 runCurrentScript();
                 break;
-              case 's':
-                e.preventDefault();
-                saveCurrentScript();
-                break;
               case 'e':
                 e.preventDefault();
                 exportCurrentScript();
@@ -957,9 +1129,12 @@
                 currentScript.name = newName;
                 post('SAVE', {
                   name: newName,
+                  oldName: originalText,
                   code: currentScript.code,
                   type: 'user'
                 });
+                // Update last opened script with new name
+                post('SET_LAST_OPENED', { name: newName, scriptType: 'user' });
                 updateScriptList(searchInput.value);
                 // post('NOTIFY', { message: `Renamed to: ${newName}` });
               }
@@ -994,7 +1169,6 @@
       // Event listeners
       newScriptBtn.addEventListener('click', createNewScript);
       runBtn.addEventListener('click', runCurrentScript);
-      saveBtn.addEventListener('click', saveCurrentScript);
       deleteBtn.addEventListener('click', deleteCurrentScript);
       exportBtn.addEventListener('click', exportCurrentScript);
       importBtn.addEventListener('click', importScript);
@@ -1007,7 +1181,9 @@
 
       // Code change detection
       code.on('change', () => {
+        debugLog('Code change detected');
         updateButtonStates();
+        scheduleAutosave();
       });
 
       // Message handling
@@ -1017,8 +1193,8 @@
         
         switch (msg.type) {
           case 'LIST':
-            console.log('Received user scripts:', msg.items);
-            console.log('Last opened script:', msg.lastOpenedScript);
+            debugLog('Received user scripts:', msg.items);
+            debugLog('Last opened script:', msg.lastOpenedScript);
             
             userScripts = msg.items.map(script => ({
               name: script.name || 'Unnamed',
@@ -1031,12 +1207,23 @@
             // Open the last opened script or default to Help & Documentation
             openInitialScript(msg.lastOpenedScript);
             break;
+            
+            case 'SAVE_CONFIRMED':
+            debugLog('Save confirmed for:', msg.scriptData.name);
+            // UI already updated immediately, just log success
+            break;
+            
+          case 'SAVE_FAILED':
+            debugError('Save failed for:', msg.scriptName, msg.error);
+            post('NOTIFY', { message: `Failed to save script: ${msg.error}` });
+            break;
         }
       };
 
+
       // Initialize everything
       function init() {
-        console.log('Initializing CodeFig...');
+        debugLog('Initializing CodeFig...');
         
         // Populate initial scripts
         allScripts = [...prebuiltScripts];
@@ -1051,7 +1238,7 @@
         // Load user scripts and open initial script
         post('LIST');
         
-        console.log('CodeFig initialized successfully');
+        debugLog('CodeFig initialized successfully');
       }
 
       // Start when DOM is ready
