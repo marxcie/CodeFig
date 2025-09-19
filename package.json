@@ -1,0 +1,36 @@
+{
+  "name": "codefig",
+  "version": "1.0.0",
+  "description": "CodeFig - A Figma plugin for running TypeScript/JavaScript scripts with advanced variable management",
+  "main": "code.js",
+  "scripts": {
+    "build": "tsc && node build-scripts.js",
+    "build:scripts": "node build-scripts.js",
+    "build:ui": "node bundle-ui.js",
+    "dev": "npm run build && npm run dev:watch",
+    "dev:watch": "concurrently \"tsc --watch\" \"npm run dev:ui\"",
+    "dev:ui": "chokidar \"src/ui.html\" \"src/scripts/**/*.ts\" -c \"node build-scripts.js\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "codemirror": "^5.65.2"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.88.0",
+    "typescript": "^5.2.2",
+    "concurrently": "^8.2.2",
+    "chokidar-cli": "^3.0.0"
+  },
+  "keywords": [
+    "figma",
+    "plugin",
+    "typescript",
+    "variables",
+    "scripting"
+  ],
+  "author": "Marton Lakatos",
+  "license": "MIT",
+  "dependencies": {
+    "codemirror": "^5.65.2"
+  }
+}

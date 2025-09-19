@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["ES2017", "DOM"],
+    "module": "CommonJS",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "typeRoots": ["./node_modules/@types", "./node_modules/@figma"]
+  },
+  "include": ["src/code.ts"],
+  "exclude": ["node_modules", "*.js"]
+}

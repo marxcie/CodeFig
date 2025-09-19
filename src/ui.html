@@ -1,0 +1,1065 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 0; font: 12px system-ui; height: 100vh; display: flex; }
+      
+      /* Resizable container */
+      .resizable-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        position: relative;
+        overflow: hidden;
+        width: 100%;
+      }
+      
+      .main-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+      
+      /* Resizer */
+      .resizer {
+        width: 1px;
+        /* background: #e1e5e9; */
+        cursor: col-resize;
+        position: relative;
+        flex-shrink: 0;
+        transition: background-color 0.2s ease;
+      }
+      
+      .resizer:hover {
+        background: #007AFF;
+      }
+      
+      .resizer::before {
+        content: '';
+        position: absolute;
+        left: -4px;
+        right: -4px;
+        top: 0;
+        bottom: 0;
+        background: transparent;
+      }
+      
+      .resizing {
+        background: #007AFF !important;
+      }
+      
+      /* Sidebar */
+      .sidebar { 
+        width: 240px; 
+        min-width: 200px;
+        max-width: 400px;
+        background: #fff; 
+        display: flex; 
+        flex-direction: column;
+        overflow: hidden;
+      }
+      
+      .sidebar-header { 
+        padding: 0px;
+        border-bottom: 1px solid #e6e6e6; 
+        background: #fff;
+      }
+      
+      .search-container {
+        position: relative;
+      }
+      
+      .search-input {
+        padding: 12px 20px 12px 20px; 
+        width: 100%;
+        height: 56px;
+        border-radius: 6px;
+        font: 11px system-ui;
+        font-weight: 600;
+        outline: none;
+        transition: all 0.2s ease;
+        border: none;
+      }
+      
+      .search-input:focus {
+        /* border-color: #e6e6e6; */
+        /* background: #f8f9fa; */
+      }
+      
+      .search-input::placeholder {
+        color: #000;
+        opacity: 0.5;
+        font-weight: 600;
+      }
+      
+      .script-list { 
+        flex: 1; 
+        overflow-y: auto; 
+        padding: 20px 0;
+      }
+      
+      .plugin-footer {
+        padding: 12px 20px;
+        border-top: 1px solid #e6e6e6;
+        background: #fff;
+        display: flex;
+        flex-direction: row;
+        gap: 12px;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        position: relative;
+        flex-shrink: 0;
+      }
+      
+      .footer-left {
+        display: flex;
+        gap: 12px;
+      }
+      
+      .footer-right {
+        display: flex;
+        gap: 12px;
+      }
+      
+      
+      .script-section {
+        margin-bottom: 0;
+      }
+      
+      .script-section:not(:last-child) {
+        margin-bottom: 20px;
+      }
+      
+      .script-section .divider {
+        height: 1px;
+        background: #e5e5e5;
+        margin: 0;
+      }
+      
+      .section-header {
+        padding: 0 20px 12px 20px;
+        font: 11px system-ui;
+        font-weight: 500;
+        color: #6d6d6d;
+        letter-spacing: -0.22px;
+        background: transparent;
+      }
+      
+      .section-header.example-scripts, .section-header.user-scripts {
+        font: 9px system-ui;
+        font-weight: 500;
+        /* letter-spacing: -0.08px; */
+        text-transform: uppercase;
+        color: #afafaf;
+        padding: 20px 20px 6px 20px;
+      }
+      
+      .section-header.hidden {
+        display: none;
+      }
+      
+      .script-item { 
+        padding: 6px 20px;
+        cursor: pointer; 
+        display: flex;
+        align-items: center;
+        font: 11px system-ui;
+        font-weight: 500;
+        color: #6d6d6d;
+        /* letter-spacing: -0.22px; */
+      }
+      
+      .script-item.user-script {
+        font-weight: 500;
+        letter-spacing: -0.11px;
+        color: #000;
+      }
+      
+      .script-item:hover { background: #f0f0f0; }
+      .script-item.active { background: #f0f0f0; color: #000; }
+      
+      .script-item .name {
+        flex: 1;
+      }
+      
+      .no-results {
+        padding: 20px 12px;
+        text-align: center;
+        color: #86868b;
+        font: 12px system-ui;
+        font-style: italic;
+      }
+      
+      /* Main Content */
+      .main-content { 
+        flex: 1; 
+        display: flex; 
+        flex-direction: column; 
+        overflow: hidden;
+        min-width: 300px;
+        width: 100%;
+      }
+      
+      .editor-header { 
+        padding: 12px 16px 12px 24px; 
+        background: #fff; 
+        border-bottom: 1px solid #e1e5e9; 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between;
+        width: 100%;
+      }
+      
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+      }
+      
+      .script-title { 
+        font-size: 14px; 
+        font-weight: 600; 
+        color: #1d1d1f;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+      }
+      
+      /* Editable title (user scripts only) */
+      .script-title.editable {
+        cursor: pointer;
+      }
+      
+      .script-title.editable:hover {
+        background-color: #f0f0f0;
+      }
+      
+      .script-title.editing {
+        background-color: #fff;
+        border: 1px solid #007AFF;
+        outline: none;
+        cursor: text;
+      }
+      
+      .script-status { 
+        font-size: 11px; 
+        color: #86868b; 
+        background: #f5f5f7; 
+        padding: 2px 8px; 
+        border-radius: 12px;
+      }
+      
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      .editor-container { 
+        flex: 1; 
+        overflow: hidden; 
+        position: relative;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      
+      .CodeMirror { 
+        height: 100%; 
+        width: 100%;
+        font-size: 12px; 
+        border: none;
+        background: #fff !important;
+      }
+      
+      .CodeMirror-scroll {
+        overflow: auto !important;
+      }
+      
+      .CodeMirror-gutters {
+        background: #f8f9fa !important;
+        border-right: 1px solid #e1e5e9 !important;
+      }
+      
+      .CodeMirror-linenumber {
+        color: #86868b !important;
+      }
+      
+      .CodeMirror-cursor {
+        border-left: 1px solid #007AFF !important;
+      }
+      
+      .CodeMirror-selected {
+        background: #e8f4fd !important;
+      }
+      
+      /* === BUTTON STYLES === */
+      
+      /* Base button (no colors) */
+      .btn { 
+        height: 32px;
+        padding: 0 10px; 
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 6px; 
+        font: 11px system-ui;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        letter-spacing: -0.11px;
+      }
+      
+      /* Button disabled state */
+      .btn:disabled { 
+        opacity: 0.5; 
+        cursor: not-allowed; 
+      }
+      
+      /* === BUTTON VARIANTS === */
+      
+      /* Primary button (blue) */
+      .btn.primary { 
+        background: #3b7bef; 
+        color: white; 
+        border-color: #3b7bef; 
+      }
+      
+      .btn.primary:hover:not(:disabled) { 
+        background: #2968d7; 
+        border-color: #2968d7;
+      }
+      
+      /* Secondary button (outline) */
+      .btn.secondary { 
+        background: #fff; 
+        color: #333; 
+        border-color: #e6e6e6; 
+      }
+      
+      .btn.secondary:hover:not(:disabled) { 
+        /* background: #f8f9fa;  */
+        border-color: #333; 
+      }
+      
+      /* Danger button (outline with red hover) */
+      .btn.danger { 
+        background: #fff; 
+        color: #333; 
+        border-color: #e6e6e6; 
+      }
+      
+      .btn.danger:hover:not(:disabled) { 
+        background: #fef2f2; 
+        border-color: #ef4444; 
+        color: #dc2626;
+      }
+      
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="resizable-container">
+      <div class="main-container">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+          <div class="sidebar-header">
+            <div class="search-container">
+              <input type="text" id="searchInput" class="search-input" placeholder="Search..." title="Search Scripts (⌘/)">
+            </div>
+          </div>
+          <div class="script-list" id="scriptList">
+            <!-- Scripts will be populated here -->
+          </div>
+        </div>
+        
+        <!-- Resizer -->
+        <div class="resizer" id="resizer"></div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+          <div class="editor-header">
+            <div class="header-left">
+              <div class="script-title" id="scriptTitle">Select a script</div>
+              <div class="script-status" id="scriptStatus">Ready</div>
+            </div>
+            <div class="header-right">
+              <button class="btn secondary" id="saveBtn" disabled title="Save Script (⌘S)">Save</button>
+              <button class="btn danger" id="deleteBtn" disabled title="Delete Script">Delete</button>
+              <button class="btn primary" id="runBtn" title="Run Script (⌘R)">Run</button>
+            </div>
+          </div>
+          
+          <div class="editor-container">
+            <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Footer outside main container for full width -->
+      <div class="plugin-footer">
+        <div class="footer-left">
+          <button class="btn secondary" id="newScript" title="Create New Script (⌘N)">New Script</button>
+        </div>
+        <div class="footer-right">
+          <button class="btn secondary" id="exportBtn" title="Export Current Script (⌘E)">Export Script</button>
+          <button class="btn secondary" id="exportAllBtn" title="Export All User Scripts">Export All User Scripts</button>
+          <button class="btn secondary" id="importBtn" title="Import Script (⌘I)">Import Script</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Pre-built scripts
+      const prebuiltScripts = [
+        // PLACEHOLDER_FOR_SCRIPTS
+      ];
+
+      // State
+      let currentScript = null;
+      let userScripts = [];
+      let allScripts = [];
+      let originalCode = '';
+      let isResizing = false;
+      let startX, startWidth; // Global scope for resizing
+
+      // DOM elements
+      const scriptList = document.getElementById('scriptList');
+      const scriptTitle = document.getElementById('scriptTitle');
+      const scriptStatus = document.getElementById('scriptStatus');
+      const codeTextarea = document.getElementById('code');
+      const newScriptBtn = document.getElementById('newScript');
+      const runBtn = document.getElementById('runBtn');
+      const saveBtn = document.getElementById('saveBtn');
+      const deleteBtn = document.getElementById('deleteBtn');
+      const exportBtn = document.getElementById('exportBtn');
+      const importBtn = document.getElementById('importBtn');
+      const exportAllBtn = document.getElementById('exportAllBtn');
+      const resizer = document.getElementById('resizer');
+      const sidebar = document.getElementById('sidebar');
+      const searchInput = document.getElementById('searchInput');
+
+      // Initialize CodeMirror
+      const code = CodeMirror.fromTextArea(codeTextarea, {
+        mode: 'javascript',
+        theme: 'default',
+        lineNumbers: true,
+        indentUnit: 2,
+        tabSize: 2,
+        lineWrapping: false,
+        autoCloseBrackets: true,
+        matchBrackets: true,
+        foldGutter: true,
+        gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+        scrollbarStyle: 'native'
+      });
+
+      // Ensure CodeMirror fills the container properly
+      setTimeout(() => {
+        code.refresh();
+        code.setSize(null, '100%');
+      }, 100);
+
+      function post(type, data = {}) {
+        parent.postMessage({ pluginMessage: { type, ...data } }, '*');
+      }
+
+      // Update script list in sidebar
+      function updateScriptList(searchTerm = '') {
+        const filteredScripts = allScripts.filter(script =>
+          script.name.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+
+        if (filteredScripts.length === 0 && searchTerm) {
+          scriptList.innerHTML = '<div class="no-results">No scripts found</div>';
+          return;
+        }
+
+        // Group scripts by type and sort alphabetically
+        const helpScripts = filteredScripts.filter(s => s.type === 'help');
+        const prebuiltScripts = filteredScripts.filter(s => s.type === 'prebuilt')
+          .sort((a, b) => a.name.localeCompare(b.name));
+        const userScripts = filteredScripts.filter(s => s.type === 'user')
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        let html = '';
+
+        // Introduction & Help section (no header)
+        if (helpScripts.length > 0) {
+          html += createScriptSection(helpScripts, '', true);
+        }
+
+        // Example Scripts section
+        if (prebuiltScripts.length > 0) {
+          html += createScriptSection(prebuiltScripts, 'Example Scripts', false);
+        }
+
+        // User Scripts section
+        if (userScripts.length > 0) {
+          html += createScriptSection(userScripts, 'User Scripts', false);
+        }
+
+        scriptList.innerHTML = html;
+      }
+
+      function createScriptSection(scripts, title, hideHeader = false) {
+        let html = '';
+        
+        if (!hideHeader && title) {
+          const headerClass = title === 'Example Scripts' ? 'example-scripts' : 'user-scripts';
+          html += `<div class="section-header ${headerClass}">${title}</div>`;
+        }
+        
+        scripts.forEach(script => {
+          const isActive = currentScript && currentScript.name === script.name;
+          const itemClass = script.type === 'user' ? 'user-script' : '';
+          html += `
+            <div class="script-item ${itemClass} ${isActive ? 'active' : ''}" onclick="selectScript('${script.name}')">
+              <div class="name">${script.name}</div>
+            </div>
+          `;
+        });
+        
+        // Add divider after each section except the last
+        if (title !== 'User Scripts') {
+          html += '<div class="divider"></div>';
+        }
+        
+        return html;
+      }
+
+      // Select script
+      function selectScript(scriptName) {
+        const script = allScripts.find(s => s.name === scriptName);
+        if (script) {
+          selectScriptDirectly(script);
+        }
+      }
+
+      function selectScriptDirectly(script) {
+        console.log('Selecting script:', script);
+        currentScript = script;
+        code.setValue(script.code || '');
+        originalCode = script.code || '';
+        scriptTitle.textContent = script.name;
+        
+        // Only show badge for Example Scripts, hide for User Scripts
+        if (script.type === 'prebuilt') {
+          scriptStatus.textContent = 'Example Script';
+          scriptStatus.style.display = 'block';
+          // Remove editable class for example scripts
+          scriptTitle.classList.remove('editable');
+        } else if (script.type === 'help') {
+          scriptStatus.textContent = 'Help';
+          scriptStatus.style.display = 'block';
+          // Remove editable class for help scripts
+          scriptTitle.classList.remove('editable');
+        } else {
+          // Hide badge for user scripts (including new/temporary scripts)
+          scriptStatus.style.display = 'none';
+          // Add editable class for user scripts
+          scriptTitle.classList.add('editable');
+        }
+        
+        // Save this as the last opened script (but not for temporary scripts)
+        if (!script.isTemporary) {
+          post('SET_LAST_OPENED', { name: script.name, scriptType: script.type });
+        }
+        
+        updateButtonStates();
+        updateScriptList(searchInput.value);
+      }
+
+      // Open the initial script based on last opened or default to Help
+      function openInitialScript(lastOpenedScript) {
+        let scriptToOpen = null;
+        
+        if (lastOpenedScript) {
+          // Try to find the last opened script
+          scriptToOpen = allScripts.find(s => 
+            s.name === lastOpenedScript.name && s.type === lastOpenedScript.type
+          );
+        }
+        
+        // If no last opened script or it doesn't exist, default to Help & Documentation
+        if (!scriptToOpen) {
+          scriptToOpen = allScripts.find(s => s.name === 'Help & Documentation');
+        }
+        
+        // Fallback to first script if Help & Documentation doesn't exist
+        if (!scriptToOpen && allScripts.length > 0) {
+          scriptToOpen = allScripts[0];
+        }
+        
+        if (scriptToOpen) {
+          selectScriptDirectly(scriptToOpen);
+        }
+      }
+
+      // Update button states
+      function updateButtonStates() {
+        const hasContent = code.getValue().trim().length > 0;
+        const hasChanged = code.getValue() !== originalCode;
+        const isTemporary = currentScript && currentScript.isTemporary;
+        const isPrebuilt = currentScript && (currentScript.type === 'prebuilt' || currentScript.type === 'help');
+
+        // Run button: enabled if there's content
+        runBtn.disabled = !hasContent;
+
+        // Save button: enabled if changed OR temporary, and has content
+        saveBtn.disabled = (!hasChanged && !isTemporary) || !hasContent;
+        
+        // Delete button: enabled for user scripts that aren't temporary
+        deleteBtn.disabled = isTemporary || !currentScript || currentScript.type !== 'user';
+
+        // Hide Save/Delete buttons for prebuilt scripts
+        if (isPrebuilt) {
+          saveBtn.style.display = 'none';
+          deleteBtn.style.display = 'none';
+        } else {
+          saveBtn.style.display = 'flex';
+          deleteBtn.style.display = 'flex';
+        }
+      }
+
+      // Create new script
+      function createNewScript() {
+        console.log('Creating new script...');
+        
+        // Generate unique name
+        let baseName = 'Untitled';
+        let counter = 0;
+        let scriptName = baseName;
+        
+        while (allScripts.some(s => s.name === scriptName)) {
+          counter++;
+          scriptName = `${baseName} ${counter}`;
+        }
+        
+        console.log('Generated name:', scriptName);
+        
+        const newScript = {
+          name: scriptName,
+          type: 'user',
+          code: '// Write your script here\n',
+          isTemporary: true
+        };
+        
+        console.log('Created script:', newScript);
+        
+        allScripts.push(newScript);
+        selectScriptDirectly(newScript);
+        updateScriptList(searchInput.value);
+        
+        post('NOTIFY', { message: `Created new script: ${scriptName}` });
+      }
+
+      // Save current script
+      function saveCurrentScript() {
+        if (!currentScript) return;
+        
+        let scriptName = currentScript.name;
+        
+        // If it's temporary or starts with "Untitled", prompt for new name
+        if (currentScript.isTemporary || currentScript.name.startsWith('Untitled')) {
+          scriptName = prompt('Enter script name:', currentScript.name);
+          if (!scriptName || scriptName.trim() === '') {
+            post('NOTIFY', { message: 'Save cancelled - no name provided' });
+            return;
+          }
+          scriptName = scriptName.trim();
+          
+          // Check for duplicates
+          if (allScripts.some(s => s.name === scriptName && s !== currentScript)) {
+            post('NOTIFY', { message: 'A script with that name already exists' });
+            return;
+          }
+        }
+        
+        const scriptCode = code.getValue();
+        const scriptData = {
+          name: scriptName,
+          code: scriptCode,
+          type: 'user'
+        };
+        
+        // Update current script
+        currentScript.name = scriptName;
+        currentScript.code = scriptCode;
+        currentScript.type = 'user';
+        currentScript.isTemporary = false;
+        
+        originalCode = scriptCode;
+        scriptTitle.textContent = scriptName;
+        
+        post('SAVE', scriptData);
+        updateButtonStates();
+        updateScriptList(searchInput.value);
+        
+        post('NOTIFY', { message: `Saved: ${scriptName}` });
+      }
+
+      // Delete current script
+      function deleteCurrentScript() {
+        if (!currentScript || currentScript.type !== 'user' || currentScript.isTemporary) return;
+        
+        if (confirm(`Delete "${currentScript.name}"?`)) {
+          const scriptName = currentScript.name;
+          post('DELETE', { name: scriptName });
+          
+          // Remove from local array
+          allScripts = allScripts.filter(s => s.name !== scriptName);
+          
+          // Clear editor
+          currentScript = null;
+          code.setValue('');
+          originalCode = '';
+          scriptTitle.textContent = 'Select a script';
+          scriptTitle.classList.remove('editable');
+          scriptStatus.textContent = 'Ready';
+          scriptStatus.style.display = 'block';
+          
+          updateButtonStates();
+          updateScriptList(searchInput.value);
+          
+          post('NOTIFY', { message: `Deleted: ${scriptName}` });
+        }
+      }
+
+      // Run current script
+      function runCurrentScript() {
+        const scriptCode = code.getValue();
+        if (scriptCode.trim()) {
+          post('RUN', { code: scriptCode });
+        }
+      }
+
+      // Export current script
+      function exportCurrentScript() {
+        if (!currentScript) return;
+        
+        const scriptData = {
+          name: currentScript.name,
+          code: code.getValue(),
+          type: currentScript.type
+        };
+        
+        const dataStr = JSON.stringify(scriptData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${currentScript.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        post('NOTIFY', { message: `Exported: ${currentScript.name}` });
+      }
+
+      // Import script
+      function importScript() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              try {
+                const scriptData = JSON.parse(e.target.result);
+                
+                // Validate script data
+                if (!scriptData.name || !scriptData.code) {
+                  post('NOTIFY', { message: 'Invalid script file format' });
+                  return;
+                }
+                
+                // Check for duplicates
+                if (allScripts.some(s => s.name === scriptData.name)) {
+                  post('NOTIFY', { message: 'A script with that name already exists' });
+                  return;
+                }
+                
+                // Add to scripts
+                const newScript = {
+                  name: scriptData.name,
+                  code: scriptData.code,
+                  type: 'user'
+                };
+                
+                allScripts.push(newScript);
+                userScripts.push(newScript);
+                
+                // Save to storage
+                post('SAVE', newScript);
+                
+                // Select the imported script
+                selectScriptDirectly(newScript);
+                updateScriptList(searchInput.value);
+                
+                post('NOTIFY', { message: `Imported: ${scriptData.name}` });
+              } catch (error) {
+                post('NOTIFY', { message: 'Error reading script file' });
+              }
+            };
+            reader.readAsText(file);
+          }
+        };
+        input.click();
+      }
+
+      // Export all user scripts
+      function exportAllUserScripts() {
+        const userScriptsData = allScripts.filter(s => s.type === 'user');
+        
+        if (userScriptsData.length === 0) {
+          post('NOTIFY', { message: 'No user scripts to export' });
+          return;
+        }
+        
+        const dataStr = JSON.stringify(userScriptsData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'codefig_user_scripts.json';
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        post('NOTIFY', { message: `Exported ${userScriptsData.length} user scripts` });
+      }
+
+      // Initialize resizing functionality
+      function initResizing() {
+        resizer.addEventListener('mousedown', (e) => {
+          isResizing = true;
+          startX = e.clientX;
+          startWidth = sidebar.offsetWidth;
+          resizer.classList.add('resizing');
+          document.addEventListener('mousemove', handleResize);
+          document.addEventListener('mouseup', stopResize);
+          e.preventDefault();
+        });
+      }
+
+      function handleResize(e) {
+        if (!isResizing) return;
+        
+        const deltaX = e.clientX - startX;
+        const newWidth = Math.max(200, Math.min(400, startWidth + deltaX));
+        sidebar.style.width = newWidth + 'px';
+        
+        // Refresh CodeMirror after resize
+        setTimeout(() => {
+          code.refresh();
+          code.setSize(null, '100%');
+        }, 0);
+      }
+
+      function stopResize() {
+        isResizing = false;
+        resizer.classList.remove('resizing');
+        document.removeEventListener('mousemove', handleResize);
+        document.removeEventListener('mouseup', stopResize);
+        
+        // Final CodeMirror refresh
+        setTimeout(() => {
+          code.refresh();
+          code.setSize(null, '100%');
+        }, 0);
+      }
+
+      // Initialize keyboard shortcuts
+      function initKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+          if (e.metaKey || e.ctrlKey) {
+            switch (e.key) {
+              case 'r':
+                e.preventDefault();
+                runCurrentScript();
+                break;
+              case 's':
+                e.preventDefault();
+                saveCurrentScript();
+                break;
+              case 'e':
+                e.preventDefault();
+                exportCurrentScript();
+                break;
+              case 'i':
+                e.preventDefault();
+                importScript();
+                break;
+              case 'n':
+                e.preventDefault();
+                createNewScript();
+                break;
+              case '/':
+                e.preventDefault();
+                focusSearch();
+                break;
+            }
+          }
+        });
+      }
+
+      // Focus the search input
+      function focusSearch() {
+        searchInput.focus();
+        searchInput.select();
+      }
+
+      // Handle title editing
+      function initTitleEditing() {
+        scriptTitle.addEventListener('click', () => {
+          if (!currentScript || currentScript.type !== 'user' || !scriptTitle.classList.contains('editable')) return;
+          
+          const originalText = scriptTitle.textContent;
+          scriptTitle.contentEditable = true;
+          scriptTitle.classList.add('editing');
+          scriptTitle.focus();
+          
+          // Select all text
+          const range = document.createRange();
+          range.selectNodeContents(scriptTitle);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          
+          function finishEditing(save = false) {
+            scriptTitle.contentEditable = false;
+            scriptTitle.classList.remove('editing');
+            
+            if (save) {
+              const newName = scriptTitle.textContent.trim();
+              if (newName && newName !== originalText) {
+                // Check for duplicates
+                if (allScripts.some(s => s.name === newName && s !== currentScript)) {
+                  post('NOTIFY', { message: 'A script with that name already exists' });
+                  scriptTitle.textContent = originalText;
+                  return;
+                }
+                
+                // Update script name
+                currentScript.name = newName;
+                post('SAVE', {
+                  name: newName,
+                  code: currentScript.code,
+                  type: 'user'
+                });
+                updateScriptList(searchInput.value);
+                // post('NOTIFY', { message: `Renamed to: ${newName}` });
+              }
+            } else {
+              scriptTitle.textContent = originalText;
+            }
+          }
+          
+          scriptTitle.addEventListener('blur', () => finishEditing(true), { once: true });
+          scriptTitle.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              finishEditing(true);
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              finishEditing(false);
+            }
+          }, { once: true });
+        });
+      }
+
+      // Handle window resize
+      function initWindowResize() {
+        window.addEventListener('resize', () => {
+          setTimeout(() => {
+            code.refresh();
+            code.setSize(null, '100%');
+          }, 0);
+        });
+      }
+
+      // Event listeners
+      newScriptBtn.addEventListener('click', createNewScript);
+      runBtn.addEventListener('click', runCurrentScript);
+      saveBtn.addEventListener('click', saveCurrentScript);
+      deleteBtn.addEventListener('click', deleteCurrentScript);
+      exportBtn.addEventListener('click', exportCurrentScript);
+      importBtn.addEventListener('click', importScript);
+      exportAllBtn.addEventListener('click', exportAllUserScripts);
+
+      // Search functionality
+      searchInput.addEventListener('input', (e) => {
+        updateScriptList(e.target.value);
+      });
+
+      // Code change detection
+      code.on('change', () => {
+        updateButtonStates();
+      });
+
+      // Message handling
+      window.onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+        
+        switch (msg.type) {
+          case 'LIST':
+            console.log('Received user scripts:', msg.items);
+            console.log('Last opened script:', msg.lastOpenedScript);
+            
+            userScripts = msg.items.map(script => ({
+              name: script.name || 'Unnamed',
+              code: script.code || '',
+              type: 'user'
+            }));
+            allScripts = [...prebuiltScripts, ...userScripts];
+            updateScriptList();
+            
+            // Open the last opened script or default to Help & Documentation
+            openInitialScript(msg.lastOpenedScript);
+            break;
+        }
+      };
+
+      // Initialize everything
+      function init() {
+        console.log('Initializing CodeFig...');
+        
+        // Populate initial scripts
+        allScripts = [...prebuiltScripts];
+        updateScriptList();
+        
+        // Initialize features
+        initResizing();
+        initKeyboardShortcuts();
+        initTitleEditing();
+        initWindowResize();
+        
+        // Load user scripts and open initial script
+        post('LIST');
+        
+        console.log('CodeFig initialized successfully');
+      }
+
+      // Start when DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    </script>
+  </body>
+</html>

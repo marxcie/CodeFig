@@ -29,7 +29,7 @@ function buildScripts() {
   
   // Process each category
   Object.entries(scriptConfig).forEach(([category, files]) => {
-    const categoryPath = path.join(__dirname, 'scripts', category);
+    const categoryPath = path.join(__dirname, 'src', 'scripts', category);
     
     if (!fs.existsSync(categoryPath)) {
       console.log(`Warning: Directory ${categoryPath} does not exist`);
@@ -72,29 +72,17 @@ function generateScriptsJS(scripts) {
         }`;
   }).join(',\n');
   
-  return `      // Pre-built scripts
-      const prebuiltScripts = [
-${scriptsJS}
-      ];`;
+  return scriptsJS;
 }
 
 // Update ui.html with the generated scripts
 function updateUIHtml(scriptsJS) {
-  const templatePath = path.join(__dirname, 'ui-template.html');
-  const uiHtmlPath = path.join(__dirname, 'ui.html');
+  const templatePath = path.join(__dirname, 'src', 'ui.html');
+  const uiHtmlPath = path.join(__dirname, 'dist', 'ui.html');
   
-  // Use template if ui.html is corrupted or missing
-  let content;
-  try {
-    content = fs.readFileSync(uiHtmlPath, 'utf8');
-    // Check if ui.html is corrupted (starts with weird content)
-    if (!content.startsWith('<!doctype html>')) {
-      throw new Error('ui.html appears to be corrupted');
-    }
-  } catch (error) {
-    console.log('⚠️  Using template due to corrupted ui.html');
-    content = fs.readFileSync(templatePath, 'utf8');
-  }
+  // Always use the template to ensure we have all functionality
+  console.log('📋 Using template for ui.html');
+  let content = fs.readFileSync(templatePath, 'utf8');
   
   // Find the scripts placeholder and replace it
   const placeholder = '        // PLACEHOLDER_FOR_SCRIPTS';
@@ -102,25 +90,9 @@ function updateUIHtml(scriptsJS) {
   if (content.includes(placeholder)) {
     // Replace placeholder with actual scripts
     content = content.replace(placeholder, scriptsJS.trim());
+    console.log('✅ Replaced scripts placeholder');
   } else {
-    // Fallback: try to find the prebuiltScripts array
-    const startMarker = '      // Pre-built scripts';
-    const endMarker = '      ];';
-    
-    const startIndex = content.indexOf(startMarker);
-    if (startIndex === -1) {
-      throw new Error('Could not find scripts placeholder or marker in ui.html');
-    }
-    
-    const endIndex = content.indexOf(endMarker, startIndex);
-    if (endIndex === -1) {
-      throw new Error('Could not find prebuiltScripts end marker in ui.html');
-    }
-    
-    // Replace the section
-    const before = content.substring(0, startIndex);
-    const after = content.substring(endIndex + endMarker.length);
-    content = before + scriptsJS + '\n' + after;
+    throw new Error('Could not find scripts placeholder in template');
   }
   
   fs.writeFileSync(uiHtmlPath, content, 'utf8');
