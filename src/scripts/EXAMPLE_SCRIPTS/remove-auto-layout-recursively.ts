@@ -1,10 +1,10 @@
-// REMOVE AUTO LAYOUT RECURSIVELY
+// Remove auto layout recursively
 // Removes auto layout from selected nodes and all children
 
-function removeAutoLayout(node: SceneNode) {
+function removeAutoLayout(node) {
   if ("layoutMode" in node && node.layoutMode !== "NONE") {
     node.layoutMode = "NONE"; // remove auto layout
-    console.log(`Removed Auto Layout from: ${node.name}`);
+    console.log("Removed Auto Layout from: " + node.name);
   }
 
   if ("children" in node) {

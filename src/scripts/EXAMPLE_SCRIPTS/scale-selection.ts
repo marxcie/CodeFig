@@ -1,4 +1,4 @@
-// SCALE EVERY ELEMENT IN SELECTION
+// Scale every element in selection
 const scaleFactor = 0.8; // Change this to any factor you want
 
 function scaleIndividually(node: SceneNode) {

@@ -1,125 +1,183 @@
 const fs = require('fs');
 const path = require('path');
 
-// Script configuration - maps file names to display names and types
-const scriptConfig = {
-  'prebuilt': {
-    'rename-styles.ts': { name: 'Rename Styles', type: 'prebuilt' },
-    'auto-layout-all-selected.ts': { name: 'Auto Layout All Selected', type: 'prebuilt' },
-    'frame-all-selected.ts': { name: 'Frame All Selected', type: 'prebuilt' },
-    'remove-auto-layout-recursively.ts': { name: 'Remove Auto Layout Recursively', type: 'prebuilt' },
-    'detach-styles.ts': { name: 'Detach Styles', type: 'prebuilt' },
-    'scale-selection.ts': { name: 'Scale Selection', type: 'prebuilt' },
-    'find-and-replace-styles.ts': { name: 'Find and Replace Styles', type: 'prebuilt' },
-    'replace-variable-bindings.ts': { name: 'Replace Variable Bindings', type: 'prebuilt' },
-    'find-broken-variables.ts': { name: 'Find Broken Variables', type: 'prebuilt' },
-    'duplicate-variable-collection.ts': { name: 'Duplicate Variable Collection', type: 'prebuilt' },
-    'list-all-variables.ts': { name: 'List All Variables', type: 'prebuilt' },
-    'list-all-styles.ts': { name: 'List All Styles', type: 'prebuilt' },
-    'utility-functions.ts': { name: 'Utility Functions', type: 'prebuilt' },
-  },
-  'examples': {
-    'help-documentation.ts': { name: 'Help & Documentation', type: 'help' },
+// Convert filename to display name
+function filenameToDisplayName(filename) {
+  // Remove .ts extension
+  const nameWithoutExt = filename.replace(/\.ts$/, '');
+  
+  // Replace hyphens and underscores with spaces
+  const withSpaces = nameWithoutExt.replace(/[-_]/g, ' ');
+  
+  // Capitalize only the first letter
+  const capitalized = withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1).toLowerCase();
+  
+  return capitalized;
+}
+
+// Get script name from file content or generate from filename
+function getScriptName(filePath, filename) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    
+    // Look for a comment like "// SCRIPT_NAME: Custom Name" in the first few lines
+    const lines = content.split('\n').slice(0, 10);
+    for (const line of lines) {
+      const match = line.match(/\/\/\s*SCRIPT_NAME:\s*(.+)/i);
+      if (match) {
+        return match[1].trim();
+      }
+    }
+    
+    // Look for a comment like "// CUSTOM SCRIPT NAME" as the first non-empty line
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && trimmed.startsWith('//')) {
+        const commentContent = trimmed.replace(/^\/\/\s*/, '').trim();
+        // Skip if it contains equals signs (section headers like === GEOMETRY ===)
+        if (commentContent.includes('===') || commentContent.includes('==')) {
+          continue;
+        }
+        // If it looks like a title (not a regular comment), use it as-is
+        if (commentContent.length > 0 && !commentContent.toLowerCase().includes('execute') && 
+            !commentContent.toLowerCase().includes('import') && 
+            !commentContent.toLowerCase().includes('function') &&
+            !commentContent.toLowerCase().includes('collection of')) {
+          return commentContent;
+        }
+      }
+    }
+  } catch (error) {
+    console.log(`Warning: Could not read file ${filePath}: ${error.message}`);
   }
-};
+  
+  // Fall back to filename-based name
+  return filenameToDisplayName(filename);
+}
+
+// Get category type from folder name
+function getCategoryType(folderName) {
+  const folderLower = folderName.toLowerCase();
+  if (folderLower === 'help') {
+    return 'help';
+  } else if (folderLower === 'example_scripts' || folderLower === 'examples') {
+    return 'prebuilt';
+  } else {
+    return 'user'; // Default for any other folders
+  }
+}
+
+// Recursively find all .ts files in the scripts directory
+function findAllScripts(scriptsDir) {
+  const scripts = [];
+  
+  function scanDirectory(dir, relativePath = '') {
+    const items = fs.readdirSync(dir);
+    
+    for (const item of items) {
+      const itemPath = path.join(dir, item);
+      const stat = fs.statSync(itemPath);
+      
+      if (stat.isDirectory()) {
+        // Recursively scan subdirectories
+        const newRelativePath = relativePath ? `${relativePath}/${item}` : item;
+        scanDirectory(itemPath, newRelativePath);
+      } else if (item.endsWith('.ts')) {
+        // Found a TypeScript file
+        const folderName = relativePath.split('/')[0] || 'EXAMPLE_SCRIPTS'; // Default category
+        const scriptName = getScriptName(itemPath, item);
+        const scriptType = getCategoryType(folderName);
+        
+        scripts.push({
+          name: scriptName,
+          code: fs.readFileSync(itemPath, 'utf8'),
+          type: scriptType,
+          filename: item,
+          folder: folderName
+        });
+      }
+    }
+  }
+  
+  if (fs.existsSync(scriptsDir)) {
+    scanDirectory(scriptsDir);
+  }
+  
+  return scripts;
+}
 
 // Read all script files and generate the prebuiltScripts array
 function buildScripts() {
-  const scripts = [];
+  const scriptsDir = path.join(__dirname, 'src', 'scripts');
+  const scripts = findAllScripts(scriptsDir);
   
-  // Process each category
-  Object.entries(scriptConfig).forEach(([category, files]) => {
-    const categoryPath = path.join(__dirname, 'src', 'scripts', category);
+  if (scripts.length === 0) {
+    console.log('⚠️ No scripts found in', scriptsDir);
+    return [];
+  }
+  
+  // Sort scripts by type and name
+  scripts.sort((a, b) => {
+    // Help scripts first, then prebuilt, then user
+    const typeOrder = { help: 0, prebuilt: 1, user: 2 };
+    const aOrder = typeOrder[a.type] || 3;
+    const bOrder = typeOrder[b.type] || 3;
     
-    if (!fs.existsSync(categoryPath)) {
-      console.log(`Warning: Directory ${categoryPath} does not exist`);
-      return;
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
     }
     
-    Object.entries(files).forEach(([filename, config]) => {
-      const filePath = path.join(categoryPath, filename);
-      
-      if (fs.existsSync(filePath)) {
-        const code = fs.readFileSync(filePath, 'utf8');
-        scripts.push({
-          name: config.name,
-          type: config.type,
-          code: code
-        });
-        console.log(`✅ Loaded: ${config.name} (${filename})`);
-      } else {
-        console.log(`⚠️  Missing: ${filename} in ${category}/`);
-      }
-    });
+    // Within same type, sort by name
+    return a.name.localeCompare(b.name);
+  });
+  
+  console.log(`📦 Loaded ${scripts.length} scripts`);
+  scripts.forEach(script => {
+    console.log(`✅ Loaded: ${script.name} (${script.filename}) [${script.type}]`);
   });
   
   return scripts;
 }
 
-// Generate JavaScript code for the prebuiltScripts array
-function generateScriptsJS(scripts) {
-  const scriptsJS = scripts.map(script => {
-    // Escape backticks and ${} in the code
-    const escapedCode = script.code
-      .replace(/\\/g, '\\\\')
-      .replace(/`/g, '\\`')
-      .replace(/\${/g, '\\${');
-    
-    return `        {
-          name: "${script.name}",
-          type: "${script.type}",
-          code: \`${escapedCode}\`
-        }`;
-  }).join(',\n');
+// Update ui.html with the built scripts
+function updateUIHtml() {
+  const scripts = buildScripts();
+  const uiTemplatePath = path.join(__dirname, 'src', 'ui.html');
+  const uiDistPath = path.join(__dirname, 'dist', 'ui.html');
   
-  return scriptsJS;
-}
-
-// Update ui.html with the generated scripts
-function updateUIHtml(scriptsJS) {
-  const templatePath = path.join(__dirname, 'src', 'ui.html');
-  const uiHtmlPath = path.join(__dirname, 'dist', 'ui.html');
-  
-  // Always use the template to ensure we have all functionality
-  console.log('📋 Using template for ui.html');
-  let content = fs.readFileSync(templatePath, 'utf8');
-  
-  // Find the scripts placeholder and replace it
-  const placeholder = '        // PLACEHOLDER_FOR_SCRIPTS';
-  
-  if (content.includes(placeholder)) {
-    // Replace placeholder with actual scripts
-    content = content.replace(placeholder, scriptsJS.trim());
-    console.log('✅ Replaced scripts placeholder');
-  } else {
-    throw new Error('Could not find scripts placeholder in template');
+  if (!fs.existsSync(uiTemplatePath)) {
+    console.error('❌ ui.html template not found');
+    return;
   }
   
-  fs.writeFileSync(uiHtmlPath, content, 'utf8');
+  console.log('📋 Using template for ui.html');
+  
+  let uiContent = fs.readFileSync(uiTemplatePath, 'utf8');
+  
+  // Generate the scripts array
+  const scriptsArrayString = JSON.stringify(scripts, null, 2);
+  
+  // Replace the placeholder
+  const placeholder = '// PLACEHOLDER_FOR_SCRIPTS';
+  if (uiContent.includes(placeholder)) {
+    uiContent = uiContent.replace(placeholder, scriptsArrayString.slice(1, -1)); // Remove outer brackets
+    console.log('✅ Replaced scripts placeholder');
+  } else {
+    console.log('⚠️ Scripts placeholder not found in ui.html');
+  }
+  
+  // Ensure dist directory exists
+  const distDir = path.dirname(uiDistPath);
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+  }
+  
+  // Write the updated ui.html to dist
+  fs.writeFileSync(uiDistPath, uiContent);
   console.log('✅ Updated ui.html with bundled scripts');
 }
 
-// Main build function
-function build() {
-  console.log('🔨 Building scripts...');
-  
-  try {
-    const scripts = buildScripts();
-    console.log(`📦 Loaded ${scripts.length} scripts`);
-    
-    const scriptsJS = generateScriptsJS(scripts);
-    updateUIHtml(scriptsJS);
-    
-    console.log('✅ Build completed successfully!');
-  } catch (error) {
-    console.error('❌ Build failed:', error.message);
-    process.exit(1);
-  }
-}
-
-// Run build if called directly
-if (require.main === module) {
-  build();
-}
-
-module.exports = { build };
+// Run the build
+console.log('🔨 Building scripts...');
+updateUIHtml();
+console.log('✅ Build completed successfully!');

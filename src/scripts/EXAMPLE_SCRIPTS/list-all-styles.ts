@@ -1,4 +1,4 @@
-// LIST ALL STYLES
+// List all styles
 
 // Execute
 const styles = figma.getLocalPaintStyles().concat(figma.getLocalTextStyles()).concat(figma.getLocalEffectStyles()).concat(figma.getLocalGridStyles());

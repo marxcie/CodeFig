@@ -1,4 +1,4 @@
-// RENAME STYLES (font- to text-)
+// Rename styles
 
 // Configuration - Change these values as needed
 const searchPattern = 'font-';

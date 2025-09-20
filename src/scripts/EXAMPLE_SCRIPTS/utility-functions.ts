@@ -1,4 +1,4 @@
-// UTILITY FUNCTIONS
+// Utility functions
 // Collection of helpful utility functions for Figma scripting
 
 // === GEOMETRY UTILITIES ===

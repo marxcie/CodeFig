@@ -1,4 +1,4 @@
-// FIND BROKEN VARIABLES
+// Find broken variables
 
 const findBrokenVariables = () => {
   const variables = figma.variables.getLocalVariables();

@@ -1,4 +1,4 @@
-// DUPLICATE VARIABLE COLLECTION (EXACT COPY)
+// Duplicate variable collection
 
 // Configuration - Change these values as needed
 const sourceCollectionName = 'website V3';

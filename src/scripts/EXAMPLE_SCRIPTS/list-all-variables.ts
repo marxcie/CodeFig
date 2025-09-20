@@ -1,4 +1,4 @@
-// LIST ALL VARIABLES
+// List all variables
 
 // Execute
 const variables = figma.variables.getLocalVariables();

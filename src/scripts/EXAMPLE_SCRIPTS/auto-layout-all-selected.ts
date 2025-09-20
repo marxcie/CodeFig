@@ -1,14 +1,14 @@
-// AUTO LAYOUT ALL SELECTED
+// Auto layout all selected
 // Wraps each selected node in its own auto layout frame
 
-figma.currentPage.selection.forEach(node => {
+figma.currentPage.selection.forEach(function(node) {
   if (!("x" in node && "y" in node && "width" in node && "height" in node)) return;
 
-  const parent = node.parent;
-  const indexInParent = parent?.children.indexOf(node);
+  var parent = node.parent;
+  var indexInParent = parent && parent.children.indexOf(node);
 
   // Create an individual auto layout frame
-  const frame = figma.createFrame();
+  var frame = figma.createFrame();
   frame.layoutMode = "HORIZONTAL"; // or "VERTICAL"
   frame.counterAxisSizingMode = "AUTO";
   frame.primaryAxisSizingMode = "AUTO";
@@ -26,7 +26,7 @@ figma.currentPage.selection.forEach(node => {
 
   // Add the frame to the parent at the correct index
   if (parent) {
-    parent.insertChild(indexInParent!, frame);
+    parent.insertChild(indexInParent, frame);
   }
 
   // Move the node inside the frame
@@ -35,4 +35,4 @@ figma.currentPage.selection.forEach(node => {
   node.y = 0;
 });
 
-figma.notify(`Added auto layout to ${figma.currentPage.selection.length} items`);
+figma.notify("Added auto layout to " + figma.currentPage.selection.length + " items");

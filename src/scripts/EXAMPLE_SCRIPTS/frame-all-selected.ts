@@ -1,4 +1,4 @@
-// FRAME ALL SELECTED
+// Frame all selected
 // Wraps each selected node in a frame
 
 figma.currentPage.selection.forEach(node => {

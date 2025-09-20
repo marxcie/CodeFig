@@ -1,4 +1,4 @@
-// CODEFIG - HELP & DOCUMENTATION
+// CodeFig - help & documentation
 // Welcome to CodeFig! Your TypeScript-powered Figma scripting environment.
 
 // === GETTING STARTED ===
