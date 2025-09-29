@@ -1,4 +1,4 @@
-// Manage typography system
+// Typography variables
 // Advanced responsive typography system with fluid scaling and style generation
 
 // Import functions from libraries
