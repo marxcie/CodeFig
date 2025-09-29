@@ -94,12 +94,6 @@
         font-weight: 600;
       }
       
-      .script-list { 
-        flex: 1; 
-        overflow-y: auto; 
-        padding: 20px 0;
-      }
-      
       .plugin-footer {
         padding: 12px 20px;
         border-top: 1px solid #e6e6e6;
@@ -133,53 +127,188 @@
         margin-bottom: 20px;
       }
       
-      .script-section .divider {
+      .script-list { 
+        flex: 1; 
+        overflow-y: auto; 
+      }
+      
+      .script-list .divider {
         height: 1px;
         background: #e5e5e5;
-        margin: 0;
+      }
+
+      /* Script list structure */
+      .system-scripts {
+        padding: 12px 0;
+      }
+      
+      .user-scripts {
+        padding: 12px 0;
       }
       
       .section-header {
-        padding: 0 20px 12px 20px;
-        font: 11px system-ui;
-        font-weight: 500;
-        color: #6d6d6d;
-        letter-spacing: -0.22px;
+        padding: 12px 20px 6px 20px;
+        font: 9px system-ui;
+        font-weight: 600;
+        color: #808080;
+        /* letter-spacing: -0.22px; */
         background: transparent;
       }
       
       .section-header.example-scripts, .section-header.user-scripts {
-        font: 9px system-ui;
-        font-weight: 500;
+        /* font: 9px system-ui; */
+        /* font-weight: 500; */
         /* letter-spacing: -0.08px; */
-        text-transform: uppercase;
-        color: #afafaf;
-        padding: 20px 20px 6px 20px;
+        /* text-transform: uppercase; */
+        /* color: #6D6D6D; */
+        /* padding: 12px 20px 6px 20px; */
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: all 0.2s ease;
+        user-select: none;
+      }
+      
+      .section-header.example-scripts:hover, .section-header.user-scripts:hover {
+        color: #8a8a8a;
+      }
+      
+      .section-header.selected {
+        background: #FAFAFA;
       }
       
       .section-header.hidden {
         display: none;
       }
       
+      .section-toggle {
+        width: 12px;
+        height: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        opacity: 0.6;
+        flex-shrink: 0;
+      }
+      
+      .section-toggle svg {
+        width: 12px;
+        height: 12px;
+      }
+      
+      .chevron-expanded {
+        display: block;
+      }
+      
+      .chevron-collapsed {
+        display: none;
+      }
+      
+      .section-toggle.collapsed .chevron-expanded {
+        display: none;
+      }
+      
+      .section-toggle.collapsed .chevron-collapsed {
+        display: block;
+      }
+      
+      /* Script groups styling */
+      .script-group {
+        margin-bottom: 0;
+      }
+      
+      .group-header {
+        font: 11px system-ui;
+        font-weight: 500;
+        /* text-transform: uppercase; */
+        color: #6D6D6D;
+        padding: 12px 20px 8px 20px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: all 0.2s ease;
+        user-select: none;
+      }
+      
+      .group-header.selected {
+        background: #FAFAFA;
+      }
+      
+      .script-group.selected {
+        background: #FAFAFA;
+      }
+      
+      .script-group.selected .group-content {
+        background: #FAFAFA;
+      }
+      
+      .group-header:hover {
+        color: #8a8a8a;
+      }
+      
+      .group-content {
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+      }
+      
+      .group-content.collapsed {
+        max-height: 0;
+      }
+      
+      .group-content:not(.collapsed) {
+        max-height: none;
+      }
+      
+      /* Indented scripts within groups */
+      .script-item.grouped {
+        padding-left: 36px;
+      }
+      
+      /* Breadcrumb in header */
+      .script-breadcrumb {
+        font-size: 12px;
+        color: #86868b;
+        margin-right: 8px;
+      }
+      
+      .section-content {
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+      }
+      
+      .section-content.collapsed {
+        max-height: 0;
+      }
+      
+      .section-content:not(.collapsed) {
+        max-height: none;
+      }
+      
+      .section-content.selected {
+        background: #FAFAFA;
+      }
+      
       .script-item { 
-        padding: 6px 20px;
+        padding: 8px 20px;
         cursor: pointer; 
         display: flex;
         align-items: center;
         font: 11px system-ui;
-        font-weight: 500;
-        color: #6d6d6d;
+        font-weight: 400;
+        color: #000;
         /* letter-spacing: -0.22px; */
       }
       
-      .script-item.user-script {
-        font-weight: 500;
-        letter-spacing: -0.11px;
-        color: #000;
-      }
+      .script-item:hover { background: #FAFAFA; }
+      .script-item.active { background: #3b7bef; color: #fff; }
       
-      .script-item:hover { background: #f0f0f0; }
-      .script-item.active { background: #f0f0f0; color: #000; }
+      /* System scripts indentation to match grouped scripts */
+      .script-item.system-script {
+        padding-left: 36px;
+      }
       
       .script-item .name {
         flex: 1;
@@ -313,7 +442,7 @@
         align-items: center;
         justify-content: center;
         gap: 4px;
-        letter-spacing: -0.11px;
+        /* letter-spacing: -0.11px; */
       }
       
       /* Button disabled state */
@@ -415,6 +544,8 @@
     </div>
 
     <script>
+      // Help scripts will be populated by the build process from HELP folder
+
       // Pre-built scripts
       const prebuiltScripts = [
         // PLACEHOLDER_FOR_SCRIPTS
@@ -424,10 +555,12 @@
       let currentScript = null;
       let userScripts = [];
       let allScripts = [];
+      let userGroups = new Map(); // Map of groupName -> {scripts: [], collapsed: false}
       let originalCode = '';
       let isResizing = false;
       let startX, startWidth; // Global scope for resizing
       let autosaveTimeout = null; // For debounced autosave
+      let collapsedSections = new Set(); // Track collapsed sections
 
       // DOM elements
       const scriptList = document.getElementById('scriptList');
@@ -506,19 +639,40 @@
 
         let html = '';
 
-        // Introduction & Help section (no header)
-        if (helpScripts.length > 0) {
-          html += createScriptSection(helpScripts, '', true);
+        // <system-scripts>
+        if (helpScripts.length > 0 || prebuiltScripts.length > 0) {
+          html += '<div class="system-scripts">';
+          
+          // Help scripts (no grouping)
+          if (helpScripts.length > 0) {
+            helpScripts.forEach(script => {
+              const isActive = currentScript && currentScript.name === script.name;
+              html += `
+                <div class="script-item ${isActive ? 'active' : ''}" onclick="selectScript('${script.name}')">
+                  <div class="name">${script.name}</div>
+                </div>
+              `;
+            });
+          }
+          
+          // Example Scripts (with grouping)
+          if (prebuiltScripts.length > 0) {
+            html += createScriptsWithGroups(prebuiltScripts, 'prebuilt');
+          }
+          
+          html += '</div>'; // Close system-scripts
+        }
+        
+        // <divider>
+        if ((helpScripts.length > 0 || prebuiltScripts.length > 0) && userScripts.length > 0) {
+          html += '<div class="divider"></div>';
         }
 
-        // Example Scripts section
-        if (prebuiltScripts.length > 0) {
-          html += createScriptSection(prebuiltScripts, 'Example Scripts', false);
-        }
-
-        // User Scripts section
+        // <user-scripts>
         if (userScripts.length > 0) {
-          html += createScriptSection(userScripts, 'User Scripts', false);
+          html += '<div class="user-scripts">';
+          html += createUserScriptsWithGroups(userScripts);
+          html += '</div>'; // Close user-scripts
         }
 
         scriptList.innerHTML = html;
@@ -529,25 +683,174 @@
         
         if (!hideHeader && title) {
           const headerClass = title === 'Example Scripts' ? 'example-scripts' : 'user-scripts';
-          html += `<div class="section-header ${headerClass}">${title}</div>`;
-        }
-        
-        scripts.forEach(script => {
-          const isActive = currentScript && currentScript.name === script.name;
-          const itemClass = script.type === 'user' ? 'user-script' : '';
+          const sectionId = title.replace(/\s+/g, '-').toLowerCase();
+          const isCollapsed = collapsedSections.has(sectionId);
+          const toggleClass = isCollapsed ? 'collapsed' : '';
+          
+          // Check if any script in this section is selected
+          const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
+          const sectionHeaderClass = hasSelectedScript ? 'selected' : '';
+          
+          const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+          const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+          
           html += `
-            <div class="script-item ${itemClass} ${isActive ? 'active' : ''}" onclick="selectScript('${script.name}')">
-              <div class="name">${script.name}</div>
+            <div class="section-header ${headerClass} ${sectionHeaderClass}" onclick="toggleSection('${sectionId}')">
+              <div class="section-toggle ${toggleClass}">
+                ${expandedChevron}
+                ${collapsedChevron}
+              </div>
+              <span>${title}</span>
             </div>
           `;
-        });
-        
-        // Add divider after each section except the last
-        if (title !== 'User Scripts') {
-          html += '<div class="divider"></div>';
+          
+          // Handle regular sections (Example Scripts, etc.)
+          {
+            // Regular section for Example Scripts
+            const contentMaxHeight = isCollapsed ? '0' : `${scripts.length * 32 + 20}px`;
+            const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
+            const sectionContentClass = hasSelectedScript ? 'selected' : '';
+            
+            html += `<div class="section-content ${isCollapsed ? 'collapsed' : ''} ${sectionContentClass}" id="content-${sectionId}">`;
+            
+            // Use createScriptsWithGroups for proper grouping and alphabetical sorting
+            html += createScriptsWithGroups(scripts, 'prebuilt');
+            
+            html += '</div>';
+          }
         }
         
+        // Don't add divider here - it's handled in updateScriptList
+        
         return html;
+      }
+      
+      function createScriptsWithGroups(scripts, scriptType) {
+        let html = '';
+        const ungroupedScripts = [];
+        const groupedScripts = new Map();
+        
+        // Parse script names to extract groups and separate grouped/ungrouped scripts
+        // Handle all slash variations: Test/Script, Test / Script, Test /Script, Test/ Script, etc.
+        scripts.forEach(script => {
+          const fullName = script.name;
+          
+          // Look for any slash (with or without spaces)
+          const slashMatch = fullName.match(/^(.+?)\s*\/\s*(.+)$/);
+          
+          if (slashMatch) {
+            // Script has group format - extract and normalize
+            const groupName = slashMatch[1].trim();
+            const scriptName = slashMatch[2].trim();
+            
+            // Normalize the full name to standard format "Group / Script"
+            const normalizedFullName = `${groupName} / ${scriptName}`;
+            
+            if (!groupedScripts.has(groupName)) {
+              groupedScripts.set(groupName, []);
+            }
+            groupedScripts.get(groupName).push({
+              ...script,
+              name: normalizedFullName, // Store normalized name
+              displayName: scriptName,
+              groupName: groupName
+            });
+          } else {
+            // Ungrouped script
+            ungroupedScripts.push({
+              ...script,
+              displayName: fullName,
+              groupName: null
+            });
+          }
+        });
+        
+        // Create a mixed array of ungrouped scripts and groups for alphabetical sorting
+        const allItems = [];
+        
+        // Add ungrouped scripts
+        ungroupedScripts.forEach(script => {
+          allItems.push({
+            type: 'script',
+            name: script.displayName,
+            script: script,
+            sortKey: script.displayName
+          });
+        });
+        
+        // Add groups
+        for (const [groupName, groupScripts] of groupedScripts) {
+          allItems.push({
+            type: 'group',
+            name: groupName,
+            scripts: groupScripts,
+            sortKey: groupName
+          });
+        }
+        
+        // Sort all items alphabetically
+        allItems.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+        
+        // Render items in sorted order
+        allItems.forEach(item => {
+          if (item.type === 'script') {
+            // Render ungrouped script
+            const script = item.script;
+            const isActive = currentScript && currentScript.name === script.name;
+            const scriptClass = scriptType === 'prebuilt' ? 'system-script' : 'user-script';
+            html += `
+              <div class="script-item ${scriptClass} ${isActive ? 'active' : ''}" onclick="selectScript('${script.name}')">
+                <div class="name">${script.displayName}</div>
+              </div>
+            `;
+          } else {
+            // Render group
+            const groupName = item.name;
+            const scripts = item.scripts;
+            const groupId = `group-${groupName.replace(/\s+/g, '-').toLowerCase()}`;
+            const isGroupCollapsed = collapsedSections.has(groupId);
+            const toggleClass = isGroupCollapsed ? 'collapsed' : '';
+            const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
+            const groupHeaderClass = hasSelectedScript ? 'selected' : '';
+            const groupClass = hasSelectedScript ? 'selected' : '';
+            const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+            const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+            
+            html += `
+              <div class="script-group ${groupClass}">
+                <div class="group-header ${groupHeaderClass}" onclick="toggleSection('${groupId}')">
+                  <div class="section-toggle ${toggleClass}">
+                    ${expandedChevron}
+                    ${collapsedChevron}
+                  </div>
+                  <span>${groupName}</span>
+                </div>
+                <div class="group-content ${isGroupCollapsed ? 'collapsed' : ''}" id="content-${groupId}">
+            `;
+            
+            scripts.forEach(script => {
+              const isActive = currentScript && currentScript.name === script.name;
+              const scriptClass = scriptType === 'prebuilt' ? 'system-script' : 'user-script';
+              html += `
+                <div class="script-item ${scriptClass} grouped ${isActive ? 'active' : ''}" onclick="selectScript('${script.name}')">
+                  <div class="name">${script.displayName}</div>
+                </div>
+              `;
+            });
+            
+            html += `
+                </div>
+              </div>
+            `;
+          }
+        });
+        
+        return html;
+      }
+      
+      // Legacy function for backward compatibility
+      function createUserScriptsWithGroups(userScripts) {
+        return createScriptsWithGroups(userScripts, 'user');
       }
 
       // Select script
@@ -563,6 +866,8 @@
         currentScript = script;
         code.setValue(script.code || '');
         originalCode = script.code || '';
+        
+        // The script name already contains the group info if it exists (Group / Script Name)
         scriptTitle.textContent = script.name;
         
         // Only show badge for Example Scripts, hide for User Scripts
@@ -601,9 +906,10 @@
         let scriptToOpen = null;
         
         if (lastOpenedScript) {
-          // Try to find the last opened script
+          // Try to find the last opened script by name and type
           scriptToOpen = allScripts.find(s => 
-            s.name === lastOpenedScript.name && s.type === lastOpenedScript.type
+            s.name === lastOpenedScript.name && 
+            s.type === lastOpenedScript.type
           );
         }
         
@@ -669,6 +975,7 @@
         
         post('NOTIFY', { message: 'Created new script - start typing to save it!' });
       }
+      
 
       // Auto-save current script (silent, no prompts)
       function autoSaveCurrentScript() {
@@ -719,7 +1026,8 @@
         debugLog('autoSaveCurrentScript - about to save scriptData:', {
           name: scriptData.name,
           codeLength: scriptData.code.length,
-          type: scriptData.type
+          type: scriptData.type,
+          group: scriptData.group
         });
         
         post('SAVE', scriptData);
@@ -805,20 +1113,27 @@
         }
         
         const scriptCode = code.getValue();
+        
+        // Normalize the name if it contains a slash
+        const slashMatch = scriptName.match(/^(.+?)\s*\/\s*(.+)$/);
+        const normalizedName = slashMatch ? `${slashMatch[1].trim()} / ${slashMatch[2].trim()}` : scriptName;
+        
         const scriptData = {
-          name: scriptName,
+          name: normalizedName,
           code: scriptCode,
           type: 'user'
         };
         
         // Update current script
-        currentScript.name = scriptName;
+        currentScript.name = normalizedName;
         currentScript.code = scriptCode;
         currentScript.type = 'user';
         currentScript.isTemporary = false;
         
         originalCode = scriptCode;
-        scriptTitle.textContent = scriptName;
+        
+        // Update title (script name already contains group info if applicable)
+        scriptTitle.textContent = normalizedName;
         
         post('SAVE', scriptData);
         updateButtonStates();
@@ -912,10 +1227,138 @@
         }
       }
 
+      // Runtime import system
+      function processRuntimeImports(code) {
+        let processedCode = code;
+        
+        // Handle both syntax types:
+        // 1. @import { func1, func2 } from "Script Name"
+        // 2. @import { func1, func2 } (defaults to core library)
+        
+        // Pattern 1: @import with 'from' clause
+        const importWithFromRegex = /@import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
+        let match;
+        
+        while ((match = importWithFromRegex.exec(code)) !== null) {
+          const functionList = match[1];
+          const scriptName = match[2];
+          const functionNames = functionList.split(',').map(name => name.trim());
+          
+          processedCode = processImport(processedCode, match[0], functionNames, scriptName);
+        }
+        
+        // Pattern 2: @import without 'from' (defaults to core library)
+        const importSimpleRegex = /@import\s+\{([^}]+)\}(?!\s+from)/g;
+        
+        while ((match = importSimpleRegex.exec(code)) !== null) {
+          const functionList = match[1];
+          const functionNames = functionList.split(',').map(name => name.trim());
+          
+          processedCode = processImport(processedCode, match[0], functionNames, '@Core Library');
+        }
+        
+        return processedCode;
+      }
+      
+      // Process a single import statement
+      function processImport(code, importStatement, functionNames, scriptName) {
+        // Find the source script with improved matching
+        const sourceScript = allScripts.find(script => {
+          // Exact match
+          if (script.name === scriptName) return true;
+          
+          // Partial match (handles "Example Scripts / @Core Library" matching "@Core Library")
+          if (script.name.includes(scriptName)) return true;
+          
+          // Filename match
+          if (script.filename === scriptName + '.ts') return true;
+          
+          // Case insensitive match
+          if (script.name.toLowerCase().includes(scriptName.toLowerCase())) return true;
+          
+          // Handle @ prefixed names specifically
+          if (scriptName.startsWith('@') && script.name.includes(scriptName)) return true;
+          
+          return false;
+        });
+        
+        if (sourceScript) {
+          console.log('🔗 Runtime import: ' + functionNames.join(', ') + ' from ' + sourceScript.name);
+          
+          // Unescape the source code (convert \n to actual newlines, etc.)
+          const unescapedCode = sourceScript.code.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+          
+          
+          // Extract and inject the needed functions
+          const extractedFunctions = extractFunctionsFromCode(unescapedCode, functionNames);
+          
+          // Replace the @import statement with the extracted functions
+          const injectedCode = '// Runtime imported from: ' + sourceScript.name + '\n' + 
+                             extractedFunctions + '\n';
+          
+          return code.replace(importStatement, injectedCode);
+        } else {
+          console.warn('⚠️ Script not found for import: ' + scriptName);
+          figma.notify('Import failed: Script "' + scriptName + '" not found');
+          // Remove the failed import statement
+          return code.replace(importStatement, '// Import failed: ' + scriptName + ' not found');
+        }
+      }
+      
+      // Extract specific functions from code
+      function extractFunctionsFromCode(sourceCode, functionNames) {
+        let extractedCode = '';
+        
+        functionNames.forEach(functionName => {
+          
+          // Use a more robust regex that captures the entire function
+          // This regex looks for: function name(...) { ... } where the braces are balanced
+          const functionPattern = new RegExp(
+            `(function\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?^\\})`, 
+            'gm'
+          );
+          
+          const match = functionPattern.exec(sourceCode);
+          
+          if (match) {
+            const functionCode = match[1];
+            extractedCode += functionCode + '\n\n';
+          } else {
+            
+            // Fallback to the old brace counting method
+            const funcRegex = new RegExp(`function\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{`, 'g');
+            const funcMatch = funcRegex.exec(sourceCode);
+            
+            if (funcMatch) {
+              const startIndex = funcMatch.index;
+              
+              // Simple approach: find the next standalone closing brace on its own line
+              const lines = sourceCode.substring(startIndex).split('\n');
+              let functionLines = [lines[0]]; // Start with the function declaration line
+              
+              for (let i = 1; i < lines.length; i++) {
+                functionLines.push(lines[i]);
+                // Look for a closing brace that's the only non-whitespace character on the line
+                if (lines[i].trim() === '}') {
+                  break;
+                }
+              }
+              
+              const functionCode = functionLines.join('\n');
+              extractedCode += functionCode + '\n\n';
+            }
+          }
+        });
+        
+        return extractedCode;
+      }
+
       // Run current script
       function runCurrentScript() {
-        const scriptCode = code.getValue();
+        let scriptCode = code.getValue();
         if (scriptCode.trim()) {
+          // Process runtime imports before execution
+          scriptCode = processRuntimeImports(scriptCode);
           post('RUN', { code: scriptCode });
         }
       }
@@ -1058,6 +1501,44 @@
         }, 0);
       }
 
+      // Toggle section collapse/expand
+      function toggleSection(sectionId) {
+        const contentElement = document.getElementById(`content-${sectionId}`);
+        const toggleElement = document.querySelector(`[onclick="toggleSection('${sectionId}')"] .section-toggle`);
+        
+        if (!contentElement || !toggleElement) return;
+        
+        const isCollapsed = collapsedSections.has(sectionId);
+        
+        if (isCollapsed) {
+          // Expand
+          collapsedSections.delete(sectionId);
+          contentElement.classList.remove('collapsed');
+          toggleElement.classList.remove('collapsed');
+          
+          // Remove max-height to allow full expansion
+          contentElement.style.maxHeight = 'none';
+          
+          // Store expanded state
+          post('SAVE_COLLAPSED_SECTIONS', { collapsedSections: [...collapsedSections] });
+        } else {
+          // Collapse
+          collapsedSections.add(sectionId);
+          contentElement.classList.add('collapsed');
+          toggleElement.classList.add('collapsed');
+          contentElement.style.maxHeight = '0';
+          
+          // Store collapsed state
+          post('SAVE_COLLAPSED_SECTIONS', { collapsedSections: [...collapsedSections] });
+        }
+      }
+      
+      // Load collapsed sections from figma.clientStorage
+      function loadCollapsedSections() {
+        post('LOAD_COLLAPSED_SECTIONS');
+      }
+      
+
       // Initialize keyboard shortcuts
       function initKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
@@ -1125,16 +1606,20 @@
                   return;
                 }
                 
+                // Normalize the name if it contains a slash
+                const slashMatch = newName.match(/^(.+?)\s*\/\s*(.+)$/);
+                const normalizedName = slashMatch ? `${slashMatch[1].trim()} / ${slashMatch[2].trim()}` : newName;
+                
                 // Update script name
-                currentScript.name = newName;
+                currentScript.name = normalizedName;
                 post('SAVE', {
-                  name: newName,
+                  name: normalizedName,
                   oldName: originalText,
                   code: currentScript.code,
                   type: 'user'
                 });
                 // Update last opened script with new name
-                post('SET_LAST_OPENED', { name: newName, scriptType: 'user' });
+                post('SET_LAST_OPENED', { name: normalizedName, scriptType: 'user' });
                 updateScriptList(searchInput.value);
                 // post('NOTIFY', { message: `Renamed to: ${newName}` });
               }
@@ -1144,15 +1629,19 @@
           }
           
           scriptTitle.addEventListener('blur', () => finishEditing(true), { once: true });
-          scriptTitle.addEventListener('keydown', (e) => {
+          const handleKeyDown = (e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
               finishEditing(true);
+              scriptTitle.removeEventListener('keydown', handleKeyDown);
             } else if (e.key === 'Escape') {
               e.preventDefault();
               finishEditing(false);
+              scriptTitle.removeEventListener('keydown', handleKeyDown);
             }
-          }, { once: true });
+          };
+          
+          scriptTitle.addEventListener('keydown', handleKeyDown);
         });
       }
 
@@ -1208,6 +1697,12 @@
             openInitialScript(msg.lastOpenedScript);
             break;
             
+          case 'COLLAPSED_SECTIONS':
+            collapsedSections = new Set(msg.collapsedSections || []);
+            // Update the script list to apply the collapsed state
+            updateScriptList();
+            break;
+            
             case 'SAVE_CONFIRMED':
             debugLog('Save confirmed for:', msg.scriptData.name);
             // UI already updated immediately, just log success
@@ -1225,7 +1720,10 @@
       function init() {
         debugLog('Initializing CodeFig...');
         
-        // Populate initial scripts
+        // Load collapsed sections state
+        loadCollapsedSections();
+        
+        // Populate initial scripts (build process includes all scripts in prebuiltScripts)
         allScripts = [...prebuiltScripts];
         updateScriptList();
         

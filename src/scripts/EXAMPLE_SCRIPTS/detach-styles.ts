@@ -1,4 +1,4 @@
-// Detach styles
+// ✅ Detach styles
 // Configuration - change these to control what gets detached
 var detachFonts = true;    // Detach text styles
 var detachFills = false;   // Detach fill styles

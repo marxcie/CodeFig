@@ -1,23 +1,25 @@
-// Scale every element in selection
-const scaleFactor = 0.8; // Change this to any factor you want
+// ✅ Scale elements in selection
+var scaleFactor = 0.8; // Change this to any factor you want
 
-function scaleIndividually(node: SceneNode) {
+function scaleIndividually(node) {
   if ("children" in node) {
-    node.children.forEach(scaleIndividually);
+    node.children.forEach(function(child) {
+      scaleIndividually(child);
+    });
   }
 
   if ("resize" in node && "absoluteTransform" in node && node.type !== "GROUP") {
-    const bbox = node.absoluteBoundingBox;
+    var bbox = node.absoluteBoundingBox;
     if (!bbox) return;
 
-    const centerX = bbox.x + bbox.width / 2;
-    const centerY = bbox.y + bbox.height / 2;
+    var centerX = bbox.x + bbox.width / 2;
+    var centerY = bbox.y + bbox.height / 2;
 
-    const newWidth = node.width * scaleFactor;
-    const newHeight = node.height * scaleFactor;
+    var newWidth = node.width * scaleFactor;
+    var newHeight = node.height * scaleFactor;
 
-    const dx = (newWidth - node.width) / 2;
-    const dy = (newHeight - node.height) / 2;
+    var dx = (newWidth - node.width) / 2;
+    var dy = (newHeight - node.height) / 2;
 
     node.resize(newWidth, newHeight);
     node.x -= dx;
@@ -25,5 +27,7 @@ function scaleIndividually(node: SceneNode) {
   }
 }
 
-figma.currentPage.selection.forEach(scaleIndividually);
-figma.notify(`Scaled ${figma.currentPage.selection.length} items by ${scaleFactor}x`);
+figma.currentPage.selection.forEach(function(node) {
+  scaleIndividually(node);
+});
+figma.notify('Scaled ' + figma.currentPage.selection.length + ' items by ' + scaleFactor + 'x');

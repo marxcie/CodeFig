@@ -24,6 +24,30 @@
 // - All modern TypeScript features
 // - Auto-completion and error checking
 
+// === @IMPORT SYSTEM ===
+// 🚀 CodeFig includes a powerful runtime import system for code reuse!
+
+// 🎯 SYNTAX:
+// @import { functionName1, functionName2 } from "Script Name"
+// @import { functionName1, functionName2 }  // defaults to @Core Library
+
+// 📚 AVAILABLE LIBRARIES:
+// • @Core Library: getAllStyles, traverseNodes, distance, center, bounds, hexToRgb, etc.
+// • @Math Helpers: add, multiply, average, roundToNearest, clamp, lerp
+// • @Custom Helpers: generateSpacing, setupAutoLayout, analyzeSelection
+
+// 💡 IMPORT EXAMPLES:
+// @import { getAllStyles, distance } from "@Core Library"
+// @import { add, average } from "@Math Helpers"  
+// @import { generateSpacing } from "@Custom Helpers"
+// @import { myFunction } from "My Custom Script"  // Import from any user script
+
+// ✨ HOW IT WORKS:
+// 1. Write @import statements at the top of your script
+// 2. Click Run - imports are processed automatically at runtime
+// 3. Only the functions you need are included (lightweight!)
+// 4. No build process required - works immediately in the app
+
 // === AVAILABLE APIs ===
 // - figma: Full Figma API (with TypeScript types!)
 // - selection: Current selection (auto-available)
@@ -71,10 +95,12 @@ if (variable) {
 // === TIPS & TRICKS ===
 // 🔍 Use search (Cmd//) to quickly find scripts
 // 💡 Check Example Scripts for inspiration and ready-to-use code
+// 📚 Use @import to reuse functions: @import { getAllStyles } from "@Core Library"
 // 🐛 Use console.log() and check browser dev tools for debugging
 // 📋 Copy useful code snippets from examples to your scripts
 // 💾 Your work is automatically saved - no need to manually save!
 // 📱 Use figma.notify() instead of alert() for better UX
+// 🎯 Check @Core Library, @Math Helpers, @Custom Helpers for reusable functions
 
 // === EXAMPLE: TypeScript-powered variable listing ===
 const variables = figma.variables.getLocalVariables();

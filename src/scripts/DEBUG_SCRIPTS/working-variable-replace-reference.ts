@@ -1,6 +1,5 @@
 // Working variable replace reference
 // Reference implementation of working variable replacement with library import
-// @ts-convert: false
 
 console.log('Working Variable Replace Reference - Library Import Version');
 

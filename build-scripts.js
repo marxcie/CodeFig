@@ -15,35 +15,45 @@ function filenameToDisplayName(filename) {
   return capitalized;
 }
 
-// Get script name from file content or generate from filename
-function getScriptName(filePath, filename) {
+// Get script name and metadata from file content
+function getScriptMetadata(filePath, filename) {
+  const metadata = {
+    name: filenameToDisplayName(filename),
+    shared: false
+  };
+  
   try {
     const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split('\n').slice(0, 20); // Check more lines for metadata
     
-    // Look for a comment like "// SCRIPT_NAME: Custom Name" in the first few lines
-    const lines = content.split('\n').slice(0, 10);
     for (const line of lines) {
-      const match = line.match(/\/\/\s*SCRIPT_NAME:\s*(.+)/i);
-      if (match) {
-        return match[1].trim();
+      // Look for script name
+      const nameMatch = line.match(/\/\/\s*SCRIPT_NAME:\s*(.+)/i);
+      if (nameMatch) {
+        metadata.name = nameMatch[1].trim();
+        continue;
       }
-    }
-    
-    // Look for a comment like "// CUSTOM SCRIPT NAME" as the first non-empty line
-    for (const line of lines) {
+      
+      // Look for shared flag (not commented out)
+      const sharedMatch = line.match(/^\s*var\s+shared\s*=\s*(true|false)/);
+      if (sharedMatch) {
+        metadata.shared = sharedMatch[1] === 'true';
+        continue;
+      }
+      
+      // Look for title comment as first non-empty line
       const trimmed = line.trim();
-      if (trimmed && trimmed.startsWith('//')) {
+      if (trimmed && trimmed.startsWith('//') && !metadata.nameFromComment) {
         const commentContent = trimmed.replace(/^\/\/\s*/, '').trim();
-        // Skip if it contains equals signs (section headers like === GEOMETRY ===)
-        if (commentContent.includes('===') || commentContent.includes('==')) {
-          continue;
-        }
-        // If it looks like a title (not a regular comment), use it as-is
-        if (commentContent.length > 0 && !commentContent.toLowerCase().includes('execute') && 
+        // Skip section headers and common patterns
+        if (!commentContent.includes('===') && !commentContent.includes('==') &&
+            !commentContent.toLowerCase().includes('execute') && 
             !commentContent.toLowerCase().includes('import') && 
             !commentContent.toLowerCase().includes('function') &&
-            !commentContent.toLowerCase().includes('collection of')) {
-          return commentContent;
+            !commentContent.toLowerCase().includes('collection of') &&
+            commentContent.length > 0) {
+          metadata.name = commentContent;
+          metadata.nameFromComment = true;
         }
       }
     }
@@ -51,8 +61,12 @@ function getScriptName(filePath, filename) {
     console.log(`Warning: Could not read file ${filePath}: ${error.message}`);
   }
   
-  // Fall back to filename-based name
-  return filenameToDisplayName(filename);
+  return metadata;
+}
+
+// Legacy function for backwards compatibility
+function getScriptName(filePath, filename) {
+  return getScriptMetadata(filePath, filename).name;
 }
 
 // Get category type from folder name
@@ -85,15 +99,22 @@ function findAllScripts(scriptsDir) {
       } else if (item.endsWith('.ts')) {
         // Found a TypeScript file
         const folderName = relativePath.split('/')[0] || 'EXAMPLE_SCRIPTS'; // Default category
-        const scriptName = getScriptName(itemPath, item);
+        const metadata = getScriptMetadata(itemPath, item);
         const scriptType = getCategoryType(folderName);
         
+        // Add "Example Scripts / " prefix to prebuilt scripts to demonstrate grouping
+        const displayName = scriptType === 'prebuilt' ? `Example Scripts / ${metadata.name}` : metadata.name;
+        
+        const scriptCode = fs.readFileSync(itemPath, 'utf8');
+        
         scripts.push({
-          name: scriptName,
-          code: fs.readFileSync(itemPath, 'utf8'),
+          name: displayName,
+          code: scriptCode,
           type: scriptType,
           filename: item,
-          folder: folderName
+          folder: folderName,
+          shared: metadata.shared,
+          filePath: itemPath
         });
       }
     }
@@ -106,15 +127,142 @@ function findAllScripts(scriptsDir) {
   return scripts;
 }
 
+// Parse and extract functions from library scripts
+function extractFunctions(code) {
+  const functions = new Map();
+  
+  // Match function declarations: function name() { ... }
+  const functionRegex = /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\([^)]*\)\s*\{/g;
+  let match;
+  
+  while ((match = functionRegex.exec(code)) !== null) {
+    const functionName = match[1];
+    const startIndex = match.index;
+    
+    // Find the complete function by counting braces
+    let braceCount = 0;
+    let i = startIndex;
+    let inString = false;
+    let stringChar = '';
+    
+    while (i < code.length) {
+      const char = code[i];
+      
+      if (!inString) {
+        if (char === '"' || char === "'" || char === '`') {
+          inString = true;
+          stringChar = char;
+        } else if (char === '{') {
+          braceCount++;
+        } else if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            break;
+          }
+        }
+      } else {
+        if (char === stringChar && code[i-1] !== '\\') {
+          inString = false;
+        }
+      }
+      i++;
+    }
+    
+    if (braceCount === 0) {
+      const functionCode = code.substring(startIndex, i + 1);
+      functions.set(functionName, functionCode);
+    }
+  }
+  
+  return functions;
+}
+
+// Process @import statements in scripts
+function processImports(scripts) {
+  // Build function library from all scripts
+  const functionLibrary = new Map();
+  const libraryScripts = scripts.filter(script => 
+    script.filename === '@core-library.ts' || 
+    script.filename === '@custom-helpers.ts' ||
+    script.filename === '@math-helpers.ts'
+  );
+  
+  libraryScripts.forEach(script => {
+    console.log(`📚 Extracting functions from ${script.name}`);
+    const functions = extractFunctions(script.code);
+    console.log(`   Found functions: ${Array.from(functions.keys()).join(', ')}`);
+    functions.forEach((code, name) => {
+      functionLibrary.set(name, {
+        code: code,
+        source: script.name
+      });
+    });
+  });
+  
+  console.log(`📋 Function library built with ${functionLibrary.size} functions`);
+  
+  // Process each script for @import statements
+  const processedScripts = scripts.map(script => {
+    let processedCode = script.code;
+    const imports = [];
+    
+    // Find @import statements
+    const importRegex = /@import\s+\{([^}]+)\}/g;
+    let match;
+    
+    while ((match = importRegex.exec(script.code)) !== null) {
+      const importList = match[1];
+      const functionNames = importList.split(',').map(name => name.trim());
+      
+      functionNames.forEach(functionName => {
+        if (functionLibrary.has(functionName)) {
+          const func = functionLibrary.get(functionName);
+          imports.push({
+            name: functionName,
+            code: func.code,
+            source: func.source
+          });
+        } else {
+          console.log(`⚠️ Function '${functionName}' not found in library`);
+        }
+      });
+    }
+    
+    if (imports.length > 0) {
+      console.log(`🔗 ${script.name}: importing ${imports.length} functions`);
+      
+      // Remove @import statements
+      processedCode = processedCode.replace(/@import\s+\{[^}]+\}/g, '');
+      
+      // Add imported functions at the top
+      const importedCode = imports.map(imp => 
+        `// Imported from ${imp.source}\n${imp.code}\n`
+      ).join('\n');
+      
+      processedCode = importedCode + '\n' + processedCode;
+    }
+    
+    return {
+      ...script,
+      code: processedCode
+    };
+  });
+  
+  return processedScripts;
+}
+
 // Read all script files and generate the prebuiltScripts array
 function buildScripts() {
   const scriptsDir = path.join(__dirname, 'src', 'scripts');
-  const scripts = findAllScripts(scriptsDir);
+  const allScripts = findAllScripts(scriptsDir);
   
-  if (scripts.length === 0) {
+  if (allScripts.length === 0) {
     console.log('⚠️ No scripts found in', scriptsDir);
     return [];
   }
+  
+  // Skip build-time import processing - let runtime handle it
+  const scripts = allScripts;
   
   // Sort scripts by type and name
   scripts.sort((a, b) => {
@@ -131,9 +279,9 @@ function buildScripts() {
     return a.name.localeCompare(b.name);
   });
   
-  console.log(`📦 Loaded ${scripts.length} scripts`);
+  console.log(`📦 Built ${scripts.length} scripts (${allScripts.filter(s => s.shared).length} shared libraries injected)`);
   scripts.forEach(script => {
-    console.log(`✅ Loaded: ${script.name} (${script.filename}) [${script.type}]`);
+    console.log(`✅ Built: ${script.name} (${script.filename}) [${script.type}]`);
   });
   
   return scripts;

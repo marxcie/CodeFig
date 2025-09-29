@@ -1,4 +1,5 @@
-// Replace styles with pattern matching
+// Find and replace styles
+// Enhanced with Team Library API for comprehensive style access
 
 console.log('🎨 Replace Styles - Pattern Matching with Library Import');
 
@@ -66,11 +67,11 @@ async function replaceStyles() {
   }
 }
 
-// Enhanced style cache that includes library styles
+// Enhanced style cache with Team Library API (like variable replacement)
 async function buildEnhancedStyleCache() {
   var cache = new Map();
   
-  console.log('🔍 Building enhanced style cache...');
+  console.log('🔍 Building comprehensive style cache with Team Library API...');
   
   // Add all local styles
   var localTextStyles = figma.getLocalTextStyles();
@@ -78,66 +79,123 @@ async function buildEnhancedStyleCache() {
   var localEffectStyles = figma.getLocalEffectStyles();
   
   for (var i = 0; i < localTextStyles.length; i++) {
-    cache.set(localTextStyles[i].name, localTextStyles[i]);
+    cache.set(localTextStyles[i].name, {
+      style: localTextStyles[i],
+      key: null,
+      isLibrary: false
+    });
   }
   for (var i = 0; i < localPaintStyles.length; i++) {
-    cache.set(localPaintStyles[i].name, localPaintStyles[i]);
+    cache.set(localPaintStyles[i].name, {
+      style: localPaintStyles[i],
+      key: null,
+      isLibrary: false
+    });
   }
   for (var i = 0; i < localEffectStyles.length; i++) {
-    cache.set(localEffectStyles[i].name, localEffectStyles[i]);
+    cache.set(localEffectStyles[i].name, {
+      style: localEffectStyles[i],
+      key: null,
+      isLibrary: false
+    });
   }
   
   console.log('📋 Added ' + (localTextStyles.length + localPaintStyles.length + localEffectStyles.length) + ' local styles');
   
-  // Scan document for currently used library styles
-  function scanNode(node) {
-    if (node.type === 'TEXT') {
+  // 🚀 NEW: Access Team Library styles (like we do for variables)
+  try {
+    console.log('🌐 Accessing Team Library styles...');
+    
+    // Get all available library style collections
+    var libraryCollections = await figma.teamLibrary.getAvailableLibraryStyleCollectionsAsync();
+    console.log('📚 Found ' + libraryCollections.length + ' library style collections');
+    
+    for (var libIndex = 0; libIndex < libraryCollections.length; libIndex++) {
+      var libraryCollection = libraryCollections[libIndex];
+      
       try {
-        var segments = node.getStyledTextSegments(['textStyleId']);
-        for (var segIndex = 0; segIndex < segments.length; segIndex++) {
-          var segment = segments[segIndex];
-          if (segment.textStyleId && segment.textStyleId !== figma.mixed) {
-            try {
-              var style = figma.getStyleById(segment.textStyleId);
-              if (style && !cache.has(style.name)) {
-                cache.set(style.name, style);
-              }
-            } catch (e) {
-              // Style might be inaccessible
-            }
-          }
+        // Get styles from each collection
+        var libraryStyles = await figma.teamLibrary.getStylesInLibraryCollectionAsync(libraryCollection.key);
+        console.log('📋 Collection "' + libraryCollection.name + '": ' + libraryStyles.length + ' styles');
+        
+        for (var styleIndex = 0; styleIndex < libraryStyles.length; styleIndex++) {
+          var libraryStyle = libraryStyles[styleIndex];
+          
+          // Store library style info for later import
+          cache.set(libraryStyle.name, {
+            style: null, // Will be imported when needed
+            key: libraryStyle.key,
+            isLibrary: true,
+            name: libraryStyle.name,
+            type: libraryStyle.type
+          });
         }
       } catch (e) {
-        // Node might not support text segments
+        console.log('⚠️ Could not access collection: ' + libraryCollection.name);
       }
     }
+  } catch (error) {
+    console.log('⚠️ Team Library access failed: ' + error.message);
+    console.log('📋 Falling back to document scanning...');
     
-    // Check other style types
-    var styleProps = ['fillStyleId', 'strokeStyleId', 'effectStyleId'];
-    for (var propIndex = 0; propIndex < styleProps.length; propIndex++) {
-      var prop = styleProps[propIndex];
-      if (prop in node && node[prop] && node[prop] !== figma.mixed) {
+    // Fallback: Scan document for currently used library styles
+    function scanNode(node) {
+      if (node.type === 'TEXT') {
         try {
-          var style = figma.getStyleById(node[prop]);
-          if (style && !cache.has(style.name)) {
-            cache.set(style.name, style);
+          var segments = node.getStyledTextSegments(['textStyleId']);
+          for (var segIndex = 0; segIndex < segments.length; segIndex++) {
+            var segment = segments[segIndex];
+            if (segment.textStyleId && segment.textStyleId !== figma.mixed) {
+              try {
+                var style = figma.getStyleById(segment.textStyleId);
+                if (style && !cache.has(style.name)) {
+                  cache.set(style.name, {
+                    style: style,
+                    key: style.key || null,
+                    isLibrary: style.remote || false
+                  });
+                }
+              } catch (e) {
+                // Style might be inaccessible
+              }
+            }
           }
         } catch (e) {
-          // Style might be inaccessible
+          // Node might not support text segments
+        }
+      }
+      
+      // Check other style types
+      var styleProps = ['fillStyleId', 'strokeStyleId', 'effectStyleId'];
+      for (var propIndex = 0; propIndex < styleProps.length; propIndex++) {
+        var prop = styleProps[propIndex];
+        if (prop in node && node[prop] && node[prop] !== figma.mixed) {
+          try {
+            var style = figma.getStyleById(node[prop]);
+            if (style && !cache.has(style.name)) {
+              cache.set(style.name, {
+                style: style,
+                key: style.key || null,
+                isLibrary: style.remote || false
+              });
+            }
+          } catch (e) {
+            // Style might be inaccessible
+          }
+        }
+      }
+      
+      if ('children' in node) {
+        for (var childIndex = 0; childIndex < node.children.length; childIndex++) {
+          scanNode(node.children[childIndex]);
         }
       }
     }
     
-    if ('children' in node) {
-      for (var childIndex = 0; childIndex < node.children.length; childIndex++) {
-        scanNode(node.children[childIndex]);
-      }
-    }
+    scanNode(figma.currentPage);
   }
   
-  scanNode(figma.currentPage);
   console.log('📋 Total styles in cache: ' + cache.size);
-  
   return cache;
 }
 
@@ -255,7 +313,7 @@ async function processOtherStyles(node, styleCache) {
   return replacements;
 }
 
-// Enhanced replacement function with library style import
+// Enhanced replacement function with Team Library import (like variable replacement)
 async function findReplacementStyle(currentStyle, styleCache) {
   for (var replIndex = 0; replIndex < STYLE_REPLACEMENTS.length; replIndex++) {
     var replacement = STYLE_REPLACEMENTS[replIndex];
@@ -267,90 +325,37 @@ async function findReplacementStyle(currentStyle, styleCache) {
         var newStyleName = currentStyle.name.replace(new RegExp(findPattern, 'g'), replacement.to);
         console.log('🔍 Looking for replacement style: "' + newStyleName + '"');
         
-        // First check if style is already in cache
-        var newStyle = styleCache.get(newStyleName);
-        if (newStyle) {
-          console.log('✅ Found in cache: "' + newStyleName + '"');
-          return newStyle;
+        // Check if style is in cache
+        var styleInfo = styleCache.get(newStyleName);
+        if (styleInfo) {
+          // If it's a local style or already imported library style
+          if (styleInfo.style) {
+            console.log('✅ Found in cache: "' + newStyleName + '"');
+            return styleInfo.style;
+          }
+          
+          // If it's a library style that needs to be imported
+          if (styleInfo.isLibrary && styleInfo.key) {
+            console.log('📥 Importing library style: "' + newStyleName + '"');
+            try {
+              var importedStyle = await figma.importStyleByKeyAsync(styleInfo.key);
+              console.log('✅ Successfully imported: "' + importedStyle.name + '"');
+              
+              // Update cache with imported style
+              styleCache.set(newStyleName, {
+                style: importedStyle,
+                key: styleInfo.key,
+                isLibrary: true
+              });
+              
+              return importedStyle;
+            } catch (importError) {
+              console.log('❌ Failed to import style: ' + importError.message);
+            }
+          }
         }
         
-        // If not in cache, try to import from library
-        console.log('📥 Attempting to import from library: "' + newStyleName + '"');
-        try {
-          // Try to import by key - this requires the style to exist in a team library
-          // Note: This is a simplified approach. In practice, you'd need to:
-          // 1. Get available library style collections
-          // 2. Search through them for matching style names
-          // 3. Import by key if found
-          
-          // For now, we'll just check if it's a library style we can access
-          // This approach works if the style exists in the document or libraries
-          var allStyles = [];
-          
-          // Get all styles from the document (including library styles that are used)
-          function collectAllStyles(node) {
-            if (node.type === 'TEXT') {
-              try {
-                var segments = node.getStyledTextSegments(['textStyleId']);
-                for (var segIndex = 0; segIndex < segments.length; segIndex++) {
-                  var segment = segments[segIndex];
-                  if (segment.textStyleId && segment.textStyleId !== figma.mixed) {
-                    try {
-                      var style = figma.getStyleById(segment.textStyleId);
-                      if (style && style.name === newStyleName && !styleCache.has(style.name)) {
-                        console.log('🎯 Found library style in document: "' + style.name + '"');
-                        styleCache.set(style.name, style);
-                        return style;
-                      }
-                    } catch (e) {
-                      // Style might be inaccessible
-                    }
-                  }
-                }
-              } catch (e) {
-                // Node might not support text segments
-              }
-            }
-            
-            // Check other style types
-            var styleProps = ['fillStyleId', 'strokeStyleId', 'effectStyleId'];
-            for (var propIndex = 0; propIndex < styleProps.length; propIndex++) {
-              var prop = styleProps[propIndex];
-              if (prop in node && node[prop] && node[prop] !== figma.mixed) {
-                try {
-                  var style = figma.getStyleById(node[prop]);
-                  if (style && style.name === newStyleName && !styleCache.has(style.name)) {
-                    console.log('🎯 Found library style in document: "' + style.name + '"');
-                    styleCache.set(style.name, style);
-                    return style;
-                  }
-                } catch (e) {
-                  // Style might be inaccessible
-                }
-              }
-            }
-            
-            if ('children' in node) {
-              for (var childIndex = 0; childIndex < node.children.length; childIndex++) {
-                var foundStyle = collectAllStyles(node.children[childIndex]);
-                if (foundStyle) return foundStyle;
-              }
-            }
-            
-            return null;
-          }
-          
-          // Search the entire document for the target style
-          var foundStyle = collectAllStyles(figma.root);
-          if (foundStyle) {
-            return foundStyle;
-          }
-          
-          console.log('❌ Style not found in document or libraries: "' + newStyleName + '"');
-          
-        } catch (error) {
-          console.log('❌ Error importing style: ' + error.message);
-        }
+        console.log('❌ Style not found: "' + newStyleName + '"');
       }
     }
   }
