@@ -266,7 +266,11 @@
       .script-item.grouped {
         padding-left: 36px;
       }
-      
+
+      /* .script-item.user-script {
+        color: #007AFF;
+      } */
+
       /* Breadcrumb in header */
       .script-breadcrumb {
         font-size: 12px;
@@ -489,6 +493,311 @@
         border-color: #ef4444; 
         color: #dc2626;
       }
+
+      /* Button Group Styles */
+      .button-group {
+        display: flex;
+        gap: 4px;
+        margin-right: 8px;
+      }
+
+      .icon-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: #666;
+        cursor: pointer;
+        transition: color 0.2s ease;
+      }
+
+      .icon-btn:hover {
+        color: #333;
+      }
+
+      .icon-btn.active {
+        color: #3b7bef;
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 8px;
+      }
+
+      /* Editor container needs to be relative for panel positioning */
+      .editor-container {
+        position: relative;
+      }
+
+      /* Info Panel Styles */
+      .info-panel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 300px;
+        height: 100%;
+        background: #FAFAFA;
+        border-left: 1px solid #e6e6e6;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 100;
+        overflow: hidden;
+      }
+
+      .info-panel.open {
+        transform: translateX(0);
+      }
+
+      .info-panel-scroll {
+        height: 100%;
+        overflow-y: auto;
+        /* background: #f5f5f5; */
+      }
+
+      .info-header {
+        padding: 16px 16px 12px 16px;
+      }
+
+      .info-title {
+        font-size: 16px;
+        color: #333;
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .info-filtering {
+        padding: 0 16px 12px 16px;
+        /* border-bottom: 1px solid #e6e6e6; */
+        /* margin-bottom: 12px; */
+      }
+
+      .info-filtering:empty {
+        display: none;
+      }
+
+      .info-list {
+        padding: 0 16px 16px 16px;
+      }
+
+      .info-placeholder {
+        text-align: center;
+        color: #999;
+        font-size: 14px;
+        margin-top: 40px;
+      }
+
+      .info-result-item {
+        /* padding-left: 8px; */
+        /* border-left: 1px solid #e6e6e6; */
+        margin-bottom: 8px;
+      }
+
+      /* Custom InfoPanel Entry Styles */
+      .info-entry {
+        display: flex;
+        align-items: flex-start;
+        /* padding: 12px; */
+        /* border: 1px solid #e6e6e6; */
+        /* border-radius: 6px; */
+        /* background: #fff; */
+        margin-bottom: 16px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      /* .info-entry:hover {
+        border-color: #0066cc;
+        box-shadow: 0 2px 4px rgba(0, 102, 204, 0.1);
+      } */
+
+      .info-entry-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: 12px;
+        margin-top: 2px;
+        flex-shrink: 0;
+      }
+
+      .info-entry-content {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .info-entry-title {
+        font-weight: 600;
+        color: #000;
+        font-size: 11px;
+        margin-bottom: 4px;
+        word-break: break-word;
+      }
+
+      .info-entry-count {
+        font-size: 11px;
+        font-weight: 400;
+        color: #808080;
+      }
+
+      .info-entry-subtitle {
+        font-size: 13px;
+        color: #666;
+        line-height: 1.4;
+      }
+
+      .info-entry-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 500;
+        margin-right: 2px;
+      }
+
+      .info-entry-badge.error {
+        background: #D92637;
+        color: #fff;
+      }
+
+      .info-entry-badge.warning {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      .info-entry-badge.success {
+        background: #d4edda;
+        color: #155724;
+      }
+
+      .info-entry-badge.info {
+        background: #d1ecf1;
+        color: #0c5460;
+      }
+
+      /* Category Header Styles */
+      .info-category-header {
+        display: flex;
+        align-items: center;
+        padding: 12px 0 8px 0;
+        margin-top: 16px;
+      }
+
+      .info-category-header:first-child {
+        margin-top: 0;
+      }
+
+      .info-category-title {
+        font-size: 9px;
+        font-weight: 500;
+        color: #808080;
+        text-transform: uppercase;
+      }
+        /* background: white; */
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      /* .info-result-item:hover {
+        background: #f5f5f5;
+        border-color: #ccc;
+      }
+
+      .info-result-item.error {
+        border-color: #ef4444;
+        background: #fef2f2;
+      }
+
+      .info-result-item.warning {
+        border-color: #f59e0b;
+        background: #fffbeb;
+      }
+
+      .info-result-item.success {
+        border-color: #10b981;
+        background: #ecfdf5;
+      } */
+
+      .info-result-message {
+        font-size: 11px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 4px;
+      }
+      .info-result-message.error {
+        color: #ef4444;
+      }
+
+      .info-result-details {
+        font-size: 9px;
+        color: #666;
+      }
+
+      /* Additional styling classes for InfoPanel content */
+      .info-result-message .highlight {
+        background: #fff3cd;
+        padding: 1px 3px;
+        border-radius: 2px;
+        font-weight: 600;
+      }
+
+      .info-result-message .error-text {
+        color: #dc3545;
+        font-weight: 600;
+      }
+
+      .info-result-message .warning-text {
+        color: #fd7e14;
+        font-weight: 600;
+      }
+
+      .info-result-message .success-text {
+        color: #198754;
+        font-weight: 600;
+      }
+
+      .info-result-message .code {
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+        background: #f8f9fa;
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 10px;
+        border: 1px solid #e9ecef;
+      }
+
+      .info-result-message .badge {
+        display: inline-block;
+        padding: 2px 3px;
+        font-size: 9px;
+        font-weight: 600;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: 2px;
+        margin-right: 4px;
+      }
+
+      .info-result-message .badge-error {
+        color: #fff;
+        background-color: #dc3545;
+      }
+
+      .info-result-message .badge-warning {
+        color: #000;
+        background-color: #ffc107;
+      }
+
+      .info-result-message .badge-success {
+        color: #fff;
+        background-color: #198754;
+      }
+
+      .info-result-message .badge-info {
+        color: #fff;
+        background-color: #0dcaf0;
+      }
       
       .hidden { display: none; }
     </style>
@@ -519,13 +828,52 @@
               <div class="script-status" id="scriptStatus">Ready</div>
             </div>
             <div class="header-right">
-              <button class="btn danger" id="deleteBtn" disabled title="Delete Script">Delete</button>
-              <button class="btn primary" id="runBtn" title="Run Script (⌘R)">Run</button>
+              <div class="button-group">
+                <button class="icon-btn" id="infoPanelBtn" title="Results & Information">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" id="maximizeBtn" title="Maximize Window">
+                  <svg width="16" height="16" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <g clip-path="url(#clip0_58_779)">
+                      <path d="M4 1.5H2.5C2.23478 1.5 1.98043 1.60536 1.79289 1.79289C1.60536 1.98043 1.5 2.23478 1.5 2.5V4M10.5 4V2.5C10.5 2.23478 10.3946 1.98043 10.2071 1.79289C10.0196 1.60536 9.76522 1.5 9.5 1.5H8M8 10.5H9.5C9.76522 10.5 10.0196 10.3946 10.2071 10.2071C10.3946 10.0196 10.5 9.76522 10.5 9.5V8M1.5 8V9.5C1.5 9.76522 1.60536 10.0196 1.79289 10.2071C1.98043 10.3946 2.23478 10.5 2.5 10.5H4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </g>
+                    <defs>
+                      <clipPath id="clip0_58_779">
+                        <rect width="12" height="12" fill="white"/>
+                      </clipPath>
+                    </defs>
+                  </svg>
+                </button>
+              </div>
+              <div class="action-buttons">
+                <button class="btn danger" id="deleteBtn" disabled title="Delete Script">Delete</button>
+                <button class="btn primary" id="runBtn" title="Run Script (⌘R)">Run</button>
+              </div>
             </div>
           </div>
           
           <div class="editor-container">
             <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
+            
+            <!-- Info Panel -->
+            <div class="info-panel" id="infoPanel">
+              <div class="info-panel-scroll">
+                <div class="info-header">
+                  <span class="info-title">Results & Information</span>
+                </div>
+                <div class="info-filtering" id="infoFiltering">
+                  <!-- Filtering controls will be added here later -->
+                </div>
+                <div class="info-list" id="infoContent">
+                  <div class="info-placeholder">
+                    <p>No results yet. Run a script to see information here.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -572,6 +920,10 @@
       const deleteBtn = document.getElementById('deleteBtn');
       const exportBtn = document.getElementById('exportBtn');
       const importBtn = document.getElementById('importBtn');
+      const infoPanelBtn = document.getElementById('infoPanelBtn');
+      const maximizeBtn = document.getElementById('maximizeBtn');
+      const infoPanel = document.getElementById('infoPanel');
+      const infoContent = document.getElementById('infoContent');
       const exportAllBtn = document.getElementById('exportAllBtn');
       const resizer = document.getElementById('resizer');
       const sidebar = document.getElementById('sidebar');
@@ -596,6 +948,9 @@
       setTimeout(() => {
         code.refresh();
         code.setSize(null, '100%');
+        
+        // Initialize the app after CodeMirror is ready
+        init();
       }, 100);
 
       function post(type, data = {}) {
@@ -691,8 +1046,8 @@
           const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
           const sectionHeaderClass = hasSelectedScript ? 'selected' : '';
           
-          const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-          const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+          const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" /></svg>`;
+          const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" /></svg>`;
           
           html += `
             <div class="section-header ${headerClass} ${sectionHeaderClass}" onclick="toggleSection('${sectionId}')">
@@ -813,8 +1168,8 @@
             const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
             const groupHeaderClass = hasSelectedScript ? 'selected' : '';
             const groupClass = hasSelectedScript ? 'selected' : '';
-            const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-            const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+            const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
+            const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
             
             html += `
               <div class="script-group ${groupClass}">
@@ -864,8 +1219,21 @@
       function selectScriptDirectly(script) {
         debugLog('Selecting script:', script);
         currentScript = script;
-        code.setValue(script.code || '');
+        
+        // Ensure CodeMirror is ready before setting value
+        if (code && code.setValue) {
+          code.setValue(script.code || '');
+          // Use setTimeout to ensure CodeMirror updates properly
+          setTimeout(() => {
+            code.refresh();
+            code.setSize(null, '100%');
+          }, 10);
+        }
         originalCode = script.code || '';
+        
+        // Check if this script uses @InfoPanel
+        infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
+        updateInfoPanelButtonVisibility();
         
         // The script name already contains the group info if it exists (Group / Script Name)
         scriptTitle.textContent = script.name;
@@ -915,7 +1283,7 @@
         
         // If no last opened script or it doesn't exist, default to Help & Documentation
         if (!scriptToOpen) {
-          scriptToOpen = allScripts.find(s => s.name === 'Help & Documentation');
+          scriptToOpen = allScripts.find(s => s.name === 'CodeFig - help & documentation');
         }
         
         // Fallback to first script if Help & Documentation doesn't exist
@@ -950,6 +1318,470 @@
         } else {
           deleteBtn.style.display = 'flex';
         }
+      }
+
+      // Info Panel functionality
+      let infoPanelOpen = false;
+      let isMaximized = false;
+      const originalSize = { width: 1000, height: 600 };
+      let infoPanelAvailable = false;
+
+      function checkInfoPanelAvailability(scriptCode) {
+        // Check if script imports @InfoPanel
+        const hasInfoPanelImport = /@import.*@InfoPanel|@import.*InfoPanel/.test(scriptCode);
+        return hasInfoPanelImport;
+      }
+
+      function updateInfoPanelButtonVisibility() {
+        if (infoPanelAvailable) {
+          infoPanelBtn.style.display = 'flex';
+        } else {
+          infoPanelBtn.style.display = 'none';
+          // Also close panel if it's open
+          if (infoPanelOpen) {
+            infoPanelOpen = false;
+            infoPanel.classList.remove('open');
+            infoPanelBtn.classList.remove('active');
+          }
+        }
+      }
+
+      // Initialize button as hidden until a script is loaded
+      function initializeInfoPanel() {
+        infoPanelBtn.style.display = 'none';
+      }
+
+      function toggleInfoPanel() {
+        infoPanelOpen = !infoPanelOpen;
+        
+        if (infoPanelOpen) {
+          infoPanel.classList.add('open');
+          infoPanelBtn.classList.add('active');
+        } else {
+          infoPanel.classList.remove('open');
+          infoPanelBtn.classList.remove('active');
+        }
+        
+        // Note: State saving would need to be done via message passing to backend
+      }
+
+
+      function toggleMaximize() {
+        isMaximized = !isMaximized;
+        
+        if (isMaximized) {
+          // Maximize to near full viewport size
+          parent.postMessage({
+            pluginMessage: { 
+              type: 'RESIZE_WINDOW', 
+              width: Math.min(1600, window.screen.width * 0.95),
+              height: Math.min(1000, window.screen.height * 0.9)
+            }
+          }, '*');
+          maximizeBtn.classList.add('active');
+          maximizeBtn.title = 'Restore Window';
+        } else {
+          // Restore to original size
+          parent.postMessage({
+            pluginMessage: { 
+              type: 'RESIZE_WINDOW', 
+              width: originalSize.width,
+              height: originalSize.height
+            }
+          }, '*');
+          maximizeBtn.classList.remove('active');
+          maximizeBtn.title = 'Maximize Window';
+        }
+        
+        // Note: State saving would need to be done via message passing to backend
+      }
+
+      function displayInfoResults(data) {
+        console.log('UI: displayInfoResults called with:', data);
+        console.log('UI: Results array length:', data.results ? data.results.length : 'no results');
+        
+        const { title, results, type = 'info', grouping, showFilters = true, autoClose = false } = data;
+        
+        // Auto-open the InfoPanel when results are received (only for errors, not for success)
+        if (!infoPanel.classList.contains('open') && !autoClose && type !== 'success') {
+          console.log('UI: Auto-opening InfoPanel for results');
+          toggleInfoPanel();
+        }
+        
+        // Update main panel title (replace "Results & Information")
+        const infoTitle = document.querySelector('.info-title');
+        if (infoTitle && title) {
+          infoTitle.textContent = title;
+        }
+        
+        // Clear previous content
+        infoContent.innerHTML = '';
+        
+        // Add filtering controls if grouping is enabled
+        if (grouping && showFilters && grouping.modes && grouping.modes.length > 1) {
+          const filterContainer = createFilterControls(grouping);
+          infoContent.appendChild(filterContainer);
+        }
+        
+        if (!results || results.length === 0) {
+          const noResults = document.createElement('div');
+          noResults.className = 'info-placeholder';
+          noResults.innerHTML = '<p>No results found.</p>';
+          infoContent.appendChild(noResults);
+          return;
+        }
+        
+        // Store data for filtering
+        window.currentInfoData = data;
+        
+        // Display results (grouped or flat)
+        if (grouping) {
+          displayGroupedResults(results, grouping, type);
+        } else {
+          displayFlatResults(results, type);
+        }
+        
+        // Auto-close panel after showing success message (only if panel was already open)
+        if (autoClose && infoPanel.classList.contains('open')) {
+          console.log('UI: Auto-closing InfoPanel after success message');
+          setTimeout(() => {
+            toggleInfoPanel();
+          }, 2000); // Close after 2 seconds
+        }
+      }
+
+      function createFilterControls(grouping) {
+        const container = document.createElement('div');
+        container.className = 'info-filter-controls';
+        container.style.cssText = 'margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e6e6e6;';
+        
+        const label = document.createElement('span');
+        label.textContent = 'Group by: ';
+        label.style.cssText = 'font-size: 11px; color: #666; margin-right: 8px;';
+        container.appendChild(label);
+        
+        grouping.modes.forEach((mode, index) => {
+          const button = document.createElement('button');
+          button.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+          button.className = 'filter-btn';
+          button.style.cssText = `
+            font-size: 10px; 
+            padding: 4px 8px; 
+            margin-right: 4px; 
+            border: 1px solid #ccc; 
+            background: ${mode === grouping.default ? '#007AFF' : '#fff'}; 
+            color: ${mode === grouping.default ? '#fff' : '#333'}; 
+            border-radius: 4px; 
+            cursor: pointer;
+          `;
+          
+          button.addEventListener('click', () => {
+            // Update active state
+            container.querySelectorAll('.filter-btn').forEach(btn => {
+              btn.style.background = '#fff';
+              btn.style.color = '#333';
+            });
+            button.style.background = '#007AFF';
+            button.style.color = '#fff';
+            
+            // Re-render with new grouping
+            if (window.currentInfoData) {
+              const newGrouping = { ...window.currentInfoData.grouping, default: mode };
+              displayGroupedResults(window.currentInfoData.results, newGrouping, window.currentInfoData.type);
+            }
+          });
+          
+          container.appendChild(button);
+        });
+        
+        return container;
+      }
+
+      function displayFlatResults(results, type) {
+        results.forEach(result => {
+          const item = document.createElement('div');
+          item.className = `info-result-item ${result.severity || type}`;
+          
+          // Handle custom HTML structure
+          if (result.html) {
+            item.innerHTML = result.html;
+          } else {
+            // Standard message/details structure
+            const message = document.createElement('div');
+            message.className = 'info-result-message';
+            // Support HTML content if message contains HTML tags, otherwise use textContent
+            if (typeof result.message === 'string' && (result.message.includes('<') || result.message.includes('&'))) {
+              message.innerHTML = result.message;
+            } else {
+              message.textContent = result.message || result.toString();
+            }
+            item.appendChild(message);
+          
+          if (result.details) {
+            const details = document.createElement('div');
+            details.className = 'info-result-details';
+            // Support HTML content if details contains HTML tags, otherwise use textContent
+            if (typeof result.details === 'string' && (result.details.includes('<') || result.details.includes('&'))) {
+              details.innerHTML = result.details;
+            } else {
+              details.textContent = result.details;
+            }
+            item.appendChild(details);
+          }
+          }
+          
+          // Add click handler for node selection (single or multiple)
+          if (result.nodeId || result.nodeIds) {
+            item.style.cursor = 'pointer';
+            item.addEventListener('click', () => {
+              if (result.nodeIds && result.nodeIds.length > 0) {
+                // Bulk selection
+                parent.postMessage({
+                  pluginMessage: { type: 'SELECT_NODES', nodeIds: result.nodeIds }
+                }, '*');
+              } else if (result.nodeId) {
+                // Single selection
+                parent.postMessage({
+                  pluginMessage: { type: 'SELECT_NODE', nodeId: result.nodeId }
+                }, '*');
+              }
+            });
+          }
+          
+          infoContent.appendChild(item);
+        });
+      }
+
+      function displayGroupedResults(results, grouping, type) {
+        // Clear existing results (but keep filter controls)
+        const existingResults = infoContent.querySelectorAll('.info-group, .info-result-item');
+        existingResults.forEach(el => el.remove());
+        
+        const currentMode = grouping.default;
+        
+        // Group the results using built-in logic
+        const grouped = groupResultsByMode(results, currentMode, grouping);
+        
+        // Display each group
+        grouped.order.forEach(groupKey => {
+          const group = grouped.groups[groupKey];
+          
+          // Create group header matching Figma design
+          const groupHeader = document.createElement('div');
+          groupHeader.className = 'info-group-header';
+          groupHeader.style.cssText = `
+            font-size: 12px; 
+            font-weight: 600; 
+            color: #333; 
+            margin: 16px 0 8px 0; 
+            padding: 0 0 4px 0; 
+            border-bottom: 1px solid #e6e6e6;
+            cursor: pointer;
+            transition: color 0.2s ease;
+          `;
+          
+          // Add hover effect
+          groupHeader.addEventListener('mouseenter', () => {
+            groupHeader.style.color = '#007AFF';
+          });
+          groupHeader.addEventListener('mouseleave', () => {
+            groupHeader.style.color = '#333';
+          });
+          
+          groupHeader.innerHTML = `${group.title} (${group.count})`;
+          
+          // Add bulk selection functionality
+          groupHeader.addEventListener('click', () => {
+            const nodeIds = group.results.map(result => result.nodeId).filter(id => id);
+            if (nodeIds.length > 0) {
+              parent.postMessage({
+                pluginMessage: { type: 'SELECT_NODES', nodeIds: nodeIds }
+              }, '*');
+              
+              // Visual feedback
+              groupHeader.style.background = '#007AFF';
+              groupHeader.style.color = '#fff';
+              setTimeout(() => {
+                groupHeader.style.background = '#f8f9fa';
+                groupHeader.style.color = '#333';
+              }, 200);
+            }
+          });
+          
+          infoContent.appendChild(groupHeader);
+          
+          // Create group container
+          const groupContainer = document.createElement('div');
+          groupContainer.className = 'info-group';
+          groupContainer.style.cssText = 'margin-bottom: 12px;';
+          
+          // Add results list matching Figma design
+          group.results.forEach((result, index) => {
+            const item = document.createElement('div');
+            item.className = 'info-result-item';
+            item.style.cssText = `
+              padding: 6px 0;
+              margin: 0;
+              cursor: pointer;
+              border-bottom: 1px solid #f0f0f0;
+              transition: background 0.15s ease;
+            `;
+            
+            // Property type (main text) - extracted from variable name
+            const propertyDisplay = document.createElement('div');
+            propertyDisplay.style.cssText = `
+              font-size: 11px;
+              font-weight: 500;
+              color: #333;
+              margin-bottom: 2px;
+            `;
+            
+            // Extract property type from variable name (e.g., "Typography/4xl/letter-spacing" -> "letter-spacing")
+            let displayText = result.property || 'Unknown Property';
+            if (result.variableName && result.variableName.includes('/')) {
+              const parts = result.variableName.split('/');
+              displayText = parts[parts.length - 1]; // Get the last part (property type)
+            }
+            propertyDisplay.textContent = displayText;
+            item.appendChild(propertyDisplay);
+            
+            // Node info (secondary text)
+            const nodeInfo = document.createElement('div');
+            nodeInfo.style.cssText = `
+              font-size: 10px;
+              color: #666;
+            `;
+            nodeInfo.textContent = 'in ' + (result.nodeName || 'Unknown Node');
+            item.appendChild(nodeInfo);
+            
+            // Hover effect
+            item.addEventListener('mouseenter', () => {
+              item.style.background = '#f8f9fa';
+            });
+            item.addEventListener('mouseleave', () => {
+              item.style.background = 'transparent';
+            });
+            
+            // Add click handler for individual node selection
+            if (result.nodeId) {
+              item.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent group selection
+                parent.postMessage({
+                  pluginMessage: { type: 'SELECT_NODE', nodeId: result.nodeId }
+                }, '*');
+                
+                // Visual feedback
+                item.style.background = '#007AFF';
+                variableName.style.color = '#fff';
+                details.style.color = '#fff';
+                setTimeout(() => {
+                  item.style.background = 'transparent';
+                  variableName.style.color = '#333';
+                  details.style.color = '#666';
+                }, 200);
+              });
+            }
+            
+            groupContainer.appendChild(item);
+          });
+          
+          infoContent.appendChild(groupContainer);
+        });
+        
+        // Auto-open panel if not already open
+        if (!infoPanelOpen) {
+          toggleInfoPanel();
+        }
+      }
+
+      function groupResultsByMode(results, mode, grouping) {
+        var groups = {};
+        var groupOrder = [];
+        
+        for (var i = 0; i < results.length; i++) {
+          var result = results[i];
+          var groupKey = getGroupKeyByMode(result, mode);
+          
+          if (!groups[groupKey]) {
+            groups[groupKey] = {
+              title: getGroupTitleByMode(groupKey, result, mode, grouping),
+              results: [],
+              count: 0
+            };
+            groupOrder.push(groupKey);
+          }
+          
+          groups[groupKey].results.push(result);
+          groups[groupKey].count++;
+        }
+        
+        return {
+          groups: groups,
+          order: groupOrder
+        };
+      }
+
+      function getGroupKeyByMode(result, mode) {
+        if (mode === 'property') {
+          // Group by variable name prefix (e.g., "Typography/4xl/letter-spacing" -> "Typography/4xl")
+          if (result.variableName && result.variableName.includes('/')) {
+            var parts = result.variableName.split('/');
+            if (parts.length >= 2) {
+              // For "Typography/4xl/letter-spacing" -> "Typography/4xl"
+              // For "grey/900" -> "grey"
+              return parts.slice(0, 2).join('/');
+            }
+          }
+          
+          // Fallback to property-based grouping for variables without clear naming
+          if (result.property && ['fontSize', 'fontWeight', 'fontFamily', 'lineHeight', 'letterSpacing'].includes(result.property)) {
+            return 'Typography Properties';
+          }
+          if (result.property === 'fills') {
+            return 'Fill Properties';
+          }
+          
+          return result.property || 'Other Variables';
+        } else if (mode === 'node') {
+          // Group by node name
+          return result.nodeName || 'Unknown Node';
+        }
+        return 'other';
+      }
+
+      function getGroupTitleByMode(groupKey, result, mode, grouping) {
+        if (mode === 'property') {
+          // For variable name prefixes, use them directly as titles
+          if (groupKey.includes('/')) {
+            return groupKey; // e.g., "Typography/4xl" or "grey/900"
+          }
+          
+          // Convert property names to readable titles
+          if (grouping.propertyTitles && grouping.propertyTitles[groupKey]) {
+            return grouping.propertyTitles[groupKey];
+          }
+          
+          // Default property title mapping for fallback cases
+          var propertyTitles = {
+            'Typography Properties': 'Typography Properties',
+            'Fill Properties': 'Fill Properties',
+            'fontSize': 'Font Size',
+            'fontWeight': 'Font Weight',
+            'fontFamily': 'Font Family',
+            'lineHeight': 'Line Height',
+            'letterSpacing': 'Letter Spacing'
+          };
+          
+          return propertyTitles[groupKey] || (groupKey.charAt(0).toUpperCase() + groupKey.slice(1) + ' Properties');
+        } else if (mode === 'node') {
+          // Show node type in parentheses if available
+          var nodeType = '';
+          if (result.nodeType) {
+            nodeType = ' (' + result.nodeType + ')';
+          }
+          return groupKey + nodeType;
+        }
+        return groupKey;
       }
 
       // Create new script
@@ -1184,11 +2016,15 @@
           scriptStatus.textContent = 'Ready';
           scriptStatus.style.display = 'block';
           
+          // Hide info panel button when no script is selected
+          infoPanelAvailable = false;
+          updateInfoPanelButtonVisibility();
+          
           updateButtonStates();
           updateScriptList(searchInput.value);
           
           // Open Help & Documentation after discarding temporary script
-          const helpScript = allScripts.find(s => s.name === 'Help & Documentation');
+          const helpScript = allScripts.find(s => s.name === 'CodeFig - help & documentation');
           if (helpScript) {
             selectScriptDirectly(helpScript);
           }
@@ -1214,11 +2050,15 @@
           scriptStatus.textContent = 'Ready';
           scriptStatus.style.display = 'block';
           
+          // Hide info panel button when no script is selected
+          infoPanelAvailable = false;
+          updateInfoPanelButtonVisibility();
+          
           updateButtonStates();
           updateScriptList(searchInput.value);
           
           // Open Help & Documentation after deletion
-          const helpScript = allScripts.find(s => s.name === 'Help & Documentation');
+          const helpScript = allScripts.find(s => s.name === 'CodeFig - help & documentation');
           if (helpScript) {
             selectScriptDirectly(helpScript);
           }
@@ -1655,12 +2495,21 @@
         });
       }
 
+      // Initialize info panel state
+      function initInfoPanel() {
+        // Panel states will be restored when needed
+        // We can't access figma.clientStorage from UI context
+        // State restoration happens through message passing if needed
+      }
+
       // Event listeners
       newScriptBtn.addEventListener('click', createNewScript);
       runBtn.addEventListener('click', runCurrentScript);
       deleteBtn.addEventListener('click', deleteCurrentScript);
       exportBtn.addEventListener('click', exportCurrentScript);
       importBtn.addEventListener('click', importScript);
+      infoPanelBtn.addEventListener('click', toggleInfoPanel);
+      maximizeBtn.addEventListener('click', toggleMaximize);
       exportAllBtn.addEventListener('click', exportAllUserScripts);
 
       // Search functionality
@@ -1673,14 +2522,24 @@
         debugLog('Code change detected');
         updateButtonStates();
         scheduleAutosave();
+        
+        // Check if @InfoPanel is now being used
+        const currentCode = code.getValue();
+        const newInfoPanelAvailable = checkInfoPanelAvailability(currentCode);
+        if (newInfoPanelAvailable !== infoPanelAvailable) {
+          infoPanelAvailable = newInfoPanelAvailable;
+          updateInfoPanelButtonVisibility();
+        }
       });
 
       // Message handling
-      window.onmessage = (event) => {
-        const msg = event.data.pluginMessage;
-        if (!msg) return;
-        
-        switch (msg.type) {
+        window.onmessage = (event) => {
+          const msg = event.data.pluginMessage;
+          if (!msg) return;
+          
+          console.log('UI: Received message type:', msg.type);
+          
+          switch (msg.type) {
           case 'LIST':
             debugLog('Received user scripts:', msg.items);
             debugLog('Last opened script:', msg.lastOpenedScript);
@@ -1694,7 +2553,10 @@
             updateScriptList();
             
             // Open the last opened script or default to Help & Documentation
-            openInitialScript(msg.lastOpenedScript);
+            // Add a small delay to ensure everything is fully initialized
+            setTimeout(() => {
+              openInitialScript(msg.lastOpenedScript);
+            }, 50);
             break;
             
           case 'COLLAPSED_SECTIONS':
@@ -1712,6 +2574,22 @@
             debugError('Save failed for:', msg.scriptName, msg.error);
             post('NOTIFY', { message: `Failed to save script: ${msg.error}` });
             break;
+            
+          case 'INFO_PANEL_RESULTS':
+            console.log('UI: Received INFO_PANEL_RESULTS message:', msg);
+            displayInfoResults(msg);
+            break;
+            
+          case 'INFO_PANEL_SUCCESS':
+            console.log('UI: Received INFO_PANEL_SUCCESS message:', msg);
+            // Only update if panel is currently open
+            if (infoPanel.classList.contains('open')) {
+              console.log('UI: Panel is open, showing success message');
+              displayInfoResults(msg);
+            } else {
+              console.log('UI: Panel is closed, ignoring success message');
+            }
+            break;
         }
       };
 
@@ -1719,6 +2597,9 @@
       // Initialize everything
       function init() {
         debugLog('Initializing CodeFig...');
+        
+        // Initialize info panel button as hidden initially
+        initializeInfoPanel();
         
         // Load collapsed sections state
         loadCollapsedSections();
@@ -1732,6 +2613,7 @@
         initKeyboardShortcuts();
         initTitleEditing();
         initWindowResize();
+        initInfoPanel();
         
         // Load user scripts and open initial script
         post('LIST');
@@ -1739,12 +2621,7 @@
         debugLog('CodeFig initialized successfully');
       }
 
-      // Start when DOM is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-      } else {
-        init();
-      }
+      // Init is now called after CodeMirror is ready (see above)
     </script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-// Manage color system
+// DS Foundation: Colors
 // Create and update color system variables programmatically
 
 // Import functions from libraries

@@ -132,6 +132,7 @@ figma.ui.onmessage = (msg) => {
       const scriptFunction = new Function(
         'figma',
         'console',
+        'window',
         `
         // Convenience shortcuts - make selection and currentPage available
         const selection = figma.currentPage.selection;
@@ -145,8 +146,20 @@ figma.ui.onmessage = (msg) => {
       debugLog('Backend: About to execute script function');
       debugLog('Backend: Script code preview:', jsCode.substring(0, 200) + '...');
       
-      // Pass both figma and our custom console
-      scriptFunction(figma, scriptConsole);
+      // Store messages to forward after script execution (in backend scope)
+      const pendingMessages: any[] = [];
+      
+      // Create a mock window object for the script context
+      const mockWindow = {
+        _infoPanelHandler: (message: any) => {
+          debugLog('Backend: Script sent InfoPanel message:', message);
+          // Directly forward the message to the UI from backend context
+          figma.ui.postMessage(message);
+        }
+      };
+      
+      // Pass the real figma object, custom console, and mock window
+      scriptFunction(figma, scriptConsole, mockWindow);
       debugLog('Backend: Script function completed successfully');
       
       // figma.notify('Done! 😁');
@@ -189,6 +202,52 @@ figma.ui.onmessage = (msg) => {
         collapsedSections: collapsedSections || []
       });
     });
+  }
+  
+  if (msg.type === 'RESIZE_WINDOW') {
+    // Resize the plugin window
+    try {
+      figma.ui.resize(msg.width, msg.height);
+      debugLog('Backend: Resized window to:', msg.width, 'x', msg.height);
+    } catch (error) {
+      debugError('Backend: Failed to resize window:', error);
+    }
+  }
+  
+  if (msg.type === 'SELECT_NODE') {
+    // Select a node by ID
+    try {
+      const node = figma.getNodeById(msg.nodeId);
+      if (node) {
+        figma.currentPage.selection = [node as SceneNode];
+        figma.viewport.scrollAndZoomIntoView([node as SceneNode]);
+        debugLog('Backend: Selected node:', node.name);
+      } else {
+        debugLog('Backend: Node not found:', msg.nodeId);
+      }
+    } catch (error) {
+      debugError('Backend: Failed to select node:', error);
+    }
+  }
+  
+  if (msg.type === 'SELECT_NODES') {
+    // Select multiple nodes by IDs (bulk selection)
+    try {
+      const nodes = msg.nodeIds
+        .map((id: string) => figma.getNodeById(id))
+        .filter((node: any) => node !== null) as SceneNode[];
+      
+      if (nodes.length > 0) {
+        figma.currentPage.selection = nodes;
+        figma.viewport.scrollAndZoomIntoView(nodes);
+        figma.notify(`Selected ${nodes.length} nodes with similar issues`);
+        debugLog('Backend: Selected nodes:', nodes.map(n => n.name));
+      } else {
+        debugLog('Backend: No valid nodes found for bulk selection');
+      }
+    } catch (error) {
+      debugError('Backend: Failed to select nodes:', error);
+    }
   }
 };
 

@@ -1,4 +1,4 @@
-// Typography variables
+// DS Foundation: Typography
 // Advanced responsive typography system with fluid scaling and style generation
 
 // Import functions from libraries

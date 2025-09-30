@@ -1,4 +1,4 @@
-// Manage grid system
+// DS Foundation: Grid
 // Create and update grid system variables programmatically
 
 // Import functions from libraries
