@@ -964,8 +964,8 @@
 
       // Debug logging functions to remove source references
       function debugLog(message, ...args) {
-        const log = console.log.bind(console);
-        setTimeout(() => log('%cCodeFig: ' + message, 'color: #0066cc; font-weight: bold;', ...args), 0);
+        // const log = console.log.bind(console);
+        // setTimeout(() => log('%cCodeFig: ' + message, 'color: #0066cc; font-weight: bold;', ...args), 0);
       }
 
       function debugError(message, ...args) {
@@ -2067,9 +2067,14 @@
         }
       }
 
-      // Runtime import system
+      // Runtime import system with memory optimization
       function processRuntimeImports(code) {
         let processedCode = code;
+        
+        // Skip import processing for simple scripts (< 500 chars) to reduce overhead
+        if (code.length < 500 && !code.includes('@import')) {
+          return code;
+        }
         
         // Handle both syntax types:
         // 1. @import { func1, func2 } from "Script Name"

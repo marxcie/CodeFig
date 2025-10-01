@@ -1,4 +1,4 @@
-// @InfoPanel - Results and information display library
+// @InfoPanel
 var shared = true;
 
 /**

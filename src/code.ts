@@ -103,13 +103,12 @@ figma.ui.onmessage = (msg) => {
   }
 
   if (msg.type === 'RUN') {
-    // Execute the script code (now supports TypeScript directly!)
+    // Execute the script code with memory management
     const codeToExecute = msg.code;
     let jsCode: string = codeToExecute;
     
     try {
       // Pure JavaScript execution - no TypeScript conversion
-      debugLog('Backend: Executing JavaScript code directly (no conversion)');
       
       // Create a custom console object that uses our debugLog function
       const scriptConsole = {
@@ -143,8 +142,6 @@ figma.ui.onmessage = (msg) => {
         `
       );
       
-      debugLog('Backend: About to execute script function');
-      debugLog('Backend: Script code preview:', jsCode.substring(0, 200) + '...');
       
       // Store messages to forward after script execution (in backend scope)
       const pendingMessages: any[] = [];
@@ -160,7 +157,6 @@ figma.ui.onmessage = (msg) => {
       
       // Pass the real figma object, custom console, and mock window
       scriptFunction(figma, scriptConsole, mockWindow);
-      debugLog('Backend: Script function completed successfully');
       
       // figma.notify('Done! 😁');
     } catch (error) {

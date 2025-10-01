@@ -1,8 +1,664 @@
-// Find broken variables - InfoPanel example
+// Find broken variables
 // This script demonstrates how to use @InfoPanel to display diagnostic results
 // @import { displayResults, createResult, createSelectableResult, createHtmlResult } from "@InfoPanel"
 
-// ===== BROKEN BINDING DETECTION =====
+// ===== ADVANCED BROKEN VARIABLE DETECTION =====
+// Inspired by Swap Variables plugin's sophisticated detection methods
+
+// Enhanced detection categories
+var ISSUE_TYPES = {
+  MISSING_VARIABLE: 'Variable not found',
+  MISSING_COLLECTION: 'Collection not accessible', 
+  BINDING_CLEARED: 'Binding cleared by Figma',
+  LIBRARY_DISCONNECTED: 'Library collection disconnected',
+  VALUE_MISMATCH: 'Variable value mismatch',
+  RENAMED_SUSPECTED: 'Variable may have been renamed',
+  ACCESS_ERROR: 'Variable access error'
+};
+
+// Build comprehensive variable cache for cross-referencing
+var buildVariableCache = function() {
+  var cache = {
+    local: new Map(),
+    remote: new Map(),
+    collections: new Map()
+  };
+  
+  console.log('Building variable cache...');
+  
+  // Cache local variables and collections
+  var localCollections = figma.variables.getLocalVariableCollections();
+  for (var i = 0; i < localCollections.length; i++) {
+    var collection = localCollections[i];
+    cache.collections.set(collection.id, {
+      name: collection.name,
+      remote: false,
+      accessible: true
+    });
+    
+    var variables = figma.variables.getLocalVariables();
+    for (var j = 0; j < variables.length; j++) {
+      var variable = variables[j];
+      if (variable.variableCollectionId === collection.id) {
+        cache.local.set(variable.id, {
+          name: variable.name,
+          collection: collection.name,
+          collectionId: collection.id,
+          remote: false
+        });
+      }
+    }
+  }
+  
+  // Cache remote/library variables (async operation)
+  try {
+    var libraryCollections = figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+    // Note: This is async, so we'll handle remote variables during analysis
+    console.log('Remote collections will be checked during analysis');
+  } catch (e) {
+    console.log('Could not access library collections:', e.message);
+  }
+  
+  console.log('Local cache built:', cache.local.size, 'variables,', cache.collections.size, 'collections');
+  return cache;
+};
+
+// Enhanced broken binding detection with sophisticated analysis
+var findBrokenBindingsAdvanced = function() {
+  var selection = figma.currentPage.selection;
+  var brokenBindings = [];
+  var cache = buildVariableCache();
+  
+  // If nothing selected, search entire page
+  var nodesToCheck = selection.length > 0 ? selection : [figma.currentPage];
+  var allNodes = collectAllNodes(nodesToCheck);
+  
+  console.log('=== ADVANCED BROKEN VARIABLE DETECTION ===');
+  console.log('Nodes to check:', nodesToCheck.length);
+  console.log('Total nodes collected:', allNodes.length);
+  console.log('Variable cache size:', cache.local.size + cache.remote.size);
+  
+  var nodesWithBindings = 0;
+  var totalBindingsFound = 0;
+  
+  for (var i = 0; i < allNodes.length; i++) {
+    var node = allNodes[i];
+    
+    if (node.boundVariables) {
+      var properties = Object.keys(node.boundVariables);
+      
+      if (properties.length > 0) {
+        nodesWithBindings++;
+        
+        // Check if this node has empty boundVariables (cleared by Figma)
+        if (properties.length === 0) {
+          // Auto-cleanup empty boundVariables
+          try {
+            delete node.boundVariables;
+            console.log('Cleaned up empty boundVariables from:', node.name);
+          } catch (e) {
+            console.log('Could not clean up boundVariables from:', node.name);
+          }
+          continue;
+        }
+        
+        for (var j = 0; j < properties.length; j++) {
+          var prop = properties[j];
+          var binding = node.boundVariables[prop];
+          totalBindingsFound++;
+          
+          // Handle both direct binding and array binding formats
+          var actualBinding = binding;
+          var isArray = Array.isArray(binding);
+          
+          if (isArray && binding.length > 0 && binding[0].id) {
+            actualBinding = binding[0];
+          }
+          
+          if (actualBinding && actualBinding.id) {
+            // Sophisticated variable analysis
+            var analysisResult = analyzeVariableBinding(actualBinding.id, cache, node, prop);
+            
+            if (analysisResult.isBroken) {
+              brokenBindings.push({
+                nodeId: node.id,
+                nodeName: node.name,
+                nodeType: node.type,
+                property: prop,
+                variableId: actualBinding.id,
+                variableName: analysisResult.variableName,
+                issue: analysisResult.issue,
+                issueType: analysisResult.issueType,
+                suggestions: analysisResult.suggestions || [],
+                path: getNodePath(node),
+                isArray: isArray
+              });
+            }
+          } else if (binding && typeof binding === 'object' && !binding.id) {
+            // Binding object exists but has no ID (collection deleted)
+            brokenBindings.push({
+              nodeId: node.id,
+              nodeName: node.name,
+              nodeType: node.type,
+              property: prop,
+              variableId: 'missing-id',
+              variableName: 'Binding cleared',
+              issue: ISSUE_TYPES.BINDING_CLEARED,
+              issueType: 'BINDING_CLEARED',
+              suggestions: ['Check if collection was deleted', 'Reapply variable binding'],
+              path: getNodePath(node),
+              isArray: isArray
+            });
+          }
+        }
+      }
+    }
+  }
+  
+  console.log('Nodes with bindings:', nodesWithBindings);
+  console.log('Total bindings found:', totalBindingsFound);
+  console.log('Broken bindings detected:', brokenBindings.length);
+  
+  return brokenBindings;
+};
+
+// Sophisticated variable binding analysis
+var analyzeVariableBinding = function(variableId, cache, node, property) {
+  var result = {
+    isBroken: false,
+    variableName: 'Unknown Variable',
+    issue: '',
+    issueType: '',
+    suggestions: []
+  };
+  
+  try {
+    var variable = figma.variables.getVariableById(variableId);
+    
+    if (!variable) {
+      // Variable not found - check cache for potential matches
+      result.isBroken = true;
+      result.issue = ISSUE_TYPES.MISSING_VARIABLE;
+      result.issueType = 'MISSING_VARIABLE';
+      result.suggestions = ['Variable may have been deleted', 'Check if collection still exists'];
+      return result;
+    }
+    
+    result.variableName = variable.name || 'Unnamed Variable';
+    
+    // Check collection accessibility
+    try {
+      var collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
+      
+      if (!collection) {
+        result.isBroken = true;
+        result.issue = ISSUE_TYPES.MISSING_COLLECTION;
+        result.issueType = 'MISSING_COLLECTION';
+        result.suggestions = ['Collection was deleted or moved', 'Check library connection'];
+        return result;
+      }
+      
+      // For remote variables, additional checks
+      if (variable.remote) {
+        // Check if library is properly connected
+        if (!collection.remote) {
+          result.isBroken = true;
+          result.issue = ISSUE_TYPES.LIBRARY_DISCONNECTED;
+          result.issueType = 'LIBRARY_DISCONNECTED';
+          result.suggestions = ['Library connection lost', 'Reconnect library', 'Check library permissions'];
+          return result;
+        }
+      }
+      
+      // Variable and collection exist - check for value consistency
+      // This is where we could add more sophisticated checks like the Swap Variables plugin
+      
+    } catch (collectionError) {
+      result.isBroken = true;
+      result.issue = ISSUE_TYPES.ACCESS_ERROR + ': ' + collectionError.message;
+      result.issueType = 'ACCESS_ERROR';
+      result.suggestions = ['Collection access error', 'Check permissions', 'Reload file'];
+      return result;
+    }
+    
+  } catch (variableError) {
+    result.isBroken = true;
+    result.issue = ISSUE_TYPES.ACCESS_ERROR + ': ' + variableError.message;
+    result.issueType = 'ACCESS_ERROR';
+    result.suggestions = ['Variable access error', 'Check if variable exists'];
+    return result;
+  }
+  
+  // If we get here, variable appears healthy
+  return result;
+};
+
+// ===== SIMPLE DETECTION (for debugging) =====
+
+var findBrokenBindingsSimple = function() {
+  var selection = figma.currentPage.selection;
+  var brokenBindings = [];
+  
+  // If nothing selected, search entire page
+  var nodesToCheck = selection.length > 0 ? selection : [figma.currentPage];
+  var allNodes = collectAllNodes(nodesToCheck);
+  
+  console.log('=== SIMPLE BROKEN VARIABLE DETECTION ===');
+  console.log('Nodes to check:', nodesToCheck.length);
+  console.log('Total nodes collected:', allNodes.length);
+  
+  for (var i = 0; i < allNodes.length; i++) {
+    var node = allNodes[i];
+    
+    if (node.boundVariables) {
+      var properties = Object.keys(node.boundVariables);
+      
+      if (properties.length > 0 && i < 3) { // Debug first 3 nodes
+        console.log('Node ' + i + ':', node.name, 'Properties:', properties);
+      }
+      
+      for (var j = 0; j < properties.length; j++) {
+        var prop = properties[j];
+        var binding = node.boundVariables[prop];
+        
+        if (i < 3 && j < 2) { // Debug first few bindings
+          console.log('  Binding ' + j + ' - Property:', prop, 'Binding:', typeof binding, binding);
+        }
+        
+        // Handle both direct binding and array binding formats
+        var actualBinding = binding;
+        var isArray = Array.isArray(binding);
+        
+        if (isArray && binding.length > 0 && binding[0].id) {
+          actualBinding = binding[0];
+        }
+        
+        // ORIGINAL WORKING DETECTION LOGIC - DON'T CHANGE THIS!
+        if (actualBinding && actualBinding.id) {
+          // Binding has an ID, try to get the variable
+          try {
+            var variable = figma.variables.getVariableById(actualBinding.id);
+            
+            if (i < 3 && j < 2) {
+              console.log('    Variable lookup result:', variable ? 'found' : 'null', variable ? variable.name : 'n/a');
+            }
+            
+            // If variable is null, it's broken
+            if (!variable) {
+              brokenBindings.push({
+                nodeId: node.id,
+                nodeName: node.name,
+                nodeType: node.type,
+                property: prop,
+                variableId: actualBinding.id,
+                variableName: 'Variable not found',
+                issue: 'Variable not found',
+                path: getNodePath(node),
+                isArray: isArray
+              });
+              
+              if (i < 3 && j < 2) {
+                console.log('    -> BROKEN: Variable not found');
+              }
+            } else {
+              // Variable exists, but check if its collection is accessible
+              // This is the key insight from Swap Variables plugin
+              try {
+                var collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
+                
+                if (i < 3 && j < 2) {
+                  console.log('    Collection check:', collection ? collection.name : 'null', 'Remote:', variable.remote);
+                }
+                
+                if (!collection) {
+                  // Collection not found - this is the real broken state!
+                  brokenBindings.push({
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    nodeType: node.type,
+                    property: prop,
+                    variableId: actualBinding.id,
+                    variableName: variable.name || 'Unknown Variable',
+                    issue: 'Collection not accessible (disconnected)',
+                    path: getNodePath(node),
+                    isArray: isArray
+                  });
+                  
+                  if (i < 3 && j < 2) {
+                    console.log('    -> BROKEN: Collection not accessible');
+                  }
+                } else {
+                  // Collection exists, but let's check if variable values are accessible
+                  // This is the deeper check that Swap Variables plugin likely uses
+                  try {
+                    var modes = collection.modes;
+                    var hasValidValue = false;
+                    
+                    if (i < 3 && j < 2) {
+                      console.log('    Checking variable values in', modes.length, 'modes...');
+                    }
+                    
+                    for (var modeIndex = 0; modeIndex < modes.length; modeIndex++) {
+                      var mode = modes[modeIndex];
+                      try {
+                        var value = variable.valuesByMode[mode.modeId];
+                        if (value !== undefined && value !== null) {
+                          hasValidValue = true;
+                          if (i < 3 && j < 2) {
+                            console.log('      Mode', mode.name, '- value found:', typeof value);
+                          }
+                          break;
+                        }
+                      } catch (valueError) {
+                        if (i < 3 && j < 2) {
+                          console.log('      Mode', mode.name, '- value error:', valueError.message);
+                        }
+                      }
+                    }
+                    
+                    if (!hasValidValue) {
+                      // Variable exists, collection exists, but no valid values - this might be the broken state!
+                      brokenBindings.push({
+                        nodeId: node.id,
+                        nodeName: node.name,
+                        nodeType: node.type,
+                        property: prop,
+                        variableId: actualBinding.id,
+                        variableName: variable.name || 'Unknown Variable',
+                        issue: 'Variable has no accessible values',
+                        path: getNodePath(node),
+                        isArray: isArray
+                      });
+                      
+                      if (i < 3 && j < 2) {
+                        console.log('    -> BROKEN: No accessible values');
+                      }
+                    } else {
+                      // API says everything is OK, but check force detection settings
+                      var shouldForceDetect = false;
+                      var forceReason = '';
+                      
+                      if (FORCE_DETECT_REMOTE_AS_BROKEN && variable.remote) {
+                        shouldForceDetect = true;
+                        forceReason = 'Remote variable (forced detection due to UI mismatch)';
+                      }
+                      
+                      if (FORCE_DETECT_COLLECTIONS.length > 0) {
+                        for (var forceIndex = 0; forceIndex < FORCE_DETECT_COLLECTIONS.length; forceIndex++) {
+                          if (collection.name === FORCE_DETECT_COLLECTIONS[forceIndex]) {
+                            shouldForceDetect = true;
+                            forceReason = 'Collection in force-detect list: ' + collection.name;
+                            break;
+                          }
+                        }
+                      }
+                      
+                      if (FORCE_DETECT_VARIABLES.length > 0) {
+                        for (var varIndex = 0; varIndex < FORCE_DETECT_VARIABLES.length; varIndex++) {
+                          if (variable.name === FORCE_DETECT_VARIABLES[varIndex]) {
+                            shouldForceDetect = true;
+                            forceReason = 'Variable in force-detect list: ' + variable.name;
+                            break;
+                          }
+                        }
+                      }
+                      
+                      if (shouldForceDetect) {
+                        brokenBindings.push({
+                          nodeId: node.id,
+                          nodeName: node.name,
+                          nodeType: node.type,
+                          property: prop,
+                          variableId: actualBinding.id,
+                          variableName: variable.name || 'Unknown Variable',
+                          issue: forceReason,
+                          path: getNodePath(node),
+                          isArray: isArray
+                        });
+                        
+                        if (i < 3 && j < 2) {
+                          console.log('    -> FORCED BROKEN:', forceReason);
+                        }
+                      } else {
+                        if (i < 3 && j < 2) {
+                          console.log('    -> OK: Variable has valid values');
+                        }
+                      }
+                    }
+                    
+                  } catch (valueCheckError) {
+                    // Error checking values - might be broken
+                    brokenBindings.push({
+                      nodeId: node.id,
+                      nodeName: node.name,
+                      nodeType: node.type,
+                      property: prop,
+                      variableId: actualBinding.id,
+                      variableName: variable.name || 'Unknown Variable',
+                      issue: 'Variable value check failed: ' + valueCheckError.message,
+                      path: getNodePath(node),
+                      isArray: isArray
+                    });
+                    
+                    if (i < 3 && j < 2) {
+                      console.log('    -> BROKEN: Value check error:', valueCheckError.message);
+                    }
+                  }
+                }
+                
+              } catch (collectionError) {
+                // Error accessing collection - definitely broken
+                brokenBindings.push({
+                  nodeId: node.id,
+                  nodeName: node.name,
+                  nodeType: node.type,
+                  property: prop,
+                  variableId: actualBinding.id,
+                  variableName: variable.name || 'Unknown Variable',
+                  issue: 'Collection access error: ' + collectionError.message,
+                  path: getNodePath(node),
+                  isArray: isArray
+                });
+                
+                if (i < 3 && j < 2) {
+                  console.log('    -> BROKEN: Collection error:', collectionError.message);
+                }
+              }
+            }
+            
+          } catch (e) {
+            // Error accessing variable - definitely broken
+            brokenBindings.push({
+              nodeId: node.id,
+              nodeName: node.name,
+              nodeType: node.type,
+              property: prop,
+              variableId: actualBinding.id,
+              variableName: 'Access Error',
+              issue: 'Variable access error: ' + e.message,
+              path: getNodePath(node),
+              isArray: isArray
+            });
+            
+            if (i < 3 && j < 2) {
+              console.log('    -> BROKEN: Access error:', e.message);
+            }
+          }
+          
+        } else if (binding && typeof binding === 'object' && !binding.id) {
+          // ORIGINAL WORKING DETECTION: Binding object exists but has no ID
+          brokenBindings.push({
+            nodeId: node.id,
+            nodeName: node.name,
+            nodeType: node.type,
+            property: prop,
+            variableId: 'missing-id',
+            variableName: 'Binding cleared',
+            issue: 'Binding cleared by Figma',
+            path: getNodePath(node),
+            isArray: isArray
+          });
+          
+          if (i < 3 && j < 2) {
+            console.log('    -> BROKEN: Binding has no ID (cleared by Figma)');
+          }
+        }
+      }
+    }
+  }
+  
+  console.log('Simple detection found:', brokenBindings.length, 'broken bindings');
+  return brokenBindings;
+};
+
+// ===== REMOTE CONNECTION DETECTION =====
+// Based on successful testing with test-remote-connections.ts
+// Key insight: collection.libraryId missing indicates broken library connection
+
+var detectBrokenRemoteConnections = function(brokenBindings) {
+  console.log('🔗 Testing remote variable connections...');
+  
+  var remoteConnectionIssues = 0;
+  var testedRemoteVariables = new Set();
+  
+  for (var i = 0; i < brokenBindings.length; i++) {
+    var binding = brokenBindings[i];
+    
+    // Skip if we've already tested this variable
+    if (testedRemoteVariables.has(binding.variableId)) continue;
+    testedRemoteVariables.add(binding.variableId);
+    
+    try {
+      var variable = figma.variables.getVariableById(binding.variableId);
+      
+      if (variable && variable.remote) {
+        console.log('  🔍 Testing remote variable:', variable.name);
+        
+        // Get the collection
+        var collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
+        
+        if (collection) {
+          // Debug: Log ALL collection properties to understand the difference
+          console.log('    📊 Collection details:');
+          console.log('      - Name:', collection.name);
+          console.log('      - ID:', collection.id);
+          console.log('      - Remote:', collection.remote);
+          console.log('      - Modes:', collection.modes.length);
+          console.log('      - Library ID:', collection.libraryId || 'MISSING');
+          console.log('      - Key:', collection.key || 'MISSING');
+          
+          // Try to access other properties that might indicate connection status
+          try {
+            console.log('      - Default mode:', collection.defaultModeId);
+            console.log('      - Hidden from publishing:', collection.hiddenFromPublishing);
+          } catch (e) {
+            console.log('      - Additional properties error:', e.message);
+          }
+          
+          // Check if collection has library reference
+          if (!collection.libraryId) {
+            console.log('    ⚠️ Collection missing library ID - might be broken connection');
+            
+            // Additional test: Try to access the collection's key
+            if (!collection.key) {
+              console.log('    ❌ Collection also missing key - definitely broken');
+              binding.issue = 'Remote variable missing library connection (no key)';
+              binding.isRemoteConnectionBroken = true;
+              remoteConnectionIssues++;
+            } else {
+              console.log('    🤔 Collection has key but no library ID - investigating...');
+              // This might be a working connection that just doesn't expose libraryId
+              binding.issue = 'Remote variable - unclear connection status';
+              binding.isRemoteConnectionBroken = false; // Don't flag as broken yet
+            }
+          } else {
+            console.log('    ✅ Collection has library ID:', collection.libraryId);
+            binding.isRemoteConnectionBroken = false;
+          }
+        } else {
+          console.log('    ❌ Collection not found');
+          binding.issue = 'Remote variable collection not accessible';
+          binding.isRemoteConnectionBroken = true;
+          remoteConnectionIssues++;
+        }
+      }
+    } catch (error) {
+      console.log('    ❌ Error testing remote connection:', error.message);
+      binding.issue = 'Error testing remote connection: ' + error.message;
+      binding.isRemoteConnectionBroken = true;
+      remoteConnectionIssues++;
+    }
+  }
+  
+  console.log('🔗 Remote connection test complete:', remoteConnectionIssues, 'issues found');
+  return brokenBindings;
+};
+
+var findAllRemoteVariables = function() {
+  console.log('🔍 Scanning for all remote variables...');
+  
+  var selection = figma.currentPage.selection;
+  var nodesToCheck = selection.length > 0 ? selection : [figma.currentPage];
+  var allNodes = collectAllNodes(nodesToCheck);
+  
+  var remoteVariables = [];
+  var foundVariableIds = new Set();
+  
+  for (var i = 0; i < allNodes.length; i++) {
+    var node = allNodes[i];
+    
+    if (!node.boundVariables) continue;
+    
+    var properties = Object.keys(node.boundVariables);
+    
+    for (var j = 0; j < properties.length; j++) {
+      var property = properties[j];
+      var binding = node.boundVariables[property];
+      
+      // Handle array bindings
+      var bindings = Array.isArray(binding) ? binding : [binding];
+      
+      for (var k = 0; k < bindings.length; k++) {
+        var actualBinding = bindings[k];
+        
+        if (actualBinding && actualBinding.id) {
+          var variableId = actualBinding.id;
+          
+          // Skip if we've already found this variable
+          if (foundVariableIds.has(variableId)) continue;
+          foundVariableIds.add(variableId);
+          
+          try {
+            var variable = figma.variables.getVariableById(variableId);
+            
+            if (variable && variable.remote) {
+              console.log('  📡 Found remote variable:', variable.name);
+              
+              remoteVariables.push({
+                nodeId: node.id,
+                nodeName: node.name,
+                nodeType: node.type,
+                property: property,
+                variableId: variableId,
+                variableName: variable.name,
+                issue: 'Remote variable (needs connection test)',
+                path: getNodePath(node),
+                isArray: Array.isArray(binding)
+              });
+            }
+          } catch (error) {
+            console.log('  ❌ Error checking variable:', variableId, error.message);
+          }
+        }
+      }
+    }
+  }
+  
+  console.log('🔍 Remote variable scan complete:', remoteVariables.length, 'found');
+  return remoteVariables;
+};
+
+// ===== LEGACY DETECTION (keeping for comparison) =====
 
 var collectAllNodes = function(nodes) {
   var allNodes = [];
@@ -31,11 +687,19 @@ var findBrokenBindings = function() {
   var nodesToCheck = selection.length > 0 ? selection : [figma.currentPage];
   var allNodes = collectAllNodes(nodesToCheck);
   
+  console.log('=== DEBUGGING BROKEN BINDINGS ===');
+  console.log('Nodes to check:', nodesToCheck.length);
+  console.log('Total nodes collected:', allNodes.length);
+  
   for (var i = 0; i < allNodes.length; i++) {
     var node = allNodes[i];
     
     if (node.boundVariables) {
       var properties = Object.keys(node.boundVariables);
+      
+      if (properties.length > 0 && i < 5) { // Only log first 5 nodes with bindings
+        console.log('Node with bindings:', node.name, 'Properties:', properties);
+      }
       
       // Check if this node has empty boundVariables (cleared by Figma after collection deletion)
       if (properties.length === 0) {
@@ -76,18 +740,39 @@ var findBrokenBindings = function() {
                 path: getNodePath(node)
               });
             } else {
-              // Since you see these as "broken" in Figma UI, treat them as broken
-              // even though the API says they're valid
-              brokenBindings.push({
-                nodeId: node.id,
-                nodeName: node.name,
-                nodeType: node.type,
-                property: prop,
-                variableId: actualBinding.id,
-                variableName: variable.name,
-                issue: 'Variable appears broken in Figma UI (collection disconnected)',
-                path: getNodePath(node)
-              });
+              // Variable object exists, but check if it's actually broken
+              // For remote variables, check if the collection is accessible
+              if (variable.remote) {
+                try {
+                  var collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
+                  if (!collection) {
+                    // Remote variable's collection is not accessible - broken library connection
+                    brokenBindings.push({
+                      nodeId: node.id,
+                      nodeName: node.name,
+                      nodeType: node.type,
+                      property: prop,
+                      variableId: actualBinding.id,
+                      variableName: variable.name || 'Unknown Variable',
+                      issue: 'Library variable collection not accessible',
+                      path: getNodePath(node)
+                    });
+                  }
+                } catch (collectionError) {
+                  // Error accessing collection - likely broken library connection
+                  brokenBindings.push({
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    nodeType: node.type,
+                    property: prop,
+                    variableId: actualBinding.id,
+                    variableName: variable.name || 'Unknown Variable',
+                    issue: 'Library variable collection error: ' + collectionError.message,
+                    path: getNodePath(node)
+                  });
+                }
+              }
+              // For local variables, if we got here, they should be healthy
             }
           } catch (e) {
             brokenBindings.push({
@@ -152,12 +837,38 @@ var getNodePath = function(node) {
   return path.join(' > ');
 };
 
+// ===== CONFIGURATION =====
+// Since the API doesn't match UI state, allow manual configuration
+var FORCE_DETECT_REMOTE_AS_BROKEN = false; // Set to true if ALL remote variables appear broken in UI
+var FORCE_DETECT_COLLECTIONS = ['colors / grey']; // Add collection names that appear broken: ['Responsive V2', 'colors / grey']
+var FORCE_DETECT_VARIABLES = []; // Add specific variable names that appear broken: ['grey/900', 'Typography/4xl/font-size']
+
 // ===== MAIN EXECUTION =====
 
-var brokenBindings = findBrokenBindings();
+// Use simple detection first to debug what's happening
+var brokenBindings = findBrokenBindingsSimple();
+
+// Also scan for remote variables that might have broken library connections
+var allRemoteVariables = findAllRemoteVariables();
+console.log('Found', allRemoteVariables.length, 'remote variables to test');
+
+// Test remote connections for all found bindings AND remote variables
+var allVariablesToTest = brokenBindings.concat(allRemoteVariables);
+brokenBindings = detectBrokenRemoteConnections(allVariablesToTest);
 
 console.log('=== DETECTION RESULTS ===');
 console.log('- Broken bindings:', brokenBindings.length);
+
+// Debug: Show some details about what we found
+if (brokenBindings.length > 0) {
+  console.log('First few broken bindings:');
+  for (var debugIndex = 0; debugIndex < Math.min(3, brokenBindings.length); debugIndex++) {
+    var debugBinding = brokenBindings[debugIndex];
+    console.log('  ' + (debugIndex + 1) + '. ' + debugBinding.nodeName + ' - ' + debugBinding.property + ' - ' + debugBinding.issue);
+  }
+} else {
+  console.log('No broken bindings detected - checking if this is correct...');
+}
 
 if (brokenBindings.length > 0) {
   console.log('First broken binding:', brokenBindings[0]);
