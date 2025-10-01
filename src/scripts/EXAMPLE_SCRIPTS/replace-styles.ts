@@ -96,50 +96,218 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
   }
 }
 
-// Build comprehensive style cache for all style types
+// Build comprehensive style cache for all style types (local + library)
 function buildStyleCache() {
-  var cache = new Map();
-  
-  console.log('🔍 Building comprehensive style cache...');
-  
-  // Add all local text styles
-  var localTextStyles = figma.getLocalTextStyles();
-  for (var i = 0; i < localTextStyles.length; i++) {
-    var style = localTextStyles[i];
-    cache.set(style.name, {
-      style: style,
-      type: 'TEXT',
-      isLibrary: false
+  return new Promise(function(resolve, reject) {
+    var cache = new Map();
+    
+    console.log('🔍 Building comprehensive style cache with Team Library API...');
+    
+    // Add all local styles
+    var localTextStyles = figma.getLocalTextStyles();
+    var localPaintStyles = figma.getLocalPaintStyles();
+    var localEffectStyles = figma.getLocalEffectStyles();
+    
+    for (var i = 0; i < localTextStyles.length; i++) {
+      var style = localTextStyles[i];
+      cache.set(style.name, {
+        style: style,
+        type: 'TEXT',
+        key: null,
+        isLibrary: false
+      });
+    }
+    for (var i = 0; i < localPaintStyles.length; i++) {
+      var style = localPaintStyles[i];
+      cache.set(style.name, {
+        style: style,
+        type: 'PAINT',
+        key: null,
+        isLibrary: false
+      });
+    }
+    for (var i = 0; i < localEffectStyles.length; i++) {
+      var style = localEffectStyles[i];
+      cache.set(style.name, {
+        style: style,
+        type: 'EFFECT',
+        key: null,
+        isLibrary: false
+      });
+    }
+    
+    console.log('📋 Added ' + (localTextStyles.length + localPaintStyles.length + localEffectStyles.length) + ' local styles');
+    
+  // 🚀 Access Team Library styles (with performance optimization)
+  try {
+    console.log('🌐 Accessing Team Library styles...');
+    var startTime = Date.now();
+    
+    // Get all available library style collections
+    figma.teamLibrary.getAvailableLibraryStyleCollectionsAsync().then(function(libraryCollections) {
+      console.log('📚 Found ' + libraryCollections.length + ' library style collections');
+      
+      // Performance optimization: Limit collections to prevent timeout
+      var maxCollections = 10; // Limit to prevent timeout in large files
+      if (libraryCollections.length > maxCollections) {
+        console.log('⚠️ Large file detected: Processing first ' + maxCollections + ' collections only');
+        libraryCollections = libraryCollections.slice(0, maxCollections);
+      }
+      
+      // Process collections sequentially to avoid Promise complexity
+      var processedCollections = 0;
+      var totalCollections = libraryCollections.length;
+      
+      function processNextCollection() {
+        if (processedCollections >= totalCollections) {
+          var endTime = Date.now();
+          console.log('⏱️ Team Library access took: ' + (endTime - startTime) + 'ms');
+          console.log('📋 Total styles in cache: ' + cache.size + ' (local + library)');
+          resolve(cache);
+          return;
+        }
+        
+        var libraryCollection = libraryCollections[processedCollections];
+        processedCollections++;
+        
+        figma.teamLibrary.getStylesInLibraryCollectionAsync(libraryCollection.key).then(function(libraryStyles) {
+          console.log('📋 Collection "' + libraryCollection.name + '": ' + libraryStyles.length + ' styles');
+          
+          for (var styleIndex = 0; styleIndex < libraryStyles.length; styleIndex++) {
+            var libraryStyle = libraryStyles[styleIndex];
+            
+            // Store library style info for later import
+            cache.set(libraryStyle.name, {
+              style: null, // Will be imported when needed
+              key: libraryStyle.key,
+              isLibrary: true,
+              name: libraryStyle.name,
+              type: libraryStyle.type
+            });
+          }
+          
+          // Process next collection
+          processNextCollection();
+        }).catch(function(e) {
+          console.log('⚠️ Could not access collection: ' + libraryCollection.name);
+          // Continue with next collection even if this one fails
+          processNextCollection();
+        });
+      }
+      
+      // Start processing collections
+      processNextCollection();
+      
+    }).catch(function(error) {
+      console.log('⚠️ Team Library access failed: ' + error.message);
+      console.log('📋 Falling back to document scanning...');
+      
+      // Fallback: Scan document for currently used library styles
+      scanDocumentForLibraryStyles(cache);
+      console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
+      
+      // Debug: Show what styles were found
+      console.log('🔍 Found styles:');
+      for (var [styleName, styleInfo] of cache.entries()) {
+        console.log('   - "' + styleName + '" (' + styleInfo.type + ', library: ' + styleInfo.isLibrary + ')');
+      }
+      
+      resolve(cache);
     });
+      
+    } catch (error) {
+      console.log('⚠️ Team Library access failed: ' + error.message);
+      console.log('📋 Falling back to document scanning...');
+      
+      // Fallback: Scan document for currently used library styles
+      scanDocumentForLibraryStyles(cache);
+      console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
+      
+      // Debug: Show what styles were found
+      console.log('🔍 Found styles:');
+      for (var [styleName, styleInfo] of cache.entries()) {
+        console.log('   - "' + styleName + '" (' + styleInfo.type + ', library: ' + styleInfo.isLibrary + ')');
+      }
+      
+      resolve(cache);
+    }
+  });
+}
+
+// Fallback function to scan document for library styles
+function scanDocumentForLibraryStyles(cache) {
+  function scanNode(node) {
+    // Safely check if node exists and has the required properties
+    if (!node || typeof node !== 'object') {
+      return;
+    }
+    
+    // Handle text nodes
+    if (node.type === 'TEXT' && typeof node.getStyledTextSegments === 'function') {
+      try {
+        var segments = node.getStyledTextSegments(['textStyleId']);
+        if (Array.isArray(segments)) {
+          for (var segIndex = 0; segIndex < segments.length; segIndex++) {
+            var segment = segments[segIndex];
+            if (segment && segment.textStyleId && segment.textStyleId !== figma.mixed) {
+              try {
+                var style = figma.getStyleById(segment.textStyleId);
+                if (style && !cache.has(style.name)) {
+                  cache.set(style.name, {
+                    style: style,
+                    type: 'TEXT',
+                    key: style.key || null,
+                    isLibrary: style.remote || false
+                  });
+                }
+              } catch (e) {
+                // Style might be inaccessible
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Node might not support text segments
+      }
+    }
+    
+    // Check other style types
+    var styleProps = ['fillStyleId', 'strokeStyleId', 'effectStyleId'];
+    for (var propIndex = 0; propIndex < styleProps.length; propIndex++) {
+      var prop = styleProps[propIndex];
+      if (prop in node && node[prop] && node[prop] !== figma.mixed) {
+        try {
+          var style = figma.getStyleById(node[prop]);
+          if (style && !cache.has(style.name)) {
+            var styleType = 'PAINT';
+            if (prop === 'effectStyleId') styleType = 'EFFECT';
+            
+            cache.set(style.name, {
+              style: style,
+              type: styleType,
+              key: style.key || null,
+              isLibrary: style.remote || false
+            });
+          }
+        } catch (e) {
+          // Style might be inaccessible
+        }
+      }
+    }
+    
+    // Recursively scan children
+    if (node.children && Array.isArray(node.children)) {
+      for (var childIndex = 0; childIndex < node.children.length; childIndex++) {
+        scanNode(node.children[childIndex]);
+      }
+    }
   }
   
-  // Add all local paint styles
-  var localPaintStyles = figma.getLocalPaintStyles();
-  for (var i = 0; i < localPaintStyles.length; i++) {
-    var style = localPaintStyles[i];
-    cache.set(style.name, {
-      style: style,
-      type: 'PAINT',
-      isLibrary: false
-    });
+  try {
+    scanNode(figma.currentPage);
+  } catch (e) {
+    console.log('⚠️ Error scanning document: ' + e.message);
   }
-  
-  // Add all local effect styles
-  var localEffectStyles = figma.getLocalEffectStyles();
-  for (var i = 0; i < localEffectStyles.length; i++) {
-    var style = localEffectStyles[i];
-    cache.set(style.name, {
-      style: style,
-      type: 'EFFECT',
-      isLibrary: false
-    });
-  }
-  
-  console.log('📋 Added ' + localTextStyles.length + ' text styles');
-  console.log('📋 Added ' + localPaintStyles.length + ' paint styles');
-  console.log('📋 Added ' + localEffectStyles.length + ' effect styles');
-  
-  return Promise.resolve(cache);
 }
 
 // Recursive node processing function
@@ -184,7 +352,21 @@ function processTextNode(node, styleCache, nodeName, replacements) {
           var currentStyle = figma.getStyleById(segment.textStyleId);
           if (currentStyle) {
             var newStyle = findReplacementStyle(currentStyle, styleCache, 'TEXT', replacements);
-            if (newStyle) {
+            
+            // Handle both synchronous and Promise returns
+            if (newStyle && typeof newStyle.then === 'function') {
+              // It's a Promise (library style import)
+              newStyle.then(function(importedStyle) {
+                if (importedStyle) {
+                  node.setRangeTextStyleId(segment.start, segment.end, importedStyle.id);
+                  totalReplacements++;
+                  console.log('✅ Text: "' + currentStyle.name + '" → "' + importedStyle.name + '" in "' + nodeName + '"');
+                }
+              }).catch(function(error) {
+                console.log('❌ Failed to import style: ' + error.message);
+              });
+            } else if (newStyle) {
+              // It's a synchronous result (local style)
               node.setRangeTextStyleId(segment.start, segment.end, newStyle.id);
               totalReplacements++;
               console.log('✅ Text: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
@@ -211,7 +393,21 @@ function processOtherStyles(node, styleCache, nodeName, replacements) {
       var currentStyle = figma.getStyleById(node.fillStyleId);
       if (currentStyle) {
         var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements);
-        if (newStyle) {
+        
+        // Handle both synchronous and Promise returns
+        if (newStyle && typeof newStyle.then === 'function') {
+          // It's a Promise (library style import)
+          newStyle.then(function(importedStyle) {
+            if (importedStyle) {
+              node.fillStyleId = importedStyle.id;
+              totalReplacements++;
+              console.log('✅ Fill: "' + currentStyle.name + '" → "' + importedStyle.name + '" in "' + nodeName + '"');
+            }
+          }).catch(function(error) {
+            console.log('❌ Failed to import style: ' + error.message);
+          });
+        } else if (newStyle) {
+          // It's a synchronous result (local style)
           node.fillStyleId = newStyle.id;
           totalReplacements++;
           console.log('✅ Fill: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
@@ -228,7 +424,21 @@ function processOtherStyles(node, styleCache, nodeName, replacements) {
       var currentStyle = figma.getStyleById(node.strokeStyleId);
       if (currentStyle) {
         var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements);
-        if (newStyle) {
+        
+        // Handle both synchronous and Promise returns
+        if (newStyle && typeof newStyle.then === 'function') {
+          // It's a Promise (library style import)
+          newStyle.then(function(importedStyle) {
+            if (importedStyle) {
+              node.strokeStyleId = importedStyle.id;
+              totalReplacements++;
+              console.log('✅ Stroke: "' + currentStyle.name + '" → "' + importedStyle.name + '" in "' + nodeName + '"');
+            }
+          }).catch(function(error) {
+            console.log('❌ Failed to import style: ' + error.message);
+          });
+        } else if (newStyle) {
+          // It's a synchronous result (local style)
           node.strokeStyleId = newStyle.id;
           totalReplacements++;
           console.log('✅ Stroke: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
@@ -245,7 +455,21 @@ function processOtherStyles(node, styleCache, nodeName, replacements) {
       var currentStyle = figma.getStyleById(node.effectStyleId);
       if (currentStyle) {
         var newStyle = findReplacementStyle(currentStyle, styleCache, 'EFFECT', replacements);
-        if (newStyle) {
+        
+        // Handle both synchronous and Promise returns
+        if (newStyle && typeof newStyle.then === 'function') {
+          // It's a Promise (library style import)
+          newStyle.then(function(importedStyle) {
+            if (importedStyle) {
+              node.effectStyleId = importedStyle.id;
+              totalReplacements++;
+              console.log('✅ Effect: "' + currentStyle.name + '" → "' + importedStyle.name + '" in "' + nodeName + '"');
+            }
+          }).catch(function(error) {
+            console.log('❌ Failed to import style: ' + error.message);
+          });
+        } else if (newStyle) {
+          // It's a synchronous result (local style)
           node.effectStyleId = newStyle.id;
           totalReplacements++;
           console.log('✅ Effect: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
@@ -259,11 +483,15 @@ function processOtherStyles(node, styleCache, nodeName, replacements) {
   return totalReplacements;
 }
 
-// Enhanced replacement function with partial matching
+// Enhanced replacement function with Team Library import support
 function findReplacementStyle(currentStyle, styleCache, expectedType, replacements) {
+  console.log('🔍 Checking style: "' + currentStyle.name + '" (type: ' + expectedType + ')');
+  
   for (var replIndex = 0; replIndex < replacements.length; replIndex++) {
     var replacement = replacements[replIndex];
     var findPattern = replacement.from;
+    
+    console.log('🔍 Testing pattern: "' + findPattern + '" → "' + replacement.to + '"');
     
     // Check if current style name contains the pattern
     if (currentStyle.name.indexOf(findPattern) !== -1) {
@@ -277,8 +505,37 @@ function findReplacementStyle(currentStyle, styleCache, expectedType, replacemen
         // Check if replacement style exists in cache
         var styleInfo = styleCache.get(newStyleName);
         if (styleInfo && styleInfo.type === expectedType) {
-          console.log('✅ Found replacement: "' + newStyleName + '"');
-          return styleInfo.style;
+          // If it's a local style or already imported library style
+          if (styleInfo.style) {
+            console.log('✅ Found replacement: "' + newStyleName + '"');
+            return styleInfo.style;
+          }
+          
+          // If it's a library style that needs to be imported
+          if (styleInfo.isLibrary && styleInfo.key) {
+            console.log('📥 Importing library style: "' + newStyleName + '"');
+            try {
+              var importedStyle = figma.importStyleByKeyAsync(styleInfo.key);
+              return importedStyle.then(function(importedStyle) {
+                console.log('✅ Successfully imported: "' + importedStyle.name + '"');
+                
+                // Update cache with imported style
+                styleCache.set(newStyleName, {
+                  style: importedStyle,
+                  type: styleInfo.type,
+                  key: styleInfo.key,
+                  isLibrary: true
+                });
+                
+                return importedStyle;
+              }).catch(function(importError) {
+                console.log('❌ Failed to import style: ' + importError.message);
+                return null;
+              });
+            } catch (importError) {
+              console.log('❌ Failed to import style: ' + importError.message);
+            }
+          }
         } else {
           console.log('❌ Replacement style not found: "' + newStyleName + '" (type: ' + expectedType + ')');
         }

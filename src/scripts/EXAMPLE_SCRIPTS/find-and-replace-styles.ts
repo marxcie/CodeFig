@@ -1,4 +1,4 @@
-// Find and replace styles
+// Find and replace styles - earlier version
 // Enhanced with Team Library API for comprehensive style access
 
 console.log('🎨 Replace Styles - Pattern Matching with Library Import');
