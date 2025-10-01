@@ -2076,9 +2076,11 @@
           return code;
         }
         
-        // Handle both syntax types:
+        // Handle multiple syntax types:
         // 1. @import { func1, func2 } from "Script Name"
         // 2. @import { func1, func2 } (defaults to core library)
+        // 3. @import * from "Script Name" (wildcard import)
+        // 4. @import * (wildcard from core library)
         
         // Pattern 1: @import with 'from' clause
         const importWithFromRegex = /@import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
@@ -2102,27 +2104,108 @@
           processedCode = processImport(processedCode, match[0], functionNames, '@Core Library');
         }
         
+        // Pattern 3: @import * from "Script Name" (wildcard import)
+        const wildcardWithFromRegex = /@import\s+\*\s+from\s+['"]([^'"]+)['"]/g;
+        
+        while ((match = wildcardWithFromRegex.exec(code)) !== null) {
+          const scriptName = match[1];
+          
+          // Get all functions from the source script
+          const sourceScript = allScripts.find(script => {
+            if (script.name === scriptName) return true;
+            if (script.name.includes(scriptName)) return true;
+            if (script.filename === scriptName + '.ts') return true;
+            return false;
+          });
+          
+          if (sourceScript) {
+            const functionNames = extractAllFunctionNames(sourceScript.code);
+            processedCode = processImport(processedCode, match[0], functionNames, scriptName);
+          } else {
+            console.warn('Wildcard import: Script not found:', scriptName);
+            processedCode = processedCode.replace(match[0], '// Import failed: Script not found');
+          }
+        }
+        
+        // Pattern 4: @import * (wildcard from core library)
+        const wildcardSimpleRegex = /@import\s+\*(?!\s+from)/g;
+        
+        while ((match = wildcardSimpleRegex.exec(code)) !== null) {
+          // Get all functions from the core library
+          const coreScript = allScripts.find(script => script.name.includes('@Core Library'));
+          
+          if (coreScript) {
+            const functionNames = extractAllFunctionNames(coreScript.code);
+            processedCode = processImport(processedCode, match[0], functionNames, '@Core Library');
+          } else {
+            console.warn('Wildcard import: Core library not found');
+            processedCode = processedCode.replace(match[0], '// Import failed: Core library not found');
+          }
+        }
+        
         return processedCode;
+      }
+      
+      // Extract all function names from a script
+      function extractAllFunctionNames(code) {
+        const functionNames = [];
+        
+        // Match function declarations: function functionName(...)
+        const functionRegex = /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g;
+        let match;
+        while ((match = functionRegex.exec(code)) !== null) {
+          functionNames.push(match[1]);
+        }
+        
+        // Match variable function assignments: var functionName = function(...)
+        const varFunctionRegex = /var\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function\s*\(/g;
+        while ((match = varFunctionRegex.exec(code)) !== null) {
+          functionNames.push(match[1]);
+        }
+        
+        // Match arrow function assignments: var functionName = (...) => 
+        const arrowFunctionRegex = /var\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\([^)]*\)\s*=>/g;
+        while ((match = arrowFunctionRegex.exec(code)) !== null) {
+          functionNames.push(match[1]);
+        }
+        
+        // Match const/let function assignments: const functionName = function(...)
+        const constFunctionRegex = /(?:const|let)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function\s*\(/g;
+        while ((match = constFunctionRegex.exec(code)) !== null) {
+          functionNames.push(match[1]);
+        }
+        
+        // Match const/let arrow function assignments: const functionName = (...) =>
+        const constArrowFunctionRegex = /(?:const|let)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\([^)]*\)\s*=>/g;
+        while ((match = constArrowFunctionRegex.exec(code)) !== null) {
+          functionNames.push(match[1]);
+        }
+        
+        // Remove duplicates and return
+        return [...new Set(functionNames)];
       }
       
       // Process a single import statement
       function processImport(code, importStatement, functionNames, scriptName) {
         // Find the source script with improved matching
         const sourceScript = allScripts.find(script => {
-          // Exact match
+          // Exact match (highest priority)
           if (script.name === scriptName) return true;
           
-          // Partial match (handles "Example Scripts / @Core Library" matching "@Core Library")
-          if (script.name.includes(scriptName)) return true;
-          
-          // Filename match
+          // Filename match (high priority)
           if (script.filename === scriptName + '.ts') return true;
-          
-          // Case insensitive match
-          if (script.name.toLowerCase().includes(scriptName.toLowerCase())) return true;
           
           // Handle @ prefixed names specifically
           if (scriptName.startsWith('@') && script.name.includes(scriptName)) return true;
+          
+          // End-of-name match (e.g., "Replace Styles" matches "Example Scripts / Replace Styles")
+          if (script.name.endsWith(' / ' + scriptName)) return true;
+          
+          // Case insensitive end-of-name match
+          if (script.name.toLowerCase().endsWith(' / ' + scriptName.toLowerCase())) return true;
+          
+          // Partial match (lowest priority - only if no better match found)
+          if (script.name.includes(scriptName)) return true;
           
           return false;
         });
@@ -2156,41 +2239,46 @@
         
         functionNames.forEach(functionName => {
           
-          // Use a more robust regex that captures the entire function
-          // This regex looks for: function name(...) { ... } where the braces are balanced
-          const functionPattern = new RegExp(
-            `(function\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?^\\})`, 
-            'gm'
-          );
+          // Use a more robust approach that finds the function start and then balances braces
+          const functionStartPattern = new RegExp(`function\\s+${functionName}\\s*\\(`, 'g');
+          let match;
           
-          const match = functionPattern.exec(sourceCode);
-          
-          if (match) {
-            const functionCode = match[1];
-            extractedCode += functionCode + '\n\n';
-          } else {
+          while ((match = functionStartPattern.exec(sourceCode)) !== null) {
+            const startIndex = match.index;
+            const functionStart = match[0];
             
-            // Fallback to the old brace counting method
-            const funcRegex = new RegExp(`function\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{`, 'g');
-            const funcMatch = funcRegex.exec(sourceCode);
+            // Find the opening brace after the parameters
+            let braceIndex = startIndex + functionStart.length;
+            let parenCount = 1; // We're already inside the opening paren
             
-            if (funcMatch) {
-              const startIndex = funcMatch.index;
+            // Skip the parameter list
+            while (braceIndex < sourceCode.length && parenCount > 0) {
+              if (sourceCode[braceIndex] === '(') parenCount++;
+              else if (sourceCode[braceIndex] === ')') parenCount--;
+              braceIndex++;
+            }
+            
+            // Skip whitespace to find the opening brace
+            while (braceIndex < sourceCode.length && /\s/.test(sourceCode[braceIndex])) {
+              braceIndex++;
+            }
+            
+            if (braceIndex < sourceCode.length && sourceCode[braceIndex] === '{') {
+              // Now find the matching closing brace
+              let braceCount = 1;
+              let endIndex = braceIndex + 1;
               
-              // Simple approach: find the next standalone closing brace on its own line
-              const lines = sourceCode.substring(startIndex).split('\n');
-              let functionLines = [lines[0]]; // Start with the function declaration line
-              
-              for (let i = 1; i < lines.length; i++) {
-                functionLines.push(lines[i]);
-                // Look for a closing brace that's the only non-whitespace character on the line
-                if (lines[i].trim() === '}') {
-                  break;
-                }
+              while (endIndex < sourceCode.length && braceCount > 0) {
+                if (sourceCode[endIndex] === '{') braceCount++;
+                else if (sourceCode[endIndex] === '}') braceCount--;
+                endIndex++;
               }
               
-              const functionCode = functionLines.join('\n');
-              extractedCode += functionCode + '\n\n';
+              if (braceCount === 0) {
+                const functionCode = sourceCode.substring(startIndex, endIndex);
+                extractedCode += functionCode + '\n\n';
+                break; // Found the function, move to next function name
+              }
             }
           }
         });
