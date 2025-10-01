@@ -9,7 +9,8 @@
 // GRID SYSTEM CONFIGURATION
 // ========================================
 
-var gridSystemConfig = {
+// Use existing config if already defined, otherwise use default
+var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfig : {
   collectionName: "Grid System",
   
   // Configuration values (NOT added as variables)

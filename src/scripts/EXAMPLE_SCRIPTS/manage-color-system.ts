@@ -8,7 +8,8 @@
 // COLOR SYSTEM CONFIGURATION
 // ========================================
 
-var colorConfig = {
+// Use existing config if already defined, otherwise use default
+var colorConfig = typeof colorConfig !== 'undefined' ? colorConfig : {
   collectionName: "Colors",
   
   // Configuration values (NOT added as variables)

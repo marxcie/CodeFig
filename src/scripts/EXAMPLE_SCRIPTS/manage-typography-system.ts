@@ -9,7 +9,8 @@
 // ========================================
 
 // Configuration values (NOT added as variables)
-var typographyConfigData = {
+// Use existing config if already defined, otherwise use default
+var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typographyConfigData : {
   fontFamily: "Inter",
   fontWeights: {
     regular: 400,
@@ -91,6 +92,12 @@ var typographyConfigData = {
     styleNaming: "typography/{$fontScale}/{$fontWeight}"
   },
   scalingMethod: "multiplicative" // Options: "additive" (current) or "multiplicative"
+};
+
+// Create the main configuration object that the execution section expects
+var typographyConfig = typeof typographyConfig !== 'undefined' ? typographyConfig : {
+  collectionName: typographyConfigData.structure.variableCollection,
+  config: typographyConfigData
 };
 
 // Helper function to calculate fluid font size with force parameter
@@ -522,4 +529,63 @@ try {
 } catch (error) {
   console.error('Error:', error);
   figma.notify('❌ Error: ' + error.message);
+}
+
+// ========================================
+// SIMPLE API FOR CUSTOM CONFIGURATIONS
+// ========================================
+
+// Simple function to create a complete typography system with custom config
+function createTypographySystem(customConfig) {
+  try {
+    // Generate variables in the correct format for processVariables
+    var typographyVariables = {};
+    
+    // Generate font size variables
+    customConfig.fontScale.forEach(function(scaleName, index) {
+      var viewportNames = Object.keys(customConfig.fontSizes);
+      var totalSteps = customConfig.fontScale.length;
+      
+      viewportNames.forEach(function(viewport) {
+        var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
+        
+        // Calculate font size (simplified version)
+        var baseIndex = customConfig.fontScale.indexOf(customConfig.fontSizes[viewport].baseFont.level);
+        var minSize = customConfig.fontSizes[viewport].minFont.size;
+        var maxSize = customConfig.fontSizes[viewport].maxFont.size;
+        var baseSize = customConfig.fontSizes[viewport].baseFont.size;
+        
+        var fontSize = baseSize;
+        if (index !== baseIndex) {
+          var ratio = (index - baseIndex) / (totalSteps - 1);
+          fontSize = minSize + (maxSize - minSize) * Math.abs(ratio);
+        }
+        
+        // Store variables in the correct format
+        var groupName = customConfig.structure.variableGroup;
+        var variableName = groupName + '/' + scaleName + '/font-size';
+        
+        if (!typographyVariables[variableName]) {
+          typographyVariables[variableName] = {
+            type: 'FLOAT',
+            values: {}
+          };
+        }
+        typographyVariables[variableName].values[viewportKey] = Math.round(fontSize);
+      });
+    });
+    
+    // Create collection and process variables
+    var collection = getOrCreateCollection(customConfig.structure.variableCollection);
+    var modes = extractModes({variables: typographyVariables});
+    setupModes(collection, modes);
+    var result = processVariables(collection, typographyVariables, null, modes);
+    
+    figma.notify('✅ Typography system created: ' + result.created + ' variables created!');
+    return result;
+    
+  } catch (error) {
+    figma.notify('❌ Error: ' + error.message);
+    throw error;
+  }
 }
