@@ -2,8 +2,8 @@
 // Create and update grid system variables programmatically
 
 // Import functions from libraries
-@import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Core Library"
-@import { calculateColumnWidth } from "@Custom Helpers"
+@import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
+@import { calculateColumnWidth } from "@Core Library"
 
 // ========================================
 // GRID SYSTEM CONFIGURATION

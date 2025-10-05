@@ -2,7 +2,7 @@
 // Advanced responsive typography system with fluid scaling and style generation
 
 // Import functions from libraries
-@import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Core Library"
+@import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
 
 // ========================================
 // ADVANCED TYPOGRAPHY SYSTEM CONFIGURATION

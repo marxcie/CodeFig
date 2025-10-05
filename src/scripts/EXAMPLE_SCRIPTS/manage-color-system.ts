@@ -2,7 +2,8 @@
 // Create and update color system variables programmatically
 
 // Import functions from libraries
-@import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables, hexToRgb, rgbToHex } from "@Core Library"
+@import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
+@import { hexToRgb, rgbToHex } from "@Core Library"
 
 // ========================================
 // COLOR SYSTEM CONFIGURATION

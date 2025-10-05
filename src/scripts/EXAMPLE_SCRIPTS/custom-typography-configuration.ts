@@ -73,7 +73,7 @@ var typographyConfig = {
 @import { generateTypographyVariables, createOrUpdateCollection, calculateFluidFontSize, calculateFluidLineHeight, calculateFluidLetterSpacing, calculateMultiplicativeSize, applyForceCurve, createOrUpdateTextStyles } from "DS Foundation: Typography"
 
 // Import core functions from @Core Library
-@import { getOrCreateCollection, extractModes, setupModes, processVariables, createOrUpdateVariable } from "@Core Library"
+@import { getOrCreateCollection, extractModes, setupModes, processVariables, createOrUpdateVariable } from "@Variables"
 
 // Generate and create typography system
 try {

@@ -2,48 +2,15 @@
 // Comprehensive collection of reusable Figma operations and utilities
 // 
 // 📚 IMPORT THESE FUNCTIONS IN YOUR SCRIPTS:
-// @import { getAllStyles, traverseNodes, distance } from "@Core Library"
+// @import { getAllStyles, traverseNodes, generateScale } from "@Core Library"
 //
 // 🎯 AVAILABLE FUNCTIONS:
-// • Node Operations: traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone
+// • Node Operations: traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone, setupAutoLayout, applyNamingConvention, createComponentFromSelection
 // • Style Operations: getAllStyles, buildStyleCache, replaceStylesByPattern, getStyleByName  
-// • Variable Operations: getOrCreateCollection, setupModes, createOrUpdateVariable, buildVariableCache, extractModes, processVariables
 // • Pattern Matching: replaceByPattern
-// • Geometry: distance, center, bounds
 // • Colors: hexToRgb, rgbToHex
-// • Utilities: log, timeOperation, unique
+// • Utilities: log, timeOperation, unique, analyzeSelection
 
-// === GEOMETRY UTILITIES ===
-function distance(a, b) {
-  return Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
-}
-
-function center(node) {
-  return {
-    x: node.x + node.width / 2,
-    y: node.y + node.height / 2
-  };
-}
-
-function bounds(nodes) {
-  if (nodes.length === 0) return null;
-  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  
-  for (var i = 0; i < nodes.length; i++) {
-    var node = nodes[i];
-    minX = Math.min(minX, node.x);
-    minY = Math.min(minY, node.y);
-    maxX = Math.max(maxX, node.x + node.width);
-    maxY = Math.max(maxY, node.y + node.height);
-  }
-  
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY
-  };
-}
 
 // === NODE UTILITIES ===
 function findByName(name, parent) {
@@ -118,150 +85,6 @@ function replaceStylesByPattern(searchPattern, replacePattern) {
   return count;
 }
 
-// === VARIABLE OPERATIONS ===
-function getOrCreateCollection(name) {
-  var collections = figma.variables.getLocalVariableCollections();
-  var existing = collections.find(function(c) { return c.name === name; });
-  
-  if (existing) {
-    return existing;
-  }
-  
-  return figma.variables.createVariableCollection(name);
-}
-
-function setupModes(collection, modeNames) {
-  console.log('Setting up modes: ' + modeNames.join(', '));
-  
-  // Remove extra modes
-  while (collection.modes.length > modeNames.length) {
-    collection.removeMode(collection.modes[collection.modes.length - 1].modeId);
-  }
-  
-  // Add missing modes and rename
-  modeNames.forEach(function(modeName, index) {
-    if (index === 0) {
-      // Rename default mode
-      collection.renameMode(collection.modes[0].modeId, modeName);
-    } else if (index >= collection.modes.length) {
-      // Add new mode
-      collection.addMode(modeName);
-    } else {
-      // Rename existing mode
-      collection.renameMode(collection.modes[index].modeId, modeName);
-    }
-  });
-  
-  return collection;
-}
-
-function createOrUpdateVariable(collection, name, config, modes) {
-  // Handle both old signature (type, values) and new signature (config, modes)
-  var actualConfig, actualModes;
-  
-  if (typeof config === 'string') {
-    // Old signature: createOrUpdateVariable(collection, name, type, values)
-    actualConfig = { type: config, values: modes || {} };
-    actualModes = Object.keys(modes || {});
-  } else {
-    // New signature: createOrUpdateVariable(collection, name, config, modes)
-    actualConfig = config;
-    actualModes = modes || Object.keys(config.values || {});
-  }
-  
-  // Find existing variable
-  var existingVar = collection.variableIds
-    .map(function(id) { return figma.variables.getVariableById(id); })
-    .find(function(v) { return v && v.name === name; });
-  
-  var variable;
-  var action;
-  
-  if (existingVar) {
-    variable = existingVar;
-    action = 'updated';
-    console.log('Updating variable: ' + name);
-  } else {
-    variable = figma.variables.createVariable(name, collection, actualConfig.type);
-    action = 'created';
-    console.log('Creating variable: ' + name + ' (' + actualConfig.type + ')');
-  }
-  
-  // Set scopes if provided
-  if (actualConfig.scopes && actualConfig.scopes.length > 0) {
-    variable.scopes = actualConfig.scopes;
-    console.log('  Scopes set: ' + actualConfig.scopes.join(', '));
-  }
-  
-  // Set values for each mode
-  actualModes.forEach(function(modeName) {
-    var mode = collection.modes.find(function(m) { return m.name === modeName; });
-    if (mode && actualConfig.values && actualConfig.values[modeName] !== undefined) {
-      var value = actualConfig.values[modeName];
-      
-      // Convert color strings to RGB objects
-      if (actualConfig.type === 'COLOR' && typeof value === 'string') {
-        value = hexToRgb(value);
-      }
-      
-      variable.setValueForMode(mode.modeId, value);
-      console.log('  ' + modeName + ': ' + (actualConfig.type === 'COLOR' ? rgbToHex(value.r, value.g, value.b) : value));
-    }
-  });
-  
-  return action;
-}
-
-function extractModes(config) {
-  // Get modes from the first variable's values
-  var firstVariable = Object.keys(config.variables)[0];
-  if (firstVariable && config.variables[firstVariable].values) {
-    return Object.keys(config.variables[firstVariable].values);
-  }
-  return ["Default"];
-}
-
-function processVariables(collection, variables, configValues, modes) {
-  var stats = { created: 0, updated: 0, skipped: 0 };
-  
-  console.log('Processing ' + Object.keys(variables).length + ' variables...');
-  
-  // Process all variables
-  Object.keys(variables).forEach(function(varName) {
-    var varConfig = variables[varName];
-    console.log('Processing variable: ' + varName);
-    
-    // Calculate values using config
-    var calculatedConfig = {
-      type: varConfig.type,
-      values: {}
-    };
-    
-    modes.forEach(function(mode) {
-      if (varConfig.values && varConfig.values[mode]) {
-        if (typeof varConfig.values[mode] === 'function') {
-          // Calculate value using config
-          calculatedConfig.values[mode] = varConfig.values[mode](configValues);
-        } else {
-          // Use static value
-          calculatedConfig.values[mode] = varConfig.values[mode];
-        }
-      }
-    });
-    
-    var result = createOrUpdateVariable(collection, varName, calculatedConfig, modes);
-    stats[result]++;
-  });
-  
-  return stats;
-}
-
-function buildVariableCache() {
-  return {
-    local: figma.variables.getLocalVariables(),
-    collections: figma.variables.getLocalVariableCollections()
-  };
-}
 
 // === PATTERN MATCHING ===
 function replaceByPattern(items, patterns, getName, setName) {
@@ -363,6 +186,175 @@ function unique(array) {
   });
 }
 
+// === GENERIC UTILITIES ===
+
+// Generate a scale of values based on a base unit and multipliers
+function generateScale(baseUnit, multipliers, names) {
+  baseUnit = baseUnit || 8;
+  multipliers = multipliers || [0.5, 1, 2, 3, 4, 6];
+  names = names || ['xs', 'sm', 'md', 'lg', 'xl', 'xxl'];
+  
+  var scale = {};
+  for (var i = 0; i < Math.min(multipliers.length, names.length); i++) {
+    scale[names[i]] = baseUnit * multipliers[i];
+  }
+  return scale;
+}
+
+// Calculate column width for grid systems
+function calculateColumnWidth(viewportConfig) {
+  var availableWidth = viewportConfig.containerWidth - (viewportConfig.padding * 2);
+  var totalGaps = (viewportConfig.columns - 1) * viewportConfig.gap;
+  return (availableWidth - totalGaps) / viewportConfig.columns;
+}
+
+// === NODE OPERATIONS ===
+
+// Smart auto-layout setup with common patterns
+function setupAutoLayout(node, direction, spacing, padding) {
+  if (!('layoutMode' in node)) {
+    console.log('Node does not support auto-layout: ' + node.name);
+    return false;
+  }
+  
+  node.layoutMode = direction || 'HORIZONTAL';
+  node.itemSpacing = spacing || 16;
+  
+  if (padding) {
+    if (typeof padding === 'number') {
+      node.paddingTop = node.paddingRight = node.paddingBottom = node.paddingLeft = padding;
+    } else {
+      node.paddingTop = padding.top || 0;
+      node.paddingRight = padding.right || 0;
+      node.paddingBottom = padding.bottom || 0;
+      node.paddingLeft = padding.left || 0;
+    }
+  }
+  
+  console.log('Applied auto-layout to: ' + node.name);
+  return true;
+}
+
+// Batch apply consistent naming convention
+function applyNamingConvention(nodes, prefix, separator) {
+  separator = separator || '/';
+  var renamed = 0;
+  
+  nodes.forEach(function(node, index) {
+    var oldName = node.name;
+    var newName = prefix + separator + (index + 1).toString().padStart(2, '0');
+    
+    if (oldName !== newName) {
+      node.name = newName;
+      console.log('Renamed: "' + oldName + '" → "' + newName + '"');
+      renamed++;
+    }
+  });
+  
+  return renamed;
+}
+
+// Quick component creation workflow
+function createComponentFromSelection(name, description) {
+  var selection = figma.currentPage.selection;
+  
+  if (selection.length === 0) {
+    figma.notify('Please select elements to convert to component');
+    return null;
+  }
+  
+  if (selection.length === 1 && selection[0].type === 'FRAME') {
+    // Convert frame to component
+    var component = figma.createComponent();
+    var frame = selection[0];
+    
+    // Copy frame properties
+    component.name = name || frame.name + ' Component';
+    component.description = description || 'Auto-generated component';
+    component.resize(frame.width, frame.height);
+    component.x = frame.x;
+    component.y = frame.y;
+    
+    // Move children
+    while (frame.children.length > 0) {
+      component.appendChild(frame.children[0]);
+    }
+    
+    // Remove original frame
+    frame.remove();
+    
+    console.log('Created component: ' + component.name);
+    figma.notify('Component created: ' + component.name);
+    return component;
+  } else {
+    figma.notify('Please select a single frame to convert to component');
+    return null;
+  }
+}
+
+// === ANALYSIS UTILITIES ===
+
+// Analyze selection and provide insights
+function analyzeSelection(nodes) {
+  var analysis = {
+    totalNodes: 0,
+    nodeTypes: {},
+    hasStyles: 0,
+    hasVariables: 0,
+    avgSize: { width: 0, height: 0 },
+    bounds: null
+  };
+  
+  if (!nodes || nodes.length === 0) {
+    return analysis;
+  }
+  
+  var totalWidth = 0, totalHeight = 0;
+  var sizedNodes = 0;
+  
+  traverseNodes(nodes, function(node) {
+    analysis.totalNodes++;
+    
+    // Count by type
+    analysis.nodeTypes[node.type] = (analysis.nodeTypes[node.type] || 0) + 1;
+    
+    // Check for styles
+    if (('textStyleId' in node && node.textStyleId) ||
+        ('fillStyleId' in node && node.fillStyleId) ||
+        ('strokeStyleId' in node && node.strokeStyleId) ||
+        ('effectStyleId' in node && node.effectStyleId)) {
+      analysis.hasStyles++;
+    }
+    
+    // Check for variables (simplified check)
+    if ('boundVariables' in node && Object.keys(node.boundVariables || {}).length > 0) {
+      analysis.hasVariables++;
+    }
+    
+    // Calculate average size
+    if ('width' in node && 'height' in node) {
+      totalWidth += node.width;
+      totalHeight += node.height;
+      sizedNodes++;
+    }
+    
+    return 1;
+  });
+  
+  if (sizedNodes > 0) {
+    analysis.avgSize.width = Math.round(totalWidth / sizedNodes);
+    analysis.avgSize.height = Math.round(totalHeight / sizedNodes);
+  }
+  
+  // Calculate bounds
+  if (nodes.length > 0 && 'x' in nodes[0]) {
+    analysis.bounds = bounds(nodes);
+  }
+  
+  return analysis;
+}
+
 console.log('📚 @Core Library loaded - ' + 
-  'getAllStyles, traverseNodes, distance, center, bounds, ' +
-  'findByName, replaceByPattern, hexToRgb, and more available for import');
+  'getAllStyles, traverseNodes, findByName, replaceByPattern, ' +
+  'hexToRgb, generateScale, setupAutoLayout, analyzeSelection, ' +
+  'and more available for import');

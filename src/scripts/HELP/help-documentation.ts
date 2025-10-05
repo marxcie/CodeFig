@@ -32,14 +32,16 @@
 // @import { functionName1, functionName2 }  // defaults to @Core Library
 
 // 📚 AVAILABLE LIBRARIES:
-// • @Core Library: getAllStyles, traverseNodes, distance, center, bounds, hexToRgb, etc.
-// • @Math Helpers: add, multiply, average, roundToNearest, clamp, lerp
-// • @Custom Helpers: generateSpacing, setupAutoLayout, analyzeSelection
+// • @Core Library: getAllStyles, traverseNodes, hexToRgb, generateScale, setupAutoLayout, analyzeSelection, calculateColumnWidth
+// • @Math Helpers: add, multiply, average, roundToNearest, clamp, lerp, distance, center, bounds, interpolate, linear, exponential, sine, cubic, quint, goldenRatio
+// • @Variables: getCollection, getVariable, setVariableValue, updateMultipleVariables, validateCollection, getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables
+// • @InfoPanel: displayResults, createResult, createSelectableResult, createHtmlResult
 
 // 💡 IMPORT EXAMPLES:
-// @import { getAllStyles, distance } from "@Core Library"
-// @import { add, average } from "@Math Helpers"  
-// @import { generateSpacing } from "@Custom Helpers"
+// @import { getAllStyles, generateScale } from "@Core Library"
+// @import { add, average, distance, interpolate } from "@Math Helpers"  
+// @import { getCollection, setVariableValue, getOrCreateCollection } from "@Variables"
+// @import { displayResults, createHtmlResult } from "@InfoPanel"
 // @import { myFunction } from "My Custom Script"  // Import from any user script
 
 // ✨ HOW IT WORKS:
