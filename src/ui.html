@@ -94,6 +94,45 @@
         font-weight: 600;
       }
       
+      /* Progress Indicator */
+      .progress-indicator {
+        padding: 4px 20px;
+        background: #2c2c2c;
+        /* border-bottom: 1px solid #e6e6e6; */
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+        position: relative;
+        z-index: 1000;
+        min-height: 32px;
+      }
+      
+      .progress-bar {
+        width: 60%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.333);
+        border-radius: 3px;
+        overflow: hidden;
+        /* border: 1px solid #999; */
+      }
+      
+      .progress-fill {
+        height: 100%;
+        background: #fff;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+        width: 0%;
+      }
+      
+      .progress-text {
+        font: 10px system-ui;
+        font-weight: 500;
+        color: #fff;
+        text-align: right;
+      }
+      
       .plugin-footer {
         padding: 12px 20px;
         border-top: 1px solid #e6e6e6;
@@ -694,6 +733,71 @@
         color: #808080;
         text-transform: uppercase;
       }
+
+      /* Style Preview Styles */
+      .style-preview, .variable-preview {
+        margin: 8px 0;
+        padding: 8px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        border: 1px solid #e6e6e6;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .color-preview {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        display: inline-block;
+        border: 1px solid #ddd;
+        flex-shrink: 0;
+      }
+
+      .stroke-preview {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        display: inline-block;
+        flex-shrink: 0;
+      }
+
+      .text-preview {
+        font-size: 14px;
+        font-weight: 500;
+        color: #333;
+        margin-right: 8px;
+        flex-shrink: 0;
+      }
+
+      .text-details {
+        font-size: 10px;
+        color: #666;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .font-family {
+        font-weight: 500;
+      }
+
+      .font-size, .font-weight, .color-value, .dimension-value, .spacing-value, .radius-value, .effect-value {
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+        font-size: 10px;
+        background: #e9ecef;
+        padding: 2px 4px;
+        border-radius: 2px;
+      }
+
+      .effect-preview {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        display: inline-block;
+        flex-shrink: 0;
+      }
         /* background: white; */
         cursor: pointer;
         transition: all 0.2s ease;
@@ -745,6 +849,11 @@
       .info-result-message .error-text {
         color: #dc3545;
         font-weight: 600;
+      }
+      
+      .warning-text {
+        color: #f57c00;
+        font-weight: 500;
       }
 
       .info-result-message .warning-text {
@@ -876,6 +985,14 @@
             </div>
           </div>
         </div>
+      </div>           
+
+      <!-- Progress Indicator -->
+      <div class="progress-indicator" id="progressIndicator" style="display: none;">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-text" id="progressText">Processing...</div>
       </div>
       
       <!-- Footer outside main container for full width -->
@@ -1395,6 +1512,22 @@
         
         // Note: State saving would need to be done via message passing to backend
       }
+
+      // Function to select nodes in Figma
+      function selectNodes(nodeIds) {
+        console.log('UI: selectNodes called with nodeIds:', nodeIds);
+        
+        // Send message to backend to select nodes
+        parent.postMessage({
+          pluginMessage: {
+            type: 'SELECT_NODES',
+            nodeIds: nodeIds
+          }
+        }, '*');
+      }
+      
+      // Make selectNodes available globally for onclick handlers
+      window.selectNodes = selectNodes;
 
       function displayInfoResults(data) {
         console.log('UI: displayInfoResults called with:', data);
@@ -2683,9 +2816,76 @@
               console.log('UI: Panel is closed, ignoring success message');
             }
             break;
+            
+          case 'PROGRESS_RESET':
+            console.log('UI: Received progress reset');
+            hideProgress();
+            break;
+            
+          case 'PROGRESS_UPDATE':
+            console.log('UI: Received progress update:', msg);
+            updateProgress(msg.operation, msg.processed, msg.total, msg.percentage);
+            break;
+            
+          case 'PROGRESS_COMPLETE':
+            console.log('UI: Progress complete:', msg);
+            hideProgress();
+            break;
         }
       };
 
+      // === PROGRESS INDICATOR FUNCTIONS ===
+      
+      function updateProgress(operation, processed, total, percentage) {
+        const progressIndicator = document.getElementById('progressIndicator');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        
+        if (progressIndicator && progressFill && progressText) {
+          // Show progress indicator
+          progressIndicator.style.display = 'flex';
+          
+          // Update progress bar - use pixel width instead of percentage
+          var progressBarContainer = progressIndicator.querySelector('.progress-bar');
+          var containerWidth = progressBarContainer.clientWidth;
+          var fillWidth = Math.round((containerWidth * percentage) / 100);
+          
+          progressFill.style.width = fillWidth + 'px';
+          
+          // Update text
+          const elapsed = Date.now() - (window.progressStartTime || Date.now());
+          const estimated = processed > 0 ? Math.round((elapsed / processed) * (total - processed)) : 0;
+          
+          let message = operation + ': ' + processed + '/' + total + ' (' + percentage + '%)';
+          if (estimated > 0) {
+            const formatTime = function(ms) {
+              if (ms < 1000) return ms + 'ms';
+              if (ms < 60000) return Math.round(ms / 1000) + 's';
+              return Math.round(ms / 60000) + 'm ' + Math.round((ms % 60000) / 1000) + 's';
+            };
+            message += ' - ETA: ' + formatTime(estimated);
+          }
+          
+          progressText.textContent = message;
+        }
+      }
+      
+      function hideProgress() {
+        const progressIndicator = document.getElementById('progressIndicator');
+        if (progressIndicator) {
+          progressIndicator.style.display = 'none';
+        }
+        // Reset progress state
+        window.progressStartTime = null;
+      }
+      
+      function showProgress(operation, processed, total) {
+        if (!window.progressStartTime) {
+          window.progressStartTime = Date.now();
+        }
+        const percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
+        updateProgress(operation, processed, total, percentage);
+      }
 
       // Initialize everything
       function init() {

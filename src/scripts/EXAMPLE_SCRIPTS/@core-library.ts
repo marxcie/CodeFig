@@ -2,12 +2,13 @@
 // Comprehensive collection of reusable Figma operations and utilities
 // 
 // 📚 IMPORT THESE FUNCTIONS IN YOUR SCRIPTS:
-// @import { getAllStyles, traverseNodes, generateScale } from "@Core Library"
+// @import { getAllStyles, traverseNodes, generateScale, processWithOptimization } from "@Core Library"
 //
 // 🎯 AVAILABLE FUNCTIONS:
 // • Node Operations: traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone, setupAutoLayout, applyNamingConvention, createComponentFromSelection
 // • Style Operations: getAllStyles, buildStyleCache, replaceStylesByPattern, getStyleByName  
 // • Pattern Matching: replaceByPattern
+// • Memory Optimization: processWithOptimization, estimateNodeCount, showProgress, cleanupMemory
 // • Colors: hexToRgb, rgbToHex
 // • Utilities: log, timeOperation, unique, analyzeSelection
 
@@ -354,7 +355,436 @@ function analyzeSelection(nodes) {
   return analysis;
 }
 
+// === MEMORY OPTIMIZATION SYSTEM ===
+
+/**
+ * Estimate node count in selection without full traversal
+ * @param {Array} selection - Figma selection
+ * @returns {Object} - Estimation with counts and warnings
+ */
+function estimateNodeCount(selection) {
+  var estimation = {
+    direct: selection.length,
+    estimated: selection.length,
+    warning: null,
+    critical: false
+  };
+  
+  // Quick estimation based on selection types
+  var frameCount = 0;
+  var componentCount = 0;
+  var instanceCount = 0;
+  
+  selection.forEach(function(node) {
+    if (node.type === 'FRAME' || node.type === 'COMPONENT') {
+      frameCount++;
+      // Estimate children based on type
+      if (node.type === 'FRAME') {
+        estimation.estimated += Math.min(node.children.length * 2, 100);
+      } else if (node.type === 'COMPONENT') {
+        estimation.estimated += Math.min(node.children.length * 3, 200);
+      }
+    } else if (node.type === 'INSTANCE') {
+      instanceCount++;
+      estimation.estimated += 50; // Instances often have many children
+    } else if (node.type === 'COMPONENT_SET') {
+      estimation.estimated += 100; // Component sets are complex
+    }
+  });
+  
+  // Add warning if estimation is high (using hardcoded values to avoid dependency)
+  if (estimation.estimated > 5000) {
+    estimation.warning = 'Selection contains ' + estimation.estimated + '+ nodes. This may cause performance issues. Consider breaking into smaller selections.';
+    estimation.critical = true;
+  } else if (estimation.estimated > 1000) {
+    estimation.warning = 'Large selection detected (' + estimation.estimated + '+ nodes). Processing may take longer.';
+    estimation.critical = false;
+  }
+  
+  return estimation;
+}
+
+/**
+ * Show progress indicator in UI
+ * @param {string} operation - Current operation description
+ * @param {number} processed - Number of items processed
+ * @param {number} total - Total number of items
+ */
+function showProgress(operation, processed, total) {
+  var percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
+  
+  // Initialize progress tracking if not exists
+  if (!window._progressStartTime) {
+    window._progressStartTime = Date.now();
+  }
+  
+  // Send progress update to UI via message passing
+  try {
+    var message = operation + ': ' + processed + '/' + total + ' (' + percentage + '%)';
+    
+    // Try to send to UI via the info panel handler if available
+    if (typeof window !== 'undefined' && window._infoPanelHandler) {
+      window._infoPanelHandler({
+        type: 'PROGRESS_UPDATE',
+        operation: operation,
+        processed: processed,
+        total: total,
+        percentage: percentage
+      });
+    } else {
+      // Fallback to Figma notification for progress updates
+      figma.notify(message, { timeout: 1000 });
+    }
+  } catch (e) {
+    console.log('Progress: ' + operation + ': ' + processed + '/' + total + ' (' + percentage + '%)');
+  }
+}
+
+/**
+ * Clean up memory by clearing large objects and arrays
+ */
+function cleanupMemory() {
+  // Clear any global caches or large objects
+  if (typeof global !== 'undefined') {
+    // Clear global caches if they exist
+    if (global.styleCache) {
+      global.styleCache = null;
+    }
+    if (global.variableCache) {
+      global.variableCache = null;
+    }
+  }
+  
+  // Clear window-level caches
+  if (typeof window !== 'undefined') {
+    if (window._styleCache) {
+      window._styleCache = null;
+    }
+    if (window._variableCache) {
+      window._variableCache = null;
+    }
+  }
+  
+  // Force garbage collection if available
+  if (typeof gc === 'function') {
+    try {
+      gc();
+    } catch (e) {
+      // Ignore if gc is not available
+    }
+  }
+}
+
+/**
+ * Process nodes with memory optimization, chunking, and progress tracking
+ * @param {Array} nodes - Nodes to process
+ * @param {Function} processor - Function to process each node
+ * @param {Object} options - Processing options
+ * @returns {Promise} - Promise that resolves with results
+ */
+function processWithOptimization(nodes, processor, options) {
+  options = options || {};
+  
+  // Set defaults (using hardcoded values to avoid dependency on MEMORY_CONFIG)
+  var chunkSize = options.chunkSize || 15; // Further reduced chunk size for better memory management
+  var showProgressUpdates = options.showProgress !== false;
+  var operationName = options.operation || 'Processing nodes';
+  var nodeFilter = options.nodeFilter || null;
+  var maxNodes = options.maxNodes || 15000; // Increased limit for larger selections
+  
+  return new Promise(function(resolve, reject) {
+    // Initialize progress state locally
+    var localProgressState = {
+      isProcessing: true,
+      total: nodes.length,
+      processed: 0,
+      startTime: Date.now(),
+      currentOperation: operationName
+    };
+    
+    var results = [];
+    var index = 0;
+    var lastCleanup = 0;
+    var errorCount = 0;
+    var maxErrors = 50; // Stop if too many errors occur
+    
+    // Check for early warning
+    var estimation = estimateNodeCount(nodes);
+    if (estimation.warning && showProgressUpdates) {
+      showProgress('Warning: ' + estimation.warning, 0, nodes.length);
+    }
+    
+    function processChunk() {
+      try {
+        // Adaptive timeout based on dataset size
+        var timeoutMs = 15000; // Reduced default timeout
+        if (nodes.length > 1000) {
+          timeoutMs = 45000; // 45 seconds for large datasets
+        } else if (nodes.length > 500) {
+          timeoutMs = 30000; // 30 seconds for medium datasets
+        }
+        
+        // Check if we've exceeded time limit
+        if (Date.now() - localProgressState.startTime > timeoutMs) {
+          localProgressState.isProcessing = false;
+          console.warn('Processing timeout exceeded: ' + Math.round(timeoutMs / 1000) + 's');
+          resolve({
+            results: results,
+            partial: true,
+            processed: localProgressState.processed,
+            total: nodes.length,
+            message: 'Processing timeout exceeded (' + Math.round(timeoutMs / 1000) + 's)'
+          });
+          return;
+        }
+        
+        // Check if we've exceeded node limit
+        if (maxNodes && localProgressState.processed >= maxNodes) {
+          localProgressState.isProcessing = false;
+          resolve({
+            results: results,
+            partial: true,
+            processed: localProgressState.processed,
+            total: nodes.length,
+            message: 'Processed ' + maxNodes + ' nodes (limit reached)'
+          });
+          return;
+        }
+        
+        // Check if too many errors occurred
+        if (errorCount >= maxErrors) {
+          localProgressState.isProcessing = false;
+          console.warn('Too many errors occurred: ' + errorCount);
+          resolve({
+            results: results,
+            partial: true,
+            processed: localProgressState.processed,
+            total: nodes.length,
+            message: 'Processing stopped due to errors (' + errorCount + ' errors)'
+          });
+          return;
+        }
+        
+        // Process chunk with timing
+        var chunkStartTime = Date.now();
+        var chunk = nodes.slice(index, Math.min(index + chunkSize, nodes.length));
+        var chunkResults = [];
+        
+        chunk.forEach(function(node) {
+          // Apply node filter if provided
+          if (nodeFilter && !nodeFilter(node)) {
+            return;
+          }
+          
+          try {
+            var result = processor(node);
+            if (result !== undefined && result !== null) {
+              if (Array.isArray(result)) {
+                chunkResults = chunkResults.concat(result);
+              } else {
+                chunkResults.push(result);
+              }
+            }
+          } catch (e) {
+            errorCount++;
+            console.warn('Error processing node ' + node.id + ' (error #' + errorCount + '):', e.message);
+            
+            // If this is a critical error, stop processing
+            if (e.message && e.message.includes('Aborted')) {
+              throw e;
+            }
+          }
+        });
+        
+        var chunkProcessingTime = Date.now() - chunkStartTime;
+        
+        // Adaptive chunk sizing based on processing time
+        if (chunkProcessingTime > 2000) {
+          // If chunk took more than 2 seconds, reduce chunk size significantly
+          chunkSize = Math.max(3, Math.floor(chunkSize * 0.5));
+        } else if (chunkProcessingTime > 1000) {
+          // If chunk took more than 1 second, reduce chunk size
+          chunkSize = Math.max(5, Math.floor(chunkSize * 0.7));
+        } else if (chunkProcessingTime < 50 && chunkSize < 25) {
+          // If chunk was very fast, increase chunk size slightly
+          chunkSize = Math.min(25, Math.floor(chunkSize * 1.1));
+        }
+        
+        results = results.concat(chunkResults);
+        localProgressState.processed = Math.min(index + chunk.length, nodes.length);
+        
+        // Update progress (every 3 nodes for more frequent updates)
+        if (showProgressUpdates && localProgressState.processed % 3 === 0) {
+          showProgress(operationName, localProgressState.processed, nodes.length);
+        }
+        
+        // Cleanup memory more frequently and aggressively
+        if (localProgressState.processed - lastCleanup > 15) {
+          cleanupMemory();
+          lastCleanup = localProgressState.processed;
+          
+          // Force garbage collection if available
+          if (typeof gc !== 'undefined') {
+            try {
+              gc();
+            } catch (e) {
+              // Ignore gc errors
+            }
+          }
+        }
+        
+        // Clear chunk results to free memory immediately
+        chunkResults = null;
+        
+        index += chunkSize;
+        
+        // Continue processing or finish
+        if (index < nodes.length) {
+          // Use setTimeout to yield control back to Figma
+          setTimeout(processChunk, 1); // Slightly longer delay for better stability
+        } else {
+          // Finished processing
+          localProgressState.isProcessing = false;
+          localProgressState.processed = nodes.length; // Ensure we're at 100%
+          cleanupMemory();
+          
+          if (showProgressUpdates) {
+            // Send final progress update to show 100%
+            showProgress(operationName, nodes.length, nodes.length);
+            
+            // Small delay before completion message
+            setTimeout(function() {
+              try {
+                if (typeof window !== 'undefined' && window._infoPanelHandler) {
+                  window._infoPanelHandler({
+                    type: 'PROGRESS_COMPLETE',
+                    operation: operationName,
+                    processed: nodes.length,
+                    total: nodes.length,
+                    message: options.partial ? 
+                      'Processed ' + nodes.length + ' nodes (limit reached)' : 
+                      'Processed ' + nodes.length + ' nodes successfully'
+                  });
+                } else {
+                  // Fallback to Figma notification
+                  figma.notify('Processing complete: ' + nodes.length + ' nodes processed');
+                }
+              } catch (e) {
+                console.log('Progress complete: ' + nodes.length + ' nodes processed');
+              }
+            }, 100);
+          }
+          
+          resolve({
+            results: results,
+            partial: options.partial || false,
+            processed: localProgressState.processed,
+            total: nodes.length,
+            message: options.partial ? 
+              'Processed ' + nodes.length + ' nodes (limit reached)' : 
+              'Processed ' + nodes.length + ' nodes successfully'
+          });
+        }
+        
+      } catch (e) {
+        localProgressState.isProcessing = false;
+        console.error('Critical error in processChunk:', e.message);
+        reject(e);
+      }
+    }
+    
+    // Start processing
+    processChunk();
+  });
+}
+
+/**
+ * Enhanced traverseNodes with memory optimization
+ * @param {Array} nodes - Nodes to traverse
+ * @param {Function} processor - Function to process each node
+ * @param {Object} options - Processing options
+ * @returns {Promise} - Promise that resolves with results
+ */
+function traverseNodesOptimized(nodes, processor, options) {
+  options = options || {};
+  
+  // Get maxNodes limit early to prevent memory issues
+  var maxNodes = options.maxNodes || 15000; // Increased limit for larger selections
+  
+  // Collect nodes with early termination if limit reached
+  var allNodes = [];
+  var processed = new Set();
+  var nodeCount = 0;
+  var startTime = Date.now();
+  var maxCollectionTime = 30000; // 30 seconds max for node collection
+  
+  function collectNodes(node, depth) {
+    depth = depth || 0;
+    
+    // Check for timeout during collection
+    if (Date.now() - startTime > maxCollectionTime) {
+      console.warn('Node collection timeout reached, stopping at ' + nodeCount + ' nodes');
+      return;
+    }
+    
+    // Skip if already processed or depth limit reached
+    if (processed.has(node.id) || depth > 15) return; // Reduced depth limit
+    processed.add(node.id);
+    
+    // Apply node filter if provided
+    if (!options.nodeFilter || options.nodeFilter(node)) {
+      allNodes.push(node);
+      nodeCount++;
+      
+      // Early termination if we've reached the limit
+      if (nodeCount >= maxNodes) {
+        console.log('Node limit reached: ' + nodeCount + '/' + maxNodes);
+        return;
+      }
+    }
+    
+    // Recurse into children only if we haven't hit the limit
+    if (nodeCount < maxNodes && 'children' in node && depth < 15) {
+      for (var i = 0; i < node.children.length; i++) {
+        collectNodes(node.children[i], depth + 1);
+        // Check limit again after each child
+        if (nodeCount >= maxNodes) {
+          return;
+        }
+      }
+    }
+  }
+  
+  try {
+    if (Array.isArray(nodes)) {
+      for (var i = 0; i < nodes.length; i++) {
+        collectNodes(nodes[i]);
+        if (nodeCount >= maxNodes) break;
+      }
+    } else {
+      collectNodes(nodes);
+    }
+  } catch (e) {
+    console.warn('Error during node collection:', e.message);
+    // Continue with what we have collected so far
+  }
+  
+  console.log('Node collection completed: ' + nodeCount + ' nodes collected');
+  
+  // Mark as partial if we hit the limit
+  if (nodeCount >= maxNodes) {
+    options.partial = true;
+  }
+  
+  // Clean up memory after collection
+  cleanupMemory();
+  
+  // Process with optimization
+  return processWithOptimization(allNodes, processor, options);
+}
+
 console.log('📚 @Core Library loaded - ' + 
   'getAllStyles, traverseNodes, findByName, replaceByPattern, ' +
   'hexToRgb, generateScale, setupAutoLayout, analyzeSelection, ' +
+  'processWithOptimization, estimateNodeCount, showProgress, ' +
   'and more available for import');
