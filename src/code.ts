@@ -210,6 +210,48 @@ figma.ui.onmessage = (msg) => {
     }
   }
   
+  if (msg.type === 'RESTORE_WINDOW') {
+    // Restore window size and position
+    try {
+      figma.ui.resize(msg.width, msg.height);
+      // Note: Figma doesn't support setting window position directly
+      // The position will be handled by the browser/OS
+      debugLog('Backend: Restored window to:', msg.width, 'x', msg.height);
+    } catch (error) {
+      debugError('Backend: Failed to restore window:', error);
+    }
+  }
+  
+  if (msg.type === 'SAVE_WINDOW_MEMORY') {
+    // Save window memory to plugin storage
+    try {
+      figma.clientStorage.setAsync('window_memory', msg.memory);
+      debugLog('💾 Backend: Saved window memory:', msg.memory);
+    } catch (error) {
+      debugError('Backend: Failed to save window memory:', error);
+    }
+  }
+  
+  if (msg.type === 'LOAD_WINDOW_MEMORY') {
+    // Load window memory from plugin storage
+    try {
+      debugLog('📂 Backend: Loading window memory...');
+      figma.clientStorage.getAsync('window_memory').then((memory) => {
+        if (memory) {
+          figma.ui.postMessage({
+            type: 'WINDOW_MEMORY_LOADED',
+            memory: memory
+          });
+          debugLog('📥 Backend: Loaded window memory:', memory);
+        } else {
+          debugLog('❌ Backend: No window memory found in storage');
+        }
+      });
+    } catch (error) {
+      debugError('Backend: Failed to load window memory:', error);
+    }
+  }
+  
   if (msg.type === 'SELECT_NODE') {
     // Select a node by ID
     try {

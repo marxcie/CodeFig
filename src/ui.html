@@ -20,6 +20,45 @@
         width: 100%;
       }
       
+      /* Window resize handles */
+      .resize-handle {
+        position: absolute;
+        background: transparent;
+        z-index: 1000;
+      }
+      
+      .resize-handle-right {
+        top: 0;
+        right: 0;
+        width: 4px;
+        height: 100%;
+        cursor: ew-resize;
+      }
+      
+      .resize-handle-bottom {
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        cursor: ns-resize;
+      }
+      
+      .resize-handle-corner {
+        bottom: 0;
+        right: 0;
+        width: 16px;
+        height: 16px;
+        cursor: nwse-resize;
+      }
+      
+      .resizing {
+        user-select: none;
+      }
+      
+      .resizing * {
+        pointer-events: none;
+      }
+      
       .main-container {
         display: flex;
         flex: 1;
@@ -798,10 +837,6 @@
         display: inline-block;
         flex-shrink: 0;
       }
-        /* background: white; */
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
 
       /* .info-result-item:hover {
         background: #f5f5f5;
@@ -913,6 +948,10 @@
   </head>
   <body>
     <div class="resizable-container">
+      <!-- Window resize handles -->
+      <div class="resize-handle resize-handle-right" id="resizeHandleRight"></div>
+      <div class="resize-handle resize-handle-bottom" id="resizeHandleBottom"></div>
+      <div class="resize-handle resize-handle-corner" id="resizeHandleCorner"></div>
       <div class="main-container">
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
@@ -942,18 +981,6 @@
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
-                <button class="icon-btn" id="maximizeBtn" title="Maximize Window">
-                  <svg width="16" height="16" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <g clip-path="url(#clip0_58_779)">
-                      <path d="M4 1.5H2.5C2.23478 1.5 1.98043 1.60536 1.79289 1.79289C1.60536 1.98043 1.5 2.23478 1.5 2.5V4M10.5 4V2.5C10.5 2.23478 10.3946 1.98043 10.2071 1.79289C10.0196 1.60536 9.76522 1.5 9.5 1.5H8M8 10.5H9.5C9.76522 10.5 10.0196 10.3946 10.2071 10.2071C10.3946 10.0196 10.5 9.76522 10.5 9.5V8M1.5 8V9.5C1.5 9.76522 1.60536 10.0196 1.79289 10.2071C1.98043 10.3946 2.23478 10.5 2.5 10.5H4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </g>
-                    <defs>
-                      <clipPath id="clip0_58_779">
-                        <rect width="12" height="12" fill="white"/>
-                      </clipPath>
-                    </defs>
                   </svg>
                 </button>
               </div>
@@ -1026,6 +1053,21 @@
       let startX, startWidth; // Global scope for resizing
       let autosaveTimeout = null; // For debounced autosave
       let collapsedSections = new Set(); // Track collapsed sections
+      
+      // Window resizing state
+      let isWindowResizing = false;
+      let resizeType = null; // 'width', 'height', or 'both'
+      let startWindowX, startWindowY, startWindowWidth, startWindowHeight;
+      
+      // Window memory state
+      let windowMemory = {
+        width: 1000,
+        height: 600,
+        x: 100,
+        y: 100,
+        displayWidth: window.screen.width,
+        displayHeight: window.screen.height
+      };
 
       // DOM elements
       const scriptList = document.getElementById('scriptList');
@@ -1038,13 +1080,17 @@
       const exportBtn = document.getElementById('exportBtn');
       const importBtn = document.getElementById('importBtn');
       const infoPanelBtn = document.getElementById('infoPanelBtn');
-      const maximizeBtn = document.getElementById('maximizeBtn');
       const infoPanel = document.getElementById('infoPanel');
       const infoContent = document.getElementById('infoContent');
       const exportAllBtn = document.getElementById('exportAllBtn');
       const resizer = document.getElementById('resizer');
       const sidebar = document.getElementById('sidebar');
       const searchInput = document.getElementById('searchInput');
+      
+      // Window resize handles
+      const resizeHandleRight = document.getElementById('resizeHandleRight');
+      const resizeHandleBottom = document.getElementById('resizeHandleBottom');
+      const resizeHandleCorner = document.getElementById('resizeHandleCorner');
 
       // Initialize CodeMirror
       const code = CodeMirror.fromTextArea(codeTextarea, {
@@ -1439,8 +1485,6 @@
 
       // Info Panel functionality
       let infoPanelOpen = false;
-      let isMaximized = false;
-      const originalSize = { width: 1000, height: 600 };
       let infoPanelAvailable = false;
 
       function checkInfoPanelAvailability(scriptCode) {
@@ -1483,35 +1527,6 @@
       }
 
 
-      function toggleMaximize() {
-        isMaximized = !isMaximized;
-        
-        if (isMaximized) {
-          // Maximize to near full viewport size
-          parent.postMessage({
-            pluginMessage: { 
-              type: 'RESIZE_WINDOW', 
-              width: Math.min(1600, window.screen.width * 0.95),
-              height: Math.min(1000, window.screen.height * 0.9)
-            }
-          }, '*');
-          maximizeBtn.classList.add('active');
-          maximizeBtn.title = 'Restore Window';
-        } else {
-          // Restore to original size
-          parent.postMessage({
-            pluginMessage: { 
-              type: 'RESIZE_WINDOW', 
-              width: originalSize.width,
-              height: originalSize.height
-            }
-          }, '*');
-          maximizeBtn.classList.remove('active');
-          maximizeBtn.title = 'Maximize Window';
-        }
-        
-        // Note: State saving would need to be done via message passing to backend
-      }
 
       // Function to select nodes in Figma
       function selectNodes(nodeIds) {
@@ -2567,6 +2582,183 @@
         }, 0);
       }
 
+      // ============================================================================
+      // WINDOW MEMORY FUNCTIONALITY
+      // ============================================================================
+
+      function saveWindowMemory() {
+        try {
+          const memory = {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            timestamp: Date.now()
+          };
+          
+          // Use a simple approach - store in a global variable and send to backend
+          window._codefigWindowMemory = memory;
+          
+          // Send to backend for persistence
+          parent.postMessage({
+            pluginMessage: {
+              type: 'SAVE_WINDOW_MEMORY',
+              memory: memory
+            }
+          }, '*');
+          
+          console.log('💾 Window memory saved:', memory);
+        } catch (e) {
+          console.warn('Failed to save window memory:', e);
+        }
+      }
+
+      function loadWindowMemory() {
+        try {
+          // Check if we have memory from backend
+          if (window._codefigWindowMemory) {
+            const memory = window._codefigWindowMemory;
+            
+            // Check if memory is not too old (7 days)
+            const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+            if (Date.now() - memory.timestamp > maxAge) {
+              console.log('⏰ Window memory too old, ignoring');
+              return null;
+            }
+            
+            console.log('📂 Window memory loaded:', memory);
+            return memory;
+          }
+          
+          console.log('❌ No window memory found');
+          return null;
+        } catch (e) {
+          console.warn('Failed to load window memory:', e);
+          return null;
+        }
+      }
+
+      function restoreWindowSize() {
+        console.log('🔄 Attempting to restore window size...');
+        const memory = loadWindowMemory();
+        if (!memory) {
+          console.log('❌ No memory to restore');
+          return;
+        }
+        
+        // Validate window size is reasonable
+        const minWidth = 800;
+        const maxWidth = 2000;
+        const minHeight = 400;
+        const maxHeight = 1200;
+        
+        const width = Math.max(minWidth, Math.min(maxWidth, memory.width));
+        const height = Math.max(minHeight, Math.min(maxHeight, memory.height));
+        
+        console.log('📏 Current size:', window.innerWidth, 'x', window.innerHeight);
+        console.log('📏 Saved size:', memory.width, 'x', memory.height);
+        console.log('📏 Target size:', width, 'x', height);
+        
+        // Only restore if size changed significantly
+        if (Math.abs(width - window.innerWidth) > 50 || 
+            Math.abs(height - window.innerHeight) > 50) {
+          
+          console.log('✅ Restoring window size:', { width, height });
+          
+          // Send restore message to backend
+          parent.postMessage({
+            pluginMessage: {
+              type: 'RESTORE_WINDOW',
+              width: width,
+              height: height
+            }
+          }, '*');
+        } else {
+          console.log('ℹ️ Window size is already correct, no need to restore');
+        }
+      }
+
+      // ============================================================================
+      // WINDOW RESIZING FUNCTIONALITY
+      // ============================================================================
+
+      function initWindowResizing() {
+        // Right edge resize (width only)
+        resizeHandleRight.addEventListener('mousedown', (e) => {
+          isWindowResizing = true;
+          resizeType = 'width';
+          startWindowX = e.clientX;
+          startWindowWidth = window.innerWidth;
+          document.body.classList.add('resizing');
+          document.addEventListener('mousemove', handleWindowResize);
+          document.addEventListener('mouseup', stopWindowResize);
+          e.preventDefault();
+        });
+
+        // Bottom edge resize (height only)
+        resizeHandleBottom.addEventListener('mousedown', (e) => {
+          isWindowResizing = true;
+          resizeType = 'height';
+          startWindowY = e.clientY;
+          startWindowHeight = window.innerHeight;
+          document.body.classList.add('resizing');
+          document.addEventListener('mousemove', handleWindowResize);
+          document.addEventListener('mouseup', stopWindowResize);
+          e.preventDefault();
+        });
+
+        // Corner resize (both width and height)
+        resizeHandleCorner.addEventListener('mousedown', (e) => {
+          isWindowResizing = true;
+          resizeType = 'both';
+          startWindowX = e.clientX;
+          startWindowY = e.clientY;
+          startWindowWidth = window.innerWidth;
+          startWindowHeight = window.innerHeight;
+          document.body.classList.add('resizing');
+          document.addEventListener('mousemove', handleWindowResize);
+          document.addEventListener('mouseup', stopWindowResize);
+          e.preventDefault();
+        });
+      }
+
+      function handleWindowResize(e) {
+        if (!isWindowResizing) return;
+
+        let newWidth = startWindowWidth;
+        let newHeight = startWindowHeight;
+
+        if (resizeType === 'width' || resizeType === 'both') {
+          const deltaX = e.clientX - startWindowX;
+          newWidth = Math.max(800, Math.min(2000, startWindowWidth + deltaX));
+        }
+
+        if (resizeType === 'height' || resizeType === 'both') {
+          const deltaY = e.clientY - startWindowY;
+          newHeight = Math.max(400, Math.min(1200, startWindowHeight + deltaY));
+        }
+
+        // Send resize message to backend
+        parent.postMessage({
+          pluginMessage: {
+            type: 'RESIZE_WINDOW',
+            width: newWidth,
+            height: newHeight
+          }
+        }, '*');
+      }
+
+      function stopWindowResize() {
+        isWindowResizing = false;
+        resizeType = null;
+        document.body.classList.remove('resizing');
+        document.removeEventListener('mousemove', handleWindowResize);
+        document.removeEventListener('mouseup', stopWindowResize);
+        
+        // Save window memory after resize is complete
+        setTimeout(() => {
+          saveWindowMemory();
+        }, 100);
+      }
+
       // Toggle section collapse/expand
       function toggleSection(sectionId) {
         const contentElement = document.getElementById(`content-${sectionId}`);
@@ -2735,7 +2927,6 @@
       exportBtn.addEventListener('click', exportCurrentScript);
       importBtn.addEventListener('click', importScript);
       infoPanelBtn.addEventListener('click', toggleInfoPanel);
-      maximizeBtn.addEventListener('click', toggleMaximize);
       exportAllBtn.addEventListener('click', exportAllUserScripts);
 
       // Search functionality
@@ -2831,44 +3022,69 @@
             console.log('UI: Progress complete:', msg);
             hideProgress();
             break;
+            
+          case 'WINDOW_MEMORY_LOADED':
+            console.log('📥 UI: Window memory loaded from backend:', msg);
+            // Store the loaded memory and restore window size with minimal delay
+            window._codefigWindowMemory = msg.memory;
+            setTimeout(() => {
+              restoreWindowSize();
+            }, 10);
+            break;
         }
       };
 
       // === PROGRESS INDICATOR FUNCTIONS ===
       
-      function updateProgress(operation, processed, total, percentage) {
-        const progressIndicator = document.getElementById('progressIndicator');
-        const progressFill = document.getElementById('progressFill');
-        const progressText = document.getElementById('progressText');
-        
-        if (progressIndicator && progressFill && progressText) {
-          // Show progress indicator
-          progressIndicator.style.display = 'flex';
+        function updateProgress(operation, processed, total, percentage) {
+          const progressIndicator = document.getElementById('progressIndicator');
+          const progressFill = document.getElementById('progressFill');
+          const progressText = document.getElementById('progressText');
           
-          // Update progress bar - use pixel width instead of percentage
-          var progressBarContainer = progressIndicator.querySelector('.progress-bar');
-          var containerWidth = progressBarContainer.clientWidth;
-          var fillWidth = Math.round((containerWidth * percentage) / 100);
+          // Add timestamp logging
+          var timestamp = new Date().toISOString().substr(11, 12); // HH:MM:SS.mmm
+          console.log('[' + timestamp + '] UI Progress update: ' + operation + ' - ' + processed + '/' + total + ' (' + percentage + '%)');
           
-          progressFill.style.width = fillWidth + 'px';
-          
-          // Update text
-          const elapsed = Date.now() - (window.progressStartTime || Date.now());
-          const estimated = processed > 0 ? Math.round((elapsed / processed) * (total - processed)) : 0;
-          
-          let message = operation + ': ' + processed + '/' + total + ' (' + percentage + '%)';
-          if (estimated > 0) {
-            const formatTime = function(ms) {
-              if (ms < 1000) return ms + 'ms';
-              if (ms < 60000) return Math.round(ms / 1000) + 's';
-              return Math.round(ms / 60000) + 'm ' + Math.round((ms % 60000) / 1000) + 's';
-            };
-            message += ' - ETA: ' + formatTime(estimated);
+          if (progressIndicator && progressFill && progressText) {
+            // Show progress indicator
+            progressIndicator.style.display = 'flex';
+            
+            // Update progress bar - use pixel width instead of percentage
+            var progressBarContainer = progressIndicator.querySelector('.progress-bar');
+            var containerWidth = progressBarContainer.clientWidth;
+            
+            // Fallback if containerWidth is 0 (element not yet rendered)
+            if (containerWidth === 0) {
+              // Force a reflow and try again
+              progressBarContainer.offsetHeight;
+              containerWidth = progressBarContainer.clientWidth;
+            }
+            
+            // If still 0, use percentage as fallback
+            if (containerWidth === 0) {
+              progressFill.style.width = percentage + '%';
+            } else {
+              var fillWidth = Math.round((containerWidth * percentage) / 100);
+              progressFill.style.width = fillWidth + 'px';
+            }
+            
+            // Update text
+            const elapsed = Date.now() - (window.progressStartTime || Date.now());
+            const estimated = processed > 0 ? Math.round((elapsed / processed) * (total - processed)) : 0;
+            
+            let message = operation + ': ' + processed + '/' + total + ' (' + percentage + '%)';
+            if (estimated > 0) {
+              const formatTime = function(ms) {
+                if (ms < 1000) return ms + 'ms';
+                if (ms < 60000) return Math.round(ms / 1000) + 's';
+                return Math.round(ms / 60000) + 'm ' + Math.round((ms % 60000) / 1000) + 's';
+              };
+              message += ' - ETA: ' + formatTime(estimated);
+            }
+            
+            progressText.textContent = message;
           }
-          
-          progressText.textContent = message;
         }
-      }
       
       function hideProgress() {
         const progressIndicator = document.getElementById('progressIndicator');
@@ -2891,6 +3107,13 @@
       function init() {
         debugLog('Initializing CodeFig...');
         
+        // Load window memory from backend FIRST, before any UI rendering
+        parent.postMessage({
+          pluginMessage: {
+            type: 'LOAD_WINDOW_MEMORY'
+          }
+        }, '*');
+        
         // Initialize info panel button as hidden initially
         initializeInfoPanel();
         
@@ -2903,10 +3126,17 @@
         
         // Initialize features
         initResizing();
+        initWindowResizing();
         initKeyboardShortcuts();
         initTitleEditing();
         initWindowResize();
         initInfoPanel();
+        
+        
+        // Save window memory when page is about to unload
+        window.addEventListener('beforeunload', () => {
+          saveWindowMemory();
+        });
         
         // Load user scripts and open initial script
         post('LIST');

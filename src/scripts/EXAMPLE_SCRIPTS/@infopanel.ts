@@ -195,3 +195,80 @@ function clearResults() {
     type: 'info'
   });
 }
+
+// ============================================================================
+// DISPLAY HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get category icon for display
+ */
+function getCategoryIcon(category) {
+  var icons = {
+    typography: '📝',
+    color: '🎨',
+    dimensions: '📏',
+    effects: '✨',
+    grid: '📐'
+  };
+  return icons[category] || '📋';
+}
+
+/**
+ * Get category name for display
+ */
+function getCategoryName(category) {
+  var names = {
+    typography: 'Typography',
+    color: 'Color',
+    dimensions: 'Dimensions & Spacing',
+    effects: 'Grid & Effects',
+    grid: 'Grid System'
+  };
+  return names[category] || category;
+}
+
+/**
+ * Convert property name to readable format
+ */
+function getPropertyDisplay(property) {
+  if (property === 'fills') return 'Fill';
+  if (property === 'strokes') return 'Stroke';
+  if (property === 'effects') return 'Effects';
+  if (property === 'fontSize') return 'Font Size';
+  if (property === 'fontWeight') return 'Font Weight';
+  if (property === 'fontFamily') return 'Font Family';
+  if (property === 'lineHeight') return 'Line Height';
+  if (property === 'letterSpacing') return 'Letter Spacing';
+  if (property === 'paragraphSpacing') return 'Paragraph Spacing';
+  if (property === 'paragraphIndent') return 'Paragraph Indent';
+  if (property === 'textCase') return 'Text Case';
+  if (property === 'textDecoration') return 'Text Decoration';
+  if (property === 'characters') return 'Text Content';
+  if (property === 'width') return 'Width';
+  if (property === 'height') return 'Height';
+  if (property === 'minWidth') return 'Min Width';
+  if (property === 'maxWidth') return 'Max Width';
+  if (property === 'minHeight') return 'Min Height';
+  if (property === 'maxHeight') return 'Max Height';
+  if (property === 'paddingTop') return 'Padding Top';
+  if (property === 'paddingRight') return 'Padding Right';
+  if (property === 'paddingBottom') return 'Padding Bottom';
+  if (property === 'paddingLeft') return 'Padding Left';
+  if (property === 'itemSpacing') return 'Gap';
+  if (property === 'cornerRadius') return 'Corner Radius';
+  if (property === 'topLeftRadius') return 'Top Left Radius';
+  if (property === 'topRightRadius') return 'Top Right Radius';
+  if (property === 'bottomLeftRadius') return 'Bottom Left Radius';
+  if (property === 'bottomRightRadius') return 'Bottom Right Radius';
+  if (property === 'strokeWeight') return 'Stroke Weight';
+  if (property === 'strokeTopWeight') return 'Stroke Top Weight';
+  if (property === 'strokeRightWeight') return 'Stroke Right Weight';
+  if (property === 'strokeBottomWeight') return 'Stroke Bottom Weight';
+  if (property === 'strokeLeftWeight') return 'Stroke Left Weight';
+  if (property === 'opacity') return 'Opacity';
+  if (property === 'visible') return 'Visibility';
+  if (property === 'layoutGrids') return 'Layout Grids';
+  if (property === 'textRangeFills') return 'Text Range Fill';
+  return property;
+}

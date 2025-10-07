@@ -1,0 +1,458 @@
+// /**
+//  * Replace Variables with Styles
+//  * 
+//  * Intelligently replaces variable bindings with styles based on pattern matching.
+//  * Handles mixed font weights and complex typography patterns.
+//  */
+
+// // ============================================================================
+// // CONFIGURATION
+// // ============================================================================
+
+// interface ReplacementRule {
+//   variablePattern: string;    // Pattern to match variables (supports * wildcard)
+//   stylePattern: string;       // Pattern for replacement styles (supports * wildcard)
+//   description: string;         // Human-readable description
+// }
+
+// // Define your replacement rules
+// const REPLACEMENT_RULES: ReplacementRule[] = [
+//   {
+//     variablePattern: "website V2/typography/*",
+//     stylePattern: "V4/*",
+//     description: "Website V2 typography variables → V4 styles"
+//   },
+//   {
+//     variablePattern: "brand/typography/*",
+//     stylePattern: "Brand/*",
+//     description: "Brand typography variables → Brand styles"
+//   }
+//   // Add more rules as needed
+// ];
+
+// // Font weight mappings for intelligent style selection
+// const FONT_WEIGHT_MAPPINGS: { [key: string]: string } = {
+//   "thin": "Thin",
+//   "light": "Light", 
+//   "regular": "Regular",
+//   "medium": "Medium",
+//   "semibold": "SemiBold",
+//   "bold": "Bold",
+//   "extrabold": "ExtraBold",
+//   "black": "Black"
+// };
+
+// // ============================================================================
+// // MAIN SCRIPT
+// // ============================================================================
+
+// function replaceVariablesWithStyles() {
+//   try {
+//     console.log('🎨 Starting Variable to Style Replacement...');
+    
+//     // Get current selection
+//     const selection = figma.currentPage.selection;
+//     if (selection.length === 0) {
+//       figma.notify('❌ Please select some nodes first');
+//       return;
+//     }
+    
+//     console.log(`📋 Processing ${selection.length} selected node(s)`);
+    
+//     // Analyze selection and find matching variables
+//     const analysis = analyzeSelection(selection);
+    
+//     if (analysis.totalMatches === 0) {
+//       figma.notify('ℹ️ No matching variables found in selection');
+//       return;
+//     }
+    
+//     // Show analysis results
+//     showAnalysisResults(analysis);
+    
+//     // Get user confirmation
+//     const proceed = confirm(`Found ${analysis.totalMatches} variable bindings to replace.\n\nProceed with replacement?`);
+//     if (!proceed) {
+//       figma.notify('❌ Replacement cancelled');
+//       return;
+//     }
+    
+//     // Perform the replacement
+//     const results = performReplacement(analysis);
+    
+//     // Show results
+//     showReplacementResults(results);
+    
+//     figma.notify(`✅ Replacement complete! ${results.successful} successful, ${results.failed} failed`);
+    
+//   } catch (error) {
+//     console.error('❌ Error in replaceVariablesWithStyles:', error);
+//     figma.notify('❌ Error occurred during replacement');
+//   }
+// }
+
+// // ============================================================================
+// // ANALYSIS FUNCTIONS
+// // ============================================================================
+
+// interface VariableMatch {
+//   node: any;
+//   nodeName: string;
+//   property: string;
+//   variable: any;
+//   variableName: string;
+//   matchedRule: ReplacementRule;
+//   suggestedStyle: string;
+//   confidence: number;
+// }
+
+// interface AnalysisResult {
+//   matches: VariableMatch[];
+//   totalMatches: number;
+//   rulesUsed: Set<string>;
+//   nodesAffected: Set<string>;
+// }
+
+// function analyzeSelection(selection: ReadonlyArray<any>): AnalysisResult {
+//   const matches: VariableMatch[] = [];
+//   const rulesUsed = new Set<string>();
+//   const nodesAffected = new Set<string>();
+  
+//   // Collect all nodes recursively
+//   const allNodes = collectAllNodes(selection);
+  
+//   console.log(`🔍 Analyzing ${allNodes.length} nodes for variable bindings...`);
+  
+//   for (const node of allNodes) {
+//     if (!node.boundVariables || typeof node.boundVariables !== 'object') continue;
+    
+//     for (const [property, binding] of Object.entries(node.boundVariables)) {
+//       if (!binding) continue;
+      
+//       const variableId = binding.id || (binding[0] && binding[0].id);
+//       if (!variableId) continue;
+      
+//       const variable = figma.variables.getVariableById(variableId);
+//       if (!variable || !variable.name) continue;
+      
+//       // Check if this variable matches any of our rules
+//       const match = findMatchingRule(variable.name, property);
+//       if (match) {
+//         const suggestedStyle = generateSuggestedStyle(variable.name, property, match);
+        
+//         matches.push({
+//           node,
+//           nodeName: node.name || 'Unnamed',
+//           property,
+//           variable,
+//           variableName: variable.name,
+//           matchedRule: match.rule,
+//           suggestedStyle: suggestedStyle.style,
+//           confidence: match.confidence
+//         });
+        
+//         rulesUsed.add(match.rule.description);
+//         nodesAffected.add(node.id);
+//       }
+//     }
+//   }
+  
+//   return {
+//     matches,
+//     totalMatches: matches.length,
+//     rulesUsed,
+//     nodesAffected
+//   };
+// }
+
+// function findMatchingRule(variableName: string, property: string): { rule: ReplacementRule; confidence: number } | null {
+//   for (const rule of REPLACEMENT_RULES) {
+//     const pattern = rule.variablePattern.replace(/\*/g, '.*');
+//     const regex = new RegExp(`^${pattern}$`, 'i');
+    
+//     if (regex.test(variableName)) {
+//       // Calculate confidence based on how well it matches
+//       const confidence = calculateMatchConfidence(variableName, rule.variablePattern);
+//       return { rule, confidence };
+//     }
+//   }
+  
+//   return null;
+// }
+
+// function calculateMatchConfidence(variableName: string, pattern: string): number {
+//   // Simple confidence calculation based on pattern matching
+//   const wildcardCount = (pattern.match(/\*/g) || []).length;
+//   const exactParts = pattern.split('*').filter(part => part.length > 0);
+  
+//   let score = 0;
+//   for (const part of exactParts) {
+//     if (variableName.toLowerCase().includes(part.toLowerCase())) {
+//       score += part.length;
+//     }
+//   }
+  
+//   return Math.min(score / variableName.length, 1);
+// }
+
+// function generateSuggestedStyle(variableName: string, property: string, match: { rule: ReplacementRule; confidence: number }): { style: string; reasoning: string } {
+//   const { rule } = match;
+  
+//   // Extract the variable part after the pattern
+//   const patternPrefix = rule.variablePattern.replace(/\*.*$/, '');
+//   const variableSuffix = variableName.replace(patternPrefix, '').replace(/^\//, '');
+  
+//   // Generate the style name
+//   let styleName = rule.stylePattern.replace(/\*/g, variableSuffix);
+  
+//   // Handle font weight intelligently
+//   if (property.includes('fontWeight') || property.includes('font-weight')) {
+//     styleName = adjustStyleForFontWeight(styleName, variableName);
+//   }
+  
+//   return {
+//     style: styleName,
+//     reasoning: `Based on pattern: ${rule.variablePattern} → ${rule.stylePattern}`
+//   };
+// }
+
+// function adjustStyleForFontWeight(styleName: string, variableName: string): string {
+//   // Look for font weight indicators in the variable name
+//   for (const [weightKey, weightValue] of Object.entries(FONT_WEIGHT_MAPPINGS)) {
+//     if (variableName.toLowerCase().includes(weightKey)) {
+//       // Replace or append the weight to the style name
+//       const baseStyle = styleName.replace(/\/[^\/]*$/, ''); // Remove last part
+//       return `${baseStyle}/${weightValue}`;
+//     }
+//   }
+  
+//   return styleName;
+// }
+
+// // ============================================================================
+// // REPLACEMENT FUNCTIONS
+// // ============================================================================
+
+// interface ReplacementResult {
+//   successful: number;
+//   failed: number;
+//   errors: string[];
+//   details: Array<{
+//     nodeName: string;
+//     property: string;
+//     oldVariable: string;
+//     newStyle: string;
+//     success: boolean;
+//     error?: string;
+//   }>;
+// }
+
+// function performReplacement(analysis: AnalysisResult): ReplacementResult {
+//   const result: ReplacementResult = {
+//     successful: 0,
+//     failed: 0,
+//     errors: [],
+//     details: []
+//   };
+  
+//   console.log(`🔄 Performing replacement on ${analysis.matches.length} bindings...`);
+  
+//   for (const match of analysis.matches) {
+//     try {
+//       // Find the style by name
+//       const style = findStyleByName(match.suggestedStyle);
+      
+//       if (!style) {
+//         result.failed++;
+//         result.errors.push(`Style not found: ${match.suggestedStyle}`);
+//         result.details.push({
+//           nodeName: match.nodeName,
+//           property: match.property,
+//           oldVariable: match.variableName,
+//           newStyle: match.suggestedStyle,
+//           success: false,
+//           error: 'Style not found'
+//         });
+//         continue;
+//       }
+      
+//       // Apply the style
+//       const success = applyStyleToNode(match.node, match.property, style);
+      
+//       if (success) {
+//         result.successful++;
+//         result.details.push({
+//           nodeName: match.nodeName,
+//           property: match.property,
+//           oldVariable: match.variableName,
+//           newStyle: match.suggestedStyle,
+//           success: true
+//         });
+//       } else {
+//         result.failed++;
+//         result.errors.push(`Failed to apply style to ${match.nodeName}`);
+//         result.details.push({
+//           nodeName: match.nodeName,
+//           property: match.property,
+//           oldVariable: match.variableName,
+//           newStyle: match.suggestedStyle,
+//           success: false,
+//           error: 'Failed to apply style'
+//         });
+//       }
+      
+//     } catch (error) {
+//       result.failed++;
+//       result.errors.push(`Error processing ${match.nodeName}: ${error.message}`);
+//       result.details.push({
+//         nodeName: match.nodeName,
+//         property: match.property,
+//         oldVariable: match.variableName,
+//         newStyle: match.suggestedStyle,
+//         success: false,
+//         error: error.message
+//       });
+//     }
+//   }
+  
+//   return result;
+// }
+
+// function findStyleByName(styleName: string): any | null {
+//   // Search through all styles
+//   const allStyles = [
+//     ...figma.getLocalTextStyles(),
+//     ...figma.getLocalPaintStyles(),
+//     ...figma.getLocalEffectStyles(),
+//     ...figma.getLocalGridStyles()
+//   ];
+  
+//   // Try exact match first
+//   let style = allStyles.find(s => s.name === styleName);
+//   if (style) return style;
+  
+//   // Try case-insensitive match
+//   style = allStyles.find(s => s.name.toLowerCase() === styleName.toLowerCase());
+//   if (style) return style;
+  
+//   // Try partial match
+//   style = allStyles.find(s => s.name.toLowerCase().includes(styleName.toLowerCase()));
+//   if (style) return style;
+  
+//   return null;
+// }
+
+// function applyStyleToNode(node: any, property: string, style: any): boolean {
+//   try {
+//     if (property === 'textStyleId' && style.type === 'TEXT') {
+//       (node as any).textStyleId = style.id;
+//       return true;
+//     } else if (property === 'fillStyleId' && style.type === 'PAINT') {
+//       (node as any).fillStyleId = style.id;
+//       return true;
+//     } else if (property === 'strokeStyleId' && style.type === 'PAINT') {
+//       (node as any).strokeStyleId = style.id;
+//       return true;
+//     } else if (property === 'effectStyleId' && style.type === 'EFFECT') {
+//       (node as any).effectStyleId = style.id;
+//       return true;
+//     }
+    
+//     return false;
+//   } catch (error) {
+//     console.error(`Failed to apply style to ${node.name}:`, error);
+//     return false;
+//   }
+// }
+
+// // ============================================================================
+// // DISPLAY FUNCTIONS
+// // ============================================================================
+
+// function showAnalysisResults(analysis: AnalysisResult) {
+//   console.log('🔍 Analysis Results:');
+//   console.log(`Total matches found: ${analysis.totalMatches}`);
+//   console.log(`Nodes affected: ${analysis.nodesAffected.size}`);
+//   console.log(`Rules used: ${Array.from(analysis.rulesUsed).join(', ')}`);
+  
+//   // Group matches by rule
+//   const matchesByRule = new Map<string, VariableMatch[]>();
+//   for (const match of analysis.matches) {
+//     const ruleDesc = match.matchedRule.description;
+//     if (!matchesByRule.has(ruleDesc)) {
+//       matchesByRule.set(ruleDesc, []);
+//     }
+//     matchesByRule.get(ruleDesc)!.push(match);
+//   }
+  
+//   for (const [ruleDesc, matches] of matchesByRule) {
+//     console.log(`\n${ruleDesc}:`);
+//     console.log(`${matches.length} matches`);
+    
+//     // Show first few examples
+//     const examples = matches.slice(0, 5);
+//     for (const match of examples) {
+//       console.log(`  ${match.nodeName} - ${match.property}`);
+//       console.log(`    ${match.variableName} → ${match.suggestedStyle}`);
+//       console.log(`    Confidence: ${Math.round(match.confidence * 100)}%`);
+//     }
+    
+//     if (matches.length > 5) {
+//       console.log(`  ... and ${matches.length - 5} more`);
+//     }
+//   }
+// }
+
+// function showReplacementResults(results: ReplacementResult) {
+//   console.log('✅ Replacement Results:');
+//   console.log(`Successful: ${results.successful}`);
+//   console.log(`Failed: ${results.failed}`);
+  
+//   if (results.details.length > 0) {
+//     console.log('\nDetails:');
+//     for (const detail of results.details) {
+//       const status = detail.success ? '✅' : '❌';
+//       const errorText = detail.error ? ` (${detail.error})` : '';
+//       console.log(`${status} ${detail.nodeName} - ${detail.property}`);
+//       console.log(`  ${detail.oldVariable} → ${detail.newStyle}${errorText}`);
+//     }
+//   }
+  
+//   if (results.errors.length > 0) {
+//     console.log('\nErrors:');
+//     for (const error of results.errors) {
+//       console.log(`❌ ${error}`);
+//     }
+//   }
+// }
+
+// // ============================================================================
+// // UTILITY FUNCTIONS
+// // ============================================================================
+
+// function collectAllNodes(selection: ReadonlyArray<any>): any[] {
+//   const nodes: any[] = [];
+  
+//   function traverse(node: any) {
+//     nodes.push(node);
+    
+//     if ('children' in node) {
+//       for (const child of node.children) {
+//         traverse(child);
+//       }
+//     }
+//   }
+  
+//   for (const node of selection) {
+//     traverse(node);
+//   }
+  
+//   return nodes;
+// }
+
+// // ============================================================================
+// // SCRIPT EXECUTION
+// // ============================================================================
+
+// // Run the script
+// replaceVariablesWithStyles();

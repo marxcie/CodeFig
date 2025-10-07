@@ -783,8 +783,257 @@ function traverseNodesOptimized(nodes, processor, options) {
   return processWithOptimization(allNodes, processor, options);
 }
 
+// ============================================================================
+// STYLE ANALYSIS FUNCTIONS
+// ============================================================================
+
+/**
+ * Collect styles from a node and add to the usedStyles Map
+ */
+function collectNodeStyles(node, usedStyles) {
+  try {
+    if (!node) return;
+    
+    // Text styles
+    if (node.textStyleId && node.textStyleId !== figma.mixed) {
+      try {
+        var textStyle = figma.getStyleById(node.textStyleId);
+        if (textStyle && textStyle.name) {
+          var key = textStyle.name + '::text';
+          if (!usedStyles.has(key)) {
+            usedStyles.set(key, {
+              style: textStyle,
+              type: 'text',
+              nodes: [],
+              nodeIds: []
+            });
+          }
+          var styleData = usedStyles.get(key);
+          if (styleData && Array.isArray(styleData.nodes) && Array.isArray(styleData.nodeIds)) {
+            styleData.nodes.push(node.name || 'Unnamed');
+            styleData.nodeIds.push(node.id);
+          }
+        }
+      } catch (e) {
+        console.warn('Error processing text style for node ' + node.id + ':', e.message);
+      }
+    }
+    
+    // Fill styles
+    if (node.fillStyleId && node.fillStyleId !== figma.mixed) {
+      try {
+        var fillStyle = figma.getStyleById(node.fillStyleId);
+        if (fillStyle && fillStyle.name) {
+          var key = fillStyle.name + '::fill';
+          if (!usedStyles.has(key)) {
+            usedStyles.set(key, {
+              style: fillStyle,
+              type: 'fill',
+              nodes: [],
+              nodeIds: []
+            });
+          }
+          var styleData = usedStyles.get(key);
+          if (styleData && Array.isArray(styleData.nodes) && Array.isArray(styleData.nodeIds)) {
+            styleData.nodes.push(node.name || 'Unnamed');
+            styleData.nodeIds.push(node.id);
+          }
+        }
+      } catch (e) {
+        console.warn('Error processing fill style for node ' + node.id + ':', e.message);
+      }
+    }
+    
+    // Stroke styles
+    if (node.strokeStyleId && node.strokeStyleId !== figma.mixed) {
+      try {
+        var strokeStyle = figma.getStyleById(node.strokeStyleId);
+        if (strokeStyle && strokeStyle.name) {
+          var key = strokeStyle.name + '::stroke';
+          if (!usedStyles.has(key)) {
+            usedStyles.set(key, {
+              style: strokeStyle,
+              type: 'stroke',
+              nodes: [],
+              nodeIds: []
+            });
+          }
+          var styleData = usedStyles.get(key);
+          if (styleData && Array.isArray(styleData.nodes) && Array.isArray(styleData.nodeIds)) {
+            styleData.nodes.push(node.name || 'Unnamed');
+            styleData.nodeIds.push(node.id);
+          }
+        }
+      } catch (e) {
+        console.warn('Error processing stroke style for node ' + node.id + ':', e.message);
+      }
+    }
+    
+    // Effect styles
+    if (node.effectStyleId && node.effectStyleId !== figma.mixed) {
+      try {
+        var effectStyle = figma.getStyleById(node.effectStyleId);
+        if (effectStyle && effectStyle.name) {
+          var key = effectStyle.name + '::effect';
+          if (!usedStyles.has(key)) {
+            usedStyles.set(key, {
+              style: effectStyle,
+              type: 'effect',
+              nodes: [],
+              nodeIds: []
+            });
+          }
+          var styleData = usedStyles.get(key);
+          if (styleData && Array.isArray(styleData.nodes) && Array.isArray(styleData.nodeIds)) {
+            styleData.nodes.push(node.name || 'Unnamed');
+            styleData.nodeIds.push(node.id);
+          }
+        }
+      } catch (e) {
+        console.warn('Error processing effect style for node ' + node.id + ':', e.message);
+      }
+    }
+    
+    // Grid styles
+    if (node.layoutGrids && node.layoutGrids.length > 0) {
+      for (var i = 0; i < node.layoutGrids.length; i++) {
+        try {
+          var grid = node.layoutGrids[i];
+          if (grid.pattern === 'COLUMNS' || grid.pattern === 'ROWS') {
+            var key = 'Layout Grid::' + grid.pattern.toLowerCase();
+            if (!usedStyles.has(key)) {
+              usedStyles.set(key, {
+                style: { name: 'Layout Grid', type: 'GRID' },
+                type: 'grid',
+                nodes: [],
+                nodeIds: []
+              });
+            }
+            var styleData = usedStyles.get(key);
+            if (styleData && Array.isArray(styleData.nodes) && Array.isArray(styleData.nodeIds)) {
+              styleData.nodes.push(node.name || 'Unnamed');
+              styleData.nodeIds.push(node.id);
+            }
+          }
+        } catch (e) {
+          console.warn('Error processing grid style for node ' + node.id + ':', e.message);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error collecting styles from node ' + (node ? node.id : 'unknown') + ':', e.message);
+  }
+}
+
+/**
+ * Categorize a style by its name and type
+ */
+function categorizeStyle(styleName, styleType) {
+  var name = styleName.toLowerCase();
+  
+  // Typography
+  if (styleType === 'text' || name.includes('typography') || name.includes('font') || name.includes('text')) {
+    return 'typography';
+  }
+  
+  // Color
+  if (styleType === 'fill' || styleType === 'stroke' || name.includes('color')) {
+    return 'color';
+  }
+  
+  // Effects
+  if (styleType === 'effect' || name.includes('effect') || name.includes('shadow') || name.includes('blur')) {
+    return 'effects';
+  }
+  
+  // Grid
+  if (styleType === 'grid' || name.includes('grid') || name.includes('column') || name.includes('row')) {
+    return 'grid';
+  }
+  
+  // Default to color for unknown
+  return 'color';
+}
+
+/**
+ * Create a style result for display
+ */
+function createStyleResult(styleData) {
+  try {
+    if (!styleData || !styleData.style || !styleData.type) {
+      return createHtmlResult('<div class="error-text">❌ Invalid style data</div>');
+    }
+    
+    var style = styleData.style;
+    var type = styleData.type;
+    var nodes = styleData.nodes || [];
+    var nodeIds = styleData.nodeIds || [];
+    
+    var html = [];
+    html.push('<div class="info-entry" onclick="selectNodes([\'' + nodeIds.join('\',\'') + '\'])">');
+    html.push('  <div class="info-entry-icon">🎨</div>');
+    html.push('  <div class="info-entry-content">');
+    html.push('    <div class="info-entry-title">' + (style.name || 'Unknown Style') + '</div>');
+    html.push('    <div class="info-entry-subtitle">' + (type || 'Unknown Type') + ' style</div>');
+    
+    // Add visual preview based on style type
+    try {
+      var preview = createStylePreview(style, type);
+      if (preview) {
+        html.push('    <div class="style-preview">' + preview + '</div>');
+      }
+    } catch (e) {
+      console.warn('Error creating style preview:', e.message);
+    }
+    
+    if (nodes.length > 0) {
+      html.push('    <div class="info-entry-badge">' + nodes.length + ' node' + (nodes.length !== 1 ? 's' : '') + '</div>');
+    }
+    
+    html.push('  </div>');
+    html.push('</div>');
+    
+    return createHtmlResult(html.join(''));
+  } catch (e) {
+    console.warn('Error creating style result:', e.message);
+    return createHtmlResult('<div class="error-text">❌ Error displaying style</div>');
+  }
+}
+
+/**
+ * Create a visual preview for a style
+ */
+function createStylePreview(style, type) {
+  try {
+    if (!style || !type) return null;
+    
+    var preview = '';
+    
+    // Fill styles
+    if (type === 'fill' && style.paints && style.paints.length > 0) {
+      var paint = style.paints[0];
+      if (paint.type === 'SOLID') {
+        var color = paint.color;
+        var hex = rgbToHex(color.r, color.g, color.b);
+        preview = '<div class="color-preview" style="background-color: ' + hex + '; width: 20px; height: 20px; border-radius: 3px; display: inline-block; margin-right: 8px;"></div>';
+      }
+    }
+    
+    // Text styles
+    if (type === 'text') {
+      preview = '<span class="typography-preview" style="font-size: 12px;">Aa</span>';
+    }
+    
+    return preview;
+  } catch (e) {
+    console.warn('Error creating style preview:', e.message);
+    return null;
+  }
+}
+
 console.log('📚 @Core Library loaded - ' + 
   'getAllStyles, traverseNodes, findByName, replaceByPattern, ' +
   'hexToRgb, generateScale, setupAutoLayout, analyzeSelection, ' +
   'processWithOptimization, estimateNodeCount, showProgress, ' +
+  'collectNodeStyles, categorizeStyle, createStyleResult, createStylePreview ' +
   'and more available for import');

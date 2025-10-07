@@ -539,6 +539,175 @@ function rgbToHex(r, g, b) {
   return "#" + ((1 << 24) + (Math.round(r * 255) << 16) + (Math.round(g * 255) << 8) + Math.round(b * 255)).toString(16).slice(1);
 }
 
+// ============================================================================
+// VARIABLE ANALYSIS FUNCTIONS
+// ============================================================================
+
+/**
+ * Collect variables from a node and add to the usedVariables Map
+ */
+function collectNodeVariables(node, usedVariables) {
+  try {
+    if (!node || !node.boundVariables || typeof node.boundVariables !== 'object') return;
+    
+    for (var property in node.boundVariables) {
+      try {
+        var binding = node.boundVariables[property];
+        if (!binding) continue;
+        
+        var variableId = binding.id || (binding[0] && binding[0].id);
+        if (!variableId) continue;
+        
+        var variable = figma.variables.getVariableById(variableId);
+        if (!variable || !variable.name) continue;
+        
+        var key = variable.name + '::' + property;
+        if (!usedVariables.has(key)) {
+          usedVariables.set(key, {
+            variable: variable,
+            property: property,
+            nodes: [],
+            nodeIds: []
+          });
+        }
+        
+        var varData = usedVariables.get(key);
+        if (varData && Array.isArray(varData.nodes) && Array.isArray(varData.nodeIds)) {
+          varData.nodes.push(node.name || 'Unnamed');
+          varData.nodeIds.push(node.id);
+        }
+      } catch (e) {
+        console.warn('Error processing variable binding for property ' + property + ' on node ' + node.id + ':', e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('Error collecting variables from node ' + (node ? node.id : 'unknown') + ':', e.message);
+  }
+}
+
+/**
+ * Categorize a variable by its name and property
+ */
+function categorizeVariable(variableName, property) {
+  var name = variableName.toLowerCase();
+  var prop = property.toLowerCase();
+  
+  // Typography
+  if (prop.includes('font') || prop.includes('text') || name.includes('typography') || name.includes('font')) {
+    return 'typography';
+  }
+  
+  // Color
+  if (prop.includes('color') || prop.includes('fill') || prop.includes('stroke') || name.includes('color')) {
+    return 'color';
+  }
+  
+  // Dimensions
+  if (prop.includes('width') || prop.includes('height') || prop.includes('padding') || prop.includes('margin') || 
+      prop.includes('radius') || prop.includes('gap') || prop.includes('spacing') || name.includes('spacing') || 
+      name.includes('padding') || name.includes('margin') || name.includes('radius')) {
+    return 'dimensions';
+  }
+  
+  // Grid
+  if (name.includes('grid') || name.includes('column') || name.includes('row')) {
+    return 'grid';
+  }
+  
+  // Effects
+  if (prop.includes('effect') || prop.includes('shadow') || prop.includes('blur') || name.includes('effect') || 
+      name.includes('shadow') || name.includes('blur')) {
+    return 'effects';
+  }
+  
+  // Default to dimensions for unknown
+  return 'dimensions';
+}
+
+/**
+ * Create a variable result for display
+ */
+function createVariableResult(varData) {
+  try {
+    if (!varData || !varData.variable || !varData.property) {
+      return createHtmlResult('<div class="error-text">❌ Invalid variable data</div>');
+    }
+    
+    var variable = varData.variable;
+    var property = varData.property;
+    var nodes = varData.nodes || [];
+    var nodeIds = varData.nodeIds || [];
+    
+    var html = [];
+    html.push('<div class="info-entry" onclick="selectNodes([\'' + nodeIds.join('\',\'') + '\'])">');
+    html.push('  <div class="info-entry-icon">📊</div>');
+    html.push('  <div class="info-entry-content">');
+    html.push('    <div class="info-entry-title">' + (variable.name || 'Unknown Variable') + '</div>');
+    html.push('    <div class="info-entry-subtitle">' + (property || 'Unknown Property') + '</div>');
+    
+    // Add visual preview for variables
+    try {
+      var preview = createVariablePreview(variable, property);
+      if (preview) {
+        html.push('    <div class="variable-preview">' + preview + '</div>');
+      }
+    } catch (e) {
+      console.warn('Error creating variable preview:', e.message);
+    }
+    
+    if (nodes.length > 0) {
+      html.push('    <div class="info-entry-badge">' + nodes.length + ' node' + (nodes.length !== 1 ? 's' : '') + '</div>');
+    }
+    
+    html.push('  </div>');
+    html.push('</div>');
+    
+    return createHtmlResult(html.join(''));
+  } catch (e) {
+    console.warn('Error creating variable result:', e.message);
+    return createHtmlResult('<div class="error-text">❌ Error displaying variable</div>');
+  }
+}
+
+/**
+ * Create a visual preview for a variable
+ */
+function createVariablePreview(variable, property) {
+  try {
+    if (!variable || !property) return null;
+    
+    // Get the first mode value for preview
+    var modeIds = Object.keys(variable.valuesByMode);
+    if (modeIds.length === 0) return null;
+    
+    var value = variable.valuesByMode[modeIds[0]];
+    if (!value) return null;
+    
+    var preview = '';
+    
+    // Color variables
+    if (property.includes('fill') || property.includes('stroke') || property.includes('color')) {
+      if (value.type === 'VARIABLE_ALIAS') {
+        preview = '<div class="color-preview" style="background-color: var(--' + value.id + '); width: 20px; height: 20px; border-radius: 3px; display: inline-block; margin-right: 8px;"></div>';
+      } else if (value.type === 'VARIABLE_ALIAS') {
+        preview = '<div class="color-preview" style="background-color: var(--' + value.id + '); width: 20px; height: 20px; border-radius: 3px; display: inline-block; margin-right: 8px;"></div>';
+      }
+    }
+    
+    // Typography variables
+    if (property.includes('font') || property.includes('text')) {
+      if (value.type === 'VARIABLE_ALIAS') {
+        preview = '<span class="typography-preview" style="font-family: var(--' + value.id + '); font-size: 12px;">Aa</span>';
+      }
+    }
+    
+    return preview;
+  } catch (e) {
+    console.warn('Error creating variable preview:', e.message);
+    return null;
+  }
+}
+
 // Export functions for use in other scripts
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -567,6 +736,12 @@ if (typeof module !== 'undefined' && module.exports) {
     setupModes,
     createOrUpdateVariable,
     extractModes,
-    processVariables
+    processVariables,
+    
+    // Variable Analysis Functions
+    collectNodeVariables,
+    categorizeVariable,
+    createVariableResult,
+    createVariablePreview
   };
 }
