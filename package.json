@@ -4,12 +4,13 @@
   "description": "CodeFig - A Figma plugin for running TypeScript/JavaScript scripts with advanced variable management",
   "main": "code.js",
   "scripts": {
-    "build": "tsc && node build-scripts.js",
+    "validate": "node validate-scripts.js",
+    "build": "npm run validate || true && tsc && node build-scripts.js",
     "build:scripts": "node build-scripts.js",
     "build:ui": "node bundle-ui.js",
     "dev": "npm run build && npm run dev:watch",
     "dev:watch": "concurrently \"tsc --watch\" \"npm run dev:ui\"",
-    "dev:ui": "chokidar \"src/ui.html\" \"src/scripts/**/*.ts\" -c \"node build-scripts.js\"",
+    "dev:ui": "chokidar \"src/ui.html\" \"scripts/**/*.ts\" -c \"node build-scripts.js\"",
     "clean": "rm -rf dist"
   },
   "dependencies": {

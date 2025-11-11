@@ -1,4 +1,4 @@
-// ✅ Auto layout all selected
+// Auto layout all selected
 // Wraps each selected node in its own auto layout frame
 
 figma.currentPage.selection.forEach(function(node) {

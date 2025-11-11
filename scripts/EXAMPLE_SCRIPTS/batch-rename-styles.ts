@@ -1,4 +1,4 @@
-// ✅ Batch rename styles
+// Batch rename styles
 
 // Import utility functions
 @import { getAllStyles, replaceByPattern } from "@Core Library"

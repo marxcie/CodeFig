@@ -1,0 +1,115 @@
+/**
+ * Find and Replace Styles v2
+ * 
+ * Advanced style find and replace using modular libraries.
+ * Supports pattern matching, collection filtering, and batch processing.
+ */
+
+// Import required libraries
+// Note: These will be injected at build time
+
+// ============================================================================
+// MAIN SCRIPT
+// ============================================================================
+
+function findAndReplaceStyles() {
+  try {
+    console.log('🎨 Starting Find and Replace Styles v2...');
+    
+    // Get current selection
+    const selection = figma.currentPage.selection;
+    if (selection.length === 0) {
+      figma.notify('❌ Please select some nodes first');
+      return;
+    }
+    
+    console.log(`📋 Processing ${selection.length} selected node(s)`);
+    
+    // Configuration
+    const options = {
+      findPattern: 'V2/*',                   // Pattern to find
+      replacePattern: 'V4/*',                // Pattern to replace with
+      collection: 'V2',                      // Collection filter
+      type: 'TEXT',                          // Style type filter
+      exact: false,                          // Exact match
+      caseSensitive: false,                  // Case sensitivity
+      dryRun: true,                          // Preview only
+      batchSize: 50,                         // Batch processing size
+      maxReplacements: 1000                  // Maximum replacements
+    };
+    
+    // Show configuration
+    console.log('⚙️ Configuration:', options);
+    
+    // Find and replace
+    const result = findAndReplace(selection, options);
+    
+    // Show results
+    showResults(result, options);
+    
+  } catch (error) {
+    console.error('❌ Error in findAndReplaceStyles:', error);
+    figma.notify('❌ Error occurred during find and replace');
+  }
+}
+
+// ============================================================================
+// DISPLAY FUNCTIONS
+// ============================================================================
+
+function showResults(result: any, options: any) {
+  console.log('📊 Find and Replace Results:');
+  console.log(`Total matches: ${result.total}`);
+  console.log(`Successful: ${result.successful}`);
+  console.log(`Failed: ${result.failed}`);
+  console.log(`Skipped: ${result.skipped}`);
+  console.log(`Execution time: ${result.executionTime}ms`);
+  
+  if (result.errors.length > 0) {
+    console.log('❌ Errors:');
+    result.errors.forEach((error: string) => console.log(`  ${error}`));
+  }
+  
+  if (result.warnings.length > 0) {
+    console.log('⚠️ Warnings:');
+    result.warnings.forEach((warning: string) => console.log(`  ${warning}`));
+  }
+  
+  // Show first few details
+  if (result.details.length > 0) {
+    console.log('📝 Details (first 10):');
+    result.details.slice(0, 10).forEach((detail: any, index: number) => {
+      const status = detail.success ? '✅' : '❌';
+      console.log(`  ${index + 1}. ${status} ${detail.node.name} - ${detail.property}`);
+      console.log(`     ${detail.oldValue.name} → ${detail.newValue.name}`);
+      console.log(`     Confidence: ${Math.round(detail.confidence * 100)}%`);
+    });
+    
+    if (result.details.length > 10) {
+      console.log(`  ... and ${result.details.length - 10} more`);
+    }
+  }
+  
+  // Show summary
+  const summary = generateSummary(result, options);
+  figma.notify(summary);
+}
+
+function generateSummary(result: any, options: any): string {
+  if (result.total === 0) {
+    return 'ℹ️ No style matches found';
+  }
+  
+  if (options.dryRun) {
+    return `🔍 Preview: Found ${result.total} style matches (${result.successful} would succeed, ${result.failed} would fail)`;
+  }
+  
+  return `✅ Replaced ${result.successful} styles (${result.failed} failed, ${result.skipped} skipped)`;
+}
+
+// ============================================================================
+// SCRIPT EXECUTION
+// ============================================================================
+
+// Run the script
+findAndReplaceStyles();

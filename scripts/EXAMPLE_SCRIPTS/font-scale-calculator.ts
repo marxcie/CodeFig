@@ -1,5 +1,5 @@
-// Font Scale Calculator - Simple script using @Variables library
-// Calculates font sizes based on scale ratios and base values
+// Font Scale Calculator
+// Simple script using @Variables library, calculates font sizes based on scale ratios and base values
 
 console.log('📏 Font Scale Calculator');
 console.log('========================');

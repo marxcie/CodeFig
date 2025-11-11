@@ -1,0 +1,13 @@
+/**
+ * Simple Test
+ * 
+ * Basic test to verify UI stability.
+ */
+
+function simpleTest() {
+  console.log('✅ Simple test running...');
+  figma.notify('✅ Simple test completed');
+}
+
+// Run the test
+simpleTest();

@@ -1039,9 +1039,8 @@
       // Help scripts will be populated by the build process from HELP folder
 
       // Pre-built scripts
-      const prebuiltScripts = [
-        // PLACEHOLDER_FOR_SCRIPTS
-      ];
+      // Prebuilt scripts will be loaded from backend at runtime
+      let prebuiltScripts = [];
 
       // State
       let currentScript = null;
@@ -2340,11 +2339,18 @@
           // Exact match (highest priority)
           if (script.name === scriptName) return true;
           
-          // Filename match (high priority)
-          if (script.filename === scriptName + '.ts') return true;
+          // Filename match (high priority) - check if script has filename property
+          if (script.filename && script.filename === scriptName + '.ts') return true;
           
-          // Handle @ prefixed names specifically
-          if (scriptName.startsWith('@') && script.name.includes(scriptName)) return true;
+          // Handle @ prefixed names specifically (e.g., "@Variables" matches "Example Scripts / @Variables")
+          if (scriptName.startsWith('@')) {
+            // Check if script name ends with the @-prefixed name
+            if (script.name.endsWith(' / ' + scriptName)) return true;
+            // Check if script name includes the @-prefixed name
+            if (script.name.includes(scriptName)) return true;
+            // Check filename for @-prefixed scripts
+            if (script.filename && script.filename === scriptName.replace('@', '') + '.ts') return true;
+          }
           
           // End-of-name match (e.g., "Replace Styles" matches "Example Scripts / Replace Styles")
           if (script.name.endsWith(' / ' + scriptName)) return true;
@@ -2381,11 +2387,22 @@
         }
       }
       
-      // Extract specific functions from code
-      function extractFunctionsFromCode(sourceCode, functionNames) {
+      // Extract specific functions from code with recursive dependency extraction
+      function extractFunctionsFromCode(sourceCode, functionNames, extractedSet = new Set(), depth = 0) {
+        // Prevent infinite recursion
+        if (depth > 10) {
+          console.warn('⚠️ Maximum dependency depth reached');
+          return '';
+        }
+        
         let extractedCode = '';
+        const newFunctionsToExtract = [];
         
         functionNames.forEach(functionName => {
+          // Skip if already extracted
+          if (extractedSet.has(functionName)) {
+            return;
+          }
           
           // Use a more robust approach that finds the function start and then balances braces
           const functionStartPattern = new RegExp(`function\\s+${functionName}\\s*\\(`, 'g');
@@ -2424,6 +2441,21 @@
               
               if (braceCount === 0) {
                 const functionCode = sourceCode.substring(startIndex, endIndex);
+                const functionBody = sourceCode.substring(braceIndex + 1, endIndex - 1);
+                
+                // Mark as extracted
+                extractedSet.add(functionName);
+                
+                // Find all function calls in the function body
+                const dependencies = findFunctionCallsInCode(functionBody, sourceCode);
+                
+                // Add dependencies to extraction queue
+                dependencies.forEach(dep => {
+                  if (!extractedSet.has(dep)) {
+                    newFunctionsToExtract.push(dep);
+                  }
+                });
+                
                 extractedCode += functionCode + '\n\n';
                 break; // Found the function, move to next function name
               }
@@ -2431,7 +2463,49 @@
           }
         });
         
+        // Recursively extract dependencies
+        if (newFunctionsToExtract.length > 0) {
+          const dependencyCode = extractFunctionsFromCode(sourceCode, newFunctionsToExtract, extractedSet, depth + 1);
+          // Dependencies go before the functions that depend on them
+          extractedCode = dependencyCode + extractedCode;
+        }
+        
         return extractedCode;
+      }
+      
+      // Find all function calls in code that are defined in the same source
+      function findFunctionCallsInCode(code, sourceCode) {
+        const dependencies = new Set();
+        
+        // Get all function names defined in the source code
+        const definedFunctions = new Set();
+        const functionDefRegex = /function\s+(\w+)\s*\(/g;
+        let match;
+        while ((match = functionDefRegex.exec(sourceCode)) !== null) {
+          definedFunctions.add(match[1]);
+        }
+        
+        // Find function calls in the code
+        // Pattern: functionName( or functionName (with potential whitespace)
+        const functionCallRegex = /\b(\w+)\s*\(/g;
+        while ((match = functionCallRegex.exec(code)) !== null) {
+          const functionName = match[1];
+          
+          // Skip common built-ins and keywords
+          const builtIns = new Set([
+            'console', 'figma', 'if', 'for', 'while', 'switch', 'case', 'return',
+            'var', 'let', 'const', 'function', 'typeof', 'instanceof', 'new',
+            'Array', 'Object', 'String', 'Number', 'Boolean', 'Date', 'Math',
+            'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'JSON', 'Promise',
+            'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'
+          ]);
+          
+          if (!builtIns.has(functionName) && definedFunctions.has(functionName)) {
+            dependencies.add(functionName);
+          }
+        }
+        
+        return Array.from(dependencies);
       }
 
       // Run current script
@@ -2957,6 +3031,18 @@
           console.log('UI: Received message type:', msg.type);
           
           switch (msg.type) {
+          case 'EXAMPLE_SCRIPTS':
+            debugLog('Received example scripts:', msg.items);
+            
+            prebuiltScripts = msg.items.map(script => ({
+              name: script.name || 'Unnamed',
+              code: script.code || '',
+              type: script.type || 'prebuilt'
+            }));
+            allScripts = [...prebuiltScripts, ...userScripts];
+            updateScriptList();
+            break;
+            
           case 'LIST':
             debugLog('Received user scripts:', msg.items);
             debugLog('Last opened script:', msg.lastOpenedScript);
@@ -2984,7 +3070,31 @@
             
             case 'SAVE_CONFIRMED':
             debugLog('Save confirmed for:', msg.scriptData.name);
-            // UI already updated immediately, just log success
+            // Immediately add/update the script in allScripts so it's available for import
+            if (msg.scriptData) {
+              // Get the current code from the editor if scriptData doesn't have it
+              const scriptCode = msg.scriptData.code || (currentScript && currentScript.code) || code.getValue() || '';
+              
+              const existingIndex = allScripts.findIndex(s => s.name === msg.scriptData.name && s.type === 'user');
+              if (existingIndex >= 0) {
+                // Update existing script
+                allScripts[existingIndex] = {
+                  name: msg.scriptData.name,
+                  code: scriptCode,
+                  type: 'user'
+                };
+              } else {
+                // Add new script
+                allScripts.push({
+                  name: msg.scriptData.name,
+                  code: scriptCode,
+                  type: 'user'
+                });
+              }
+              // Update userScripts array as well
+              userScripts = allScripts.filter(s => s.type === 'user');
+              debugLog('Script added to allScripts for immediate import availability:', msg.scriptData.name);
+            }
             break;
             
           case 'SAVE_FAILED':
@@ -3138,7 +3248,35 @@
           saveWindowMemory();
         });
         
-        // Load user scripts and open initial script
+        // Read scripts from embedded script tag and send to backend
+        const scriptsScript = document.getElementById('scripts-data');
+        if (scriptsScript) {
+          try {
+            // Get the base64 encoded content
+            const scriptsBase64 = scriptsScript.textContent || scriptsScript.innerText || '';
+            // Decode from base64 with proper UTF-8 handling
+            // atob() returns a binary string, we need to convert it to UTF-8
+            const binaryString = atob(scriptsBase64);
+            // Convert binary string to UTF-8 using TextDecoder
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const scriptsText = new TextDecoder('utf-8').decode(bytes);
+            // Parse the JSON
+            const scripts = JSON.parse(scriptsText);
+            // Send scripts to backend
+            post('SET_SCRIPTS', { scripts: scripts });
+            debugLog('Sent scripts to backend:', scripts.length, 'scripts');
+          } catch (e) {
+            console.error('Failed to parse scripts from UI HTML:', e);
+          }
+        } else {
+          console.error('Scripts script tag not found in HTML');
+        }
+        
+        // Load example scripts and user scripts
+        post('LOAD_EXAMPLE_SCRIPTS');
         post('LIST');
         
         debugLog('CodeFig initialized successfully');

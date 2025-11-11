@@ -458,17 +458,51 @@ function createOrUpdateVariable(collection, name, config, modes) {
   
   // Set values for each mode
   actualModes.forEach(function(modeName) {
-    var mode = collection.modes.find(function(m) { return m.name === modeName; });
-    if (mode && actualConfig.values && actualConfig.values[modeName] !== undefined) {
-      var value = actualConfig.values[modeName];
-      
-      // Convert color strings to RGB objects
-      if (actualConfig.type === 'COLOR' && typeof value === 'string') {
-        value = hexToRgb(value);
+    try {
+      var mode = collection.modes.find(function(m) { return m.name === modeName; });
+      if (!mode) {
+        console.error('Mode not found: ' + modeName);
+        return;
       }
       
-      existing.setValueForMode(mode.modeId, value);
-      console.log('  ' + modeName + ': ' + (actualConfig.type === 'COLOR' ? rgbToHex(value.r, value.g, value.b) : value));
+      if (actualConfig.values && actualConfig.values[modeName] !== undefined) {
+        var value = actualConfig.values[modeName];
+        
+        // Validate value
+        if (value === null || value === undefined) {
+          console.error('Invalid value for mode ' + modeName + ': ' + value);
+          return;
+        }
+        
+        // Convert color strings to RGB objects
+        if (actualConfig.type === 'COLOR' && typeof value === 'string') {
+          value = hexToRgb(value);
+          if (!value) {
+            console.error('Invalid color value for mode ' + modeName + ': ' + actualConfig.values[modeName]);
+            return;
+          }
+        }
+        
+        // Validate number values
+        if (actualConfig.type === 'FLOAT' && (typeof value !== 'number' || isNaN(value))) {
+          console.error('Invalid FLOAT value for mode ' + modeName + ': ' + value + ' (type: ' + typeof value + ')');
+          return;
+        }
+        
+        existing.setValueForMode(mode.modeId, value);
+        console.log('  ' + modeName + ': ' + (actualConfig.type === 'COLOR' ? rgbToHex(value.r, value.g, value.b) : value));
+      }
+    } catch (e) {
+      console.error('Error setting value for mode ' + modeName + ':', e);
+      console.error('Error details:', {
+        message: e.message,
+        stack: e.stack,
+        name: e.name,
+        error: e,
+        value: actualConfig.values ? actualConfig.values[modeName] : 'undefined',
+        type: actualConfig.type
+      });
+      throw e;
     }
   });
   
@@ -497,29 +531,45 @@ function processVariables(collection, variables, configValues, modes) {
   
   // Process all variables
   Object.keys(variables).forEach(function(varName) {
-    var varConfig = variables[varName];
-    console.log('Processing variable: ' + varName);
-    
-    // Calculate values using config
-    var calculatedConfig = {
-      type: varConfig.type,
-      values: {}
-    };
-    
-    modes.forEach(function(mode) {
-      if (varConfig.values && varConfig.values[mode]) {
-        if (typeof varConfig.values[mode] === 'function') {
-          // Calculate value using config
-          calculatedConfig.values[mode] = varConfig.values[mode](configValues);
-        } else {
-          // Use static value
-          calculatedConfig.values[mode] = varConfig.values[mode];
+    try {
+      var varConfig = variables[varName];
+      console.log('Processing variable: ' + varName);
+      
+      // Calculate values using config
+      var calculatedConfig = {
+        type: varConfig.type,
+        values: {}
+      };
+      
+      modes.forEach(function(mode) {
+        if (varConfig.values && varConfig.values[mode]) {
+          try {
+            if (typeof varConfig.values[mode] === 'function') {
+              // Calculate value using config
+              calculatedConfig.values[mode] = varConfig.values[mode](configValues);
+            } else {
+              // Use static value
+              calculatedConfig.values[mode] = varConfig.values[mode];
+            }
+          } catch (e) {
+            console.error('Error calculating value for mode ' + mode + ':', e);
+            throw e;
+          }
         }
-      }
-    });
-    
-    var result = createOrUpdateVariable(collection, varName, calculatedConfig, modes);
-    stats[result]++;
+      });
+      
+      var result = createOrUpdateVariable(collection, varName, calculatedConfig, modes);
+      stats[result]++;
+    } catch (e) {
+      console.error('Error processing variable ' + varName + ':', e);
+      console.error('Error details:', {
+        message: e.message,
+        stack: e.stack,
+        name: e.name,
+        error: e
+      });
+      stats.skipped++;
+    }
   });
   
   return stats;

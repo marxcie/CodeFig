@@ -1,4 +1,4 @@
-// ✅ Remove auto layout recursively
+// Remove auto layout recursively
 // Removes auto layout from selected nodes and all children
 
 function removeAutoLayout(node) {

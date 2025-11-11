@@ -1,4 +1,4 @@
-// ✅ Find and replace variables
+// Find and replace variables
 // This script replaces variable bindings based on text patterns in variable names
 // Uses library import capabilities for comprehensive variable replacement
 

@@ -1,4 +1,4 @@
-// ✅ Duplicate variable collection
+// Duplicate variable collection
 
 // Configuration - Change these values as needed
 var sourceCollectionName = 'website V3';

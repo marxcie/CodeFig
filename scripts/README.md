@@ -1,0 +1,118 @@
+# CodeFig Scripts
+
+This directory contains all scripts for the CodeFig plugin. The build system automatically discovers and loads scripts from subdirectories.
+
+**Location**: This `scripts/` folder is at the root level of the project (not in `src/` or `dist/`). This is the single source of truth for all scripts. Scripts are embedded in `dist/scripts-manifest.json` during the build process.
+
+## Folder Structure
+
+### `/HELP/`
+Contains help and documentation scripts that appear in the "Help" category.
+- **Type**: `help`
+- **Purpose**: Documentation, tutorials, and help content
+
+### `/EXAMPLE_SCRIPTS/`
+Contains example scripts that demonstrate various Figma automation capabilities.
+- **Type**: `prebuilt` 
+- **Purpose**: Ready-to-use scripts for common tasks
+
+### `/CODEFIG_LIBRARIES/`
+Contains importable library scripts (prefixed with `@`) that provide reusable functions and utilities.
+- **Type**: `prebuilt`
+- **Purpose**: Core libraries and utilities that can be imported by other scripts
+- **Files**: `@variables.ts`, `@styles.ts`, `@core-library.ts`, `@math-helpers.ts`, `@replacement-engine.ts`, `@infopanel.ts`
+
+### Excluded Folders
+Folders and files starting with `_` or `.` are automatically excluded from the build:
+- `/_DEBUG_SCRIPTS/` - Debug scripts (excluded by `_` prefix)
+- Any folder/file starting with `_` or `.` will be skipped
+
+### Custom Categories
+You can create additional folders for custom categories:
+- Folder names become category labels
+- Scripts are automatically categorized based on their folder
+- Use `_` prefix to exclude folders from the build
+
+## Script Exclusion
+
+Scripts are automatically excluded from the build if they:
+- Start with `_` or `.` (e.g., `_debug-script.ts`, `.hidden.ts`)
+- Have backup extensions: `.bak`, `.bak2`, `.bak3`, `.backup`, `.old`, `.tmp`
+- Are in folders starting with `_` or `.`
+
+Examples:
+- `_DEBUG_SCRIPTS/` - Entire folder excluded
+- `script.ts.bak` - Backup file excluded
+- `_experimental.ts` - Hidden script excluded
+
+## Script Naming
+
+Scripts are automatically named using this priority:
+
+1. **Custom name comment**: Add `// SCRIPT_NAME: Your Custom Name` at the top of the file
+2. **Title comment**: Use the first comment line as the title (e.g., `// REPLACE TEXT STYLES`)
+3. **Filename**: Automatically convert filename to display name
+   - `find-broken-variables.ts` → "Find Broken Variables"
+   - `auto-layout-all.ts` → "Auto Layout All"
+
+## Adding New Scripts
+
+1. **Create a `.ts` file** in the appropriate folder
+2. **Add your script code** 
+3. **Optionally add a title comment** at the top
+4. **Run `npm run build`** to rebuild the plugin
+
+The script will automatically appear in the plugin interface!
+
+## Example Script Template
+
+```typescript
+// REPLACE TEXT STYLES
+// or
+// SCRIPT_NAME: My Custom Script Name
+
+// Your script code here
+console.log('Hello from my script!');
+figma.notify('Script executed successfully!');
+```
+
+## Build Process
+
+The build system (`build-scripts.js`) automatically:
+- 🔍 **Discovers** all `.ts` files in subdirectories (excluding `_`/`.` prefixed files)
+- 📁 **Categorizes** scripts based on folder names
+- 🏷️ **Names** scripts using comments or filenames
+- 🔗 **Processes** `@import` statements at build time
+- 📦 **Embeds** processed scripts in `dist/scripts-manifest.json` (no duplication)
+
+## @Import System
+
+Scripts can import functions from library scripts using `@import` statements:
+
+```typescript
+// Import specific functions
+@import { getAllStyles, generateScale } from "@Core Library"
+
+// Import all functions (wildcard)
+@import * from "@Variables"
+
+// Import from any script
+@import { myFunction } from "My Custom Script"
+```
+
+Available library scripts:
+- `@core-library.ts` - Core utility functions
+- `@math-helpers.ts` - Math and calculation functions
+- `@variables.ts` - Variable management functions
+- `@infopanel.ts` - InfoPanel display functions
+
+Imports are processed at build time, so the imported functions are included directly in the script code.
+
+## Validation
+
+Run `npm run validate` to check scripts for:
+- Syntax errors
+- Invalid `@import` references
+- Missing metadata warnings
+
+The build process automatically runs validation before building.

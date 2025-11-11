@@ -17,9 +17,163 @@ figma.showUI(__html__, {
   // Note: resizable is not in the official Figma API types but works in practice
 } as any);
 
+// Extract script metadata from code (name, type)
+function extractScriptMetadata(code: string, filePath: string): { name: string; type: string } {
+  const filename = filePath.split('/').pop() || '';
+  const filenameWithoutExt = filename.replace(/\.ts$/, '');
+  
+  // Default name from filename
+  let name = filenameWithoutExt.replace(/[-_]/g, ' ');
+  name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+  
+  // Determine type from folder path
+  let type = 'prebuilt';
+  let folderPrefix = '';
+  if (filePath.includes('/HELP/')) {
+    type = 'help';
+  } else if (filePath.includes('/CODEFIG_LIBRARIES/')) {
+    type = 'prebuilt';
+    folderPrefix = 'CodeFig Libraries';
+  } else if (filePath.includes('/EXAMPLE_SCRIPTS/')) {
+    type = 'prebuilt';
+    folderPrefix = 'Example Scripts';
+  }
+  
+  // Extract name from code comments
+  const lines = code.split('\n').slice(0, 20);
+  for (const line of lines) {
+    // Look for SCRIPT_NAME comment
+    const nameMatch = line.match(/\/\/\s*SCRIPT_NAME:\s*(.+)/i);
+    if (nameMatch) {
+      name = nameMatch[1].trim();
+      continue;
+    }
+    
+    // Look for title comment as first non-empty line
+    const trimmed = line.trim();
+    if (trimmed && trimmed.startsWith('//')) {
+      const commentContent = trimmed.replace(/^\/\/\s*/, '').trim();
+      // Skip section headers and common patterns
+      if (!commentContent.includes('===') && 
+          !commentContent.includes('==') &&
+          !commentContent.toLowerCase().includes('execute') && 
+          !commentContent.toLowerCase().includes('import') && 
+          !commentContent.toLowerCase().includes('function') &&
+          !commentContent.toLowerCase().includes('collection of') &&
+          commentContent.length > 0) {
+        name = commentContent;
+        break;
+      }
+    }
+  }
+  
+  // Add folder prefix for prebuilt scripts
+  if (type === 'prebuilt' && folderPrefix) {
+    name = `${folderPrefix} / ${name}`;
+  }
+  
+  return { name, type };
+}
+
+// Check if a filename should be excluded
+function shouldExcludeScript(filename: string): boolean {
+  // Exclude files starting with _ or .
+  if (filename.startsWith('_') || filename.startsWith('.')) {
+    return true;
+  }
+  // Exclude backup files
+  if (filename.match(/\.(bak\d*|backup|old|tmp)\.ts$/i)) {
+    return true;
+  }
+  return false;
+}
+
+// Store scripts received from UI
+let cachedScripts: any[] | null = null;
+
+// Auto-discover and load scripts
+async function loadExampleScripts() {
+  try {
+    let scripts: any[] = [];
+    
+    // First, try to use cached scripts from UI
+    if (cachedScripts && cachedScripts.length > 0) {
+      scripts = cachedScripts;
+      debugLog('Loaded scripts from cache (received from UI)');
+    } else {
+      // Fallback: try to discover from __uiFiles__ (for backwards compatibility)
+      for (const filePath in __uiFiles__) {
+        // Match scripts/**/*.ts pattern
+        if (filePath.match(/^scripts\/.*\.ts$/)) {
+          // Get filename to check exclusion
+          const filename = filePath.split('/').pop() || '';
+          
+          // Exclude files starting with _ or . and backup files
+          if (shouldExcludeScript(filename)) {
+            continue;
+          }
+          
+          const code = __uiFiles__[filePath];
+          if (code) {
+            // Extract metadata from code
+            const metadata = extractScriptMetadata(code, filePath);
+            
+            scripts.push({
+              name: metadata.name,
+              code: code,
+              type: metadata.type,
+              filename: filename
+            });
+          }
+        }
+      }
+      debugLog(`Auto-discovered ${scripts.length} scripts from __uiFiles__`);
+    }
+    
+    // Process scripts: extract metadata and format
+    const processedScripts = scripts.map(script => {
+      // Always extract metadata from code to ensure we have proper names
+      const metadata = extractScriptMetadata(script.code, script.filePath || '');
+      
+      return {
+        name: metadata.name, // Use extracted name (from comments or filename)
+        code: script.code,
+        type: script.type || metadata.type, // Use provided type or extracted type
+        filename: script.filename || script.filePath?.split('/').pop() || 'unknown'
+      };
+    });
+    
+    debugLog(`Loaded ${processedScripts.length} example scripts`);
+    return processedScripts;
+  } catch (error) {
+    debugError('Failed to load example scripts:', error);
+    return [];
+  }
+}
+
 // Handle messages from the UI
 figma.ui.onmessage = (msg) => {
   debugLog('Backend: Received message type:', msg.type);
+  
+  if (msg.type === 'SET_SCRIPTS') {
+    // Cache scripts received from UI
+    if (msg.scripts && Array.isArray(msg.scripts)) {
+      cachedScripts = msg.scripts;
+      debugLog('Scripts cached from UI:', cachedScripts ? cachedScripts.length : 0, 'scripts');
+    }
+    return;
+  }
+  
+  if (msg.type === 'LOAD_EXAMPLE_SCRIPTS') {
+    loadExampleScripts().then(scripts => {
+      figma.ui.postMessage({
+        type: 'EXAMPLE_SCRIPTS',
+        items: scripts
+      });
+    });
+    return;
+  }
+  
   if (msg.type === 'LIST') {
     // Get saved scripts and last opened script from client storage
     Promise.all([
@@ -114,15 +268,27 @@ figma.ui.onmessage = (msg) => {
       const scriptConsole = {
         log: (...args: any[]) => {
           const message = args.map(arg => 
-            typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+            typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
           ).join(' ');
           debugLog('Script:', message);
         },
         error: (...args: any[]) => {
-          const message = args.map(arg => 
-            typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-          ).join(' ');
+          const message = args.map(arg => {
+            if (arg instanceof Error) {
+              return `${arg.name}: ${arg.message}\n${arg.stack || ''}`;
+            }
+            return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+          }).join(' ');
           debugError('Script:', message);
+        },
+        warn: (...args: any[]) => {
+          const message = args.map(arg => {
+            if (arg instanceof Error) {
+              return `${arg.name}: ${arg.message}\n${arg.stack || ''}`;
+            }
+            return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+          }).join(' ');
+          debugError('Script Warning:', message);
         }
       };
 
