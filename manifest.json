@@ -7,7 +7,7 @@
   "editorType": ["figma", "figjam"],
   "permissions": ["teamlibrary"],
   "networkAccess": {
-    "allowedDomains": ["https://cdnjs.cloudflare.com"],
-    "reasoning": "Temporary CDN access for CodeMirror during development. Will be bundled locally for production."
+    "allowedDomains": ["https://cdnjs.cloudflare.com", "https://api.figma.com"],
+    "reasoning": "CDN access for CodeMirror during development. Figma API access for fetching comments via REST API."
   }
 }

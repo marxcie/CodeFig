@@ -9,38 +9,55 @@
 // Fallback for escapeWildcards if import fails
 if (typeof escapeWildcards === 'undefined') {
   var escapeWildcards = function(pattern) {
-    return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Escape regex special characters, but preserve * for wildcard matching
+    // We'll handle * separately in matchPattern
+    return pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
   };
 }
 
 // Fallback for matchPattern if import fails
 if (typeof matchPattern === 'undefined') {
   var matchPattern = function(text, pattern, options) {
-    options = options || {};
-    var exact = options.exact || false;
-    var caseSensitive = options.caseSensitive || false;
-    
-    var searchText = caseSensitive ? text : text.toLowerCase();
-    var searchPattern = caseSensitive ? pattern : pattern.toLowerCase();
-    
-    // Exact match
-    if (exact) {
+    try {
+      options = options || {};
+      var exact = options.exact || false;
+      var caseSensitive = options.caseSensitive || false;
+      
+      var searchText = caseSensitive ? text : text.toLowerCase();
+      var searchPattern = caseSensitive ? pattern : pattern.toLowerCase();
+      
+      // Exact match
+      if (exact) {
+        return {
+          match: searchText === searchPattern,
+          confidence: searchText === searchPattern ? 1.0 : 0.0
+        };
+      }
+      
+      // For partial matching, check if pattern is contained in text
+      // First, escape special regex characters (but not *)
+      var escapedPattern = escapeWildcards(searchPattern);
+      // Then replace * with .* for wildcard matching
+      var regexPattern = escapedPattern.replace(/\*/g, '.*');
+      // For partial matching, we want to find the pattern anywhere in the text
+      // So we don't use ^ and $ anchors
+      var regex = new RegExp(regexPattern, caseSensitive ? '' : 'i');
+      var match = regex.test(searchText);
+      
       return {
-        match: searchText === searchPattern,
-        confidence: searchText === searchPattern ? 1.0 : 0.0
+        match: match,
+        confidence: match ? 1.0 : 0.0
+      };
+    } catch (e) {
+      // Fallback to simple string contains check if regex fails
+      var searchText = (options && options.caseSensitive) ? text : text.toLowerCase();
+      var searchPattern = (options && options.caseSensitive) ? pattern : pattern.toLowerCase();
+      var match = searchText.indexOf(searchPattern) !== -1;
+      return {
+        match: match,
+        confidence: match ? 1.0 : 0.0
       };
     }
-    
-    // Wildcard match - convert * to .* for regex
-    var escapedPattern = escapeWildcards(searchPattern);
-    var regexPattern = escapedPattern.replace(/\*/g, '.*');
-    var regex = new RegExp('^' + regexPattern + '$', caseSensitive ? '' : 'i');
-    var match = regex.test(searchText);
-    
-    return {
-      match: match,
-      confidence: match ? 1.0 : 0.0
-    };
   };
 }
 
@@ -250,10 +267,11 @@ function buildStyleCache() {
   if (skipTeamLibrary) {
     // Skip Team Library and just use local styles + document scanning
     console.log('📋 Using local styles only (Team Library skipped)');
-    scanDocumentForLibraryStyles(cache);
-    console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
-    cleanupMemory();
-    resolve(cache);
+    scanDocumentForLibraryStyles(cache).then(function() {
+      console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
+      cleanupMemory();
+      resolve(cache);
+    });
     return;
   }
   
@@ -274,10 +292,11 @@ function buildStyleCache() {
     } catch (apiError) {
       console.log('⚠️ Team Library API call failed: ' + apiError.message);
       skipTeamLibrary = true;
-      scanDocumentForLibraryStyles(cache);
-      console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
-      cleanupMemory();
-      resolve(cache);
+      scanDocumentForLibraryStyles(cache).then(function() {
+        console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
+        cleanupMemory();
+        resolve(cache);
+      });
       return;
     }
     
@@ -349,13 +368,14 @@ function buildStyleCache() {
       console.log('📋 Falling back to document scanning...');
       
       // Fallback: Scan document for currently used library styles
-      scanDocumentForLibraryStyles(cache);
-      console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
-      
-      // Cleanup memory after building cache
-      cleanupMemory();
-      
-      resolve(cache);
+      scanDocumentForLibraryStyles(cache).then(function() {
+        console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
+        
+        // Cleanup memory after building cache
+        cleanupMemory();
+        
+        resolve(cache);
+      });
     });
       
     } catch (error) {
@@ -363,105 +383,155 @@ function buildStyleCache() {
       console.log('📋 Falling back to document scanning...');
       
       // Fallback: Scan document for currently used library styles
-      scanDocumentForLibraryStyles(cache);
-      console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
-      
-      // Cleanup memory after building cache
-      cleanupMemory();
-      
-      resolve(cache);
+      scanDocumentForLibraryStyles(cache).then(function() {
+        console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
+        
+        // Cleanup memory after building cache
+        cleanupMemory();
+        
+        resolve(cache);
+      });
     }
   });
 }
 
 // Fallback function to scan document for library styles
-// Limited scanning to prevent memory issues
+// Scans all pages with chunked processing to prevent memory issues
 function scanDocumentForLibraryStyles(cache) {
-  var scannedCount = 0;
-  var MAX_SCAN_NODES = 1000; // Limit scanning to prevent memory issues
-  
-  function scanNode(node) {
-    // Limit scanning to prevent memory overload
-    if (scannedCount >= MAX_SCAN_NODES) {
-      return;
-    }
+  return new Promise(function(resolve) {
+    var allPages = figma.root.children; // All pages in the document
+    var totalPages = allPages.length;
+    var currentPageIndex = 0;
+    var nodesToProcess = [];
+    var chunkStartIndex = 0; // Position in current page's nodes array
+    var totalNodesScanned = 0; // Total nodes scanned across all pages
+    var CHUNK_SIZE = 500; // Process 500 nodes at a time
+    var YIELD_DELAY = 10; // 10ms delay between chunks to yield to Figma
     
-    // Safely check if node exists and has the required properties
-    if (!node || typeof node !== 'object') {
-      return;
-    }
+    console.log('📄 Scanning ' + totalPages + ' pages for styles...');
     
-    scannedCount++;
-    
-    // Handle text nodes
-    if (node.type === 'TEXT' && typeof node.getStyledTextSegments === 'function') {
-      try {
-        var segments = node.getStyledTextSegments(['textStyleId']);
-        if (Array.isArray(segments)) {
-          for (var segIndex = 0; segIndex < segments.length; segIndex++) {
-            var segment = segments[segIndex];
-            if (segment && segment.textStyleId && segment.textStyleId !== figma.mixed) {
-              try {
-                var style = figma.getStyleById(segment.textStyleId);
-                if (style && !cache.has(style.name)) {
-                  cache.set(style.name, {
-                    style: style,
-                    type: 'TEXT',
-                    key: style.key || null,
-                    isLibrary: style.remote || false
-                  });
+    // Helper function to extract styles from a node
+    function extractStylesFromNode(node) {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+      
+      // Handle text nodes
+      if (node.type === 'TEXT' && typeof node.getStyledTextSegments === 'function') {
+        try {
+          var segments = node.getStyledTextSegments(['textStyleId']);
+          if (Array.isArray(segments)) {
+            for (var segIndex = 0; segIndex < segments.length; segIndex++) {
+              var segment = segments[segIndex];
+              if (segment && segment.textStyleId && segment.textStyleId !== figma.mixed) {
+                try {
+                  var style = figma.getStyleById(segment.textStyleId);
+                  if (style && !cache.has(style.name)) {
+                    cache.set(style.name, {
+                      style: style,
+                      type: 'TEXT',
+                      key: style.key || null,
+                      isLibrary: style.remote || false
+                    });
+                  }
+                } catch (e) {
+                  // Style might be inaccessible
                 }
-              } catch (e) {
-                // Style might be inaccessible
               }
             }
           }
-        }
-      } catch (e) {
-        // Node might not support text segments
-      }
-    }
-    
-    // Check other style types
-    var styleProps = ['fillStyleId', 'strokeStyleId', 'effectStyleId'];
-    for (var propIndex = 0; propIndex < styleProps.length; propIndex++) {
-      var prop = styleProps[propIndex];
-      if (prop in node && node[prop] && node[prop] !== figma.mixed) {
-        try {
-          var style = figma.getStyleById(node[prop]);
-          if (style && !cache.has(style.name)) {
-            var styleType = 'PAINT';
-            if (prop === 'effectStyleId') styleType = 'EFFECT';
-            
-            cache.set(style.name, {
-              style: style,
-              type: styleType,
-              key: style.key || null,
-              isLibrary: style.remote || false
-            });
-          }
         } catch (e) {
-          // Style might be inaccessible
+          // Node might not support text segments
+        }
+      }
+      
+      // Check other style types
+      var styleProps = ['fillStyleId', 'strokeStyleId', 'effectStyleId'];
+      for (var propIndex = 0; propIndex < styleProps.length; propIndex++) {
+        var prop = styleProps[propIndex];
+        if (prop in node && node[prop] && node[prop] !== figma.mixed) {
+          try {
+            var style = figma.getStyleById(node[prop]);
+            if (style && !cache.has(style.name)) {
+              var styleType = 'PAINT';
+              if (prop === 'effectStyleId') styleType = 'EFFECT';
+              
+              cache.set(style.name, {
+                style: style,
+                type: styleType,
+                key: style.key || null,
+                isLibrary: style.remote || false
+              });
+            }
+          } catch (e) {
+            // Style might be inaccessible
+          }
         }
       }
     }
     
-    // Recursively scan children (limited)
-    if (node.children && Array.isArray(node.children) && scannedCount < MAX_SCAN_NODES) {
-      for (var childIndex = 0; childIndex < node.children.length && scannedCount < MAX_SCAN_NODES; childIndex++) {
-        scanNode(node.children[childIndex]);
+    // Collect all nodes from a page
+    function collectNodesFromPage(page) {
+      nodesToProcess = [];
+      try {
+        traverseNodes([page], function(node) {
+          nodesToProcess.push(node);
+          return 0; // Continue traversal
+        });
+      } catch (e) {
+        console.log('⚠️ Error collecting nodes from page: ' + e.message);
       }
     }
-  }
-  
-  try {
-    scanNode(figma.currentPage);
-    if (scannedCount >= MAX_SCAN_NODES) {
-      console.log('⚠️ Document scanning limited to ' + MAX_SCAN_NODES + ' nodes to prevent memory issues');
+    
+    // Process nodes in chunks with yields
+    function processChunk() {
+      var chunkEnd = Math.min(chunkStartIndex + CHUNK_SIZE, nodesToProcess.length);
+      
+      // Process chunk
+      for (var i = chunkStartIndex; i < chunkEnd; i++) {
+        extractStylesFromNode(nodesToProcess[i]);
+        totalNodesScanned++;
+      }
+      
+      chunkStartIndex = chunkEnd;
+      
+      // Check if we're done with current page
+      if (chunkStartIndex >= nodesToProcess.length) {
+        // Move to next page or finish
+        currentPageIndex++;
+        
+        if (currentPageIndex < totalPages) {
+          // Collect nodes from next page
+          collectNodesFromPage(allPages[currentPageIndex]);
+          chunkStartIndex = 0;
+          
+          console.log('📄 Scanning page ' + (currentPageIndex + 1) + '/' + totalPages + ' (' + allPages[currentPageIndex].name + ')...');
+          
+          // Process next page
+          setTimeout(processChunk, YIELD_DELAY);
+        } else {
+          // All pages processed
+          console.log('✅ Scanned ' + totalNodesScanned + ' nodes across ' + totalPages + ' pages');
+          console.log('📋 Found ' + cache.size + ' unique styles');
+          cleanupMemory();
+          resolve();
+        }
+      } else {
+        // Continue processing current chunk
+        setTimeout(processChunk, YIELD_DELAY);
+      }
     }
-  } catch (e) {
-    console.log('⚠️ Error scanning document: ' + e.message);
-  }
+    
+    // Start processing first page
+    if (totalPages > 0) {
+      collectNodesFromPage(allPages[0]);
+      console.log('📄 Scanning page 1/' + totalPages + ' (' + allPages[0].name + ')...');
+      setTimeout(processChunk, YIELD_DELAY);
+    } else {
+      console.log('⚠️ No pages found in document');
+      resolve();
+    }
+  });
 }
 
 function processTextNode(node, styleCache, nodeName, replacements) {
@@ -594,16 +664,19 @@ function findReplacementStyle(currentStyle, styleCache, expectedType, replacemen
     console.log('🔍 Testing pattern: "' + findPattern + '" → "' + replacement.to + '"');
     
     // Use pattern matching library for more robust matching
-    var escapedPattern = escapeWildcards(findPattern);
-    var patternMatch = matchPattern(currentStyle.name, escapedPattern, {
+    // Don't escape the pattern here - let matchPattern handle it
+    var patternMatch = matchPattern(currentStyle.name, findPattern, {
       exact: false,
       caseSensitive: false
     });
     
     // Check if current style name matches the pattern
-    if (patternMatch.match) {
+    if (patternMatch && patternMatch.match) {
       // Create new style name by replacing the pattern
-      var newStyleName = currentStyle.name.replace(new RegExp(escapedPattern.replace(/\*/g, '.*'), 'g'), replacement.to);
+      // Use simple string replacement for the pattern (case-insensitive)
+      var newStyleName = currentStyle.name;
+      var patternRegex = new RegExp(findPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*'), 'gi');
+      newStyleName = newStyleName.replace(patternRegex, replacement.to);
       
       // Only proceed if the name actually changed
       if (newStyleName !== currentStyle.name) {

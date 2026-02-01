@@ -1,5 +1,5 @@
 // Create Styles from Text Nodes
-// Creates text styles from selected text nodes, preserving variable bindings
+// Creates text styles from selected text nodes, preserving variable bindings (if any)
 // Uses layer name as style name
 
 // ============================================================================
@@ -271,7 +271,13 @@ async function createStylesFromNodes() {
         var variablesBound = bindVariablesToStyle(textStyle, bindings);
         stats.totalVariablesBound += variablesBound;
 
-        console.log('Text style ' + action + ': ' + nodeName + (variablesBound > 0 ? ' (' + variablesBound + ' variables bound)' : ''));
+        // Connect the text node to the newly created/updated style
+        try {
+          textNode.textStyleId = textStyle.id;
+          console.log('Text style ' + action + ': ' + nodeName + (variablesBound > 0 ? ' (' + variablesBound + ' variables bound)' : '') + ' - node connected to style');
+        } catch (connectError) {
+          console.warn('Could not connect node ' + nodeName + ' to style: ' + connectError.message);
+        }
       } catch (error) {
         console.error('Error processing node ' + nodeName + ': ' + error.message);
         stats.errors++;

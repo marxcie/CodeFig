@@ -154,7 +154,8 @@ function extractFunctions(code) {
   const functions = new Map();
   
   // Match function declarations: function name() { ... }
-  const functionRegex = /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\([^)]*\)\s*\{/g;
+  // Also handles TypeScript return type annotations: function name(): Type { ... }
+  const functionRegex = /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\([^)]*\)\s*(?::[^{]*)?\s*\{/g;
   let match;
   
   while ((match = functionRegex.exec(code)) !== null) {
@@ -289,17 +290,14 @@ function validateImports(scripts) {
   const scriptLibrary = new Map();
   
   const libraryScripts = scripts.filter(script => 
-    script.name === '@core-library.ts' || 
-    script.name === '@custom-helpers.ts' ||
-    script.name === '@math-helpers.ts' ||
-    script.name === '@variables.ts' ||
-    script.name === '@infopanel.ts' ||
-    script.name === '@pattern-matching.ts' ||
     script.filename === '@core-library.ts' ||
-    script.filename === '@variables.ts' ||
+    script.filename === '@custom-helpers.ts' ||
     script.filename === '@math-helpers.ts' ||
+    script.filename === '@variables.ts' ||
     script.filename === '@infopanel.ts' ||
-    script.filename === '@pattern-matching.ts'
+    script.filename === '@pattern-matching.ts' ||
+    script.filename === '@replacement-engine.ts' ||
+    script.filename === '@styles.ts'
   );
   
   libraryScripts.forEach(script => {
@@ -317,22 +315,28 @@ function validateImports(scripts) {
     scriptLibrary.set(script.name, functions);
     scriptLibrary.set(script.name.replace('.ts', ''), functions);
     
-    // Map common name variations
-    if (script.name === '@core-library.ts') {
+    // Map common name variations (check by filename, not display name)
+    if (script.filename === '@core-library.ts') {
       scriptLibrary.set('@Core Library', functions);
       scriptLibrary.set('@core-library', functions);
-    } else if (script.name === '@variables.ts') {
+    } else if (script.filename === '@variables.ts') {
       scriptLibrary.set('@Variables', functions);
       scriptLibrary.set('@variables', functions);
-    } else if (script.name === '@math-helpers.ts') {
+    } else if (script.filename === '@math-helpers.ts') {
       scriptLibrary.set('@Math Helpers', functions);
       scriptLibrary.set('@math-helpers', functions);
-    } else if (script.name === '@infopanel.ts') {
+    } else if (script.filename === '@infopanel.ts') {
       scriptLibrary.set('@InfoPanel', functions);
       scriptLibrary.set('@infopanel', functions);
-    } else if (script.name === '@pattern-matching.ts') {
+    } else if (script.filename === '@pattern-matching.ts') {
       scriptLibrary.set('@Pattern Matching', functions);
       scriptLibrary.set('@pattern-matching', functions);
+    } else if (script.filename === '@replacement-engine.ts') {
+      scriptLibrary.set('@Replacement Engine', functions);
+      scriptLibrary.set('@replacement-engine', functions);
+    } else if (script.filename === '@styles.ts') {
+      scriptLibrary.set('@Styles', functions);
+      scriptLibrary.set('@styles', functions);
     }
   });
   
@@ -340,6 +344,11 @@ function validateImports(scripts) {
   scripts.forEach(script => {
     // Skip validation for help-documentation.ts (contains example imports)
     if (script.filename === 'help-documentation.ts' || script.name.includes('help & documentation')) {
+      return;
+    }
+    
+    // Skip validation for library files themselves (they are the source, not consumers)
+    if (libraryScripts.some(lib => lib.filename === script.filename)) {
       return;
     }
     
