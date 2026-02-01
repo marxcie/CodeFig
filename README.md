@@ -224,13 +224,20 @@ npm run build
 
 This compiles TypeScript and bundles all scripts into the `dist/` folder.
 
+### Console bridge (for Cursor)
+
+`npm run dev` starts the Figma console server as well, so plugin and script `console.log` / `console.error` / `console.warn` are appended to `figma-console.log` in the project root. In Cursor, reference `figma-console.log` (e.g. `@figma-console.log`) so the AI can read errors and suggest fixes.
+
+To run only the console server (e.g. if dev is already running elsewhere): `npm run dev:figma-console-server`. The bridge only works when the plugin manifest allows `http://localhost:8765`. For a **no-network** build, use a separate manifest that omits `networkAccess` or uses an empty `allowedDomains`.
+
 ### Available Commands
 
 ```bash
-npm run dev          # Development mode (watch all files)
-npm run build        # Full build (TypeScript + scripts)
-npm run build:scripts # Build scripts only
-npm run clean        # Clean build output
+npm run dev            # Development mode (watch + Figma console log server)
+npm run build          # Full build (TypeScript + scripts)
+npm run build:scripts  # Build scripts only
+npm run dev:figma-console-server # Run only the Figma console log server (optional)
+npm run clean          # Clean build output
 ```
 
 ## 📄 License

@@ -63,18 +63,18 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
           "Mobile": function(config) { return config.mobile.padding; }
         }
       },
-      "grid/max-width": {
+      "grid/viewport-width": {
         type: "FLOAT",
         values: {
-          "Desktop": function(config) { return config.desktop.containerWidth - (config.desktop.padding * 2); },
-          "Tablet": function(config) { return config.tablet.containerWidth - (config.tablet.padding * 2); },
-          "Mobile": function(config) { return config.mobile.containerWidth - (config.mobile.padding * 2); }
+          "Desktop": function(config) { return config.desktop.containerWidth; },
+          "Tablet": function(config) { return config.tablet.containerWidth; },
+          "Mobile": function(config) { return config.mobile.containerWidth; }
         }
       }
     };
     
     // Generate column widths programmatically
-    var columnNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    var columnNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
     columnNumbers.forEach(function(colNum) {
       basicVariables['grid/col-' + colNum] = {
         type: "FLOAT",

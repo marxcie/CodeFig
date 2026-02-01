@@ -7,7 +7,7 @@
   "editorType": ["figma", "figjam"],
   "permissions": ["teamlibrary"],
   "networkAccess": {
-    "allowedDomains": ["https://cdnjs.cloudflare.com", "https://api.figma.com"],
-    "reasoning": "CDN access for CodeMirror during development. Figma API access for fetching comments via REST API."
+    "allowedDomains": ["https://cdnjs.cloudflare.com", "https://api.figma.com", "http://localhost:8765"],
+    "reasoning": "CDN for CodeMirror. Figma API for comments. localhost:8765 for console bridge (Cursor). For a no-network build, use a manifest without networkAccess or with empty allowedDomains."
   }
 }

@@ -3132,6 +3132,19 @@
             console.log('UI: Progress complete:', msg);
             hideProgress();
             break;
+
+          case 'CONSOLE_FORWARD':
+            (function () {
+              const level = msg.level || 'log';
+              const payload = msg.payload != null ? String(msg.payload) : '';
+              const line = '[' + new Date().toISOString() + '] [' + level.toUpperCase() + '] ' + payload + '\n';
+              fetch('http://localhost:8765', {
+                method: 'POST',
+                body: line,
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+              }).catch(function () { /* console bridge server not running */ });
+            })();
+            break;
             
           case 'WINDOW_MEMORY_LOADED':
             console.log('📥 UI: Window memory loaded from backend:', msg);

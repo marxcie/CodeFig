@@ -1,12 +1,29 @@
+// Serialize args for the console bridge (file / Cursor)
+function serializeForConsole(args: any[]): string {
+  return args.map(arg => {
+    if (arg instanceof Error) return `${arg.name}: ${arg.message}\n${arg.stack || ''}`;
+    if (typeof arg === 'object') try { return JSON.stringify(arg, null, 2); } catch (_) { return String(arg); }
+    return String(arg);
+  }).join(' ');
+}
+
+function forwardToConsoleBridge(level: 'log' | 'warn' | 'error', args: any[]) {
+  try {
+    figma.ui.postMessage({ type: 'CONSOLE_FORWARD', level, payload: serializeForConsole(args) });
+  } catch (_) { /* UI may not be ready */ }
+}
+
 // Debug logging functions to remove source references
 function debugLog(message: string, ...args: any[]) {
   const log = console.log.bind(console);
   setTimeout(() => log('%cCodeFig: ' + message, 'color: #0066cc; font-weight: bold;', ...args), 0);
+  forwardToConsoleBridge('log', [message, ...args]);
 }
 
 function debugError(message: string, ...args: any[]) {
   const error = console.error.bind(console);
   setTimeout(() => error('%cCodeFig: ' + message, 'color: #cc0000; font-weight: bold;', ...args), 0);
+  forwardToConsoleBridge('error', [message, ...args]);
 }
 
 // Show the UI
@@ -264,13 +281,14 @@ figma.ui.onmessage = (msg) => {
     try {
       // Pure JavaScript execution - no TypeScript conversion
       
-      // Create a custom console object that uses our debugLog function
+      // Create a custom console object that uses our debugLog function and forwards to Cursor bridge
       const scriptConsole = {
         log: (...args: any[]) => {
-          const message = args.map(arg => 
+          const message = args.map(arg =>
             typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
           ).join(' ');
           debugLog('Script:', message);
+          forwardToConsoleBridge('log', ['[Script]', ...args]);
         },
         error: (...args: any[]) => {
           const message = args.map(arg => {
@@ -280,6 +298,7 @@ figma.ui.onmessage = (msg) => {
             return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
           }).join(' ');
           debugError('Script:', message);
+          forwardToConsoleBridge('error', ['[Script]', ...args]);
         },
         warn: (...args: any[]) => {
           const message = args.map(arg => {
@@ -289,6 +308,7 @@ figma.ui.onmessage = (msg) => {
             return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
           }).join(' ');
           debugError('Script Warning:', message);
+          forwardToConsoleBridge('warn', ['[Script]', ...args]);
         }
       };
 
