@@ -1,4 +1,18 @@
 // Detach styles & variables
+// @DOC_START
+// # Detach styles & variables
+// Removes style and variable bindings from selected nodes (and optionally their children).
+//
+// ## Overview
+// Clears text/fill/stroke/effect/grid style IDs and variable bindings on selected nodes so they use local values. Can run recursively on children.
+//
+// ## Config options
+// - **recursive** – If true, processes children as well.
+// - **detachAllStyles** – If true, detaches all style types; otherwise use per-type flags (detachFontStyles, detachFillStyles, etc.).
+// - **detachAllVariables** – If true, detaches all variable bindings; otherwise use detachTypographicVariables, detachNumericVariables, or detachExactVariables (array of property names).
+// @DOC_END
+
+// @CONFIG_START
 // Configuration - change these to control what gets detached
 var recursive = true;
 var detachAllStyles = true;
@@ -22,6 +36,7 @@ var detachAllVariables = true;
 // Dimensions & Spacing: width, height, minWidth, maxWidth, minHeight, maxHeight, paddingTop, paddingRight, paddingBottom, paddingLeft, itemSpacing, cornerRadius, topLeftRadius, topRightRadius, bottomLeftRadius, bottomRightRadius, strokeWeight, strokeTopWeight, strokeRightWeight, strokeBottomWeight, strokeLeftWeight
 // Color: fills, strokes, opacity
 // Grid & Effects: layoutGrids, effects, visible
+// @CONFIG_END
 
 // Helper function to check if a property is typographic
 function isTypographicProperty(property) {

@@ -1,5 +1,17 @@
 // DS Foundation: Grid
-// Create and update grid system variables programmatically
+// @DOC_START
+// # DS Foundation: Grid
+// Create and update grid system variables programmatically.
+//
+// ## Overview
+// Defines a variable collection for layout grid: columns, gap, padding, viewport width per mode (e.g. Desktop, Tablet, Mobile). Config holds container width, columns, gap, padding per viewport; the script creates the variables.
+//
+// ## Config options
+// - **collectionName** / **structure.variableCollection** – Collection name.
+// - **structure.variableGroup** – Optional group path.
+// - **config** – Per viewport (e.g. desktop, tablet, mobile): containerWidth, columns, gap, padding.
+// - **variables** – Map of variable names to { type: "FLOAT", values: { modeName: function(config) => number } } (e.g. grid/columns, grid/gap, grid/padding, grid/viewport-width).
+// @DOC_END
 
 // Import functions from libraries
 @import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
@@ -14,8 +26,9 @@ function variableNamePrefix(group) {
   return group ? group + '/' : '';
 }
 
-// Use existing config if already defined, otherwise use default
 var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfig : {
+  // @CONFIG_START
+  // Use existing config if already defined, otherwise use default
   collectionName: "Grid System",
   structure: {
     variableCollection: "Grid System",
@@ -43,6 +56,9 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
       padding: 20
     }
   },
+  
+  // @CONFIG_END
+  // Generate column widths programmatically
   
   // Variables to be created in Figma  
   variables: (function() {
@@ -81,8 +97,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
         }
       }
     };
-    
-    // Generate column widths programmatically
+
     var columnNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
     columnNumbers.forEach(function(colNum) {
       basicVariables['grid/col-' + colNum] = {

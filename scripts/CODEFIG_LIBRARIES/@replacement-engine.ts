@@ -1,14 +1,17 @@
 // @Replacement Engine
-// Advanced find and replace operations with batch processing and result reporting
-// 
-// 📚 IMPORT THESE FUNCTIONS IN YOUR SCRIPTS:
-// @import { findAndReplace, batchReplace, createReplacementPlan, executeReplacement } from "@Replacement Engine"
-// 
-// 🎯 AVAILABLE FUNCTIONS:
-// • Find & Replace: findAndReplace, batchReplace, findMatches, replaceMatches
-// • Planning: createReplacementPlan, validateReplacement, estimateImpact
-// • Execution: executeReplacement, rollbackReplacement, previewReplacement
-// • Reporting: generateReport, createSummary, exportResults
+// @DOC_START
+// # @Replacement Engine
+// Find-and-replace with planning, execution, and reporting.
+//
+// ## Overview
+// Import for find/replace with options (collection, type, property, exact, caseSensitive, dryRun, batchSize), planning (createReplacementPlan, validateReplacement, estimateImpact), execution (executeReplacement, rollbackReplacement, previewReplacement), and reporting (generateReport, createSummary, exportResults). No configuration; use via @import.
+//
+// ## Exported functions (examples)
+// - **Find & Replace:** findAndReplace, batchReplace, findMatches, replaceMatches
+// - **Planning:** createReplacementPlan, validateReplacement, estimateImpact
+// - **Execution:** executeReplacement, rollbackReplacement, previewReplacement
+// - **Reporting:** generateReport, createSummary, exportResults
+// @DOC_END
 
 // ============================================================================
 // TYPE DEFINITIONS

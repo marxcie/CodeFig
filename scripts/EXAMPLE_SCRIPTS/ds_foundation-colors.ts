@@ -1,5 +1,17 @@
 // DS Foundation: Colors
-// Create and update color system variables programmatically
+// @DOC_START
+// # DS Foundation: Colors
+// Create and update color system variables programmatically.
+//
+// ## Overview
+// Defines a color variable collection with light/dark (or other) modes. Config holds hex values per mode; the script creates variables (e.g. primary/50, primary/500, secondary, accent) from that config.
+//
+// ## Config options
+// - **collectionName** / **structure.variableCollection** – Collection name.
+// - **structure.variableGroup** – Optional group path.
+// - **config** – Per-mode (e.g. light, dark) color values: primary, primaryLight, primaryDark, secondary, accent, background, surface, text, textMuted.
+// - **variables** – Map of variable names to { type: "COLOR", values: { modeName: function(config) => hex } }.
+// @DOC_END
 
 // Import functions from libraries
 @import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
@@ -16,6 +28,7 @@ function variableNamePrefix(group) {
 
 // Use existing config if already defined, otherwise use default
 var colorConfig = typeof colorConfig !== 'undefined' ? colorConfig : {
+  // @CONFIG_START
   collectionName: "Colors",
   structure: {
     variableCollection: "Colors",
@@ -55,6 +68,8 @@ var colorConfig = typeof colorConfig !== 'undefined' ? colorConfig : {
       textMuted: "#9ca3af"
     }
   },
+  
+  // @CONFIG_END
   
   // Variables to be created in Figma
   variables: {

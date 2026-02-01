@@ -1,10 +1,23 @@
 // Create Annotations from Comments
-// Converts comments from a Figma file into Figma annotations. Creates invisible anchor frames at comment locations and attaches annotations to them.
+// @DOC_START
+// # Create Annotations from Comments
+// Converts file comments into Figma annotations and optional invisible anchor frames.
+//
+// ## Overview
+// Uses the Figma REST API to read comments, then creates annotations (and optionally anchor frames) at comment positions. Requires a Figma Personal Access Token and a file key or URL.
+//
+// ## Config options
+// - **TOKEN_STORAGE_KEY** – Client storage key for the Personal Access Token.
+// - **FILE_KEY_OR_URL** – Figma file key or file URL; leave empty to use stored key or be prompted.
+// - **ANNOTATION_ANCHORS** – If true, creates invisible anchor frames at comment locations.
+// - **INCLUDE_RESOLVED_COMMENTS** – If true, resolved comments are included; default false.
+// @DOC_END
 
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
 
+// @CONFIG_START
 // Personal Access Token for Figma REST API (stored securely in client storage)
 var TOKEN_STORAGE_KEY = "figma_personal_access_token";
 
@@ -23,6 +36,7 @@ var ANNOTATION_ANCHORS = true;
 // INCLUDE_RESOLVED_COMMENTS: Whether to include resolved comments in annotations
 // Default is false - only unresolved comments will be converted to annotations
 var INCLUDE_RESOLVED_COMMENTS = false;
+// @CONFIG_END
 
 // ============================================================================
 // MAIN ENTRY POINT

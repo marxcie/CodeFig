@@ -1,5 +1,11 @@
 // Remove auto layout recursively
-// Removes auto layout from selected nodes and all children
+// @DOC_START
+// # Remove auto layout recursively
+// Turns off auto layout on selected nodes and all descendants.
+//
+// ## Overview
+// Sets layoutMode to NONE on each selected node and every child that has a layout mode. No configuration; run on selection.
+// @DOC_END
 
 function removeAutoLayout(node) {
   if ("layoutMode" in node && node.layoutMode !== "NONE") {

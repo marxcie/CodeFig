@@ -1,17 +1,18 @@
 // @Core Library
-// Comprehensive collection of reusable Figma operations and utilities
-// 
-// 📚 IMPORT THESE FUNCTIONS IN YOUR SCRIPTS:
-// @import { getAllStyles, traverseNodes, generateScale, processWithOptimization } from "@Core Library"
+// @DOC_START
+// # @Core Library
+// Reusable Figma operations and utilities for nodes, styles, patterns, memory, and colors.
 //
-// 🎯 AVAILABLE FUNCTIONS:
-// • Node Operations: traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone, setupAutoLayout, applyNamingConvention, createComponentFromSelection
-// • Style Operations: getAllStyles, buildStyleCache, replaceStylesByPattern, getStyleByName  
-// • Pattern Matching: replaceByPattern
-// • Memory Optimization: processWithOptimization, estimateNodeCount, showProgress, cleanupMemory
-// • Colors: hexToRgb, rgbToHex
-// • Utilities: log, timeOperation, unique, analyzeSelection
-
+// ## Overview
+// Import functions into your scripts for node traversal, style listing/replacement, pattern-based rename, progress/memory handling, and color conversion. No configuration; use via @import.
+//
+// ## Exported functions
+// - **Node:** traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone, setupAutoLayout, applyNamingConvention, createComponentFromSelection
+// - **Styles:** getAllStyles, buildStyleCache, replaceStylesByPattern, getStyleByName, replaceByPattern
+// - **Memory:** processWithOptimization, estimateNodeCount, showProgress, cleanupMemory
+// - **Colors:** hexToRgb, rgbToHex
+// - **Utilities:** log, timeOperation, unique, analyzeSelection
+// @DOC_END
 
 // === NODE UTILITIES ===
 function findByName(name, parent) {

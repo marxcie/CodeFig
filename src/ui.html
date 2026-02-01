@@ -4,11 +4,46 @@
     <meta charset="utf-8" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/default.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/midnight.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
     <style>
       * { box-sizing: border-box; }
-      body { margin: 0; padding: 0; font: 12px system-ui; height: 100vh; display: flex; }
+      
+      :root {
+        color-scheme: light dark;
+        --bg-primary: #fff;
+        --bg-secondary: #fafafa;
+        --bg-tertiary: #f5f5f7;
+        --text-primary: #1d1d1f;
+        --text-secondary: #86868b;
+        --text-muted: #666;
+        --border-color: #e1e5e9;
+        --border-light: #e6e6e6;
+        --hover-bg: #fafafa;
+        --active-bg: #3b7bef;
+        --code-bg: #f5f5f7;
+        --input-bg: #fff;
+      }
+      
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-primary: #2c2c2c;
+          --bg-secondary: #252525;
+          --bg-tertiary: #1e1e1e;
+          --text-primary: #f5f5f7;
+          --text-secondary: #a1a1a6;
+          --text-muted: #86868b;
+          --border-color: #424245;
+          --border-light: #424245;
+          --hover-bg: #363638;
+          --active-bg: #0a84ff;
+          --code-bg: #363638;
+          --input-bg: #2c2c2c;
+        }
+      }
+      
+      body { margin: 0; padding: 0; font: 12px system-ui; height: 100vh; display: flex; background: var(--bg-primary); color: var(--text-primary); }
       
       /* Resizable container */
       .resizable-container {
@@ -98,7 +133,7 @@
         width: 240px; 
         min-width: 200px;
         max-width: 400px;
-        background: #fff; 
+        background: var(--bg-primary); 
         display: flex; 
         flex-direction: column;
         overflow: hidden;
@@ -106,8 +141,8 @@
       
       .sidebar-header { 
         padding: 0px;
-        border-bottom: 1px solid #e6e6e6; 
-        background: #fff;
+        border-bottom: 1px solid var(--border-light); 
+        background: var(--bg-primary);
       }
       
       .search-container {
@@ -124,11 +159,12 @@
         outline: none;
         transition: all 0.2s ease;
         border: none;
+        background: var(--input-bg);
+        color: var(--text-primary);
       }
       
-      
       .search-input::placeholder {
-        color: #000;
+        color: var(--text-primary);
         opacity: 0.5;
         font-weight: 600;
       }
@@ -174,8 +210,8 @@
       
       .plugin-footer {
         padding: 12px 20px;
-        border-top: 1px solid #e6e6e6;
-        background: #fff;
+        border-top: 1px solid var(--border-light);
+        background: var(--bg-primary);
         display: flex;
         flex-direction: row;
         gap: 12px;
@@ -212,7 +248,7 @@
       
       .script-list .divider {
         height: 1px;
-        background: #e5e5e5;
+        background: var(--border-light);
       }
 
       /* Script list structure */
@@ -228,7 +264,7 @@
         padding: 12px 20px 6px 20px;
         font: 9px system-ui;
         font-weight: 600;
-        color: #808080;
+        color: var(--text-secondary);
         /* letter-spacing: -0.22px; */
         background: transparent;
       }
@@ -249,11 +285,11 @@
       }
       
       .section-header.example-scripts:hover, .section-header.user-scripts:hover {
-        color: #8a8a8a;
+        color: var(--text-primary);
       }
       
       .section-header.selected {
-        background: #FAFAFA;
+        background: var(--hover-bg);
       }
       
       .section-header.hidden {
@@ -301,7 +337,7 @@
         font: 11px system-ui;
         font-weight: 500;
         /* text-transform: uppercase; */
-        color: #6D6D6D;
+        color: var(--text-muted);
         padding: 12px 20px 8px 20px;
         cursor: pointer;
         display: flex;
@@ -312,19 +348,19 @@
       }
       
       .group-header.selected {
-        background: #FAFAFA;
+        background: var(--hover-bg);
       }
       
       .script-group.selected {
-        background: #FAFAFA;
+        background: var(--hover-bg);
       }
       
       .script-group.selected .group-content {
-        background: #FAFAFA;
+        background: var(--hover-bg);
       }
       
       .group-header:hover {
-        color: #8a8a8a;
+        color: var(--text-secondary);
       }
       
       .group-content {
@@ -370,7 +406,7 @@
       }
       
       .section-content.selected {
-        background: #FAFAFA;
+        background: var(--hover-bg);
       }
       
       .script-item { 
@@ -380,12 +416,12 @@
         align-items: center;
         font: 11px system-ui;
         font-weight: 400;
-        color: #000;
+        color: var(--text-primary);
         /* letter-spacing: -0.22px; */
       }
       
-      .script-item:hover { background: #FAFAFA; }
-      .script-item.active { background: #3b7bef; color: #fff; }
+      .script-item:hover { background: var(--hover-bg); }
+      .script-item.active { background: var(--active-bg); color: #fff; }
       
       /* System scripts indentation to match grouped scripts */
       .script-item.system-script {
@@ -399,7 +435,7 @@
       .no-results {
         padding: 20px 12px;
         text-align: center;
-        color: #86868b;
+        color: var(--text-secondary);
         font: 12px system-ui;
         font-style: italic;
       }
@@ -416,8 +452,8 @@
       
       .editor-header { 
         padding: 12px 16px 12px 24px; 
-        background: #fff; 
-        border-bottom: 1px solid #e1e5e9; 
+        background: var(--bg-primary); 
+        border-bottom: 1px solid var(--border-color); 
         display: flex; 
         align-items: center; 
         justify-content: space-between;
@@ -434,7 +470,7 @@
       .script-title { 
         font-size: 14px; 
         font-weight: 600; 
-        color: #1d1d1f;
+        color: var(--text-primary);
         padding: 4px 8px;
         border-radius: 4px;
         transition: background-color 0.2s ease;
@@ -446,7 +482,7 @@
       }
       
       .script-title.editable:hover {
-        background-color: #f0f0f0;
+        background-color: var(--hover-bg);
       }
       
       .script-title.editing {
@@ -458,8 +494,8 @@
       
       .script-status { 
         font-size: 11px; 
-        color: #86868b; 
-        background: #f5f5f7; 
+        color: var(--text-secondary); 
+        background: var(--bg-tertiary); 
         padding: 2px 8px; 
         border-radius: 12px;
       }
@@ -468,6 +504,44 @@
         display: flex;
         align-items: center;
         gap: 12px;
+      }
+      
+      /* Editor tabs - shown when script has @DOC_START or @CONFIG_START */
+      .editor-tabs {
+        display: none;
+        flex-direction: row;
+        gap: 0;
+        padding: 0 16px 0 24px;
+        background: var(--bg-primary);
+        border-bottom: 1px solid var(--border-color);
+        min-height: 36px;
+        align-items: center;
+      }
+      
+      .editor-tabs.visible {
+        display: flex;
+      }
+      
+      .editor-tab {
+        padding: 8px 14px;
+        font: 11px system-ui;
+        font-weight: 500;
+        color: var(--text-secondary);
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        margin-bottom: -1px;
+        transition: color 0.2s ease, border-color 0.2s ease;
+      }
+      
+      .editor-tab:hover {
+        color: var(--text-primary);
+      }
+      
+      .editor-tab.active {
+        color: #007AFF;
+        border-bottom-color: #007AFF;
       }
       
       .editor-container { 
@@ -479,12 +553,50 @@
         flex-direction: column;
       }
       
+      .tab-content {
+        display: none;
+        flex: 1;
+        overflow: hidden;
+        flex-direction: column;
+        height: 100%;
+      }
+      
+      .tab-content.active {
+        display: flex;
+      }
+      
+      .tab-content .CodeMirror {
+        flex: 1;
+      }
+      
+      .docs-rendered {
+        flex: 1;
+        overflow: auto;
+        padding: 16px 24px;
+        font: 12px system-ui;
+        line-height: 1.5;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+      }
+      
+      .docs-rendered h1 { font-size: 18px; margin: 0 0 12px 0; font-weight: 600; color: var(--text-primary); }
+      .docs-rendered h2 { font-size: 15px; margin: 16px 0 8px 0; font-weight: 600; color: var(--text-primary); }
+      .docs-rendered h3 { font-size: 13px; margin: 12px 0 6px 0; font-weight: 600; color: var(--text-primary); }
+      .docs-rendered p { margin: 0 0 8px 0; color: var(--text-primary); }
+      .docs-rendered ul { margin: 0 0 8px 0; padding-left: 20px; }
+      .docs-rendered li { margin: 2px 0; color: var(--text-primary); }
+      .docs-rendered code { background: var(--code-bg); color: var(--text-primary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+      .docs-rendered pre { background: var(--code-bg); color: var(--text-primary); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; font-size: 11px; }
+      .docs-rendered pre code { background: none; padding: 0; color: inherit; }
+      .docs-rendered strong { font-weight: 600; }
+      
       .CodeMirror { 
         height: 100%; 
         width: 100%;
         font-size: 12px; 
         border: none;
-        background: #fff !important;
+        background: var(--bg-primary) !important;
+        color: var(--text-primary);
       }
       
       .CodeMirror-scroll {
@@ -492,12 +604,12 @@
       }
       
       .CodeMirror-gutters {
-        background: #f8f9fa !important;
-        border-right: 1px solid #e1e5e9 !important;
+        background: var(--bg-tertiary) !important;
+        border-right: 1px solid var(--border-color) !important;
       }
       
       .CodeMirror-linenumber {
-        color: #86868b !important;
+        color: var(--text-secondary) !important;
       }
       
       .CodeMirror-cursor {
@@ -505,7 +617,7 @@
       }
       
       .CodeMirror-selected {
-        background: #e8f4fd !important;
+        background: rgba(0, 122, 255, 0.2) !important;
       }
       
       /* === BUTTON STYLES === */
@@ -549,21 +661,20 @@
       
       /* Secondary button (outline) */
       .btn.secondary { 
-        background: #fff; 
-        color: #333; 
-        border-color: #e6e6e6; 
+        background: var(--bg-primary); 
+        color: var(--text-muted); 
+        border-color: var(--border-light); 
       }
       
       .btn.secondary:hover:not(:disabled) { 
-        /* background: #f8f9fa;  */
-        border-color: #333; 
+        border-color: var(--text-primary); 
       }
       
       /* Danger button (outline with red hover) */
       .btn.danger { 
-        background: #fff; 
-        color: #333; 
-        border-color: #e6e6e6; 
+        background: var(--bg-primary); 
+        color: var(--text-muted); 
+        border-color: var(--border-light); 
       }
       
       .btn.danger:hover:not(:disabled) { 
@@ -618,8 +729,8 @@
         right: 0;
         width: 300px;
         height: 100%;
-        background: #FAFAFA;
-        border-left: 1px solid #e6e6e6;
+        background: var(--bg-secondary);
+        border-left: 1px solid var(--border-light);
         transform: translateX(100%);
         transition: transform 0.3s ease;
         z-index: 100;
@@ -991,8 +1102,22 @@
             </div>
           </div>
           
+          <div class="editor-tabs" id="editorTabs">
+            <button class="editor-tab" data-tab="docs" type="button">Documentation</button>
+            <button class="editor-tab" data-tab="config" type="button">Configuration</button>
+            <button class="editor-tab active" data-tab="script" type="button">Script</button>
+          </div>
+          
           <div class="editor-container">
-            <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
+            <div class="tab-content active" id="tabScript">
+              <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
+            </div>
+            <div class="tab-content" id="tabConfig">
+              <textarea id="codeConfig" placeholder="// Configuration section"></textarea>
+            </div>
+            <div class="tab-content" id="tabDocs">
+              <div id="docsRenderer" class="docs-rendered"></div>
+            </div>
             
             <!-- Info Panel -->
             <div class="info-panel" id="infoPanel">
@@ -1073,6 +1198,12 @@
       const scriptTitle = document.getElementById('scriptTitle');
       const scriptStatus = document.getElementById('scriptStatus');
       const codeTextarea = document.getElementById('code');
+      const codeConfigTextarea = document.getElementById('codeConfig');
+      const editorTabsEl = document.getElementById('editorTabs');
+      const tabScriptEl = document.getElementById('tabScript');
+      const tabConfigEl = document.getElementById('tabConfig');
+      const tabDocsEl = document.getElementById('tabDocs');
+      const docsRendererEl = document.getElementById('docsRenderer');
       const newScriptBtn = document.getElementById('newScript');
       const runBtn = document.getElementById('runBtn');
       const deleteBtn = document.getElementById('deleteBtn');
@@ -1091,7 +1222,7 @@
       const resizeHandleBottom = document.getElementById('resizeHandleBottom');
       const resizeHandleCorner = document.getElementById('resizeHandleCorner');
 
-      // Initialize CodeMirror
+      // Initialize CodeMirror (main script editor)
       const code = CodeMirror.fromTextArea(codeTextarea, {
         mode: 'javascript',
         theme: 'default',
@@ -1106,10 +1237,219 @@
         scrollbarStyle: 'native'
       });
 
+      // Initialize CodeMirror for config tab
+      let configEditor = null;
+      if (codeConfigTextarea) {
+        configEditor = CodeMirror.fromTextArea(codeConfigTextarea, {
+          mode: 'javascript',
+          theme: 'default',
+          lineNumbers: true,
+          indentUnit: 2,
+          tabSize: 2,
+          lineWrapping: false,
+          autoCloseBrackets: true,
+          matchBrackets: true,
+          gutters: ['CodeMirror-linenumbers'],
+          scrollbarStyle: 'native'
+        });
+      }
+
+      // Tab state for script sections (docs / config / script)
+      let currentTab = 'script';
+      let scriptHasDocs = false;
+      let scriptHasConfig = false;
+      let parsedSections = null; // { docContent, configContent, preDoc, postDocPreConfig, postConfig } when sections exist
+
+      // Parse script into sections by @DOC_START/@DOC_END and @CONFIG_START/@CONFIG_END
+      function hasSection(code, startMarker) {
+        if (!code || typeof code !== 'string') return false;
+        return code.indexOf('// ' + startMarker) !== -1 || code.indexOf('//' + startMarker) !== -1;
+      }
+
+      function extractSection(code, startMarker, endMarker) {
+        if (!code || typeof code !== 'string') return '';
+        const startPattern = new RegExp('^\\s*//\\s*' + startMarker.replace('@', '\\@') + '\\s*$', 'm');
+        const endPattern = new RegExp('^\\s*//\\s*' + endMarker.replace('@', '\\@') + '\\s*$', 'm');
+        const startMatch = code.match(startPattern);
+        const endMatch = code.match(endPattern);
+        if (!startMatch || !endMatch) return '';
+        const startIdx = code.indexOf(startMatch[0]) + startMatch[0].length;
+        const endIdx = code.indexOf(endMatch[0]);
+        if (startIdx >= endIdx) return '';
+        return code.slice(startIdx, endIdx).replace(/^\s*\n|\n\s*$/g, '');
+      }
+
+      function extractConfigSection(code) {
+        const content = extractSection(code, '@CONFIG_START', '@CONFIG_END');
+        return content.replace(/^\s*\n|\n\s*$/g, '');
+      }
+
+      function extractDocContent(code) {
+        const raw = extractSection(code, '@DOC_START', '@DOC_END');
+        return raw.split('\n').map(line => {
+          const m = line.match(/^\s*\/\/\s?(.*)$/);
+          return m ? m[1] : line;
+        }).join('\n').trim();
+      }
+
+      function nextLineStart(s, i) {
+        const n = s.indexOf('\n', i);
+        return n === -1 ? s.length : n + 1;
+      }
+
+      function parseScriptSections(fullCode) {
+        const hasDocs = hasSection(fullCode, '@DOC_START');
+        const hasConfig = hasSection(fullCode, '@CONFIG_START');
+        if (!hasDocs && !hasConfig) {
+          return { hasDocs: false, hasConfig: false, fullCode: fullCode };
+        }
+        const docContent = hasDocs ? extractDocContent(fullCode) : '';
+        const configContent = hasConfig ? extractConfigSection(fullCode) : '';
+        const docStart = fullCode.indexOf('// @DOC_START');
+        const docEnd = fullCode.indexOf('// @DOC_END');
+        const configStart = fullCode.indexOf('// @CONFIG_START');
+        const configEnd = fullCode.indexOf('// @CONFIG_END');
+        let preDoc = '';
+        let postDocPreConfig = '';
+        let postConfig = '';
+        if (hasConfig && configEnd !== -1) {
+          postConfig = fullCode.slice(nextLineStart(fullCode, configEnd)).replace(/^\s*\n?/, '');
+        }
+        if (hasConfig && !hasDocs && configStart !== -1) {
+          preDoc = fullCode.slice(0, configStart).replace(/\n\s*$/, '');
+        } else if (hasDocs && docStart !== -1 && docEnd !== -1) {
+          preDoc = fullCode.slice(0, docStart).replace(/\n\s*$/, '');
+          if (hasConfig && configStart !== -1) {
+            postDocPreConfig = fullCode.slice(nextLineStart(fullCode, docEnd), configStart).replace(/\n\s*$/g, '').replace(/^\s*\n?/, '');
+          } else {
+            postDocPreConfig = fullCode.slice(nextLineStart(fullCode, docEnd)).replace(/^\s*\n?/, '');
+          }
+        }
+        return {
+          hasDocs,
+          hasConfig,
+          fullCode,
+          docContent,
+          configContent,
+          preDoc,
+          postDocPreConfig,
+          postConfig
+        };
+      }
+
+      function mergeConfigIntoMain() {
+        if (!scriptHasConfig || !configEditor) return;
+        const mainCode = code.getValue();
+        const configContent = configEditor.getValue();
+        const startMarker = '// @CONFIG_START';
+        const endMarker = '// @CONFIG_END';
+        const i = mainCode.indexOf(startMarker);
+        const j = mainCode.indexOf(endMarker);
+        if (i === -1 || j === -1 || j <= i) return;
+        const before = mainCode.slice(0, i + startMarker.length);
+        const after = mainCode.slice(j);
+        const newContent = before + '\n' + configContent.replace(/\n\s*$/, '') + '\n' + after;
+        code.setValue(newContent);
+      }
+
+      function getFullCode() {
+        if (currentTab === 'config' && scriptHasConfig && configEditor) {
+          mergeConfigIntoMain();
+        }
+        return code.getValue();
+      }
+
+      function getEffectiveContentLength() {
+        if (currentTab === 'config' && scriptHasConfig && configEditor) {
+          return (code.getValue().trim().length > 0) || (configEditor.getValue().trim().length > 0);
+        }
+        return code.getValue().trim().length > 0;
+      }
+
+      function reconstructScriptFromSections(sections) {
+        if (!sections.hasConfig && !sections.hasDocs) return sections.fullCode;
+        let out = '';
+        if (sections.preDoc) out += sections.preDoc + '\n\n';
+        if (sections.hasDocs) {
+          out += '// @DOC_START\n';
+          out += (sections.docContent || '').split('\n').map(l => '// ' + (l || '')).join('\n') + '\n';
+          out += '// @DOC_END\n\n';
+        }
+        if (sections.postDocPreConfig) out += sections.postDocPreConfig + '\n\n';
+        if (sections.hasConfig) {
+          out += '// @CONFIG_START\n';
+          out += (sections.configContent || '') + '\n';
+          out += '// @CONFIG_END\n\n';
+        }
+        if (sections.postConfig) out += sections.postConfig;
+        return out;
+      }
+
+      function updateTabVisibility(tabs) {
+        scriptHasDocs = tabs.indexOf('docs') !== -1;
+        scriptHasConfig = tabs.indexOf('config') !== -1;
+        const visible = scriptHasDocs || scriptHasConfig;
+        if (editorTabsEl) editorTabsEl.classList.toggle('visible', visible);
+        [].forEach.call(editorTabsEl ? editorTabsEl.querySelectorAll('.editor-tab') : [], btn => {
+          const t = btn.getAttribute('data-tab');
+          btn.style.display = tabs.indexOf(t) !== -1 ? 'block' : 'none';
+        });
+      }
+
+      function switchTab(tabName) {
+        currentTab = tabName;
+        if (tabScriptEl) tabScriptEl.classList.toggle('active', tabName === 'script');
+        if (tabConfigEl) tabConfigEl.classList.toggle('active', tabName === 'config');
+        if (tabDocsEl) tabDocsEl.classList.toggle('active', tabName === 'docs');
+        [].forEach.call(editorTabsEl ? editorTabsEl.querySelectorAll('.editor-tab') : [], btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+        });
+        if (tabName === 'config' && scriptHasConfig && configEditor) {
+          setTimeout(() => { configEditor.refresh(); configEditor.setSize(null, '100%'); }, 10);
+        }
+        if (tabName === 'script') {
+          if (scriptHasConfig && configEditor) mergeConfigIntoMain();
+          setTimeout(() => { code.refresh(); code.setSize(null, '100%'); }, 10);
+        }
+      }
+
+      function renderSimpleMarkdown(text) {
+        if (!text || !docsRendererEl) return;
+        const escape = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        let html = escape(text)
+          .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+          .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+          .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.+?)\*/g, '<em>$1</em>')
+          .replace(/`([^`]+)`/g, '<code>$1</code>')
+          .replace(/^- (.+)$/gm, '<li>$1</li>')
+          .replace(/(<li>.*?<\/li>\n?)+/g, '<ul>$&</ul>');
+        const blocks = html.split(/\n\n+/);
+        html = blocks.map(block => {
+          const t = block.trim();
+          if (!t) return '';
+          if (t.startsWith('<h') || t.startsWith('<ul')) return t;
+          return '<p>' + t.replace(/\n/g, ' ') + '</p>';
+        }).join('\n');
+        docsRendererEl.innerHTML = html;
+      }
+
+      function applyColorScheme() {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = isDark ? 'midnight' : 'default';
+        code.setOption('theme', theme);
+        if (configEditor) configEditor.setOption('theme', theme);
+      }
+
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyColorScheme);
+
       // Ensure CodeMirror fills the container properly
       setTimeout(() => {
+        applyColorScheme();
         code.refresh();
         code.setSize(null, '100%');
+        if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
         
         // Initialize the app after CodeMirror is ready
         init();
@@ -1381,17 +1721,35 @@
       function selectScriptDirectly(script) {
         debugLog('Selecting script:', script);
         currentScript = script;
+        const fullCode = script.code || '';
         
-        // Ensure CodeMirror is ready before setting value
+        parsedSections = parseScriptSections(fullCode);
+        scriptHasDocs = parsedSections.hasDocs;
+        scriptHasConfig = parsedSections.hasConfig;
+        
+        const tabs = [];
+        if (parsedSections.hasDocs) tabs.push('docs');
+        if (parsedSections.hasConfig) tabs.push('config');
+        tabs.push('script');
+        updateTabVisibility(tabs);
+        
         if (code && code.setValue) {
-          code.setValue(script.code || '');
-          // Use setTimeout to ensure CodeMirror updates properly
+          code.setValue(fullCode);
+          if (scriptHasConfig && configEditor) {
+            configEditor.setValue(parsedSections.configContent || '');
+          }
+          if (scriptHasDocs && docsRendererEl) {
+            renderSimpleMarkdown(parsedSections.docContent || '');
+          }
           setTimeout(() => {
             code.refresh();
             code.setSize(null, '100%');
+            if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
           }, 10);
         }
-        originalCode = script.code || '';
+        currentTab = tabs[0];
+        switchTab(tabs[0]);
+        originalCode = fullCode;
         
         // Check if this script uses @InfoPanel
         infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
@@ -1460,7 +1818,7 @@
 
       // Update button states
       function updateButtonStates() {
-        const hasContent = code.getValue().trim().length > 0;
+        const hasContent = !!getEffectiveContentLength();
         const isTemporary = currentScript && currentScript.isTemporary;
         const isPrebuilt = currentScript && (currentScript.type === 'prebuilt' || currentScript.type === 'help');
         const isEmptyTemporary = isTemporary && !hasContent;
@@ -1965,7 +2323,7 @@
           return;
         }
         
-        const scriptCode = code.getValue();
+        const scriptCode = getFullCode();
         debugLog('autoSaveCurrentScript - script code length:', scriptCode.length);
         debugLog('autoSaveCurrentScript - script code preview:', scriptCode.substring(0, 50) + '...');
         
@@ -2091,7 +2449,7 @@
           }
         }
         
-        const scriptCode = code.getValue();
+        const scriptCode = getFullCode();
         
         // Normalize the name if it contains a slash
         const slashMatch = scriptName.match(/^(.+?)\s*\/\s*(.+)$/);
@@ -2123,12 +2481,11 @@
 
       // Debounced autosave function
       function scheduleAutosave() {
-        const currentCode = code.getValue();
-        debugLog('scheduleAutosave called, code length:', currentCode.length);
+        debugLog('scheduleAutosave called');
         debugLog('scheduleAutosave - currentScript:', currentScript ? {name: currentScript.name, type: currentScript.type, isTemporary: currentScript.isTemporary} : 'null');
         
         // Don't schedule autosave for empty scripts
-        if (!currentCode.trim()) {
+        if (!getEffectiveContentLength()) {
           debugLog('scheduleAutosave - skipping: empty script');
           return;
         }
@@ -2157,7 +2514,13 @@
           // For temporary scripts, just clear and reset
           currentScript = null;
           code.setValue('');
+          if (configEditor) configEditor.setValue('');
           originalCode = '';
+          scriptHasDocs = false;
+          scriptHasConfig = false;
+          updateTabVisibility(['script']);
+          currentTab = 'script';
+          switchTab('script');
           scriptTitle.textContent = 'Select a script';
           scriptTitle.classList.remove('editable');
           scriptStatus.textContent = 'Ready';
@@ -2188,10 +2551,16 @@
           // Remove from local array
           allScripts = allScripts.filter(s => s.name !== scriptName);
           
-          // Clear editor
+          // Clear editor and tab state
           currentScript = null;
           code.setValue('');
+          if (configEditor) configEditor.setValue('');
           originalCode = '';
+          scriptHasDocs = false;
+          scriptHasConfig = false;
+          updateTabVisibility(['script']);
+          currentTab = 'script';
+          switchTab('script');
           scriptTitle.textContent = 'Select a script';
           scriptTitle.classList.remove('editable');
           scriptStatus.textContent = 'Ready';
@@ -2510,7 +2879,7 @@
 
       // Run current script
       function runCurrentScript() {
-        let scriptCode = code.getValue();
+        let scriptCode = getFullCode();
         if (scriptCode.trim()) {
           // Process runtime imports before execution
           scriptCode = processRuntimeImports(scriptCode);
@@ -2524,7 +2893,7 @@
         
         const scriptData = {
           name: currentScript.name,
-          code: code.getValue(),
+          code: getFullCode(),
           type: currentScript.type
         };
         
@@ -2640,6 +3009,7 @@
         setTimeout(() => {
           code.refresh();
           code.setSize(null, '100%');
+          if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
         }, 0);
       }
 
@@ -2653,6 +3023,7 @@
         setTimeout(() => {
           code.refresh();
           code.setSize(null, '100%');
+          if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
         }, 0);
       }
 
@@ -3003,12 +3374,22 @@
       infoPanelBtn.addEventListener('click', toggleInfoPanel);
       exportAllBtn.addEventListener('click', exportAllUserScripts);
 
+      // Editor tab clicks
+      if (editorTabsEl) {
+        editorTabsEl.addEventListener('click', (e) => {
+          const tab = e.target.closest('.editor-tab');
+          if (tab && tab.getAttribute('data-tab')) {
+            switchTab(tab.getAttribute('data-tab'));
+          }
+        });
+      }
+
       // Search functionality
       searchInput.addEventListener('input', (e) => {
         updateScriptList(e.target.value);
       });
 
-      // Code change detection
+      // Code change detection (main script editor)
       code.on('change', () => {
         debugLog('Code change detected');
         updateButtonStates();
@@ -3022,6 +3403,14 @@
           updateInfoPanelButtonVisibility();
         }
       });
+
+      // Config editor change (when script has config tab)
+      if (configEditor) {
+        configEditor.on('change', () => {
+          updateButtonStates();
+          scheduleAutosave();
+        });
+      }
 
       // Message handling
         window.onmessage = (event) => {
@@ -3073,7 +3462,7 @@
             // Immediately add/update the script in allScripts so it's available for import
             if (msg.scriptData) {
               // Get the current code from the editor if scriptData doesn't have it
-              const scriptCode = msg.scriptData.code || (currentScript && currentScript.code) || code.getValue() || '';
+              const scriptCode = msg.scriptData.code || (currentScript && currentScript.code) || getFullCode() || '';
               
               const existingIndex = allScripts.findIndex(s => s.name === msg.scriptData.name && s.type === 'user');
               if (existingIndex >= 0) {

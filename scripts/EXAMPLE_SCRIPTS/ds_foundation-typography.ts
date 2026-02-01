@@ -1,5 +1,23 @@
 // DS Foundation: Typography
-// Advanced responsive typography system with fluid scaling and style generation
+// @DOC_START
+// # DS Foundation: Typography
+// Advanced responsive typography system with fluid scaling and style generation.
+//
+// ## Overview
+// Creates typography variables and optional text styles with fluid scaling across desktop, tablet, and mobile.
+// Configure font family, weights, scale steps, and min/max sizes per viewport.
+//
+// ## Config options (Configuration tab)
+// - **fontFamily** – Font family name (e.g. Inter).
+// - **fontWeights** – Map of weight names to numeric values (e.g. regular: 400, semibold: 600).
+// - **structure.variableCollection** – Name of the variable collection.
+// - **structure.variableGroup** – Optional group path within the collection.
+// - **fontScale** – Array of scale step names (e.g. 3xs … 9xl).
+// - **fontSizes** – Per viewport (desktop, tablet, mobile): baseFont, minFont, maxFont (level, size, lineHeight, letterSpacing, force).
+// - **styles.createAndUpdateStyles** – If true, creates/updates text styles.
+// - **styles.styleNaming** – Naming template for styles (e.g. {$fontScale}/{$fontWeight}).
+// - **scalingMethod** – "additive" or "multiplicative" for fluid scaling.
+// @DOC_END
 
 // Import functions from libraries
 @import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
@@ -8,9 +26,9 @@
 // ADVANCED TYPOGRAPHY SYSTEM CONFIGURATION
 // ========================================
 
-// Configuration values (NOT added as variables)
-// Use existing config if already defined, otherwise use default
 var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typographyConfigData : {
+  // @CONFIG_START
+  // Configuration values (NOT added as variables)
   fontFamily: "Inter",
   fontWeights: {
     regular: 400,
@@ -92,6 +110,7 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
     styleNaming: "{$fontScale}/{$fontWeight}"
   },
   scalingMethod: "multiplicative" // Options: "additive" (current) or "multiplicative"
+  // @CONFIG_END
 };
 
 // Create the main configuration object that the execution section expects

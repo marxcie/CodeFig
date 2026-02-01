@@ -1,5 +1,23 @@
 // Font Scale Calculator
-// Simple script using @Variables library, calculates font sizes based on scale ratios and base values
+// @DOC_START
+// # Font Scale Calculator
+// Calculates and optionally applies font scale values from a base and ratio.
+//
+// ## Overview
+// Uses a target collection and variable names, base value, scale type (linear, exponential, etc.), and easing to compute font sizes. Can preview in InfoPanel or update variables. Uses @Variables, @Math Helpers, @InfoPanel.
+//
+// ## Config options (CONFIG object)
+// - **targetCollection** – Variable collection name.
+// - **targetVariables** – Array of variable names (e.g. xs, sm, md, lg, xl).
+// - **baseVariable** / **baseValue** – Base step and pixel value.
+// - **scaleType** – "linear", "exponential", "sine", "cubic", "quint", "goldenRatio".
+// - **scaleRatio** – Numeric ratio for the scale.
+// - **easing** – "none", "easeIn", "easeOut", "easeInOut", "easeOutIn".
+// - **modes** – Mode names (e.g. desktop, tablet, mobile).
+// - **modeBaseValues** – Optional per-mode base values.
+// - **previewMode** – If true, show in InfoPanel only; if false, update variables.
+// - **showDetailedLogs** – If true, log detailed output.
+// @DOC_END
 
 console.log('📏 Font Scale Calculator');
 console.log('========================');
@@ -13,6 +31,7 @@ console.log('========================');
 // CONFIGURATION
 // ============================================================================
 
+// @CONFIG_START
 var CONFIG = {
   // Target collection and variables
   targetCollection: "Typography Collection 1",
@@ -41,6 +60,7 @@ var CONFIG = {
   previewMode: false, // true = show preview in InfoPanel, false = update variables
   showDetailedLogs: true
 };
+// @CONFIG_END
 
 // ============================================================================
 // CALCULATION FUNCTIONS

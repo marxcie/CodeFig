@@ -1,8 +1,21 @@
 // Duplicate variable collection
+// @DOC_START
+// # Duplicate variable collection
+// Clones a local variable collection (modes, variables, values, descriptions, scopes).
+//
+// ## Overview
+// Finds a collection by name, creates a new collection with the given new name, copies all modes and variables with their values and metadata. No recursive option; run once per copy.
+//
+// ## Config options
+// - **sourceCollectionName** – Exact name of the collection to duplicate.
+// - **newCollectionName** – Name for the new collection.
+// @DOC_END
 
+// @CONFIG_START
 // Configuration - Change these values as needed
 var sourceCollectionName = 'website V3';
 var newCollectionName = 'website V4';
+// @CONFIG_END
 
 function duplicateVariableCollection(collection, newName) {
   var newCollection = figma.variables.createVariableCollection(newName || collection.name + ' Copy');

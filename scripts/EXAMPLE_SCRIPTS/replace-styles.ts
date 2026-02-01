@@ -1,6 +1,14 @@
 // Replace Styles
-// Handles text, color, and effect styles with partial matching
-// Can be used as standalone script or imported by other scripts
+// @DOC_START
+// # Replace Styles
+// Replaces style bindings on nodes by matching style names to patterns.
+//
+// ## Overview
+// Uses STYLE_REPLACEMENTS (or overrides when imported): each entry has "from" and "to" for partial matching on style names. Scans selection, finds matching styles, and rebinds nodes to the replacement style. Supports text, paint, and effect styles. Can be run standalone or imported.
+//
+// ## Config options
+// - **STYLE_REPLACEMENTS** – Array of { from: string, to: string }. "from" is matched partially in style names (e.g. "500" matches "Primary/500"). Use multiple entries for several replacements.
+// @DOC_END
 
 // Import memory management utilities and library functions
 @import { processWithOptimization, cleanupMemory, traverseNodes, getAllStyles } from "@Core Library"
@@ -61,6 +69,7 @@ if (typeof matchPattern === 'undefined') {
   };
 }
 
+// @CONFIG_START
 // Default configuration - can be overridden by importing scripts
 var STYLE_REPLACEMENTS = typeof STYLE_REPLACEMENTS !== 'undefined' ? STYLE_REPLACEMENTS : [
   {
@@ -81,6 +90,7 @@ var STYLE_REPLACEMENTS = typeof STYLE_REPLACEMENTS !== 'undefined' ? STYLE_REPLA
   }
 ];
 
+// @CONFIG_END
 var SELECTION_ONLY = typeof SELECTION_ONLY !== 'undefined' ? SELECTION_ONLY : true;
 
 // Helper function to collect all nodes using library function

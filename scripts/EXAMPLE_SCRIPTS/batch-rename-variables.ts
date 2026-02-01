@@ -1,5 +1,19 @@
 // Batch Rename Variables
-// Rename variables in a collection with flexible naming patterns
+// @DOC_START
+// # Batch Rename Variables
+// Rename variables in a collection using pattern-based naming.
+//
+// ## Overview
+// Targets a variable collection (and optional group), filters by name pattern or list, and renames variables according to a template. Supports placeholders: {currentName}, {numberAscending}, {numberDescending}.
+//
+// ## Config options (Configuration tab)
+// - **collectionName** – Exact name of the variable collection.
+// - **groupFilter** – Group path filter ("" or "/" for root, or e.g. "colors/pine").
+// - **variableNames** – "*" for all, or array of specific names.
+// - **renamePrefix** / **renameSuffix** – String parts for the new name.
+// - **renameSequence** / **renameStartNumber** – Step and start for number placeholders.
+// - **renamePattern** – Template string using placeholders and the variables above.
+// @DOC_END
 
 @import { getAllCollections, getCollection, getCollectionVariables, getVariable } from "@Variables"
 
@@ -7,6 +21,7 @@
 // CONFIGURATION
 // ============================================================================
 
+// @CONFIG_START
 // Collection to target (exact name match)
 var collectionName = "colors / pine";
 
@@ -35,6 +50,7 @@ var renameStartNumber = 0;
 var renamePattern = renamePrefix + "-" + "{currentName}" + "-" + renameSuffix;
 // var renamePattern = renamePrefix + "-" + "{numberAscending}";
 // var renamePattern = renamePrefix + "-" + "{numberDescending}" + "-" + renameSuffix;
+// @CONFIG_END
 
 // ============================================================================
 // HELPER FUNCTIONS

@@ -1,6 +1,11 @@
 // Create Styles from Text Nodes
-// Creates text styles from selected text nodes, preserving variable bindings (if any)
-// Uses layer name as style name
+// @DOC_START
+// # Create Styles from Text Nodes
+// Creates local text styles from selected text nodes and keeps variable bindings.
+//
+// ## Overview
+// Reads typography (font, size, weight, line height, etc.) and variable bindings from each selected text node, then creates or updates a local text style using the layer name. No configuration; run on selection.
+// @DOC_END
 
 // ============================================================================
 // HELPER FUNCTIONS

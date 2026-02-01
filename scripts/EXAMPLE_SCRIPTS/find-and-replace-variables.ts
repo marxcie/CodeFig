@@ -1,7 +1,19 @@
 // Find and replace variables
-// This script replaces variable bindings based on text patterns in variable names
-// Uses library import capabilities for comprehensive variable replacement
+// @DOC_START
+// # Find and replace variables
+// Replaces variable bindings on nodes by matching variable names to patterns.
+//
+// ## Overview
+// Scans selection (or page) for variable bindings, matches variable names to search pattern(s), and rebinds to the replacement variable(s). Supports single pattern, multiple patterns to one replacement, wildcard (*), and batch replacements. Optional collection filters.
+//
+// ## Config options
+// - **fromCollection** / **toCollection** – Optional collection name filters; leave empty for all.
+// - **searchPattern** – String, array of strings, or "*" for wildcard.
+// - **replacePattern** – Replacement string or "*" (keep name when swapping collection).
+// - **batchReplacements** – Optional array of { searchPattern, replacePattern } for multiple operations.
+// @DOC_END
 
+// @CONFIG_START
 // Configuration options
 
 // Collection filtering (leave empty to search all collections)
@@ -31,6 +43,7 @@ var replacePattern = 'Typography/2xl';
 //     replacePattern: 'Typography/3xl'
 //   }
 // ];
+// @CONFIG_END
 
 // Helper function to escape special regex characters
 function escapeRegExp(string) {

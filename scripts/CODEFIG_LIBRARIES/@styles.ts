@@ -1,15 +1,17 @@
 // @Styles
-// Comprehensive collection of style operations and analysis functions
-// 
-// 📚 IMPORT THESE FUNCTIONS IN YOUR SCRIPTS:
-// @import { findStyles, replaceStyles, analyzeStyles, getStyleById } from "@Styles"
-// 
-// 🎯 AVAILABLE FUNCTIONS:
-// • Style Finding: findStyles, findStylesByPattern, getStyleById, findStylesInCollection
-// • Style Analysis: analyzeStyles, categorizeStyle, getStyleProperties
-// • Style Replacement: replaceStyles, applyStyleToNode, validateStyleMatch
-// • Style Operations: createStylePreview, getStyleUsage, getStyleHierarchy
- 
+// @DOC_START
+// # @Styles
+// Style finding, analysis, replacement, and operations.
+//
+// ## Overview
+// Import to search styles by pattern/collection/type (findStyles, findStylesByPattern, getStyleById), analyze and categorize (analyzeStyles, categorizeStyle, getStyleProperties), replace on nodes (replaceStyles, applyStyleToNode, validateStyleMatch), and inspect usage (createStylePreview, getStyleUsage, getStyleHierarchy). No configuration; use via @import.
+//
+// ## Exported functions (examples)
+// - **Finding:** findStyles, findStylesByPattern, getStyleById, findStylesInCollection
+// - **Analysis:** analyzeStyles, categorizeStyle, getStyleProperties
+// - **Replacement:** replaceStyles, applyStyleToNode, validateStyleMatch
+// - **Operations:** createStylePreview, getStyleUsage, getStyleHierarchy
+// @DOC_END
 
 // ============================================================================
 // TYPE DEFINITIONS

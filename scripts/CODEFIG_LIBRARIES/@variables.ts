@@ -1,5 +1,16 @@
 // @Variables
-// Provides functions for manipulating Figma variables, collections, and modes
+// @DOC_START
+// # @Variables
+// Functions for Figma variables, collections, and modes.
+//
+// ## Overview
+// Import to get/create collections, get/set variables by name or mode, list variables, and run batch operations (e.g. getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables). No configuration; use via @import.
+//
+// ## Exported functions (examples)
+// - **Collections:** getAllCollections, getCollection, getOrCreateCollection, setupModes
+// - **Variables:** getVariable, getCollectionVariables, getVariableValue, setVariableValue, createOrUpdateVariable
+// - **Batch:** extractModes, processVariables
+// @DOC_END
 
 console.log('📚 @Variables - Core Variable Management Library');
 

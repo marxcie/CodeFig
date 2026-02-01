@@ -1,4 +1,18 @@
 // Scale or resize elements
+// @DOC_START
+// # Scale or resize elements
+// Scale or resize selected elements with uniform or independent dimensions, optional aspect ratio, and random ranges.
+//
+// ## Overview
+// Applies either **scale** (transform; content scales) or **resize** (change size only) to each selected node. Use one set of parameters: uniform factor, X/Y factors, width/height, or single dimension with aspect ratio.
+//
+// ## Config options (Configuration tab)
+// - **method** – "scale" or "resize".
+// - **scaledFactor** – Uniform scale (number or { min, max } for per-element random).
+// - **scaledFactorX** / **scaledFactorY** – Per-axis scale factors.
+// - **scaledWidth** / **scaledHeight** – Target dimensions in px (number or { min, max }).
+// - **aspectRatio** – Target ratio, e.g. "16:9", "1:1"; use with one dimension or one factor.
+// @DOC_END
 
 // CONFIGURATION OPTIONS
 // Choose your scaling method and parameters below. Uncomment the options you want to use.
@@ -31,6 +45,7 @@
 // scaledHeight = Target height in pixels (number or { min, max })
 // aspectRatio = Target aspect ratio (e.g., "3:4", "16:9", "1:1") - scales to this ratio
 
+// @CONFIG_START
 var method = "scale";
 var scaledFactor = 0.8;
 // var scaledFactorX = 0.8;
@@ -42,6 +57,7 @@ var scaledFactor = 0.8;
 // Examples with random ranges:
 // var scaledFactor = { min: 0.5, max: 1.5 }; // Each element gets a random scale between 0.5x and 1.5x
 // var scaledWidth = { min: 200, max: 500 }; // Each element gets a random width between 200px and 500px
+// @CONFIG_END
 
 // Random range helper function
 function random(min, max) {

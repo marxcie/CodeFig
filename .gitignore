@@ -25,6 +25,7 @@ figma-console.log
 
 # BETA files
 scripts/_DEBUG_SCRIPTS/*
+scripts/_WIP_SCRIPTS/*
 scripts/_LEGACY_SCRIPTS/*
 scripts/EXAMPLE_SCRIPTS/*.bak*
 scripts/EXAMPLE_SCRIPTS/*.temp*

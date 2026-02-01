@@ -1,5 +1,11 @@
 // Auto layout all selected
-// Wraps each selected node in its own auto layout frame
+// @DOC_START
+// # Auto layout all selected
+// Wraps each selected node in its own auto layout frame.
+//
+// ## Overview
+// For every selected node, creates a new horizontal auto layout frame, places it at the same position and size as the node, then moves the node inside the frame. No configuration; run on selection.
+// @DOC_END
 
 figma.currentPage.selection.forEach(function(node) {
   if (!("x" in node && "y" in node && "width" in node && "height" in node)) return;

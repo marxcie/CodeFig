@@ -1,7 +1,18 @@
 // Replace Variables Workflow
-// Interactive script to replace variables - useful when you can visually identify broken ones
+// @DOC_START
+// # Replace Variables Workflow
+// Interactive or batch workflow to find variable usage and replace bindings.
+//
+// ## Overview
+// Discovers variable usage in selection (or page), shows results in the InfoPanel with replacement suggestions. In interactive mode you review and act; in batch mode replacements are applied from BATCH_REPLACEMENTS. Uses @InfoPanel for display.
+//
+// ## Config options
+// - **REPLACEMENT_MODE** – "interactive" (review in InfoPanel) or "batch" (apply BATCH_REPLACEMENTS).
+// - **BATCH_REPLACEMENTS** – Array of { from: 'variable-name', to: 'new-variable-name' } for batch mode.
+// @DOC_END
 // @import { displayResults, createResult, createSelectableResult, createHtmlResult } from "@InfoPanel"
 
+// @CONFIG_START
 // ===== CONFIGURATION =====
 var REPLACEMENT_MODE = 'interactive'; // 'interactive' or 'batch'
 
@@ -10,6 +21,7 @@ var BATCH_REPLACEMENTS = [
   // { from: 'old-variable-name', to: 'new-variable-name' },
   // { from: 'Typography/4xl/font-size', to: 'Typography/3xl/font-size' }
 ];
+// @CONFIG_END
 
 // ===== UTILITY FUNCTIONS =====
 

@@ -1,4 +1,16 @@
 // @InfoPanel
+// @DOC_START
+// # @InfoPanel
+// Display script results in the plugin InfoPanel with grouping and filtering.
+//
+// ## Overview
+// Import to show results (displayResults), create result items (createResult, createSelectableResult, createHtmlResult), and configure grouping. Used by scripts that report variable usage, font scales, etc. No configuration; use via @import.
+//
+// ## Exported functions (examples)
+// - **Display:** displayResults(data) – data: { title, results, type, grouping, showFilters }
+// - **Result builders:** createResult, createSelectableResult, createHtmlResult
+// - **Grouping:** createGrouping, groupResults
+// @DOC_END
 var shared = true;
 
 /**

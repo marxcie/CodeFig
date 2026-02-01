@@ -1,15 +1,17 @@
 // @Math Helpers
-// Mathematical utility functions for calculations, interpolations, and number operations
+// @DOC_START
+// # @Math Helpers
+// Math utilities for calculations, interpolations, and number operations.
 //
-// 📚 IMPORT THESE FUNCTIONS IN YOUR SCRIPTS:
-// @import { add, average, roundToNearest, interpolate } from "@Math Helpers"
+// ## Overview
+// Import for basic math, rounding, clamping, geometry (distance, center, bounds), interpolation (linear, exponential, sine, cubic, quint, goldenRatio), and easing (easeIn, easeOut, etc.). Used by font-scale and layout scripts. No configuration; use via @import.
 //
-// 🧮 AVAILABLE FUNCTIONS:
-// • Basic Math: add, multiply, average
-// • Utilities: roundToNearest, clamp, lerp
-// • Geometry: distance, center, bounds
-// • Interpolations: linear, exponential, sine, cubic, quint, goldenRatio
-// • Easing: easeIn, easeOut, easeInOut, easeOutIn
+// ## Exported functions (examples)
+// - **Basic:** add, multiply, average, roundToNearest, clamp, lerp
+// - **Geometry:** distance, center, bounds
+// - **Interpolation:** interpolate, linear, exponential, sine, cubic, quint, goldenRatio
+// - **Easing:** easeIn, easeOut, easeInOut, easeOutIn
+// @DOC_END
 
 console.log('📚 @Math Helpers Library');
 

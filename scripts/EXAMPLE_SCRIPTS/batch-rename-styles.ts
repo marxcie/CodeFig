@@ -1,4 +1,16 @@
 // Batch rename styles
+// @DOC_START
+// # Batch rename styles
+// Rename local styles (paint, text, effect, grid) by search/replace patterns.
+//
+// ## Overview
+// Applies one or more find/replace operations to style names. Choose: single pattern, multiple patterns to one replacement, or a batch list of operations.
+//
+// ## Config options
+// - **searchPattern** – String or array of strings to find in style names.
+// - **replacePattern** – Replacement string.
+// - **batchReplacements** – Optional array of { searchPattern, replacePattern } for multiple operations.
+// @DOC_END
 
 // Import utility functions
 @import { getAllStyles, replaceByPattern } from "@Core Library"
@@ -7,6 +19,7 @@
 // CONFIGURATION - Choose one approach:
 // ========================================
 
+// @CONFIG_START
 // APPROACH 1: Single pattern replacement
 var searchPattern = 'font-';
 var replacePattern = 'text-';
@@ -30,6 +43,7 @@ var replacePattern = 'text-';
 //     replacePattern: 'MD'
 //   }
 // ];
+// @CONFIG_END
 
 // ========================================
 // FUNCTIONS

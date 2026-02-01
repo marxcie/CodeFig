@@ -1,5 +1,11 @@
 // Frame all selected
-// Wraps each selected node in a frame
+// @DOC_START
+// # Frame all selected
+// Wraps each selected node in a new frame.
+//
+// ## Overview
+// For every selected node, creates an empty frame (no auto layout, no fill), places it at the same position and size as the node, then moves the node inside. No configuration; run on selection.
+// @DOC_END
 
 figma.currentPage.selection.forEach(function(node) {
   var parent = node.parent;

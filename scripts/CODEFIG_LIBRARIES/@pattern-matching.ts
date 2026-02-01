@@ -1,13 +1,16 @@
 // @Pattern Matching
-// Advanced pattern matching and wildcard processing for collections and names
-// 📚 IMPORT THESE FUNCTIONS IN YOUR SCRIPTS:
-// @import { matchPattern, compilePattern, filterByCollection, expandWildcards, escapeWildcards } from "@Pattern Matching"
-
-// 🎯 AVAILABLE FUNCTIONS:
-// • Pattern Matching: matchPattern, compilePattern, expandWildcards
-// • Collection Filtering: filterByCollection, getCollections, validateCollection, validateCollection
-// • Wildcard Processing: processWildcards, escapePattern, normalizePattern
-// • Advanced Matching: fuzzyMatch, regexMatch, globMatch, wildcardMatch
+// @DOC_START
+// # @Pattern Matching
+// Pattern matching and wildcard processing for names and collections.
+//
+// ## Overview
+// Import for matching text against patterns (exact, partial, regex, glob, fuzzy), escaping wildcards, filtering by collection, and normalizing patterns. Used by replace-styles and find-and-replace scripts. No configuration; use via @import.
+//
+// ## Exported functions (examples)
+// - **Matching:** matchPattern(text, pattern, options), compilePattern, expandWildcards, escapeWildcards
+// - **Filtering:** filterByCollection, getCollections, validateCollection
+// - **Advanced:** fuzzyMatch, regexMatch, globMatch, wildcardMatch
+// @DOC_END
 
 // ============================================================================
 // TYPE DEFINITIONS
