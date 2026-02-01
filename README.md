@@ -1,184 +1,169 @@
 <div align="center">
   <img src="icon-16x16@512px.png" alt="CodeFig Icon" width="64" height="64">
   <h1>CodeFig</h1>
-  <p><em>A powerful Figma plugin for running TypeScript/JavaScript scripts with advanced variable management capabilities, built for modern design systems and enterprise environments.</em></p>
+  <p><em>A Figma plugin for running TypeScript/JavaScript scripts, with practical examples for layout, styles, variables, and design-system tooling.</em></p>
 </div>
 
-## 🎯 What is CodeFig?
+## What is CodeFig?
 
-**CodeFig** is a script automation plugin for Figma, inspired by the beloved [Scripter plugin](https://www.figma.com/community/plugin/757836922707087381/Scripter) by **@rsms**. While Scripter pioneered script-based Figma automation, CodeFig was built from the ground up to address modern needs like **Figma Variables**, **design systems**, and **enterprise requirements**.
+**CodeFig** is a script runner for Figma, inspired by the [Scripter plugin](https://www.figma.com/community/plugin/757836922707087381/Scripter) by **@rsms**.  
+It comes with a curated set of example scripts covering frame and auto-layout utilities, style and variable batch operations, design-system foundations (grid, color, typography), and small workflow helpers (e.g. annotations from comments).
 
-### Why CodeFig vs Original Scripter?
+Variables are supported as a first-class use case, but CodeFig is intentionally broader than variable tooling.
 
-**Original Scripter** by @rsms is fantastic and pioneered the concept of script-based Figma automation. CodeFig was inspired by this vision but built independently to add capabilities that weren't possible when Scripter was created:
+### Why CodeFig instead of Original Scripter?
 
-- 🆕 **Native Variable Support** - Built-in tools for managing Figma Variables
-- 🏢 **Enterprise-Ready** - No network access required, passes security audits
-- 📘 **TypeScript First** - Full type safety and modern development experience
-- 🎨 **Design System Focus** - Tools specifically for design token workflows
-- 🔄 **Variable Binding Management** - Replace, inspect, and manage variable connections
-- 📋 **Organized Scripts** - Better script management and organization
+**Original Scripter** introduced script-based automation in Figma and remains an excellent minimal tool.  
+CodeFig builds on that idea and focuses on scale, structure, and reuse:
 
-**Use Original Scripter if:** You need a simple, lightweight script runner
-**Use CodeFig if:** You work with Variables, design systems, or enterprise environments
+- **Broader example set** — layout, styles, variables, and design-system scripts
+- **TypeScript support** — scripts with typing and editor assistance
+- **Script organization** — categories, search, import/export
+- **Configurable networking** — optional Comments API and dev console bridge; no-network builds supported
 
-## 🏢 Enterprise-Ready
+## Features
 
-This plugin is designed for enterprise environments and **requires no network access**:
+**Core**
+- TypeScript support
+- Built-in code editor (syntax highlighting, completion)
+- Script categories, search, import/export
+- Keyboard shortcuts
 
-- ✅ **No CDN dependencies** - All assets are bundled locally
-- ✅ **`"networkAccess": "none"`** explicitly set in manifest
-- ✅ **No external API calls** - Everything runs locally
-- ✅ **Offline-first** - Works without internet connection
+**Bundled examples**
+- **Layout & frames:** auto-layout helpers, framing selections, scaling/resizing
+- **Styles:** batch rename, replace, create from nodes, detach
+- **Variables:** find/replace, batch rename, duplicate collections, detach, interactive workflows
+- **Design-system foundations:** grid, colors, typography, font scale utilities
+- **Other:** annotations generated from Figma comments (API-based)
 
-Perfect for companies with strict security policies!
+## Perfect For
 
-## ✨ Features
+Designers and engineers who want repeatable automation for layout, styles, and variables; design-system setup scripts; and the option to run everything without network access.
 
-### 🔧 Core Capabilities
-- **Native TypeScript Support** - Write scripts with full type safety and IntelliSense
-- **Professional Code Editor** - Syntax highlighting, auto-completion, error detection
-- **Script Organization** - Organized into categories with search functionality
-- **Import/Export** - Share individual scripts or entire script libraries
-- **Keyboard Shortcuts** - Efficient workflow with Cmd/Ctrl shortcuts
+## Quick Start
 
-### 🎨 Variable Management (Unique to CodeFig)
-- **Variable Binding Replacement** - Replace variable connections across selections
-- **Pattern-Based Updates** - Update "lg" to "xl" across all connected variables
-- **Collection Management** - Duplicate collections with all metadata intact
-- **Variable Inspection** - Debug and analyze variable connections
-- **Broken Variable Detection** - Find and fix orphaned variables
+1. Install from the Figma Community.
+2. Open the plugin in any file.
+3. Browse the bundled scripts in the sidebar.
+4. Run a script via the Run button or `Cmd/Ctrl + R`.
+5. Create or extend scripts using TypeScript.
 
-### 🏗️ Design System Tools
-- **Style Management** - Rename, replace, and organize styles systematically  
-- **Token Migration** - Migrate design tokens between naming conventions
-- **Bulk Operations** - Apply changes across hundreds of components at once
-- **Auto Layout Tools** - Advanced layout automation scripts
-- **Component Utilities** - Frame, scale, and organize design elements
-
-## 🎯 Perfect For
-
-- **Design System Teams** - Managing large-scale design token migrations
-- **Enterprise Organizations** - Need security compliance and no network access
-- **Advanced Users** - Want TypeScript support and professional tooling
-- **Variable-Heavy Projects** - Extensive use of Figma Variables and design tokens
-- **Teams** - Need to share and collaborate on custom automation scripts
-
-## 🚀 Quick Start
-
-1. **Install** the plugin from the Figma Community
-2. **Open** the plugin in any Figma file
-3. **Explore** pre-built scripts in the sidebar
-4. **Run** any script with the "Run" button or Cmd/Ctrl + R
-5. **Create** your own scripts with full TypeScript support
-
-### Common Workflows
-
-**🔄 Variable Migration Example:**
-```typescript
-// Replace all "lg" variables with "xl" in selection
-const searchPattern = 'lg';
-const replacePattern = 'xl';
-// Script automatically finds and replaces variable bindings
-```
-
-**📋 Style Management Example:**
-```typescript
-// Rename all styles from "V2/" to "V3/"
-const findPrefix = "V2/";
-const replacePrefix = "V3/";
-// Bulk rename across entire design system
-```
-
-**🏗️ Layout Automation Example:**
-```typescript
-// Wrap all selected elements in auto-layout frames
-selection.forEach(node => {
-  // Create frame, position, and configure auto-layout
-});
-```
+**Typical workflows**
+- Variable replacement via `searchPattern` / `replacePattern`
+- Batch renaming styles with pattern rules
+- Applying or removing auto layout across selections
 
 ## Development
 
-**How-to:** `npm install`, then `npm run dev` (builds once, then watches `src/code.ts`, `src/ui.html`, and `scripts/`; also starts the Figma console log server). Reload the plugin in Figma to test. One-off build: `npm run build`.
+**Local setup:**  
+`npm install` → `npm run dev`
 
-**Scripts:**
+- Builds once, then watches `src/code.ts`, `src/ui.html`, and `scripts/`
+- Starts the local console log server
+- Reload the plugin in Figma to test
 
-| Script | Description |
-|--------|-------------|
-| `npm run build` | Full build: validate, compile TypeScript, copy and embed scripts into `dist/`. |
-| `npm run build:scripts` | Only scripts + UI embed (no `tsc`). Use when you changed scripts or `src/ui.html` only. |
-| `npm run build:ui` | Bundle CodeMirror into UI for offline use (writes to repo-root `ui.html`). |
-| `npm run dev` | Build once, then watch code + UI + scripts and run the Figma console log server. |
-| `npm run validate` | Run script validation (syntax, imports, metadata). |
+**One-off build:** `npm run build`
+
+### Scripts
+
+| Command | Description |
+|-------|-------------|
+| `npm run build` | Full build: validate, compile TypeScript, embed scripts into `dist/`. |
+| `npm run build:scripts` | Rebuild scripts + UI embed only (skip `tsc`). |
+| `npm run build:ui` | Bundle CodeMirror into UI for offline/no-network use. |
+| `npm run dev` | Build + watch code, UI, and scripts; start console log server. |
+| `npm run validate` | Validate script syntax, imports, and metadata. |
 | `npm run clean` | Remove `dist/`. |
 
-**Console log:** `dev` appends plugin/script console output to `figma-console.log`. Point Cursor at that file to read errors. For a no-network build, use a manifest without `http://localhost:8765` in `allowedDomains`.
+**Console logging:**  
+During `dev`, plugin and script logs are written to `figma-console.log`. Point Cursor or your editor at that file to inspect errors.  
+For locked-down environments, use a manifest without `http://localhost:8765`.
 
-**Project layout:** `src/` (code.ts, ui.html), `scripts/` (example scripts and libraries), `dist/` (build output). Edit `src/` and `scripts/`; `build-scripts.js` copies scripts and embeds them into `dist/ui.html`.
+**Project structure**
+- `src/` – plugin code and UI
+- `scripts/` – example scripts and shared libraries
+- `dist/` – build output
+
+## Network and Builds
+
+The default manifest allows limited network access:
+- CDN (CodeMirror)
+- Figma API (comments → annotations)
+- Localhost (dev console bridge)
+
+For restricted environments, use a no-network manifest (empty `allowedDomains`) and bundle CodeMirror into the UI via `npm run build:ui`.
+
+No telemetry. Scripts run entirely in the plugin sandbox.
 
 ## Security & Privacy
 
-- **No network access required**
-- **No data collection**
-- **All processing happens locally**
-- **Scripts run in sandboxed environment**
+- No data collection
+- Network access is explicit and optional
+- Fully functional in offline / no-network mode
 
-## 📋 Available Scripts
+## Bundled Scripts
 
-### Pre-built Utilities
-- Auto Layout All Selected
-- Frame All Selected  
-- Remove Auto Layout Recursively
-- Detach Styles
-- Scale Selection
-- Find and Replace Styles
-- Replace Variable Bindings
-- Find Broken Variables
-- Duplicate Variable Collection
-- List All Variables/Styles
-- Rename Styles
-- Utility Functions
+**Help**
 
-### Variable Management
-- Pattern-based variable replacement
-- Collection duplication with metadata
-- Variable binding inspection
-- Broken variable detection
+| Name | Description |
+|------|-------------|
+| Help & documentation | Plugin overview and usage notes |
 
-## ⌨️ Keyboard Shortcuts
+**Example scripts**
 
-- `Cmd/Ctrl + R` - Run script
-- `Cmd/Ctrl + S` - Save script  
-- `Cmd/Ctrl + E` - Export script
-- `Cmd/Ctrl + I` - Import script
-- `Cmd/Ctrl + N` - New script
+| Name | Description |
+|------|-------------|
+| Auto layout all selected | Wrap each selected node in its own auto-layout frame |
+| Frame all selected | Wrap each selected node in a frame |
+| Remove auto layout recursively | Remove auto layout from selection and descendants |
+| Scale selection | Scale or resize by factor, dimensions, or ratio |
+| Batch rename styles | Rename text/color/effect styles by pattern |
+| Replace styles | Replace styles with partial matching |
+| Create styles from nodes | Generate text styles from selected text nodes |
+| Detach styles & variables | Remove bindings from selection |
+| Find and replace variables | Replace variable bindings by name pattern |
+| Batch rename variables | Rename variables in a collection |
+| Duplicate variable collection | Copy a variable collection with metadata |
+| Replace variables workflow | Interactive variable replacement |
+| DS Foundation: Grid | Create/update grid system variables |
+| DS Foundation: Colors | Create/update color system variables |
+| DS Foundation: Typography | Responsive typography variables and styles |
+| Font scale calculator | Generate font sizes from scales |
+| Create annotations from comments | Convert file comments to annotations (API) |
 
-## 🙏 Credits
+**Libraries**  
+Shared helpers used by scripts: `@core-library`, `@infopanel`, `@math-helpers`, `@pattern-matching`, `@replacement-engine`, `@styles`, `@variables`.
 
-This plugin is inspired by the excellent work of:
+## Keyboard Shortcuts
 
-- **[Scripter](https://www.figma.com/community/plugin/757836922707087381/Scripter)** by [@rsms](https://github.com/rsms) - The original and still fantastic script runner that pioneered Figma automation
-- **Figma Plugin API** - For enabling powerful automation capabilities
-- **CodeMirror** - For the professional code editing experience
+- `Cmd/Ctrl + R` — Run script
+- `Cmd/Ctrl + S` — Save script  
+- `Cmd/Ctrl + E` — Export script
+- `Cmd/Ctrl + I` — Import script
+- `Cmd/Ctrl + N` — New script
 
-## 🤝 Contributing
+## Credits
 
-Found a bug or have a feature request? 
-- Open an issue on GitHub
-- Submit a pull request
-- Share your custom scripts with the community
+- **Scripter** by [@rsms](https://github.com/rsms) — the original Figma script runner  
+- **Figma Plugin API**
+- **CodeMirror**
+
+## Contributing
+
+- Open issues for bugs or proposals
+- Submit pull requests
+- Share reusable scripts
 
 ## License
 
-MIT License - Feel free to use in commercial projects!
+MIT — free for commercial and non-commercial use.
 
-## 🔗 Links
+## Links
 
-- **Original Scripter**: [Figma Community](https://www.figma.com/community/plugin/757836922707087381/Scripter) | [GitHub](https://github.com/rsms/scripter)
-- **Figma Variables Documentation**: [Figma Help Center](https://help.figma.com/hc/en-us/articles/15339657135383-Guide-to-variables-in-Figma)
-- **TypeScript Documentation**: [TypeScript Handbook](https://www.typescriptlang.org/docs/)
+- **Original Scripter**: [Figma Community](https://www.figma.com/community/plugin/757836922707087381/Scripter) · [GitHub](https://github.com/rsms/scripter)  
+- **Figma Variables**: [Figma Help Center](https://help.figma.com/hc/en-us/articles/15339657135383-Guide-to-variables-in-Figma)  
+- **TypeScript**: [Handbook](https://www.typescriptlang.org/docs/)
 
 ---
 
-**Made with ❤️ for the Figma design community**
+Built for the Figma automation community.
