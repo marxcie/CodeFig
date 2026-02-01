@@ -98,38 +98,26 @@ selection.forEach(node => {
 });
 ```
 
-## 🛠️ Development
+## Development
 
-```bash
-# Install dependencies
-npm install
+**How-to:** `npm install`, then `npm run dev` (builds once, then watches `src/code.ts`, `src/ui.html`, and `scripts/`; also starts the Figma console log server). Reload the plugin in Figma to test. One-off build: `npm run build`.
 
-# Build the plugin
-npm run build
+**Scripts:**
 
-# Watch mode for development
-npm run dev
+| Script | Description |
+|--------|-------------|
+| `npm run build` | Full build: validate, compile TypeScript, copy and embed scripts into `dist/`. |
+| `npm run build:scripts` | Only scripts + UI embed (no `tsc`). Use when you changed scripts or `src/ui.html` only. |
+| `npm run build:ui` | Bundle CodeMirror into UI for offline use (writes to repo-root `ui.html`). |
+| `npm run dev` | Build once, then watch code + UI + scripts and run the Figma console log server. |
+| `npm run validate` | Run script validation (syntax, imports, metadata). |
+| `npm run clean` | Remove `dist/`. |
 
-# Build only scripts
-npm run build:scripts
+**Console log:** `dev` appends plugin/script console output to `figma-console.log`. Point Cursor at that file to read errors. For a no-network build, use a manifest without `http://localhost:8765` in `allowedDomains`.
 
-# Bundle UI assets
-npm run build:ui
-```
+**Project layout:** `src/` (code.ts, ui.html), `scripts/` (example scripts and libraries), `dist/` (build output). Edit `src/` and `scripts/`; `build-scripts.js` copies scripts and embeds them into `dist/ui.html`.
 
-## 📁 Project Structure
-
-```
-├── scripts/              # Individual script files (TypeScript)
-│   ├── prebuilt/         # Pre-built utility scripts
-│   └── examples/         # Help and documentation
-├── code.ts               # Plugin backend (TypeScript)
-├── ui.html               # Plugin UI (auto-generated)
-├── manifest.json         # Figma plugin manifest
-└── build-scripts.js      # Build system
-```
-
-## 🔒 Security & Privacy
+## Security & Privacy
 
 - **No network access required**
 - **No data collection**
@@ -181,66 +169,7 @@ Found a bug or have a feature request?
 - Submit a pull request
 - Share your custom scripts with the community
 
-## 🛠️ Development
-
-### Project Structure
-
-```
-codefig/
-├── src/                    # Source files (edit these)
-│   ├── code.ts            # Main plugin code
-│   ├── ui.html            # UI template
-│   └── scripts/           # Individual script files
-│       ├── prebuilt/      # Built-in example scripts
-│       └── examples/      # Help and documentation
-├── dist/                  # Built files (auto-generated)
-│   ├── code.js           # Compiled plugin code
-│   └── ui.html           # Final UI with bundled scripts
-├── build-scripts.js      # Build system
-└── manifest.json         # Plugin manifest
-```
-
-### Development Workflow
-
-**Quick Start:**
-1. Run `npm run dev` to start development mode
-2. Edit any files in `src/` folder
-3. Changes are automatically rebuilt
-4. Test in Figma (refresh plugin if needed)
-
-**Manual Build:**
-- `npm run build` - One-time build of everything
-
-**What Gets Watched:**
-- `src/code.ts` → `dist/code.js` (TypeScript compilation)
-- `src/ui.html` → `dist/ui.html` (UI template processing)
-- `src/scripts/**/*.ts` → bundled into `dist/ui.html` (Script bundling)
-
-### Building the Plugin
-
-```bash
-npm run build
-```
-
-This compiles TypeScript and bundles all scripts into the `dist/` folder.
-
-### Console bridge (for Cursor)
-
-`npm run dev` starts the Figma console server as well, so plugin and script `console.log` / `console.error` / `console.warn` are appended to `figma-console.log` in the project root. In Cursor, reference `figma-console.log` (e.g. `@figma-console.log`) so the AI can read errors and suggest fixes.
-
-To run only the console server (e.g. if dev is already running elsewhere): `npm run dev:figma-console-server`. The bridge only works when the plugin manifest allows `http://localhost:8765`. For a **no-network** build, use a separate manifest that omits `networkAccess` or uses an empty `allowedDomains`.
-
-### Available Commands
-
-```bash
-npm run dev            # Development mode (watch + Figma console log server)
-npm run build          # Full build (TypeScript + scripts)
-npm run build:scripts  # Build scripts only
-npm run dev:figma-console-server # Run only the Figma console log server (optional)
-npm run clean          # Clean build output
-```
-
-## 📄 License
+## License
 
 MIT License - Feel free to use in commercial projects!
 

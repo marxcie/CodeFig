@@ -22,3 +22,9 @@ figma-console.log
 # Temporary files
 *.tmp
 *.temp
+
+# BETA files
+scripts/_DEBUG_SCRIPTS/*
+scripts/LEGACY_SCRIPTS/*
+scripts/_*.*
+scripts/*.bak*
