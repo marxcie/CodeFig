@@ -410,22 +410,27 @@ function getOrCreateCollection(name) {
 
 /**
  * Setup modes for a collection
+ * Figma creates new collections with a default first mode (e.g. "Mode 1").
+ * We replace that with only the desired mode names so we don't end up with
+ * Mode 1 + Desktop + Tablet + Mobile (or similar).
  */
 function setupModes(collection, modeNames) {
   console.log('Setting up modes: ' + modeNames.join(', '));
   
-  // Remove extra modes
-  while (collection.modes.length > modeNames.length) {
-    collection.removeMode(collection.modes[collection.modes.length - 1].modeId);
-  }
-  
-  // Add missing modes
+  // 1. Add any missing modes (so we have at least our desired set before removing defaults)
   for (var i = 0; i < modeNames.length; i++) {
     var modeName = modeNames[i];
     var existingMode = collection.modes.find(function(m) { return m.name === modeName; });
-    
     if (!existingMode) {
       collection.addMode(modeName);
+    }
+  }
+  
+  // 2. Remove any mode not in our list (e.g. default "Mode 1" from createVariableCollection)
+  for (var j = collection.modes.length - 1; j >= 0; j--) {
+    var mode = collection.modes[j];
+    if (modeNames.indexOf(mode.name) === -1) {
+      collection.removeMode(mode.modeId);
     }
   }
   

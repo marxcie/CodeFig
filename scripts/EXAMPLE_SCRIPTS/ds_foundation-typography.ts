@@ -21,8 +21,8 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
   // fontWeights: { 'regular': 'Light', 'semibold': 'Bold' },
   // fontWeights: { 'normal': 'Regular', 'quote': 'Italic' },
   structure: {
-    variableCollection: "Responsive",
-    variableGroup: "Typography"
+    variableCollection: "Typography",
+    variableGroup: ""
   },
   fontScale: ["3xs", "2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl", "7xl", "8xl", "9xl"],
   fontSizes: {
@@ -89,7 +89,7 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
   },
   styles: {
     createAndUpdateStyles: true,
-    styleNaming: "typography/{$fontScale}/{$fontWeight}"
+    styleNaming: "{$fontScale}/{$fontWeight}"
   },
   scalingMethod: "multiplicative" // Options: "additive" (current) or "multiplicative"
 };
@@ -263,9 +263,15 @@ function calculateFluidLetterSpacing(scaleIndex, totalSteps, viewport, config) {
   return letterSpacing;
 }
 
+// Helper: variable name prefix (no leading slash when group is empty — Figma rejects names like "/md/font-size")
+function variableNamePrefix(group) {
+  return group ? group + '/' : '';
+}
+
 // Generate variables programmatically
 function generateTypographyVariables(config) {
   var variables = {};
+  var prefix = variableNamePrefix(config.structure.variableGroup);
   
   // Generate variables for each font scale step - grouped by scale level
   config.fontScale.forEach(function(scaleName, index) {
@@ -291,21 +297,21 @@ function generateTypographyVariables(config) {
     });
     
     // Font sizes for each viewport
-    variables[config.structure.variableGroup + '/' + scaleName + '/font-size'] = {
+    variables[prefix + scaleName + '/font-size'] = {
       type: "FLOAT",
       scopes: ["FONT_SIZE"],
       values: fontSizeValues
     };
     
     // Line heights for each viewport
-    variables[config.structure.variableGroup + '/' + scaleName + '/line-height'] = {
+    variables[prefix + scaleName + '/line-height'] = {
       type: "FLOAT",
       scopes: ["LINE_HEIGHT"],
       values: lineHeightValues
     };
     
     // Letter spacing for each viewport
-    variables[config.structure.variableGroup + '/' + scaleName + '/letter-spacing'] = {
+    variables[prefix + scaleName + '/letter-spacing'] = {
       type: "FLOAT",
       scopes: ["LETTER_SPACING"],
       values: letterSpacingValues
@@ -331,14 +337,14 @@ function generateTypographyVariables(config) {
     
     if (isNumeric) {
       // Numeric weight (400, 600, etc.) - same value for all modes
-      variables[config.structure.variableGroup + '/font-weight/' + weightName] = {
+      variables[prefix + 'font-weight/' + weightName] = {
         type: "FLOAT",
         scopes: ["FONT_WEIGHT"],
         values: weightValues
       };
     } else {
       // Font style name ('Light', 'Bold', 'Italic', etc.) - same value for all modes
-      variables[config.structure.variableGroup + '/font-style/' + weightName] = {
+      variables[prefix + 'font-style/' + weightName] = {
         type: "STRING",
         scopes: ["FONT_STYLE"],
         values: weightValues
@@ -353,7 +359,7 @@ function generateTypographyVariables(config) {
     fontFamilyValues[viewportKey] = config.fontFamily;
   });
   
-  variables[config.structure.variableGroup + '/font-family/primary'] = {
+  variables[prefix + 'font-family/primary'] = {
     type: "STRING",
     scopes: ["FONT_FAMILY"],
     values: fontFamilyValues
@@ -447,32 +453,32 @@ function createOrUpdateTextStyles(config, collection) {
           stats.created++;
         }
         
-        // Find the corresponding variables in the collection
-        var groupName = config.config.structure.variableGroup;
+        // Find the corresponding variables in the collection (same naming as generateTypographyVariables)
+        var namePrefix = variableNamePrefix(config.config.structure.variableGroup);
         var fontSizeVar = collection.variableIds
           .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === groupName + '/' + scaleName + '/font-size'; });
+          .find(function(v) { return v && v.name === namePrefix + scaleName + '/font-size'; });
         
         var lineHeightVar = collection.variableIds
           .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === groupName + '/' + scaleName + '/line-height'; });
+          .find(function(v) { return v && v.name === namePrefix + scaleName + '/line-height'; });
         
         var letterSpacingVar = collection.variableIds
           .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === groupName + '/' + scaleName + '/letter-spacing'; });
+          .find(function(v) { return v && v.name === namePrefix + scaleName + '/letter-spacing'; });
         
         // Look for both numeric font weight and font style variables
         var fontWeightVar = collection.variableIds
           .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === groupName + '/font-weight/' + weightName; });
+          .find(function(v) { return v && v.name === namePrefix + 'font-weight/' + weightName; });
           
         var fontStyleVar = collection.variableIds
           .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === groupName + '/font-style/' + weightName; });
+          .find(function(v) { return v && v.name === namePrefix + 'font-style/' + weightName; });
         
         var fontFamilyVar = collection.variableIds
           .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === groupName + '/font-family/primary'; });
+          .find(function(v) { return v && v.name === namePrefix + 'font-family/primary'; });
         
         // Apply variables to the text style
         if (fontSizeVar) {
@@ -561,9 +567,8 @@ function createTypographySystem(customConfig) {
           fontSize = minSize + (maxSize - minSize) * Math.abs(ratio);
         }
         
-        // Store variables in the correct format
-        var groupName = customConfig.structure.variableGroup;
-        var variableName = groupName + '/' + scaleName + '/font-size';
+        // Store variables in the correct format (no leading slash when group empty)
+        var variableName = variableNamePrefix(customConfig.structure.variableGroup) + scaleName + '/font-size';
         
         if (!typographyVariables[variableName]) {
           typographyVariables[variableName] = {

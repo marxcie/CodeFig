@@ -9,9 +9,18 @@
 // COLOR SYSTEM CONFIGURATION
 // ========================================
 
+// Helper: variable name prefix (no leading slash when group is empty — Figma rejects names like "/primary/50")
+function variableNamePrefix(group) {
+  return group ? group + '/' : '';
+}
+
 // Use existing config if already defined, otherwise use default
 var colorConfig = typeof colorConfig !== 'undefined' ? colorConfig : {
   collectionName: "Colors",
+  structure: {
+    variableCollection: "Colors",
+    variableGroup: ""
+  },
   
   // Configuration values (NOT added as variables)
   config: {
@@ -157,11 +166,15 @@ var colorConfig = typeof colorConfig !== 'undefined' ? colorConfig : {
 // ========================================
 
 function createOrUpdateCollection(config) {
+  var collectionName = (config.structure && config.structure.variableCollection != null) ? config.structure.variableCollection : config.collectionName;
+  var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
+  var prefix = variableNamePrefix(group);
+  
   console.log('=== COLOR SYSTEM MANAGER ===');
-  console.log('Processing collection: ' + config.collectionName);
+  console.log('Processing collection: ' + collectionName + (group ? ' (group: ' + group + ')' : ' (no group)'));
   
   // Get or create collection using imported function
-  var collection = getOrCreateCollection(config.collectionName);
+  var collection = getOrCreateCollection(collectionName);
   
   // Extract modes from variable values or use default (imported function)
   var modes = extractModes(config);
@@ -170,11 +183,17 @@ function createOrUpdateCollection(config) {
   // Setup modes (imported function)
   setupModes(collection, modes);
   
+  // Prefix variable names with group when set (no leading slash when group empty)
+  var variablesWithPrefix = {};
+  for (var key in config.variables) {
+    variablesWithPrefix[prefix + key] = config.variables[key];
+  }
+  
   // Process variables (imported function)
-  var stats = processVariables(collection, config.variables, config.config, modes);
+  var stats = processVariables(collection, variablesWithPrefix, config.config, modes);
   
   console.log('=== COLOR SYSTEM SUMMARY ===');
-  console.log('Collection: ' + config.collectionName);
+  console.log('Collection: ' + collectionName);
   console.log('Variables created: ' + stats.created);
   console.log('Variables updated: ' + stats.updated);
   console.log('Variables skipped: ' + stats.skipped);
