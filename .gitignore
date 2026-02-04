@@ -16,8 +16,8 @@ Thumbs.db
 
 # Logs
 *.log
+!figma-console.log
 npm-debug.log*
-figma-console.log
 
 # Temporary files
 *.tmp

@@ -11,6 +11,8 @@
 // - **Geometry:** distance, center, bounds
 // - **Interpolation:** interpolate, linear, exponential, sine, cubic, quint, goldenRatio
 // - **Easing:** easeIn, easeOut, easeInOut, easeOutIn
+// - **Scale curve:** applyEase(type, ease, t) returns u in [0,1] for piecewise scales (type-specific ease-in/out). Use with lerp: size = lerp(min, max, applyEase(type, ease, t)). Types: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. Eases: none, in, out, inout, outin.
+// - **Custom exponents:** applyEaseWithExponents(easeInExponent, easeOutExponent, ease, t) uses power curves t^in and 1-(1-t)^out instead of a named type. Ease still in/out/inout/outin. Exponents in (0, 10], typical 0.2–5.
 // @DOC_END
 
 console.log('📚 @Math Helpers Library');
@@ -42,6 +44,92 @@ function clamp(value, min, max) {
 
 function lerp(start, end, factor) {
   return start + (end - start) * factor;
+}
+
+// ============================================================================
+// APPLYEASE: curve(type, ease, t) -> u for piecewise scales
+// ============================================================================
+// Single combined curve per (type, ease). Use: u = applyEase(type, ease, t); value = lerp(segStart, segEnd, u).
+// type: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio
+// ease: none, in, out, inout, outin
+
+function clamp01(x) {
+  return Math.max(0, Math.min(1, x));
+}
+
+function applyEaseBaseIn(type, tt) {
+  tt = clamp01(tt);
+  switch (type) {
+    case 'sine':
+      return 1 - Math.cos((tt * Math.PI) / 2);
+    case 'quad':
+      return tt * tt;
+    case 'cubic':
+      return tt * tt * tt;
+    case 'quart':
+      return tt * tt * tt * tt;
+    case 'quint':
+      return tt * tt * tt * tt * tt;
+    case 'circ':
+      return 1 - Math.sqrt(1 - tt * tt);
+    case 'exponential':
+      return tt === 0 ? 0 : Math.pow(2, 10 * (tt - 1));
+    case 'goldenRatio': {
+      var k = 2.2;
+      return Math.pow(tt, k);
+    }
+    default:
+      return tt;
+  }
+}
+
+function applyEase(type, ease, t) {
+  t = clamp01(t);
+  if (ease === 'none' || type === 'linear') return t;
+  var baseIn = function(tt) { return applyEaseBaseIn(type, tt); };
+  var easeIn = function(tt) { return baseIn(tt); };
+  var easeOut = function(tt) { return 1 - baseIn(1 - tt); };
+  var easeInOut = function(tt) {
+    return tt < 0.5 ? 0.5 * easeIn(tt * 2) : 0.5 + 0.5 * easeOut((tt - 0.5) * 2);
+  };
+  var easeOutIn = function(tt) {
+    return tt < 0.5 ? 0.5 * easeOut(tt * 2) : 0.5 + 0.5 * easeIn((tt - 0.5) * 2);
+  };
+  switch (ease) {
+    case 'in': return easeIn(t);
+    case 'out': return easeOut(t);
+    case 'inout': return easeInOut(t);
+    case 'outin': return easeOutIn(t);
+    default: return t;
+  }
+}
+
+// Optional two-number alternative: power curves with easeInExponent and easeOutExponent (typical 0.2–5).
+// When set, use instead of type; ease (in/out/inout/outin) still applies.
+function applyEaseWithExponents(easeInExponent, easeOutExponent, ease, t) {
+  t = clamp01(t);
+  if (ease === 'none') return t;
+  var inExp = typeof easeInExponent === 'number' && easeInExponent > 0
+    ? Math.max(0.1, Math.min(10, easeInExponent)) : 1;
+  var outExp = typeof easeOutExponent === 'number' && easeOutExponent > 0
+    ? Math.max(0.1, Math.min(10, easeOutExponent)) : inExp;
+  var baseIn = function(tt) { return Math.pow(clamp01(tt), inExp); };
+  var baseOut = function(tt) { return 1 - Math.pow(1 - clamp01(tt), outExp); };
+  var easeIn = function(tt) { return baseIn(tt); };
+  var easeOut = function(tt) { return baseOut(tt); };
+  var easeInOut = function(tt) {
+    return tt < 0.5 ? 0.5 * easeIn(tt * 2) : 0.5 + 0.5 * easeOut((tt - 0.5) * 2);
+  };
+  var easeOutIn = function(tt) {
+    return tt < 0.5 ? 0.5 * easeOut(tt * 2) : 0.5 + 0.5 * easeIn((tt - 0.5) * 2);
+  };
+  switch (ease) {
+    case 'in': return easeIn(t);
+    case 'out': return easeOut(t);
+    case 'inout': return easeInOut(t);
+    case 'outin': return easeOutIn(t);
+    default: return t;
+  }
 }
 
 // ============================================================================
@@ -109,8 +197,14 @@ function interpolate(start, end, factor, type, easing) {
       return sineInterpolation(start, end, easedFactor);
     case 'cubic':
       return cubicInterpolation(start, end, easedFactor);
+    case 'quad':
+      return quadInterpolation(start, end, easedFactor);
+    case 'quart':
+      return quartInterpolation(start, end, easedFactor);
     case 'quint':
       return quintInterpolation(start, end, easedFactor);
+    case 'circ':
+      return circInterpolation(start, end, easedFactor);
     case 'goldenRatio':
       return goldenRatioInterpolation(start, end, easedFactor);
     default:
@@ -157,6 +251,21 @@ function quintInterpolation(start, end, factor) {
   var t4 = t3 * t;
   var t5 = t4 * t;
   return start + (end - start) * (6 * t5 - 15 * t4 + 10 * t3);
+}
+
+function quadInterpolation(start, end, factor) {
+  var t = factor * factor;
+  return start + (end - start) * t;
+}
+
+function quartInterpolation(start, end, factor) {
+  var t = factor * factor * factor * factor;
+  return start + (end - start) * t;
+}
+
+function circInterpolation(start, end, factor) {
+  var t = factor <= 0 ? 0 : (factor >= 1 ? 1 : 1 - Math.sqrt(1 - factor * factor));
+  return start + (end - start) * t;
 }
 
 function goldenRatioInterpolation(start, end, factor) {

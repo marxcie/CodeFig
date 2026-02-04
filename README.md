@@ -71,13 +71,12 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 | `npm run build` | Full build: validate, compile TypeScript, embed scripts into `dist/`. |
 | `npm run build:scripts` | Rebuild scripts + UI embed only (skip `tsc`). |
 | `npm run build:ui` | Bundle CodeMirror into UI for offline/no-network use. |
-| `npm run dev` | Build + watch code, UI, and scripts; start console log server. |
+| `npm run dev` | Build + watch code, UI, and scripts; start console log server. Agent can read `figma-console.log` directly. |
 | `npm run validate` | Validate script syntax, imports, and metadata. |
 | `npm run clean` | Remove `dist/`. |
 
 **Console logging:**  
-During `dev`, plugin and script logs are written to `figma-console.log`. Point Cursor or your editor at that file to inspect errors.  
-For locked-down environments, use a manifest without `http://localhost:8765`.
+During `dev`, plugin and script logs are written to `figma-console.log`. The file is un-ignored so the agent can read it directly. The `prepare` script adds it to `.git/info/exclude` so it is not committed. For locked-down environments, use a manifest without `http://localhost:8765`.
 
 **Project structure**
 - `src/` – plugin code and UI

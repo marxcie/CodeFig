@@ -471,7 +471,12 @@ function createOrUpdateVariable(collection, name, config, modes) {
   if (!existing) {
     existing = figma.variables.createVariable(name, collection, actualConfig.type);
   }
-  
+
+  // Set scopes so the variable appears only in the relevant property picker (e.g. FONT_SIZE, LINE_HEIGHT, LETTER_SPACING)
+  if (actualConfig.scopes && Array.isArray(actualConfig.scopes) && actualConfig.scopes.length > 0) {
+    existing.scopes = actualConfig.scopes;
+  }
+
   // Set values for each mode
   actualModes.forEach(function(modeName) {
     try {
@@ -551,12 +556,15 @@ function processVariables(collection, variables, configValues, modes) {
       var varConfig = variables[varName];
       console.log('Processing variable: ' + varName);
       
-      // Calculate values using config
+      // Calculate values using config (include scopes so variable is limited to the right picker)
       var calculatedConfig = {
         type: varConfig.type,
         values: {}
       };
-      
+      if (varConfig.scopes && Array.isArray(varConfig.scopes)) {
+        calculatedConfig.scopes = varConfig.scopes;
+      }
+
       modes.forEach(function(mode) {
         if (varConfig.values && varConfig.values[mode]) {
           try {
