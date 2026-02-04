@@ -1,4 +1,4 @@
-// Create Annotations from Comments
+// Comments to Annotations
 // @DOC_START
 // # Create Annotations from Comments
 // Converts file comments into Figma annotations and optional invisible anchor frames.

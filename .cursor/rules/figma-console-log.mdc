@@ -1,0 +1,15 @@
+---
+description: Read Figma console log when working on scripts
+globs: scripts/**/*
+alwaysApply: false
+---
+
+# Figma console log
+
+When working on scripts in this project (anything under `scripts/`), **always read the Figma console log** so debugging is seamless.
+
+- **Log file**: `figma-console.log` (project root). Written by the console bridge when `npm run dev` is running.
+- **When**: At the start of script-related work, and when debugging plugin/script errors.
+- **How**: Use `Read` with `offset`/`limit` or `Grep` if the file is large; otherwise read the whole file.
+
+This project keeps the log un-ignored so the agent can read it; it is not committed (see `.git/info/exclude`).

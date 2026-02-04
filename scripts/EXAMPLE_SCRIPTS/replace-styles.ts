@@ -69,9 +69,9 @@ if (typeof matchPattern === 'undefined') {
   };
 }
 
-// @CONFIG_START
 // Default configuration - can be overridden by importing scripts
 var STYLE_REPLACEMENTS = typeof STYLE_REPLACEMENTS !== 'undefined' ? STYLE_REPLACEMENTS : [
+// @CONFIG_START
   {
     from: "500",           // Partial match: "Primary/500" -> "Primary/50"
     to: "50"
@@ -88,9 +88,9 @@ var STYLE_REPLACEMENTS = typeof STYLE_REPLACEMENTS !== 'undefined' ? STYLE_REPLA
     from: "Primary",       // Partial match: "Primary/500" -> "Secondary/500"
     to: "Secondary"
   }
+// @CONFIG_END
 ];
 
-// @CONFIG_END
 var SELECTION_ONLY = typeof SELECTION_ONLY !== 'undefined' ? SELECTION_ONLY : true;
 
 // Helper function to collect all nodes using library function

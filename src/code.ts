@@ -387,7 +387,7 @@ figma.ui.onmessage = (msg) => {
   }
   
   if (msg.type === 'RESIZE_WINDOW') {
-    // Resize the plugin window
+    // Resize the plugin window (without repositioning to avoid jumping)
     try {
       figma.ui.resize(msg.width, msg.height);
       debugLog('Backend: Resized window to:', msg.width, 'x', msg.height);

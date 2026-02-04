@@ -14,21 +14,44 @@ const PORT = 8765;
 const LOG_FILE = path.join(__dirname, 'figma-console.log');
 
 const server = http.createServer((req, res) => {
-  // GET / or /log: serve log file so you can curl it; agent reads terminal output (no file access needed)
+  // CORS headers - must be in every response
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  };
+  
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, corsHeaders);
+    res.end();
+    return;
+  }
+  
+  // GET / or /log: serve log file
   if (req.method === 'GET' && (req.url === '/' || req.url === '/log')) {
     try {
       const content = fs.existsSync(LOG_FILE) ? fs.readFileSync(LOG_FILE, 'utf8') : '';
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.writeHead(200, { 
+        'Content-Type': 'text/plain; charset=utf-8',
+        ...corsHeaders
+      });
       res.end(content);
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.writeHead(500, { 
+        'Content-Type': 'text/plain',
+        ...corsHeaders
+      });
       res.end('Error reading log: ' + err.message);
     }
     return;
   }
 
   if (req.method !== 'POST') {
-    res.writeHead(405, { 'Content-Type': 'text/plain' });
+    res.writeHead(405, { 
+      'Content-Type': 'text/plain',
+      ...corsHeaders
+    });
     res.end('Method Not Allowed\n');
     return;
   }
@@ -42,7 +65,7 @@ const server = http.createServer((req, res) => {
     } catch (err) {
       console.error('Failed to append to', LOG_FILE, err.message);
     }
-    res.writeHead(204);
+    res.writeHead(204, corsHeaders);
     res.end();
   });
 });

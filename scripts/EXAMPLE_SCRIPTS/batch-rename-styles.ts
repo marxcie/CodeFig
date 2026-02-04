@@ -1,6 +1,6 @@
-// Batch rename styles
+// Batch rename Styles
 // @DOC_START
-// # Batch rename styles
+// # Batch rename Styles
 // Rename local styles (paint, text, effect, grid) by search/replace patterns.
 //
 // ## Overview

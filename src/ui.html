@@ -487,7 +487,7 @@
       
       .script-title.editing {
         background-color: #fff;
-        border: 1px solid #007AFF;
+        border: 1px solid var(--active-bg);
         outline: none;
         cursor: text;
       }
@@ -540,8 +540,8 @@
       }
       
       .editor-tab.active {
-        color: #007AFF;
-        border-bottom-color: #007AFF;
+        color: var(--active-bg);
+        border-bottom-color: var(--active-bg);
       }
       
       .editor-container { 
@@ -1182,6 +1182,7 @@
       let isWindowResizing = false;
       let resizeType = null; // 'width', 'height', or 'both'
       let startWindowX, startWindowY, startWindowWidth, startWindowHeight;
+      let lastResizeTime = 0;
       
       // Window memory state
       let windowMemory = {
@@ -3181,6 +3182,11 @@
           newHeight = Math.max(400, Math.min(1200, startWindowHeight + deltaY));
         }
 
+        // Throttle to ~60fps to reduce position jumping
+        const now = Date.now();
+        if (now - lastResizeTime < 16) return;
+        lastResizeTime = now;
+
         // Send resize message to backend
         parent.postMessage({
           pluginMessage: {
@@ -3265,8 +3271,76 @@
                 break;
               case '/':
                 e.preventDefault();
-                focusSearch();
+                toggleLineComments();
                 break;
+            }
+          }
+        });
+      }
+
+      // Toggle line comments for selected lines in CodeMirror
+      function toggleLineComments() {
+        // Determine which editor is active
+        const activeEditor = currentTab === 'config' ? configEditor : code;
+        if (!activeEditor) return;
+
+        const doc = activeEditor.getDoc();
+        const selections = doc.listSelections();
+
+        activeEditor.operation(() => {
+          for (const selection of selections) {
+            const from = selection.from();
+            const to = selection.to();
+            const startLine = from.line;
+            const endLine = to.line;
+
+            // Get all lines in the selection
+            const lines = [];
+            for (let i = startLine; i <= endLine; i++) {
+              lines.push({
+                lineNum: i,
+                text: doc.getLine(i)
+              });
+            }
+
+            // Check if all non-empty lines are commented
+            const nonEmptyLines = lines.filter(l => l.text.trim().length > 0);
+            const allCommented = nonEmptyLines.length > 0 && nonEmptyLines.every(l => 
+              l.text.trimStart().startsWith('//')
+            );
+
+            if (allCommented) {
+              // Uncomment all lines
+              for (const line of lines) {
+                const trimmedStart = line.text.length - line.text.trimStart().length;
+                const afterTrim = line.text.trimStart();
+                
+                if (afterTrim.startsWith('// ')) {
+                  // Remove "// " (with space)
+                  const newText = line.text.substring(0, trimmedStart) + afterTrim.substring(3);
+                  doc.replaceRange(newText, 
+                    { line: line.lineNum, ch: 0 }, 
+                    { line: line.lineNum, ch: line.text.length }
+                  );
+                } else if (afterTrim.startsWith('//')) {
+                  // Remove "//" (without space)
+                  const newText = line.text.substring(0, trimmedStart) + afterTrim.substring(2);
+                  doc.replaceRange(newText, 
+                    { line: line.lineNum, ch: 0 }, 
+                    { line: line.lineNum, ch: line.text.length }
+                  );
+                }
+              }
+            } else {
+              // Comment all lines
+              for (const line of lines) {
+                const trimmedStart = line.text.length - line.text.trimStart().length;
+                const newText = line.text.substring(0, trimmedStart) + '// ' + line.text.substring(trimmedStart);
+                doc.replaceRange(newText, 
+                  { line: line.lineNum, ch: 0 }, 
+                  { line: line.lineNum, ch: line.text.length }
+                );
+              }
             }
           }
         });
@@ -3527,11 +3601,14 @@
               const level = msg.level || 'log';
               const payload = msg.payload != null ? String(msg.payload) : '';
               const line = '[' + new Date().toISOString() + '] [' + level.toUpperCase() + '] ' + payload + '\n';
+              console.log('📤 UI: Forwarding to console server:', line.substring(0, 100));
               fetch('http://localhost:8765', {
                 method: 'POST',
                 body: line,
                 headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-              }).catch(function () { /* console bridge server not running */ });
+              })
+              .then(() => console.log('✅ Console forward successful'))
+              .catch((err) => console.error('❌ Console forward failed:', err));
             })();
             break;
             
