@@ -753,19 +753,40 @@
 
       .info-title {
         font-size: 16px;
-        color: #333;
+        color: var(--text-primary);
         font-weight: 600;
         margin: 0;
       }
 
       .info-filtering {
         padding: 0 16px 12px 16px;
-        /* border-bottom: 1px solid #e6e6e6; */
+        /* border-bottom: 1px solid var(--border-light); */
         /* margin-bottom: 12px; */
       }
 
       .info-filtering:empty {
         display: none;
+      }
+
+      .filter-btn {
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-light);
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .filter-btn:hover {
+        background: var(--hover-bg);
+      }
+
+      .filter-btn.active {
+        background: #007AFF;
+        color: #fff;
+        border-color: #007AFF;
       }
 
       .info-list {
@@ -774,14 +795,14 @@
 
       .info-placeholder {
         text-align: center;
-        color: #999;
+        color: var(--text-secondary);
         font-size: 14px;
         margin-top: 40px;
       }
 
       .info-result-item {
         /* padding-left: 8px; */
-        /* border-left: 1px solid #e6e6e6; */
+        /* border-left: 1px solid var(--border-light); */
         margin-bottom: 8px;
       }
 
@@ -790,9 +811,9 @@
         display: flex;
         align-items: flex-start;
         /* padding: 12px; */
-        /* border: 1px solid #e6e6e6; */
+        /* border: 1px solid var(--border-light); */
         /* border-radius: 6px; */
-        /* background: #fff; */
+        /* background: var(--bg-primary); */
         margin-bottom: 16px;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -818,7 +839,7 @@
 
       .info-entry-title {
         font-weight: 600;
-        color: #000;
+        color: var(--text-primary);
         font-size: 11px;
         margin-bottom: 4px;
         word-break: break-word;
@@ -827,12 +848,12 @@
       .info-entry-count {
         font-size: 11px;
         font-weight: 400;
-        color: #808080;
+        color: var(--text-secondary);
       }
 
       .info-entry-subtitle {
-        font-size: 13px;
-        color: #666;
+        font-size: 11px;
+        color: var(--text-secondary);
         line-height: 1.4;
       }
 
@@ -880,17 +901,64 @@
       .info-category-title {
         font-size: 9px;
         font-weight: 500;
-        color: #808080;
+        color: var(--text-secondary);
         text-transform: uppercase;
+      }
+
+      .info-group-header-interactive {
+        cursor: pointer;
+        transition: color 0.2s ease;
+      }
+
+      .info-group-header-interactive:hover {
+        color: #007AFF;
+      }
+
+      .info-group-header-interactive.clicked {
+        background: #007AFF;
+        color: #fff;
+      }
+
+      .info-variable-item {
+        padding: 6px 0;
+        margin: 0;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-light);
+        transition: background 0.15s ease;
+      }
+
+      .info-variable-item:hover {
+        background: var(--hover-bg);
+      }
+
+      .info-variable-item.clicked {
+        background: #007AFF;
+      }
+
+      .info-variable-item.clicked .info-variable-name,
+      .info-variable-item.clicked .info-variable-details {
+        color: #fff;
+      }
+
+      .info-variable-name {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+      }
+
+      .info-variable-details {
+        font-size: 11px;
+        color: var(--text-secondary);
       }
 
       /* Style Preview Styles */
       .style-preview, .variable-preview {
         margin: 8px 0;
         padding: 8px;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
         border-radius: 4px;
-        border: 1px solid #e6e6e6;
+        border: 1px solid var(--border-light);
         display: flex;
         align-items: center;
         gap: 8px;
@@ -901,7 +969,7 @@
         height: 20px;
         border-radius: 4px;
         display: inline-block;
-        border: 1px solid #ddd;
+        border: 1px solid var(--border-light);
         flex-shrink: 0;
       }
 
@@ -916,14 +984,14 @@
       .text-preview {
         font-size: 14px;
         font-weight: 500;
-        color: #333;
+        color: var(--text-primary);
         margin-right: 8px;
         flex-shrink: 0;
       }
 
       .text-details {
         font-size: 10px;
-        color: #666;
+        color: var(--text-muted);
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
@@ -936,7 +1004,8 @@
       .font-size, .font-weight, .color-value, .dimension-value, .spacing-value, .radius-value, .effect-value {
         font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
         font-size: 10px;
-        background: #e9ecef;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
         padding: 2px 4px;
         border-radius: 2px;
       }
@@ -972,7 +1041,7 @@
       .info-result-message {
         font-size: 11px;
         font-weight: bold;
-        color: #333;
+        color: var(--text-primary);
         margin-bottom: 4px;
       }
       .info-result-message.error {
@@ -980,13 +1049,19 @@
       }
 
       .info-result-details {
-        font-size: 9px;
-        color: #666;
+        font-size: 11px;
+        color: var(--text-secondary);
+        line-height: 1.5;
       }
 
       /* Additional styling classes for InfoPanel content */
+      .error-text {
+        color: #dc3545;
+        font-weight: 600;
+      }
+
       .info-result-message .highlight {
-        background: #fff3cd;
+        background: var(--bg-tertiary);
         padding: 1px 3px;
         border-radius: 2px;
         font-weight: 600;
@@ -1014,11 +1089,12 @@
 
       .info-result-message .code {
         font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-        background: #f8f9fa;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
         padding: 1px 4px;
         border-radius: 3px;
         font-size: 10px;
-        border: 1px solid #e9ecef;
+        border: 1px solid var(--border-light);
       }
 
       .info-result-message .badge {
@@ -1984,11 +2060,9 @@
           button.addEventListener('click', () => {
             // Update active state
             container.querySelectorAll('.filter-btn').forEach(btn => {
-              btn.style.background = '#fff';
-              btn.style.color = '#333';
+              btn.classList.remove('active');
             });
-            button.style.background = '#007AFF';
-            button.style.color = '#fff';
+            button.classList.add('active');
             
             // Re-render with new grouping
             if (window.currentInfoData) {
@@ -2086,13 +2160,7 @@
             transition: color 0.2s ease;
           `;
           
-          // Add hover effect
-          groupHeader.addEventListener('mouseenter', () => {
-            groupHeader.style.color = '#007AFF';
-          });
-          groupHeader.addEventListener('mouseleave', () => {
-            groupHeader.style.color = '#333';
-          });
+          groupHeader.classList.add('info-group-header-interactive');
           
           groupHeader.innerHTML = `${group.title} (${group.count})`;
           
@@ -2105,11 +2173,9 @@
               }, '*');
               
               // Visual feedback
-              groupHeader.style.background = '#007AFF';
-              groupHeader.style.color = '#fff';
+              groupHeader.classList.add('clicked');
               setTimeout(() => {
-                groupHeader.style.background = '#f8f9fa';
-                groupHeader.style.color = '#333';
+                groupHeader.classList.remove('clicked');
               }, 200);
             }
           });
@@ -2124,23 +2190,11 @@
           // Add results list matching Figma design
           group.results.forEach((result, index) => {
             const item = document.createElement('div');
-            item.className = 'info-result-item';
-            item.style.cssText = `
-              padding: 6px 0;
-              margin: 0;
-              cursor: pointer;
-              border-bottom: 1px solid #f0f0f0;
-              transition: background 0.15s ease;
-            `;
+            item.className = 'info-result-item info-variable-item';
             
             // Property type (main text) - extracted from variable name
             const propertyDisplay = document.createElement('div');
-            propertyDisplay.style.cssText = `
-              font-size: 11px;
-              font-weight: 500;
-              color: #333;
-              margin-bottom: 2px;
-            `;
+            propertyDisplay.className = 'info-variable-name';
             
             // Extract property type from variable name (e.g., "Typography/4xl/letter-spacing" -> "letter-spacing")
             let displayText = result.property || 'Unknown Property';
@@ -2153,20 +2207,9 @@
             
             // Node info (secondary text)
             const nodeInfo = document.createElement('div');
-            nodeInfo.style.cssText = `
-              font-size: 10px;
-              color: #666;
-            `;
+            nodeInfo.className = 'info-variable-details';
             nodeInfo.textContent = 'in ' + (result.nodeName || 'Unknown Node');
             item.appendChild(nodeInfo);
-            
-            // Hover effect
-            item.addEventListener('mouseenter', () => {
-              item.style.background = '#f8f9fa';
-            });
-            item.addEventListener('mouseleave', () => {
-              item.style.background = 'transparent';
-            });
             
             // Add click handler for individual node selection
             if (result.nodeId) {
@@ -2177,13 +2220,9 @@
                 }, '*');
                 
                 // Visual feedback
-                item.style.background = '#007AFF';
-                variableName.style.color = '#fff';
-                details.style.color = '#fff';
+                item.classList.add('clicked');
                 setTimeout(() => {
-                  item.style.background = 'transparent';
-                  variableName.style.color = '#333';
-                  details.style.color = '#666';
+                  item.classList.remove('clicked');
                 }, 200);
               });
             }

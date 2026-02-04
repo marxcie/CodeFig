@@ -1,12 +1,74 @@
 // Variable Inspector
+// @DOC_START
+// # 🔍 Variable Inspector
+// 
+// Comprehensive variable analysis tool showing all variables with their values, health status, and usage in your selection and styles.
+//
+// ## Features
+// - **Health Check**: Identifies variables with missing values or issues
+// - **Usage Analysis**: Shows which nodes AND styles use each variable
+// - **Value Preview**: Displays variable values across all modes
+// - **Smart Filtering**: Filter by variable purpose (typography, color, dimensions, effects)
+// - **Clickable Nodes**: Click individual nodes to select them
+//
+// ## Configuration
+// See CONFIG tab to adjust inspector behavior:
+// 
+// **Display Options:**
+// - `onlyUsedVariables` - Show only variables used in selection/styles
+// - `groupByCollection` - Organize variables by collection
+// - `showValuePreview` - Display actual variable values
+// - `maxNodesPreview` - Number of individual nodes to show (rest clickable as "Show all X nodes")
+//
+// **Variable Purpose Filters:**
+// - `typographicVariables` - Typography (fontSize, letterSpacing, lineHeight, etc.)
+// - `colorVariables` - Colors (fills, strokes, backgrounds)
+// - `dimensionVariables` - Dimensions & spacing (width, height, padding, gap, radius, etc.)
+// - `effectVariables` - Effects & opacity (shadows, blur, opacity)
+// - `otherVariables` - Other/miscellaneous variables
+//
+// **Advanced Options:**
+// - `checkStyleUsage` - Check if variables are used in text/paint/effect styles
+// - `showHealthScore` - Display variable health score (0-100)
+//
+// ## Status Indicators
+// - ✅ Healthy - Variable is working correctly
+// - ⚠️ Warning - Variable has some issues (missing values in modes)
+// - ❌ Broken - Variable has critical issues
+// - 🔗 Remote - Library/remote variable
+//
+// ## Usage
+// 1. Select nodes to inspect (or leave empty for entire page)
+// 2. Run the script
+// 3. Click any variable to select all nodes using it
+// 4. Click individual node names to select specific nodes
+// 5. Click "Show all X nodes" to select all nodes at once
+// @DOC_END
+
+// @CONFIG_START
+// ===== CONFIGURATION =====
+
+// Display Options
+var onlyUsedVariables = true; // Set to false to show all variables in file
+var groupByCollection = true; // Group variables by their collection
+var showValuePreview = true; // Show actual variable values
+var maxNodesPreview = 5; // Maximum nodes to show in usage preview
+
+// Variable Purpose Filters (set to false to hide specific categories)
+var typographicVariables = true; // Typography-related (fontSize, letterSpacing, lineHeight, etc.)
+var colorVariables = true; // Color variables (fills, strokes)
+var dimensionVariables = true; // Dimensions & spacing (width, height, padding, gap, radius, etc.)
+var effectVariables = true; // Effects & opacity
+var otherVariables = true; // Other/miscellaneous variables
+
+// Advanced Options
+var checkStyleUsage = true; // Check if variables are used in text/paint/effect styles
+var showHealthScore = false; // Show variable health score (0-100)
+// @CONFIG_END
+
+// Variable Inspector
 // Detailed inspector showing all variables with their current values for visual identification
 // @import { displayResults, createResult, createSelectableResult, createHtmlResult } from "@InfoPanel"
-
-// ===== CONFIGURATION =====
-var SHOW_ONLY_USED_VARIABLES = true; // Set to false to show all variables in file
-var GROUP_BY_COLLECTION = true; // Group variables by their collection
-var SHOW_VALUE_PREVIEW = true; // Show actual variable values
-var MAX_NODES_PREVIEW = 5; // Maximum nodes to show in usage preview
 
 // ===== UTILITY FUNCTIONS =====
 
@@ -39,6 +101,67 @@ var getNodePath = function(node) {
   }
   
   return path.join(' > ');
+};
+
+var getVariablePurpose = function(variableInfo) {
+  var variable = variableInfo.variable;
+  var usage = variableInfo.usage;
+  
+  // If COLOR type, it's definitely a color variable
+  if (variable.resolvedType === 'COLOR') {
+    return 'color';
+  }
+  
+  // Check usage properties to determine purpose
+  if (usage && usage.properties) {
+    var properties = Array.from(usage.properties);
+    
+    // Typography-related properties
+    var typographyProps = ['fontSize', 'letterSpacing', 'lineHeight', 'paragraphSpacing', 'paragraphIndent', 'fontWeight', 'textCase', 'textDecoration'];
+    var hasTypography = properties.some(function(prop) {
+      return typographyProps.indexOf(prop) !== -1;
+    });
+    if (hasTypography) return 'typographic';
+    
+    // Dimension & spacing properties
+    var dimensionProps = ['width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'itemSpacing', 'counterAxisSpacing', 'cornerRadius', 'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius', 'strokeWeight', 'strokeTopWeight', 'strokeRightWeight', 'strokeBottomWeight', 'strokeLeftWeight'];
+    var hasDimension = properties.some(function(prop) {
+      return dimensionProps.indexOf(prop) !== -1;
+    });
+    if (hasDimension) return 'dimension';
+    
+    // Effect-related properties
+    var effectProps = ['effects', 'opacity', 'blendMode'];
+    var hasEffect = properties.some(function(prop) {
+      return effectProps.indexOf(prop) !== -1;
+    });
+    if (hasEffect) return 'effect';
+    
+    // Fill/stroke properties (color-related)
+    var colorProps = ['fills', 'strokes', 'backgrounds'];
+    var hasColor = properties.some(function(prop) {
+      return colorProps.indexOf(prop) !== -1;
+    });
+    if (hasColor) return 'color';
+  }
+  
+  // Check variable name patterns as fallback
+  var varName = variable.name.toLowerCase();
+  if (varName.indexOf('color') !== -1 || varName.indexOf('fill') !== -1 || varName.indexOf('stroke') !== -1) {
+    return 'color';
+  }
+  if (varName.indexOf('font') !== -1 || varName.indexOf('text') !== -1 || varName.indexOf('letter') !== -1 || varName.indexOf('line-height') !== -1) {
+    return 'typographic';
+  }
+  if (varName.indexOf('spacing') !== -1 || varName.indexOf('padding') !== -1 || varName.indexOf('margin') !== -1 || varName.indexOf('gap') !== -1 || varName.indexOf('radius') !== -1 || varName.indexOf('size') !== -1 || varName.indexOf('width') !== -1 || varName.indexOf('height') !== -1) {
+    return 'dimension';
+  }
+  if (varName.indexOf('opacity') !== -1 || varName.indexOf('shadow') !== -1 || varName.indexOf('blur') !== -1 || varName.indexOf('effect') !== -1) {
+    return 'effect';
+  }
+  
+  // Default to other
+  return 'other';
 };
 
 var formatValue = function(value) {
@@ -128,13 +251,14 @@ var analyzeVariables = function() {
   var analysis = {
     usedVariables: new Map(),
     allVariables: new Map(),
-    collections: new Map()
+    collections: new Map(),
+    styleUsage: new Map() // Track variable usage in styles
   };
   
   console.log('=== VARIABLE INSPECTOR ANALYSIS ===');
   
   // If we want to show only used variables, scan the selection first
-  if (SHOW_ONLY_USED_VARIABLES) {
+  if (onlyUsedVariables) {
     var nodesToCheck = selection.length > 0 ? selection : [figma.currentPage];
     var allNodes = collectAllNodes(nodesToCheck);
     
@@ -164,6 +288,7 @@ var analyzeVariables = function() {
                 variableId: variableId,
                 usageCount: 0,
                 nodes: [],
+                styles: [],
                 properties: new Set()
               });
             }
@@ -183,6 +308,117 @@ var analyzeVariables = function() {
     }
     
     console.log('Found', analysis.usedVariables.size, 'variables in use');
+  }
+  
+  // Check style usage if enabled
+  if (checkStyleUsage) {
+    console.log('Checking styles for variable usage...');
+    
+    // Check text styles
+    var textStyles = figma.getLocalTextStyles();
+    for (var i = 0; i < textStyles.length; i++) {
+      var style = textStyles[i];
+      if (style.boundVariables) {
+        var properties = Object.keys(style.boundVariables);
+        for (var j = 0; j < properties.length; j++) {
+          var prop = properties[j];
+          var binding = style.boundVariables[prop];
+          if (binding && binding.id) {
+            var variableId = binding.id;
+            
+            if (!analysis.usedVariables.has(variableId)) {
+              analysis.usedVariables.set(variableId, {
+                variableId: variableId,
+                usageCount: 0,
+                nodes: [],
+                styles: [],
+                properties: new Set()
+              });
+            }
+            
+            var usage = analysis.usedVariables.get(variableId);
+            usage.styles.push({
+              styleName: style.name,
+              styleType: 'TEXT',
+              property: prop
+            });
+            usage.properties.add(prop);
+          }
+        }
+      }
+    }
+    
+    // Check paint styles
+    var paintStyles = figma.getLocalPaintStyles();
+    for (var i = 0; i < paintStyles.length; i++) {
+      var style = paintStyles[i];
+      if (style.boundVariables && style.boundVariables.paints) {
+        var bindings = style.boundVariables.paints;
+        if (Array.isArray(bindings)) {
+          for (var j = 0; j < bindings.length; j++) {
+            var binding = bindings[j];
+            if (binding && binding.id) {
+              var variableId = binding.id;
+              
+              if (!analysis.usedVariables.has(variableId)) {
+                analysis.usedVariables.set(variableId, {
+                  variableId: variableId,
+                  usageCount: 0,
+                  nodes: [],
+                  styles: [],
+                  properties: new Set()
+                });
+              }
+              
+              var usage = analysis.usedVariables.get(variableId);
+              usage.styles.push({
+                styleName: style.name,
+                styleType: 'PAINT',
+                property: 'color'
+              });
+              usage.properties.add('paints');
+            }
+          }
+        }
+      }
+    }
+    
+    // Check effect styles
+    var effectStyles = figma.getLocalEffectStyles();
+    for (var i = 0; i < effectStyles.length; i++) {
+      var style = effectStyles[i];
+      if (style.boundVariables && style.boundVariables.effects) {
+        var bindings = style.boundVariables.effects;
+        if (Array.isArray(bindings)) {
+          for (var j = 0; j < bindings.length; j++) {
+            var binding = bindings[j];
+            if (binding && binding.id) {
+              var variableId = binding.id;
+              
+              if (!analysis.usedVariables.has(variableId)) {
+                analysis.usedVariables.set(variableId, {
+                  variableId: variableId,
+                  usageCount: 0,
+                  nodes: [],
+                  styles: [],
+                  properties: new Set()
+                });
+              }
+              
+              var usage = analysis.usedVariables.get(variableId);
+              usage.styles.push({
+                styleName: style.name,
+                styleType: 'EFFECT',
+                property: 'effects'
+              });
+              usage.properties.add('effects');
+            }
+          }
+        }
+      }
+    }
+    
+    console.log('Style checking complete');
   }
   
   // Get all variables and collections for detailed analysis
@@ -235,7 +471,7 @@ var generateInspectorResults = function(analysis) {
   var variablesToShow = new Map();
   
   // Decide which variables to show
-  if (SHOW_ONLY_USED_VARIABLES) {
+  if (onlyUsedVariables) {
     analysis.usedVariables.forEach(function(usage, variableId) {
       var variableInfo = analysis.allVariables.get(variableId);
       if (variableInfo) {
@@ -246,13 +482,30 @@ var generateInspectorResults = function(analysis) {
     variablesToShow = analysis.allVariables;
   }
   
-  console.log('Displaying', variablesToShow.size, 'variables');
+  // Filter by variable purpose
+  var filteredVariables = new Map();
+  variablesToShow.forEach(function(variableInfo, variableId) {
+    var purpose = getVariablePurpose(variableInfo);
+    var shouldInclude = false;
+    
+    if (purpose === 'typographic' && typographicVariables) shouldInclude = true;
+    else if (purpose === 'color' && colorVariables) shouldInclude = true;
+    else if (purpose === 'dimension' && dimensionVariables) shouldInclude = true;
+    else if (purpose === 'effect' && effectVariables) shouldInclude = true;
+    else if (purpose === 'other' && otherVariables) shouldInclude = true;
+    
+    if (shouldInclude) {
+      filteredVariables.set(variableId, variableInfo);
+    }
+  });
   
-  if (GROUP_BY_COLLECTION) {
+  console.log('Displaying', filteredVariables.size, 'variables');
+  
+  if (groupByCollection) {
     // Group by collection
     var collectionGroups = new Map();
     
-    variablesToShow.forEach(function(variableInfo, variableId) {
+    filteredVariables.forEach(function(variableInfo, variableId) {
       var collectionId = variableInfo.collection ? variableInfo.collection.id : 'unknown';
       var collectionName = variableInfo.collection ? variableInfo.collection.name : 'Unknown Collection';
       
@@ -284,7 +537,7 @@ var generateInspectorResults = function(analysis) {
     
   } else {
     // Flat list
-    variablesToShow.forEach(function(variableInfo, variableId) {
+    filteredVariables.forEach(function(variableInfo, variableId) {
       results.push(createVariableResult(variableInfo));
     });
   }
@@ -308,30 +561,35 @@ var createVariableResult = function(variableInfo) {
   else if (variable.resolvedType === 'FLOAT') typeIcon = '🔢';
   else if (variable.resolvedType === 'BOOLEAN') typeIcon = '☑️';
   
-  // Build HTML
+  // Build HTML - using InfoPanel CSS classes instead of inline styles
   var html = '<div class="info-entry">';
   html += '<div class="info-entry-content">';
   html += '<div class="info-entry-title">' + healthIcon + ' ' + typeIcon + ' ' + variable.name + '</div>';
   
   var subtitle = variableInfo.collection ? variableInfo.collection.name : 'Unknown Collection';
   if (usage) {
-    subtitle += ' • Used ' + usage.usageCount + ' times';
+    var totalUsage = usage.nodes.length + usage.styles.length;
+    subtitle += ' • Used ' + totalUsage + ' times';
   } else {
     subtitle += ' • Not used in selection';
   }
   
+  if (showHealthScore) {
+    subtitle += ' • Health: ' + health.score + '/100';
+  }
+  
   html += '<div class="info-entry-subtitle">' + subtitle + '</div>';
   
-  // Health issues
+  // Health issues - using error-text class instead of inline color
   if (health.issues.length > 0) {
-    html += '<div style="margin-top: 4px; font-size: 11px; color: #ff6b6b;">';
-    html += '⚠️ ' + health.issues.join(', ');
+    html += '<div class="info-result-details" style="margin-top: 4px;">';
+    html += '<span class="error-text">⚠️ ' + health.issues.join(', ') + '</span>';
     html += '</div>';
   }
   
-  // Values preview
-  if (SHOW_VALUE_PREVIEW && Object.keys(variableInfo.values).length > 0) {
-    html += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-family: monospace;">';
+  // Values preview - using info-result-details class for styling
+  if (showValuePreview && Object.keys(variableInfo.values).length > 0) {
+    html += '<div class="info-result-details" style="margin-top: 8px; font-family: monospace;">';
     html += '<strong>Values:</strong><br>';
     
     var modeCount = 0;
@@ -348,18 +606,33 @@ var createVariableResult = function(variableInfo) {
     html += '</div>';
   }
   
-  // Usage preview
-  if (usage && usage.nodes.length > 0) {
-    html += '<div style="margin-top: 8px; font-size: 11px; color: #666;">';
-    html += '<strong>Used by:</strong><br>';
+  // Style usage preview
+  if (usage && usage.styles && usage.styles.length > 0) {
+    html += '<div class="info-result-details" style="margin-top: 8px;">';
+    html += '<strong>Used in styles:</strong><br>';
     
-    for (var i = 0; i < Math.min(MAX_NODES_PREVIEW, usage.nodes.length); i++) {
+    for (var i = 0; i < usage.styles.length; i++) {
+      var style = usage.styles[i];
+      html += '• ' + style.styleName + ' (' + style.styleType + ' STYLE)<br>';
+    }
+    html += '</div>';
+  }
+  
+  // Node usage preview with clickable individual nodes
+  if (usage && usage.nodes && usage.nodes.length > 0) {
+    html += '<div class="info-result-details" style="margin-top: 8px;">';
+    html += '<strong>Used by ' + usage.nodes.length + ' node' + (usage.nodes.length > 1 ? 's' : '') + ':</strong><br>';
+    
+    // Show individual clickable nodes up to maxNodesPreview
+    for (var i = 0; i < Math.min(maxNodesPreview, usage.nodes.length); i++) {
       var node = usage.nodes[i];
-      html += '• ' + node.nodeName + ' (' + node.nodeType + ')<br>';
+      // Each node gets its own clickable line - we'll create separate results for these
+      html += '• <span data-node-id="' + node.nodeId + '">' + node.nodeName + ' (' + node.nodeType + ')</span><br>';
     }
     
-    if (usage.nodes.length > MAX_NODES_PREVIEW) {
-      html += '• ... and ' + (usage.nodes.length - MAX_NODES_PREVIEW) + ' more nodes<br>';
+    // Show total count with click to select all
+    if (usage.nodes.length > maxNodesPreview) {
+      html += '• <strong><span data-select-all="true">Show all ' + usage.nodes.length + ' nodes</span></strong><br>';
     }
     
     html += '<strong>Properties:</strong> ' + Array.from(usage.properties).join(', ');
@@ -369,7 +642,7 @@ var createVariableResult = function(variableInfo) {
   html += '</div>';
   html += '</div>';
   
-  // Collect node IDs for selection
+  // Collect node IDs for selection when clicking the main result
   var nodeIds = [];
   if (usage) {
     for (var i = 0; i < usage.nodes.length; i++) {
@@ -393,7 +666,7 @@ var results = generateInspectorResults(analysis);
 
 if (results.length > 0) {
   var title = 'Variable Inspector';
-  if (SHOW_ONLY_USED_VARIABLES) {
+  if (onlyUsedVariables) {
     title += ': ' + analysis.usedVariables.size + ' used variables';
   } else {
     title += ': ' + analysis.allVariables.size + ' total variables';
