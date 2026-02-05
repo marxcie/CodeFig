@@ -172,6 +172,11 @@ async function loadExampleScripts() {
 figma.ui.onmessage = (msg) => {
   debugLog('Backend: Received message type:', msg.type);
   
+  if (msg.type === 'UI_DEBUG') {
+    debugLog('[UI]', msg.message || msg.payload || '');
+    return;
+  }
+  
   if (msg.type === 'SET_SCRIPTS') {
     // Cache scripts received from UI
     if (msg.scripts && Array.isArray(msg.scripts)) {

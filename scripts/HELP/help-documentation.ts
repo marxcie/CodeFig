@@ -36,12 +36,14 @@
 // • @Math Helpers: add, multiply, average, roundToNearest, clamp, lerp, distance, center, bounds, interpolate, linear, exponential, sine, cubic, quint, goldenRatio
 // • @Variables: getCollection, getVariable, setVariableValue, updateMultipleVariables, validateCollection, getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables
 // • @InfoPanel: displayResults, createResult, createSelectableResult, createHtmlResult
+// • @ConfigUI: section, toggle, number, string, select, sendToUI – build native UI (toggles, inputs) and show in the plugin in real time
 
 // 💡 IMPORT EXAMPLES:
 // @import { getAllStyles, generateScale } from "@Core Library"
 // @import { add, average, distance, interpolate } from "@Math Helpers"  
 // @import { getCollection, setVariableValue, getOrCreateCollection } from "@Variables"
 // @import { displayResults, createHtmlResult } from "@InfoPanel"
+// @import { section, toggle, number, sendToUI } from "@ConfigUI"
 // @import { myFunction } from "My Custom Script"  // Import from any user script
 
 // ✨ HOW IT WORKS:

@@ -7,6 +7,36 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/midnight.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+    <style id="config-ui-css">/* CodeFig Config UI - Component styles */
+.config-ui-form{display:flex;flex-direction:column;flex:1;min-height:0;width:100%;max-width:100%;padding:12px 16px;overflow-y:auto;box-sizing:border-box}
+.config-ui-empty{color:var(--text-secondary,#86868b);font-size:12px;padding:24px 16px;text-align:center}
+.config-ui-section{width:100%;min-width:0;margin-bottom:20px;flex-shrink:0}.config-ui-section:last-child{margin-bottom:0}
+.config-ui-section__header{font-size:11px;font-weight:600;color:var(--text-secondary,#86868b);margin-bottom:8px;padding-bottom:4px}
+.config-ui-section__fields{display:flex;flex-direction:column;gap:8px;width:100%;min-width:0}
+.config-ui-field{display:flex;flex-direction:column;gap:4px;width:100%;min-width:0}
+.config-ui-field__row{display:flex;flex-direction:row;align-items:center;gap:10px;min-height:28px}
+.config-ui-field__label{font-size:11px;font-weight:500;color:var(--text-primary,#1d1d1f);flex:0 0 30%;min-width:0}
+.config-ui-field__label--has-tooltip{cursor:help}
+.config-ui-field__control{flex:1;min-width:0;display:flex;align-items:center}
+.config-ui-field__hint{font-size:10px;color:var(--text-secondary,#86868b);line-height:1.3;padding-left:calc(30% + 10px)}
+.config-ui-toggle-wrap{display:flex;align-items:center}
+.config-ui-toggle{appearance:none;width:32px;height:18px;border-radius:9px;background:var(--border-light,#e6e6e6);cursor:pointer;position:relative;transition:background .2s ease;flex-shrink:0}
+.config-ui-toggle::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .2s ease}
+.config-ui-toggle:checked{background:var(--active-bg,#0a84ff)}
+.config-ui-toggle:checked::after{transform:translateX(14px)}
+.config-ui-toggle:focus{outline:none;box-shadow:0 0 0 2px rgba(10,132,255,.3)}
+.config-ui-input{font-size:12px;padding:8px 10px;border:1px solid var(--border-color,#e1e5e9);border-radius:6px;background:var(--input-bg,#fff);color:var(--text-primary,#1d1d1f);max-width:100%;transition:border-color .2s ease,box-shadow .2s ease}
+.config-ui-input:focus{outline:none;border-color:var(--active-bg,#0a84ff);box-shadow:0 0 0 2px rgba(10,132,255,.2)}
+.config-ui-input--number,.config-ui-input--text,.config-ui-input--select{width:100%;min-width:0}
+.config-ui-input--select{cursor:pointer}
+@media (prefers-color-scheme:dark){.config-ui-toggle::after{background:var(--bg-secondary,#252525)}}</style>
+    <script id="config-ui-stub">(function(){var g=typeof self!=="undefined"?self:typeof window!=="undefined"?window:typeof global!=="undefined"?global:this;if(g)g.CodeFigConfigUI={parse:function(){return{sections:[]};},serialize:function(){return"";},render:function(schema,opts){var c=opts&&opts.container;if(c)c.innerHTML='<div class="config-ui-empty">Config UI failed to load. Check figma-console.log for errors.</div>';return{getValues:function(){return{};},setValues:function(){},destroy:function(){}};}};}})();</script>
+    <script id="config-ui-js">
+(function(r,f){if(typeof define==="function"&&define.amd)define([],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f();else r.ConfigUIParser=f();})(typeof self!=="undefined"?self:this,function(){"use strict";function inferType(v){if(v===null||v===undefined)return"string";if(typeof v==="boolean")return"boolean";if(typeof v==="number"&&!Number.isNaN(v))return"number";if(typeof v==="string")return"string";if(Array.isArray(v))return"array";if(typeof v==="object")return"object";return"string"}function labelFromName(n){if(!n||typeof n!=="string")return"";return n.replace(/([A-Z])/g," $1").replace(/^./,function(s){return s.toUpperCase()}).trim()}function parseValue(s){s=(s||"").trim();if(s==="true")return true;if(s==="false")return false;if(s==="null")return null;if(/^-?\d+$/.test(s))return parseInt(s,10);if(/^-?\d*\.\d+([eE][+-]?\d+)?$/.test(s))return parseFloat(s);if((s.startsWith('"')&&s.endsWith('"'))||(s.startsWith("'")&&s.endsWith("'")))return s.slice(1,-1).replace(/\\'/g,"'").replace(/\\"/g,'"').replace(/\\n/g,"\n").replace(/\\r/g,"\r");if(s.startsWith("[")&&s.endsWith("]")){try{return JSON.parse(s)}catch(_){return s}}if(s.startsWith("{")&&s.endsWith("}")){try{return JSON.parse(s)}catch(_){return s}}return s}function parse(code){var sections=[],current={title:"",fields:[]},lines=(code||"").split(/\r?\n/),i=0;function flush(){if(current.fields.length>0||current.title)sections.push({title:current.title,fields:current.fields});current={title:"",fields:[]}}while(i<lines.length){var line=lines[i],t=line.trim();if(!t){i++;continue}if(t.startsWith("//")){var c=t.slice(2).trim();if(c&&!/^\s*var\s+/.test(c)&&!/^=+$/.test(c)){flush();current.title=c.replace(/^=\s*|\s*=$/g,"").trim()}i++;continue}var m=t.match(/^\s*var\s+(\w+)\s*=\s*(.+?)\s*;(?:\s*\/\/\s*(.*))?$/);if(m){var val=parseValue(m[2].trim());current.fields.push({name:m[1],type:inferType(val),value:val,label:labelFromName(m[1]),tooltip:(m[3]||"").trim()});i++;continue}i++}flush();return{sections:sections}}function serialize(schema,values){if(!schema||!schema.sections)return"";var out=[],vm=values||{};function fmt(v){if(v===null)return"null";if(typeof v==="boolean")return v?"true":"false";if(typeof v==="number")return String(v);return JSON.stringify(v)}schema.sections.forEach(function(sec){if(sec.title)out.push("// "+sec.title),out.push("");sec.fields.forEach(function(f){var v=vm[f.name];if(v===undefined)v=f.value;out.push("var "+f.name+" = "+fmt(v)+";"+(f.tooltip?" // "+f.tooltip:""))});out.push("")});return out.join("\n").replace(/\n{3,}/g,"\n\n").trim()}return{parse:parse,serialize:serialize,inferType:inferType,parseValue:parseValue}});
+(function(r,f){if(typeof define==="function"&&define.amd)define(["./parser"],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f(require("./parser"));else r.ConfigUIRenderer=f(r.ConfigUIParser);})(typeof self!=="undefined"?self:this,function(P){"use strict";var p=P||(typeof ConfigUIParser!=="undefined"?ConfigUIParser:null);if(!p)throw new Error("ConfigUI Renderer requires Parser");function buildField(field,idx){var n=field.name,t=field.type,v=field.value,l=field.label||n,tip=field.tooltip||"",id="config-ui-"+n+"-"+idx,wrap=document.createElement("div");wrap.className="config-ui-field config-ui-field--"+t;var row=document.createElement("div");row.className="config-ui-field__row";var lab=document.createElement("label");lab.className="config-ui-field__label";lab.htmlFor=id;lab.textContent=l;if(tip)lab.title=tip,lab.classList.add("config-ui-field__label--has-tooltip");row.appendChild(lab);var cw=document.createElement("div");cw.className="config-ui-field__control";if(t==="boolean"){var tw=document.createElement("div");tw.className="config-ui-toggle-wrap";var inp=document.createElement("input");inp.type="checkbox";inp.id=id;inp.checked=!!v;inp.className="config-ui-toggle";inp.setAttribute("data-field",n);tw.appendChild(inp);cw.appendChild(tw)}else if(t==="number"){var ni=document.createElement("input");ni.type="number";ni.id=id;ni.value=v;ni.className="config-ui-input config-ui-input--number";ni.setAttribute("data-field",n);cw.appendChild(ni)}else if(t==="select"&&field.options&&field.options.length){var sel=document.createElement("select");sel.id=id;sel.className="config-ui-input config-ui-input--select";sel.setAttribute("data-field",n);var ov=v!=null?String(v):"";field.options.forEach(function(opt){var o=document.createElement("option");o.value=opt;o.textContent=opt;if(opt===ov)o.selected=true;sel.appendChild(o)});if(!sel.value&&field.options[0])sel.value=field.options[0];cw.appendChild(sel)}else{var ti=document.createElement("input");ti.type="text";ti.id=id;ti.value=v==null?"":String(v);ti.className="config-ui-input config-ui-input--text";ti.setAttribute("data-field",n);cw.appendChild(ti)}row.appendChild(cw);wrap.appendChild(row);if(tip){var h=document.createElement("span");h.className="config-ui-field__hint";h.textContent=tip;wrap.appendChild(h)}return wrap}function buildSection(sec,idx){var el=document.createElement("div");el.className="config-ui-section";el.setAttribute("data-section",String(idx));if(sec.title){var h=document.createElement("div");h.className="config-ui-section__header";h.textContent=sec.title;el.appendChild(h)}var fe=document.createElement("div");fe.className="config-ui-section__fields";sec.fields.forEach(function(f,i){fe.appendChild(buildField(f,idx*1000+i))});el.appendChild(fe);return el}function buildForm(schema,container){if(!schema||!schema.sections||!schema.sections.length){container.innerHTML='<div class="config-ui-empty">No configuration options.</div>';return}container.innerHTML="";container.className="config-ui-form";schema.sections.forEach(function(sec,i){container.appendChild(buildSection(sec,i))})}function attachListeners(container,schema,onChange){if(!onChange||typeof onChange!=="function")return;function getValues(){var vals={};container.querySelectorAll("[data-field]").forEach(function(el){var n=el.getAttribute("data-field");if(!n)return;if(el.type==="checkbox")vals[n]=el.checked;else if(el.type==="number"){var x=parseFloat(el.value,10);vals[n]=Number.isNaN(x)?0:x}else vals[n]=el.value});return vals}container.addEventListener("change",function(e){if(e.target.getAttribute("data-field"))onChange(getValues())});container.addEventListener("input",function(e){if(e.target.getAttribute("data-field")&&e.target.type!=="checkbox")onChange(getValues())});return getValues}return{buildForm:buildForm,buildField:buildField,buildSection:buildSection,attachListeners:attachListeners}});
+(function(r,f){var P=r.ConfigUIParser,R=r.ConfigUIRenderer;if(P&&R)r.ConfigUIFormController=f(P,R);})(typeof self!=="undefined"?self:this,function(P,R){"use strict";function createForm(container,initialSchema,opts){var schema=initialSchema||null,getV=null,onCh=(opts&&opts.onChange)||null;function render(s){schema=s;R.buildForm(schema,container);getV=R.attachListeners(container,schema,onCh?function(v){onCh(v)}:null)}if(schema&&schema.sections&&schema.sections.length)render(schema);return{getValues:function(){return getV?getV():{}},setValues:function(vals){if(!vals||!container)return;Object.keys(vals).forEach(function(n){var el=container.querySelector('[data-field="'+n+'"]');if(!el)return;if(el.type==="checkbox")el.checked=!!vals[n];else el.value=vals[n]==null?"":String(vals[n])})},updateFromCode:function(code){try{var s=P.parse(code);if(s&&s.sections&&s.sections.length){var cur=(getV&&getV())||{};render(s);this.setValues(cur)}}catch(e){console.warn("ConfigUI: updateFromCode parse failed",e)}},destroy:function(){if(container)container.innerHTML="";schema=null;getV=null}}}return{createForm:createForm}});
+(function(r){var P=r.ConfigUIParser,R=r.ConfigUIRenderer,C=r.ConfigUIFormController;if(!P||!R||!C)return;r.CodeFigConfigUI={parse:function(c){return P.parse(c)},serialize:function(s,v){return P.serialize(s,v)},render:function(schema,opts){var c=opts&&opts.container;if(!c)throw new Error("CodeFigConfigUI.render: options.container is required");return C.createForm(c,schema,opts)}}})(typeof self!=="undefined"?self:this);
+    </script>
     <style>
       * { box-sizing: border-box; }
       
@@ -21,7 +51,7 @@
         --border-color: #e1e5e9;
         --border-light: #e6e6e6;
         --hover-bg: #fafafa;
-        --active-bg: #3b7bef;
+        --active-bg: #0D99FF;
         --code-bg: #f5f5f7;
         --input-bg: #fff;
 
@@ -520,7 +550,7 @@
         gap: 12px;
       }
       
-      /* Editor tabs - shown when script has @DOC_START or @CONFIG_START */
+      /* Editor tabs - shown when script has @DOC_START or @CONFIG_START / @UI_CONFIG_START */
       .editor-tabs {
         display: none;
         flex-direction: row;
@@ -580,6 +610,18 @@
       }
       
       .tab-content .CodeMirror {
+        flex: 1;
+      }
+      
+      .config-code-container,
+      .config-ui-container {
+        flex: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .config-code-container .CodeMirror {
         flex: 1;
       }
       
@@ -663,9 +705,9 @@
       
       /* Primary button (blue) */
       .btn.primary { 
-        background: #3b7bef; 
+        background: #0D99FF; 
         color: white; 
-        border-color: #3b7bef; 
+        border-color: #0D99FF; 
       }
       
       .btn.primary:hover:not(:disabled) { 
@@ -723,7 +765,7 @@
       }
 
       .icon-btn.active {
-        color: #3b7bef;
+        color: #0D99FF;
       }
 
       .action-buttons {
@@ -854,7 +896,7 @@
       .info-entry-title {
         font-weight: 600;
         color: var(--text-primary);
-        font-size: var(--font-size-body);
+        font-size: var(--font-size-subheadline);
         margin-bottom: 4px;
         word-break: break-word;
       }
@@ -955,14 +997,14 @@
       }
 
       .info-variable-name {
-        font-size: var(--font-size-caption);
+        font-size: var(--font-size-body);
         font-weight: 500;
         color: var(--text-primary);
         margin-bottom: 2px;
       }
 
       .info-variable-details {
-        font-size: var(--font-size-caption);
+        font-size: var(--font-size-body);
         color: var(--text-secondary);
       }
 
@@ -1004,7 +1046,7 @@
       }
 
       .text-details {
-        font-size: var(--font-size-caption);
+        font-size: var(--font-size-body);
         color: var(--text-muted);
         display: flex;
         gap: 8px;
@@ -1203,7 +1245,12 @@
               <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
             </div>
             <div class="tab-content" id="tabConfig">
-              <textarea id="codeConfig" placeholder="// Configuration section"></textarea>
+              <div class="config-code-container" id="configCodeContainer">
+                <textarea id="codeConfig" placeholder="// Configuration section"></textarea>
+              </div>
+              <div class="config-ui-container" id="configUIContainer" style="display: none;">
+                <!-- Rendered when script uses // @UI_CONFIG_START … // @UI_CONFIG_END -->
+              </div>
             </div>
             <div class="tab-content" id="tabDocs">
               <div id="docsRenderer" class="docs-rendered"></div>
@@ -1251,11 +1298,37 @@
     </div>
 
     <script>
+      // === UI debug: send to backend (shows in figma-console.log when npm run dev) ===
+      function uiDebugLog() {
+        const args = Array.prototype.slice.call(arguments);
+        const message = args.map(function(a) {
+          if (typeof a === 'object') try { return JSON.stringify(a); } catch(e) { return String(a); }
+          return String(a);
+        }).join(' ');
+        try {
+          if (window.parent && window.parent.postMessage) {
+            window.parent.postMessage({ pluginMessage: { type: 'UI_DEBUG', message: message } }, '*');
+          }
+        } catch (e) {}
+        try {
+          fetch('http://localhost:8765', {
+            method: 'POST',
+            body: '[UI] ' + message + '\n',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          }).catch(function() {});
+        } catch (e) {}
+      }
+      window.onerror = function(msg, url, line, col, err) {
+        uiDebugLog('window.onerror:', msg, 'at', line + ':' + col, err ? err.stack : '');
+        return false;
+      };
+
       // Help scripts will be populated by the build process from HELP folder
 
       // Pre-built scripts
       // Prebuilt scripts will be loaded from backend at runtime
       let prebuiltScripts = [];
+      uiDebugLog('Main script block started');
 
       // State
       let currentScript = null;
@@ -1345,11 +1418,56 @@
         });
       }
 
+      let configUIInstance = null;
+      const configCodeContainer = document.getElementById('configCodeContainer');
+      const configUIContainer = document.getElementById('configUIContainer');
+
+      function initConfigUI(configCode) {
+        if (!configUIContainer) return;
+        if (configUIInstance) {
+          configUIInstance.destroy();
+          configUIInstance = null;
+        }
+        if (typeof window.CodeFigConfigUI === 'undefined') {
+          configUIContainer.innerHTML = '<div class="config-ui-empty">Config UI script failed to load. Reload the plugin.</div>';
+          return;
+        }
+        var content = (configCode && configCode.trim()) || '';
+        if (!content && parsedSections && code && code.getValue) {
+          var useUI = !!parsedSections.hasUIConfig;
+          content = extractConfigSection(code.getValue(), useUI).trim();
+        }
+        try {
+          var schema = window.CodeFigConfigUI.parse(content);
+          if (schema && schema.sections && schema.sections.length > 0) {
+            configUIInstance = window.CodeFigConfigUI.render(schema, {
+              container: configUIContainer,
+              onChange: function (values) { syncUIToCode(values); }
+            });
+          } else {
+            configUIContainer.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
+          }
+        } catch (e) {
+          configUIContainer.innerHTML = '<div class="config-ui-empty">Could not render configuration: ' + (e && e.message ? e.message : String(e)) + '</div>';
+        }
+      }
+
+      function syncUIToCode(values) {
+        if (!configEditor || !scriptHasConfig || typeof window.CodeFigConfigUI === 'undefined') return;
+        try {
+          const schema = window.CodeFigConfigUI.parse(configEditor.getValue());
+          const newCode = window.CodeFigConfigUI.serialize(schema, values);
+          configEditor.setValue(newCode);
+          mergeConfigIntoMain();
+        } catch (err) {}
+      }
+
       // Tab state for script sections (docs / config / script)
       let currentTab = 'script';
       let scriptHasDocs = false;
       let scriptHasConfig = false;
-      let parsedSections = null; // { docContent, configContent, preDoc, postDocPreConfig, postConfig } when sections exist
+      let scriptHasUIConfig = false; // @UI_CONFIG_START → show UI; @CONFIG_START only → show code
+      let parsedSections = null; // { docContent, configContent, hasUIConfig, configStartMarker, configEndMarker, ... }
 
       // Parse script into sections by @DOC_START/@DOC_END and @CONFIG_START/@CONFIG_END
       function hasSection(code, startMarker) {
@@ -1370,8 +1488,10 @@
         return code.slice(startIdx, endIdx).replace(/^\s*\n|\n\s*$/g, '');
       }
 
-      function extractConfigSection(code) {
-        const content = extractSection(code, '@CONFIG_START', '@CONFIG_END');
+      function extractConfigSection(code, useUIConfig) {
+        const start = useUIConfig ? '@UI_CONFIG_START' : '@CONFIG_START';
+        const end = useUIConfig ? '@UI_CONFIG_END' : '@CONFIG_END';
+        const content = extractSection(code, start, end);
         return content.replace(/^\s*\n|\n\s*$/g, '');
       }
 
@@ -1390,16 +1510,20 @@
 
       function parseScriptSections(fullCode) {
         const hasDocs = hasSection(fullCode, '@DOC_START');
-        const hasConfig = hasSection(fullCode, '@CONFIG_START');
+        const hasUIConfig = hasSection(fullCode, '@UI_CONFIG_START');
+        const hasCodeConfig = hasSection(fullCode, '@CONFIG_START');
+        const hasConfig = hasUIConfig || hasCodeConfig;
         if (!hasDocs && !hasConfig) {
-          return { hasDocs: false, hasConfig: false, fullCode: fullCode };
+          return { hasDocs: false, hasConfig: false, hasUIConfig: false, fullCode: fullCode };
         }
         const docContent = hasDocs ? extractDocContent(fullCode) : '';
-        const configContent = hasConfig ? extractConfigSection(fullCode) : '';
+        const configContent = hasConfig ? extractConfigSection(fullCode, hasUIConfig) : '';
         const docStart = fullCode.indexOf('// @DOC_START');
         const docEnd = fullCode.indexOf('// @DOC_END');
-        const configStart = fullCode.indexOf('// @CONFIG_START');
-        const configEnd = fullCode.indexOf('// @CONFIG_END');
+        const configStartMarker = hasUIConfig ? '// @UI_CONFIG_START' : '// @CONFIG_START';
+        const configEndMarker = hasUIConfig ? '// @UI_CONFIG_END' : '// @CONFIG_END';
+        const configStart = fullCode.indexOf(configStartMarker);
+        const configEnd = fullCode.indexOf(configEndMarker);
         let preDoc = '';
         let postDocPreConfig = '';
         let postConfig = '';
@@ -1419,6 +1543,9 @@
         return {
           hasDocs,
           hasConfig,
+          hasUIConfig,
+          configStartMarker,
+          configEndMarker,
           fullCode,
           docContent,
           configContent,
@@ -1429,30 +1556,34 @@
       }
 
       function mergeConfigIntoMain() {
-        if (!scriptHasConfig || !configEditor) return;
+        if (!scriptHasConfig || !parsedSections) return;
         const mainCode = code.getValue();
-        const configContent = configEditor.getValue();
-        const startMarker = '// @CONFIG_START';
-        const endMarker = '// @CONFIG_END';
+        const startMarker = parsedSections.configStartMarker || '// @CONFIG_START';
+        const endMarker = parsedSections.configEndMarker || '// @CONFIG_END';
         const i = mainCode.indexOf(startMarker);
         const j = mainCode.indexOf(endMarker);
         if (i === -1 || j === -1 || j <= i) return;
+        let configContent = '';
+        if (scriptHasUIConfig && configUIInstance && window.CodeFigConfigUI) {
+          const schema = window.CodeFigConfigUI.parse(mainCode.slice(i + startMarker.length, j));
+          configContent = window.CodeFigConfigUI.serialize(schema, configUIInstance.getValues());
+        } else {
+          configContent = configEditor ? configEditor.getValue() : '';
+        }
         const before = mainCode.slice(0, i + startMarker.length);
         const after = mainCode.slice(j);
-        const newContent = before + '\n' + configContent.replace(/\n\s*$/, '') + '\n' + after;
-        code.setValue(newContent);
+        code.setValue(before + '\n' + configContent.replace(/\n\s*$/, '') + '\n' + after);
       }
 
       function getFullCode() {
-        if (currentTab === 'config' && scriptHasConfig && configEditor) {
-          mergeConfigIntoMain();
-        }
+        if (scriptHasConfig) mergeConfigIntoMain();
         return code.getValue();
       }
 
       function getEffectiveContentLength() {
-        if (currentTab === 'config' && scriptHasConfig && configEditor) {
-          return (code.getValue().trim().length > 0) || (configEditor.getValue().trim().length > 0);
+        if (currentTab === 'config' && scriptHasConfig) {
+          if (scriptHasUIConfig && configUIInstance) return code.getValue().trim().length > 0;
+          if (configEditor) return (code.getValue().trim().length > 0) || (configEditor.getValue().trim().length > 0);
         }
         return code.getValue().trim().length > 0;
       }
@@ -1468,9 +1599,9 @@
         }
         if (sections.postDocPreConfig) out += sections.postDocPreConfig + '\n\n';
         if (sections.hasConfig) {
-          out += '// @CONFIG_START\n';
+          out += (sections.configStartMarker || '// @CONFIG_START') + '\n';
           out += (sections.configContent || '') + '\n';
-          out += '// @CONFIG_END\n\n';
+          out += (sections.configEndMarker || '// @CONFIG_END') + '\n\n';
         }
         if (sections.postConfig) out += sections.postConfig;
         return out;
@@ -1492,6 +1623,16 @@
         if (tabScriptEl) tabScriptEl.classList.toggle('active', tabName === 'script');
         if (tabConfigEl) tabConfigEl.classList.toggle('active', tabName === 'config');
         if (tabDocsEl) tabDocsEl.classList.toggle('active', tabName === 'docs');
+        if (tabName === 'config' && scriptHasConfig) {
+          if (scriptHasUIConfig) {
+            if (configCodeContainer) configCodeContainer.style.display = 'none';
+            if (configUIContainer) { configUIContainer.style.display = 'flex'; configUIContainer.style.flexDirection = 'column'; }
+            initConfigUI(parsedSections && parsedSections.configContent ? parsedSections.configContent : (configEditor ? configEditor.getValue() : ''));
+          } else {
+            if (configCodeContainer) configCodeContainer.style.display = 'block';
+            if (configUIContainer) configUIContainer.style.display = 'none';
+          }
+        }
         [].forEach.call(editorTabsEl ? editorTabsEl.querySelectorAll('.editor-tab') : [], btn => {
           btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
         });
@@ -1817,6 +1958,7 @@
         parsedSections = parseScriptSections(fullCode);
         scriptHasDocs = parsedSections.hasDocs;
         scriptHasConfig = parsedSections.hasConfig;
+        scriptHasUIConfig = !!parsedSections.hasUIConfig;
         
         const tabs = [];
         if (parsedSections.hasDocs) tabs.push('docs');
@@ -1826,7 +1968,7 @@
         
         if (code && code.setValue) {
           code.setValue(fullCode);
-          if (scriptHasConfig && configEditor) {
+          if (scriptHasConfig && configEditor && !scriptHasUIConfig) {
             configEditor.setValue(parsedSections.configContent || '');
           }
           if (scriptHasDocs && docsRendererEl) {
@@ -2569,6 +2711,7 @@
           currentScript = null;
           code.setValue('');
           if (configEditor) configEditor.setValue('');
+          if (configUIInstance) { configUIInstance.destroy(); configUIInstance = null; }
           originalCode = '';
           scriptHasDocs = false;
           scriptHasConfig = false;
@@ -2609,6 +2752,7 @@
           currentScript = null;
           code.setValue('');
           if (configEditor) configEditor.setValue('');
+          if (configUIInstance) { configUIInstance.destroy(); configUIInstance = null; }
           originalCode = '';
           scriptHasDocs = false;
           scriptHasConfig = false;
@@ -3548,7 +3692,7 @@
           
           switch (msg.type) {
           case 'EXAMPLE_SCRIPTS':
-            debugLog('Received example scripts:', msg.items);
+            uiDebugLog('EXAMPLE_SCRIPTS received, items.length:', msg.items ? msg.items.length : 0);
             
             prebuiltScripts = msg.items.map(script => ({
               name: script.name || 'Unnamed',
@@ -3557,11 +3701,11 @@
             }));
             allScripts = [...prebuiltScripts, ...userScripts];
             updateScriptList();
+            uiDebugLog('EXAMPLE_SCRIPTS applied, allScripts.length:', allScripts.length);
             break;
             
           case 'LIST':
-            debugLog('Received user scripts:', msg.items);
-            debugLog('Last opened script:', msg.lastOpenedScript);
+            uiDebugLog('LIST received, user items:', msg.items ? msg.items.length : 0);
             
             userScripts = msg.items.map(script => ({
               name: script.name || 'Unnamed',
@@ -3570,6 +3714,7 @@
             }));
             allScripts = [...prebuiltScripts, ...userScripts];
             updateScriptList();
+            uiDebugLog('LIST applied, allScripts.length:', allScripts.length);
             
             // Open the last opened script or default to Help & Documentation
             // Add a small delay to ensure everything is fully initialized
@@ -3618,6 +3763,24 @@
             post('NOTIFY', { message: `Failed to save script: ${msg.error}` });
             break;
             
+          case 'CONFIG_UI_RENDER':
+            if (msg.schema && typeof window.CodeFigConfigUI !== 'undefined') {
+              try {
+                const container = document.getElementById('configUIContainer');
+                if (container) {
+                  if (configUIInstance) configUIInstance.destroy();
+                  configUIInstance = window.CodeFigConfigUI.render(msg.schema, {
+                    container: container,
+                    onChange: function () { /* Library-sent UI: no sync back to editor */ }
+                  });
+                  if (configCodeContainer) configCodeContainer.style.display = 'none';
+                  container.style.display = 'flex';
+                  if (tabConfigEl && scriptHasConfig) switchTab('config');
+                }
+              } catch (e) { console.warn('ConfigUI render failed', e); }
+            }
+            break;
+
           case 'INFO_PANEL_RESULTS':
             console.log('UI: Received INFO_PANEL_RESULTS message:', msg);
             displayInfoResults(msg);
@@ -3747,7 +3910,9 @@
 
       // Initialize everything
       function init() {
-        debugLog('Initializing CodeFig...');
+        uiDebugLog('init() started');
+        uiDebugLog('CodeFigConfigUI available:', typeof window.CodeFigConfigUI !== 'undefined');
+        uiDebugLog('prebuiltScripts.length (before):', prebuiltScripts.length);
         
         // Load window memory from backend FIRST, before any UI rendering
         parent.postMessage({
@@ -3765,6 +3930,7 @@
         // Populate initial scripts (build process includes all scripts in prebuiltScripts)
         allScripts = [...prebuiltScripts];
         updateScriptList();
+        uiDebugLog('allScripts.length after prebuilt:', allScripts.length);
         
         // Initialize features
         initResizing();
@@ -3783,35 +3949,36 @@
         // Read scripts from embedded script tag and send to backend
         const scriptsScript = document.getElementById('scripts-data');
         if (scriptsScript) {
+          uiDebugLog('scripts-data element found, length:', (scriptsScript.textContent || '').length);
           try {
             // Get the base64 encoded content
             const scriptsBase64 = scriptsScript.textContent || scriptsScript.innerText || '';
             // Decode from base64 with proper UTF-8 handling
-            // atob() returns a binary string, we need to convert it to UTF-8
             const binaryString = atob(scriptsBase64);
-            // Convert binary string to UTF-8 using TextDecoder
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
               bytes[i] = binaryString.charCodeAt(i);
             }
             const scriptsText = new TextDecoder('utf-8').decode(bytes);
-            // Parse the JSON
             const scripts = JSON.parse(scriptsText);
-            // Send scripts to backend
+            uiDebugLog('Parsed embedded scripts count:', scripts.length);
             post('SET_SCRIPTS', { scripts: scripts });
-            debugLog('Sent scripts to backend:', scripts.length, 'scripts');
+            uiDebugLog('Posted SET_SCRIPTS with', scripts.length, 'scripts');
           } catch (e) {
+            uiDebugLog('ERROR parsing scripts-data:', e.message, e.stack);
             console.error('Failed to parse scripts from UI HTML:', e);
           }
         } else {
+          uiDebugLog('ERROR: scripts-data element NOT FOUND in DOM');
           console.error('Scripts script tag not found in HTML');
         }
         
         // Load example scripts and user scripts
+        uiDebugLog('Posting LOAD_EXAMPLE_SCRIPTS and LIST');
         post('LOAD_EXAMPLE_SCRIPTS');
         post('LIST');
         
-        debugLog('CodeFig initialized successfully');
+        uiDebugLog('init() finished');
       }
 
       // Init is now called after CodeMirror is ready (see above)

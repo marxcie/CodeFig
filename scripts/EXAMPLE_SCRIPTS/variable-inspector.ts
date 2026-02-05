@@ -45,26 +45,27 @@
 // 5. Click "Show all X nodes" to select all nodes at once
 // @DOC_END
 
-// @CONFIG_START
-// ===== CONFIGURATION =====
+// @UI_CONFIG_START
+// # Configuration
+// Display and filter options for the Variable Inspector.
 
 // Display Options
-var onlyUsedVariables = true; // Set to false to show all variables in file
-var groupByCollection = true; // Group variables by their collection
+var onlyUsedVariables = true; // Show only variables used in selection/styles
+var groupByCollection = true; // Group variables by collection
 var showValuePreview = true; // Show actual variable values
-var maxNodesPreview = 5; // Maximum nodes to show in usage preview
+var maxNodesPreview = 5; // Max nodes in usage preview (rest: "Show all X nodes")
 
-// Variable Purpose Filters (set to false to hide specific categories)
-var typographicVariables = true; // Typography-related (fontSize, letterSpacing, lineHeight, etc.)
-var colorVariables = true; // Color variables (fills, strokes)
-var dimensionVariables = true; // Dimensions & spacing (width, height, padding, gap, radius, etc.)
+// Variable Purpose Filters
+var typographicVariables = true; // Typography (fontSize, letterSpacing, etc.)
+var colorVariables = true; // Colors (fills, strokes)
+var dimensionVariables = true; // Dimensions & spacing
 var effectVariables = true; // Effects & opacity
-var otherVariables = true; // Other/miscellaneous variables
+var otherVariables = true; // Other/miscellaneous
 
-// Advanced Options
-var checkStyleUsage = true; // Check if variables are used in text/paint/effect styles
+// Advanced
+var checkStyleUsage = true; // Check usage in text/paint/effect styles
 var showHealthScore = false; // Show variable health score (0-100)
-// @CONFIG_END
+// @UI_CONFIG_END
 
 // Variable Inspector
 // Detailed inspector showing all variables with their current values for visual identification
