@@ -551,22 +551,22 @@ var createVariableResult = function(variableInfo) {
   var usage = variableInfo.usage;
   
   // Status icons
-  var healthIcon = '✅';
+  var healthIcon = '';
   if (health.status === 'broken') healthIcon = '❌';
   else if (health.status === 'warning') healthIcon = '⚠️';
-  else if (health.status === 'remote') healthIcon = '🔗';
+  else if (health.status === 'remote') healthIcon = '❖';
   
-  var typeIcon = '📝';
-  if (variable.resolvedType === 'COLOR') typeIcon = '🎨';
-  else if (variable.resolvedType === 'FLOAT') typeIcon = '🔢';
-  else if (variable.resolvedType === 'BOOLEAN') typeIcon = '☑️';
+  var typeIcon = '';
+  // if (variable.resolvedType === 'COLOR') typeIcon = '🎨';
+  // else if (variable.resolvedType === 'FLOAT') typeIcon = '🔢';
+  // else if (variable.resolvedType === 'BOOLEAN') typeIcon = '☑️';
   
   // Build HTML - using InfoPanel CSS classes instead of inline styles
   var html = '<div class="info-entry">';
   html += '<div class="info-entry-content">';
   html += '<div class="info-entry-title">' + healthIcon + ' ' + typeIcon + ' ' + variable.name + '</div>';
   
-  var subtitle = variableInfo.collection ? variableInfo.collection.name : 'Unknown Collection';
+  var subtitle = 'Collection:' + variableInfo.collection ? variableInfo.collection.name : 'Unknown Collection';
   if (usage) {
     var totalUsage = usage.nodes.length + usage.styles.length;
     subtitle += ' • Used ' + totalUsage + ' times';
@@ -589,7 +589,7 @@ var createVariableResult = function(variableInfo) {
   
   // Values preview - using info-result-details class for styling
   if (showValuePreview && Object.keys(variableInfo.values).length > 0) {
-    html += '<div class="info-result-details" style="margin-top: 8px; font-family: monospace;">';
+    html += '<div class="info-result-details" style="margin-top: 8px;">';
     html += '<strong>Values:</strong><br>';
     
     var modeCount = 0;
