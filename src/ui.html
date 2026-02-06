@@ -7,29 +7,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/midnight.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
-    <style id="config-ui-css">/* CodeFig Config UI - Component styles */
-.config-ui-form{display:flex;flex-direction:column;flex:1;min-height:0;width:100%;max-width:100%;padding:12px 16px;overflow-y:auto;box-sizing:border-box}
-.config-ui-empty{color:var(--text-secondary,#86868b);font-size:12px;padding:24px 16px;text-align:center}
-.config-ui-section{width:100%;min-width:0;margin-bottom:20px;flex-shrink:0}.config-ui-section:last-child{margin-bottom:0}
-.config-ui-section__header{font-size:11px;font-weight:600;color:var(--text-secondary,#86868b);margin-bottom:8px;padding-bottom:4px}
-.config-ui-section__fields{display:flex;flex-direction:column;gap:8px;width:100%;min-width:0}
-.config-ui-field{display:flex;flex-direction:column;gap:4px;width:100%;min-width:0}
-.config-ui-field__row{display:flex;flex-direction:row;align-items:center;gap:10px;min-height:28px}
-.config-ui-field__label{font-size:11px;font-weight:500;color:var(--text-primary,#1d1d1f);flex:0 0 30%;min-width:0}
-.config-ui-field__label--has-tooltip{cursor:help}
-.config-ui-field__control{flex:1;min-width:0;display:flex;align-items:center}
-.config-ui-field__hint{font-size:10px;color:var(--text-secondary,#86868b);line-height:1.3;padding-left:calc(30% + 10px)}
-.config-ui-toggle-wrap{display:flex;align-items:center}
-.config-ui-toggle{appearance:none;width:32px;height:18px;border-radius:9px;background:var(--border-light,#e6e6e6);cursor:pointer;position:relative;transition:background .2s ease;flex-shrink:0}
-.config-ui-toggle::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .2s ease}
-.config-ui-toggle:checked{background:var(--active-bg,#0a84ff)}
-.config-ui-toggle:checked::after{transform:translateX(14px)}
-.config-ui-toggle:focus{outline:none;box-shadow:0 0 0 2px rgba(10,132,255,.3)}
-.config-ui-input{font-size:12px;padding:8px 10px;border:1px solid var(--border-color,#e1e5e9);border-radius:6px;background:var(--input-bg,#fff);color:var(--text-primary,#1d1d1f);max-width:100%;transition:border-color .2s ease,box-shadow .2s ease}
-.config-ui-input:focus{outline:none;border-color:var(--active-bg,#0a84ff);box-shadow:0 0 0 2px rgba(10,132,255,.2)}
-.config-ui-input--number,.config-ui-input--text,.config-ui-input--select{width:100%;min-width:0}
-.config-ui-input--select{cursor:pointer}
-@media (prefers-color-scheme:dark){.config-ui-toggle::after{background:var(--bg-secondary,#252525)}}</style>
+    <!-- Config UI CSS is now in main style block (section 9) for better readability -->
+    <style id="config-ui-css">/* Placeholder - actual styles in main <style> block below */</style>
     <script id="config-ui-stub">(function(){var g=typeof self!=="undefined"?self:typeof window!=="undefined"?window:typeof global!=="undefined"?global:this;if(g)g.CodeFigConfigUI={parse:function(){return{sections:[]};},serialize:function(){return"";},render:function(schema,opts){var c=opts&&opts.container;if(c)c.innerHTML='<div class="config-ui-empty">Config UI failed to load. Check figma-console.log for errors.</div>';return{getValues:function(){return{};},setValues:function(){},destroy:function(){}};}};}})();</script>
     <script id="config-ui-js">
 (function(r,f){if(typeof define==="function"&&define.amd)define([],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f();else r.ConfigUIParser=f();})(typeof self!=="undefined"?self:this,function(){"use strict";function inferType(v){if(v===null||v===undefined)return"string";if(typeof v==="boolean")return"boolean";if(typeof v==="number"&&!Number.isNaN(v))return"number";if(typeof v==="string")return"string";if(Array.isArray(v))return"array";if(typeof v==="object")return"object";return"string"}function labelFromName(n){if(!n||typeof n!=="string")return"";return n.replace(/([A-Z])/g," $1").replace(/^./,function(s){return s.toUpperCase()}).trim()}function parseValue(s){s=(s||"").trim();if(s==="true")return true;if(s==="false")return false;if(s==="null")return null;if(/^-?\d+$/.test(s))return parseInt(s,10);if(/^-?\d*\.\d+([eE][+-]?\d+)?$/.test(s))return parseFloat(s);if((s.startsWith('"')&&s.endsWith('"'))||(s.startsWith("'")&&s.endsWith("'")))return s.slice(1,-1).replace(/\\'/g,"'").replace(/\\"/g,'"').replace(/\\n/g,"\n").replace(/\\r/g,"\r");if(s.startsWith("[")&&s.endsWith("]")){try{return JSON.parse(s)}catch(_){return s}}if(s.startsWith("{")&&s.endsWith("}")){try{return JSON.parse(s)}catch(_){return s}}return s}function parse(code){var sections=[],current={title:"",fields:[]},lines=(code||"").split(/\r?\n/),i=0;function flush(){if(current.fields.length>0||current.title)sections.push({title:current.title,fields:current.fields});current={title:"",fields:[]}}while(i<lines.length){var line=lines[i],t=line.trim();if(!t){i++;continue}if(t.startsWith("//")){var c=t.slice(2).trim();if(c&&!/^\s*var\s+/.test(c)&&!/^=+$/.test(c)){flush();current.title=c.replace(/^=\s*|\s*=$/g,"").trim()}i++;continue}var m=t.match(/^\s*var\s+(\w+)\s*=\s*(.+?)\s*;(?:\s*\/\/\s*(.*))?$/);if(m){var val=parseValue(m[2].trim());current.fields.push({name:m[1],type:inferType(val),value:val,label:labelFromName(m[1]),tooltip:(m[3]||"").trim()});i++;continue}i++}flush();return{sections:sections}}function serialize(schema,values){if(!schema||!schema.sections)return"";var out=[],vm=values||{};function fmt(v){if(v===null)return"null";if(typeof v==="boolean")return v?"true":"false";if(typeof v==="number")return String(v);return JSON.stringify(v)}schema.sections.forEach(function(sec){if(sec.title)out.push("// "+sec.title),out.push("");sec.fields.forEach(function(f){var v=vm[f.name];if(v===undefined)v=f.value;out.push("var "+f.name+" = "+fmt(v)+";"+(f.tooltip?" // "+f.tooltip:""))});out.push("")});return out.join("\n").replace(/\n{3,}/g,"\n\n").trim()}return{parse:parse,serialize:serialize,inferType:inferType,parseValue:parseValue}});
@@ -38,10 +17,42 @@
 (function(r){var P=r.ConfigUIParser,R=r.ConfigUIRenderer,C=r.ConfigUIFormController;if(!P||!R||!C)return;r.CodeFigConfigUI={parse:function(c){return P.parse(c)},serialize:function(s,v){return P.serialize(s,v)},render:function(schema,opts){var c=opts&&opts.container;if(!c)throw new Error("CodeFigConfigUI.render: options.container is required");return C.createForm(c,schema,opts)}}})(typeof self!=="undefined"?self:this);
     </script>
     <style>
+      /* ============================================================
+         TABLE OF CONTENTS
+         
+         BASE CSS
+         --------
+         1. Theme & CSS Variables
+         2. Base Layout & Structure
+         3. Resize Handles & Resizer
+         4. Base Typography & Utilities
+         
+         PLUGIN UI COMPONENTS
+         --------------------
+         5. Sidebar & Script List
+         6. Main Content Area & Editor (CodeMirror)
+         7. Button System
+         8. Plugin Footer & Progress
+         
+         LIBRARY COMPONENTS (scripts/CODEFIG_LIBRARIES/)
+         -----------------------------------------------
+         9. Config UI (@config-ui.ts)
+         10. Info Panel (@infopanel.ts)
+         
+         ============================================================ */
+
+
+      /* ============================================================
+         1. THEME & CSS VARIABLES
+         Base design tokens for colors, typography, spacing
+         ============================================================ */
+      
       * { box-sizing: border-box; }
       
       :root {
         color-scheme: light dark;
+        
+        /* Color tokens */
         --bg-primary: #fff;
         --bg-secondary: #fafafa;
         --bg-tertiary: #f5f5f7;
@@ -55,6 +66,7 @@
         --code-bg: #f5f5f7;
         --input-bg: #fff;
 
+        /* Typography scale */
         --font-size-caption: 10px;
         --font-size-body: 12px;
         --font-size-subheadline: 14px;
@@ -62,6 +74,7 @@
         --font-size-display: 20px;
       }
       
+      /* Dark mode overrides */
       @media (prefers-color-scheme: dark) {
         :root {
           --bg-primary: #2c2c2c;
@@ -78,18 +91,24 @@
           --input-bg: #2c2c2c;
         }
       }
+
+
+      /* ============================================================
+         2. BASE LAYOUT & STRUCTURE
+         Core layout containers and flex structure
+         ============================================================ */
       
       body { 
-        margin: 0; padding: 0; 
+        margin: 0; 
+        padding: 0; 
         font: var(--font-size-body) system-ui; 
         height: 100vh; 
         display: flex; 
         background: var(--bg-primary); 
-        color: var(--text-primary); 
-        /* font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; */
+        color: var(--text-primary);
       }
       
-      /* Resizable container */
+      /* Main plugin container */
       .resizable-container {
         display: flex;
         flex-direction: column;
@@ -99,7 +118,20 @@
         width: 100%;
       }
       
-      /* Window resize handles */
+      /* Horizontal layout: sidebar | resizer | main content */
+      .main-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+
+
+      /* ============================================================
+         3. RESIZE HANDLES & RESIZER
+         Window resize handles and sidebar resizer
+         ============================================================ */
+      
+      /* Window resize handles (for Figma plugin window) */
       .resize-handle {
         position: absolute;
         background: transparent;
@@ -130,24 +162,19 @@
         cursor: nwse-resize;
       }
       
+      /* Resizing state (disable pointer events during resize) */
       .resizing {
         user-select: none;
+        background: #007AFF !important;
       }
       
       .resizing * {
         pointer-events: none;
       }
       
-      .main-container {
-        display: flex;
-        flex: 1;
-        overflow: hidden;
-      }
-      
-      /* Resizer */
+      /* Sidebar resizer */
       .resizer {
         width: 1px;
-        /* background: #e1e5e9; */
         cursor: col-resize;
         position: relative;
         flex-shrink: 0;
@@ -158,6 +185,7 @@
         background: #007AFF;
       }
       
+      /* Expand hit area for easier dragging */
       .resizer::before {
         content: '';
         position: absolute;
@@ -167,12 +195,25 @@
         bottom: 0;
         background: transparent;
       }
+
+
+      /* ============================================================
+         4. BASE TYPOGRAPHY & UTILITIES
+         Global utility classes
+         ============================================================ */
       
-      .resizing {
-        background: #007AFF !important;
+      .hidden { 
+        display: none; 
       }
+
+
+
+      /* ============================================================
+         5. SIDEBAR & SCRIPT LIST
+         Left sidebar with search and script navigation
+         ============================================================ */
       
-      /* Sidebar */
+      /* Sidebar container */
       .sidebar { 
         width: 240px; 
         min-width: 200px;
@@ -189,6 +230,7 @@
         background: var(--bg-primary);
       }
       
+      /* Search input */
       .search-container {
         position: relative;
       }
@@ -213,78 +255,7 @@
         font-weight: 600;
       }
       
-      /* Progress Indicator */
-      .progress-indicator {
-        padding: 4px 20px;
-        background: #2c2c2c;
-        /* border-bottom: 1px solid #e6e6e6; */
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        gap: 4px;
-        position: relative;
-        z-index: 1000;
-        min-height: 32px;
-      }
-      
-      .progress-bar {
-        width: 60%;
-        height: 6px;
-        background: rgba(255, 255, 255, 0.333);
-        border-radius: 3px;
-        overflow: hidden;
-        /* border: 1px solid #999; */
-      }
-      
-      .progress-fill {
-        height: 100%;
-        background: #fff;
-        border-radius: 3px;
-        transition: width 0.3s ease;
-        width: 0%;
-      }
-      
-      .progress-text {
-        font: 10px system-ui;
-        font-weight: 500;
-        color: #fff;
-        text-align: right;
-      }
-      
-      .plugin-footer {
-        padding: 12px 20px;
-        border-top: 1px solid var(--border-light);
-        background: var(--bg-primary);
-        display: flex;
-        flex-direction: row;
-        gap: 12px;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-        position: relative;
-        flex-shrink: 0;
-      }
-      
-      .footer-left {
-        display: flex;
-        gap: 12px;
-      }
-      
-      .footer-right {
-        display: flex;
-        gap: 12px;
-      }
-      
-      
-      .script-section {
-        margin-bottom: 0;
-      }
-      
-      .script-section:not(:last-child) {
-        margin-bottom: 20px;
-      }
-      
+      /* Script list container */
       .script-list { 
         flex: 1; 
         overflow-y: auto; 
@@ -295,31 +266,31 @@
         background: var(--border-light);
       }
 
-      /* Script list structure */
-      .system-scripts {
-        padding: 12px 0;
-      }
-      
+      /* Script list sections */
+      .system-scripts,
       .user-scripts {
         padding: 12px 0;
       }
       
+      .script-section {
+        margin-bottom: 0;
+      }
+      
+      .script-section:not(:last-child) {
+        margin-bottom: 20px;
+      }
+      
+      /* Section headers (Example Scripts, User Scripts) */
       .section-header {
         padding: 12px 20px 6px 20px;
         font: var(--font-size-body) system-ui;
         font-weight: 600;
         color: var(--text-secondary);
-        /* letter-spacing: -0.22px; */
         background: transparent;
       }
       
-      .section-header.example-scripts, .section-header.user-scripts {
-        /* font: 9px system-ui; */
-        /* font-weight: 500; */
-        /* letter-spacing: -0.08px; */
-        /* text-transform: uppercase; */
-        /* color: #6D6D6D; */
-        /* padding: 12px 20px 6px 20px; */
+      .section-header.example-scripts, 
+      .section-header.user-scripts {
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -328,7 +299,8 @@
         user-select: none;
       }
       
-      .section-header.example-scripts:hover, .section-header.user-scripts:hover {
+      .section-header.example-scripts:hover, 
+      .section-header.user-scripts:hover {
         color: var(--text-primary);
       }
       
@@ -340,6 +312,7 @@
         display: none;
       }
       
+      /* Section toggle chevron (collapsible sections) */
       .section-toggle {
         width: 12px;
         height: 12px;
@@ -372,7 +345,25 @@
         display: block;
       }
       
-      /* Script groups styling */
+      /* Section content (collapsible) */
+      .section-content {
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+      }
+      
+      .section-content.collapsed {
+        max-height: 0;
+      }
+      
+      .section-content:not(.collapsed) {
+        max-height: none;
+      }
+      
+      .section-content.selected {
+        background: var(--hover-bg);
+      }
+      
+      /* Script groups (for organized scripts) */
       .script-group {
         margin-bottom: 0;
       }
@@ -380,7 +371,6 @@
       .group-header {
         font: var(--font-size-body) system-ui;
         font-weight: 500;
-        /* text-transform: uppercase; */
         color: var(--text-muted);
         padding: 12px 20px 8px 20px;
         cursor: pointer;
@@ -420,39 +410,7 @@
         max-height: none;
       }
       
-      /* Indented scripts within groups */
-      .script-item.grouped {
-        padding-left: 36px;
-      }
-
-      /* .script-item.user-script {
-        color: #007AFF;
-      } */
-
-      /* Breadcrumb in header */
-      .script-breadcrumb {
-        font-size: var(--font-size-body);
-        color: #86868b;
-        margin-right: 8px;
-      }
-      
-      .section-content {
-        overflow: hidden;
-        transition: max-height 0.3s ease-out;
-      }
-      
-      .section-content.collapsed {
-        max-height: 0;
-      }
-      
-      .section-content:not(.collapsed) {
-        max-height: none;
-      }
-      
-      .section-content.selected {
-        background: var(--hover-bg);
-      }
-      
+      /* Individual script items */
       .script-item { 
         padding: 8px 20px;
         cursor: pointer; 
@@ -461,14 +419,20 @@
         font: 11px system-ui;
         font-weight: 400;
         color: var(--text-primary);
-        /* letter-spacing: -0.22px; */
       }
       
-      .script-item:hover { background: var(--hover-bg); }
-      .script-item.active { background: var(--active-bg); color: #fff; }
+      .script-item:hover { 
+        background: var(--hover-bg); 
+      }
       
-      /* System scripts indentation to match grouped scripts */
-      .script-item.system-script {
+      .script-item.active { 
+        background: var(--active-bg); 
+        color: #fff; 
+      }
+      
+      /* Indented scripts (system scripts and grouped scripts) */
+      .script-item.system-script,
+      .script-item.grouped {
         padding-left: 36px;
       }
       
@@ -476,6 +440,7 @@
         flex: 1;
       }
       
+      /* Empty state */
       .no-results {
         padding: 20px 12px;
         text-align: center;
@@ -484,7 +449,21 @@
         font-style: italic;
       }
       
-      /* Main Content */
+      /* Breadcrumb in header */
+      .script-breadcrumb {
+        font-size: var(--font-size-body);
+        color: #86868b;
+        margin-right: 8px;
+      }
+
+
+
+      /* ============================================================
+         6. MAIN CONTENT AREA & EDITOR (CodeMirror)
+         Central editor area with tabs, header, and CodeMirror
+         ============================================================ */
+      
+      /* Main content container */
       .main-content { 
         flex: 1; 
         display: flex; 
@@ -492,8 +471,10 @@
         overflow: hidden;
         min-width: 300px;
         width: 100%;
+        position: relative; /* For info panel positioning */
       }
       
+      /* Editor header (script title, status, actions) */
       .editor-header { 
         padding: 12px 16px 12px 24px; 
         background: var(--bg-primary); 
@@ -511,6 +492,13 @@
         flex: 1;
       }
       
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      /* Script title (editable for user scripts) */
       .script-title { 
         font-size: var(--font-size-headline); 
         font-weight: 600; 
@@ -520,7 +508,6 @@
         transition: background-color 0.2s ease;
       }
       
-      /* Editable title (user scripts only) */
       .script-title.editable {
         cursor: pointer;
       }
@@ -544,15 +531,9 @@
         border-radius: 12px;
       }
       
-      .header-right {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      
-      /* Editor tabs - shown when script has @DOC_START or @CONFIG_START / @UI_CONFIG_START */
+      /* Editor tabs (Documentation, Configuration, Code) */
       .editor-tabs {
-        display: none;
+        display: none; /* Hidden by default, shown when needed */
         flex-direction: row;
         gap: 0;
         padding: 0 16px 0 24px;
@@ -575,7 +556,7 @@
         border: none;
         border-bottom: 2px solid transparent;
         cursor: pointer;
-        margin-bottom: -1px;
+        margin-bottom: -1px; /* Overlap border */
         transition: color 0.2s ease, border-color 0.2s ease;
       }
       
@@ -588,6 +569,7 @@
         border-bottom-color: var(--active-bg);
       }
       
+      /* Editor container (holds tab content) */
       .editor-container { 
         flex: 1; 
         overflow: hidden; 
@@ -613,6 +595,7 @@
         flex: 1;
       }
       
+      /* Config containers (code and UI) */
       .config-code-container,
       .config-ui-container {
         flex: 1;
@@ -621,10 +604,12 @@
         flex-direction: column;
         min-height: 0;
       }
+      
       .config-code-container .CodeMirror {
         flex: 1;
       }
       
+      /* Documentation rendered view (markdown) */
       .docs-rendered {
         flex: 1;
         overflow: auto;
@@ -635,17 +620,71 @@
         color: var(--text-primary);
       }
       
-      .docs-rendered h1 { font-size: var(--font-size-display); margin: 0 0 12px 0; font-weight: 600; color: var(--text-primary); }
-      .docs-rendered h2 { font-size: var(--font-size-headline); margin: 16px 0 8px 0; font-weight: 600; color: var(--text-primary); }
-      .docs-rendered h3 { font-size: var(--font-size-subheadline); margin: 12px 0 6px 0; font-weight: 600; color: var(--text-primary); }
-      .docs-rendered p { margin: 0 0 8px 0; color: var(--text-primary); }
-      .docs-rendered ul { margin: 0 0 8px 0; padding-left: 20px; }
-      .docs-rendered li { margin: 2px 0; color: var(--text-primary); }
-      .docs-rendered code { background: var(--code-bg); color: var(--text-primary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
-      .docs-rendered pre { background: var(--code-bg); color: var(--text-primary); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; font-size: 11px; }
-      .docs-rendered pre code { background: none; padding: 0; color: inherit; }
-      .docs-rendered strong { font-weight: 600; }
+      .docs-rendered h1 { 
+        font-size: var(--font-size-display); 
+        margin: 0 0 12px 0; 
+        font-weight: 600; 
+        color: var(--text-primary); 
+      }
       
+      .docs-rendered h2 { 
+        font-size: var(--font-size-headline); 
+        margin: 16px 0 8px 0; 
+        font-weight: 600; 
+        color: var(--text-primary); 
+      }
+      
+      .docs-rendered h3 { 
+        font-size: var(--font-size-subheadline); 
+        margin: 12px 0 6px 0; 
+        font-weight: 600; 
+        color: var(--text-primary); 
+      }
+      
+      .docs-rendered p { 
+        margin: 0 0 8px 0; 
+        color: var(--text-primary); 
+      }
+      
+      .docs-rendered ul { 
+        margin: 0 0 8px 0; 
+        padding-left: 20px; 
+      }
+      
+      .docs-rendered li { 
+        margin: 2px 0; 
+        color: var(--text-primary); 
+      }
+      
+      .docs-rendered code { 
+        background: var(--code-bg); 
+        color: var(--text-primary); 
+        padding: 1px 4px; 
+        border-radius: 3px; 
+        font-size: 11px; 
+      }
+      
+      .docs-rendered pre { 
+        background: var(--code-bg); 
+        color: var(--text-primary); 
+        padding: 12px; 
+        border-radius: 6px; 
+        overflow-x: auto; 
+        margin: 8px 0; 
+        font-size: 11px; 
+      }
+      
+      .docs-rendered pre code { 
+        background: none; 
+        padding: 0; 
+        color: inherit; 
+      }
+      
+      .docs-rendered strong { 
+        font-weight: 600; 
+      }
+      
+      /* CodeMirror editor styling */
       .CodeMirror { 
         height: 100%; 
         width: 100%;
@@ -675,10 +714,14 @@
       .CodeMirror-selected {
         background: rgba(0, 122, 255, 0.2) !important;
       }
+
+
+      /* ============================================================
+         7. BUTTON SYSTEM
+         Buttons, icon buttons, and button groups
+         ============================================================ */
       
-      /* === BUTTON STYLES === */
-      
-      /* Base button (no colors) */
+      /* Base button styles */
       .btn { 
         height: 32px;
         padding: 0 10px; 
@@ -692,18 +735,14 @@
         align-items: center;
         justify-content: center;
         gap: 4px;
-        /* letter-spacing: -0.11px; */
       }
       
-      /* Button disabled state */
       .btn:disabled { 
         opacity: 0.5; 
         cursor: not-allowed; 
       }
       
-      /* === BUTTON VARIANTS === */
-      
-      /* Primary button (blue) */
+      /* Button variants */
       .btn.primary { 
         background: #0D99FF; 
         color: white; 
@@ -715,7 +754,6 @@
         border-color: #2968d7;
       }
       
-      /* Secondary button (outline) */
       .btn.secondary { 
         background: var(--bg-primary); 
         color: var(--text-muted); 
@@ -726,7 +764,6 @@
         border-color: var(--text-primary); 
       }
       
-      /* Danger button (outline with red hover) */
       .btn.danger { 
         background: var(--bg-primary); 
         color: var(--text-muted); 
@@ -739,7 +776,7 @@
         color: #dc2626;
       }
 
-      /* Button Group Styles */
+      /* Button groups and icon buttons */
       .button-group {
         display: flex;
         gap: 4px;
@@ -773,12 +810,261 @@
         gap: 8px;
       }
 
-      /* Editor container needs to be relative for panel positioning */
-      .editor-container {
+
+      /* ============================================================
+         8. PLUGIN FOOTER & PROGRESS
+         Footer and progress indicator
+         ============================================================ */
+      
+      /* Progress indicator (shown during script execution) */
+      .progress-indicator {
+        padding: 4px 20px;
+        background: #2c2c2c;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
         position: relative;
+        z-index: 1000;
+        min-height: 32px;
+      }
+      
+      .progress-bar {
+        width: 60%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.333);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      
+      .progress-fill {
+        height: 100%;
+        background: #fff;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+        width: 0%;
+      }
+      
+      .progress-text {
+        font: 10px system-ui;
+        font-weight: 500;
+        color: #fff;
+        text-align: right;
+      }
+      
+      /* Plugin footer */
+      .plugin-footer {
+        padding: 12px 20px;
+        border-top: 1px solid var(--border-light);
+        background: var(--bg-primary);
+        display: flex;
+        flex-direction: row;
+        gap: 12px;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        position: relative;
+        flex-shrink: 0;
+      }
+      
+      .footer-left {
+        display: flex;
+        gap: 12px;
+      }
+      
+      .footer-right {
+        display: flex;
+        gap: 12px;
       }
 
-      /* Info Panel Styles */
+
+      /* ============================================================
+         9. CONFIG UI (@config-ui.ts)
+         Form controls, toggles, inputs for configuration UI
+         Corresponds to scripts/CODEFIG_LIBRARIES/@config-ui.ts
+         ============================================================ */
+      
+      /* Form container */
+      .config-ui-form {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        max-width: 100%;
+        padding: 12px 16px;
+        overflow-y: auto;
+        box-sizing: border-box;
+      }
+      
+      .config-ui-empty {
+        color: var(--text-secondary, #86868b);
+        font-size: 12px;
+        padding: 24px 16px;
+        text-align: center;
+      }
+      
+      /* Sections */
+      .config-ui-section {
+        width: 100%;
+        min-width: 0;
+        margin-bottom: 20px;
+        flex-shrink: 0;
+      }
+      
+      .config-ui-section:last-child {
+        margin-bottom: 0;
+      }
+      
+      .config-ui-section__header {
+        font-size: var(--font-size-headline);
+        font-weight: 600;
+        color: var(--text-secondary, #86868b);
+        margin-bottom: 8px;
+        padding-bottom: 4px;
+      }
+      
+      .config-ui-section__fields {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+      }
+      
+      /* Fields */
+      .config-ui-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        width: 100%;
+        min-width: 0;
+      }
+      
+      .config-ui-field__row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+        min-height: 28px;
+      }
+      
+      .config-ui-field__label {
+        font-size: var(--font-size-body);
+        font-weight: 500;
+        color: var(--text-primary, #1d1d1f);
+        flex: 0 0 30%;
+        min-width: 0;
+      }
+      
+      .config-ui-field__label--has-tooltip {
+        cursor: help;
+      }
+      
+      .config-ui-field__control {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+      }
+      
+      .config-ui-field__hint {
+        font-size: var(--font-size-caption);
+        color: var(--text-secondary, #86868b);
+        line-height: 1.3;
+        padding-left: calc(30% + 10px);
+      }
+      
+      /* Toggle switch (checkbox styled as toggle) */
+      .config-ui-toggle-wrap {
+        display: flex;
+        align-items: center;
+      }
+      
+      .config-ui-toggle {
+        appearance: none;
+        width: 32px;
+        height: 18px;
+        border-radius: 9px;
+        background: var(--border-light, #e6e6e6);
+        cursor: pointer;
+        position: relative;
+        transition: background 0.2s ease;
+        flex-shrink: 0;
+      }
+      
+      /* Toggle knob */
+      .config-ui-toggle::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        transition: transform 0.2s ease;
+      }
+      
+      .config-ui-toggle:checked {
+        background: var(--active-bg, #0a84ff);
+      }
+      
+      .config-ui-toggle:checked::after {
+        transform: translateX(14px);
+      }
+      
+      .config-ui-toggle:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3);
+      }
+      
+      /* Input fields */
+      .config-ui-input {
+        font-size: var(--font-size-body);
+        padding: 8px 10px;
+        border: 1px solid var(--border-color, #e1e5e9);
+        border-radius: 6px;
+        background: var(--input-bg, #fff);
+        color: var(--text-primary, #1d1d1f);
+        max-width: 100%;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      
+      .config-ui-input:focus {
+        outline: none;
+        border-color: var(--active-bg, #0a84ff);
+        box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
+      }
+      
+      .config-ui-input--number,
+      .config-ui-input--text,
+      .config-ui-input--select {
+        width: 100%;
+        min-width: 0;
+      }
+      
+      .config-ui-input--select {
+        cursor: pointer;
+      }
+      
+      /* Dark mode adjustments */
+      @media (prefers-color-scheme: dark) {
+        .config-ui-toggle::after {
+          background: var(--bg-secondary, #252525);
+        }
+      }
+
+
+      /* ============================================================
+         10. INFO PANEL (@infopanel.ts)
+         Right-side results panel with filtering and grouping
+         Corresponds to scripts/CODEFIG_LIBRARIES/@infopanel.ts
+         ============================================================ */
+      
+      /* Info panel container (slide-in from right) */
       .info-panel {
         position: absolute;
         top: 0;
@@ -800,9 +1086,9 @@
       .info-panel-scroll {
         height: 100%;
         overflow-y: auto;
-        /* background: #f5f5f5; */
       }
 
+      /* Panel header */
       .info-header {
         padding: 16px 16px 12px 16px;
       }
@@ -814,10 +1100,9 @@
         margin: 0;
       }
 
+      /* Filtering controls */
       .info-filtering {
         padding: 0 16px 12px 16px;
-        /* border-bottom: 1px solid var(--border-light); */
-        /* margin-bottom: 12px; */
       }
 
       .info-filtering:empty {
@@ -845,6 +1130,7 @@
         border-color: #007AFF;
       }
 
+      /* Results list */
       .info-list {
         padding: 0 16px 16px 16px;
       }
@@ -857,28 +1143,17 @@
       }
 
       .info-result-item {
-        /* padding-left: 8px; */
-        /* border-left: 1px solid var(--border-light); */
         margin-bottom: 8px;
       }
 
-      /* Custom InfoPanel Entry Styles */
+      /* Entry styles (custom HTML entries) */
       .info-entry {
         display: flex;
         align-items: flex-start;
-        /* padding: 12px; */
-        /* border: 1px solid var(--border-light); */
-        /* border-radius: 6px; */
-        /* background: var(--bg-primary); */
         margin-bottom: 16px;
         cursor: pointer;
         transition: all 0.2s ease;
       }
-
-      /* .info-entry:hover {
-        border-color: #0066cc;
-        box-shadow: 0 2px 4px rgba(0, 102, 204, 0.1);
-      } */
 
       .info-entry-icon {
         width: 16px;
@@ -913,6 +1188,7 @@
         line-height: 1.4;
       }
 
+      /* Entry badges (error, warning, success, info) */
       .info-entry-badge {
         display: inline-block;
         padding: 2px 6px;
@@ -942,7 +1218,7 @@
         color: #0c5460;
       }
 
-      /* Category Header Styles */
+      /* Category and group headers */
       .info-category-header {
         display: flex;
         align-items: center;
@@ -975,6 +1251,7 @@
         color: #fff;
       }
 
+      /* Variable items (used in variable inspector) */
       .info-variable-item {
         padding: 6px 0;
         margin: 0;
@@ -1008,8 +1285,9 @@
         color: var(--text-secondary);
       }
 
-      /* Style Preview Styles */
-      .style-preview, .variable-preview {
+      /* Style and variable preview components */
+      .style-preview, 
+      .variable-preview {
         margin: 8px 0;
         padding: 8px;
         background: var(--bg-tertiary);
@@ -1037,6 +1315,14 @@
         flex-shrink: 0;
       }
 
+      .effect-preview {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        display: inline-block;
+        flex-shrink: 0;
+      }
+
       .text-preview {
         font-size: var(--font-size-body);
         font-weight: 500;
@@ -1057,7 +1343,14 @@
         font-weight: 500;
       }
 
-      .font-size, .font-weight, .color-value, .dimension-value, .spacing-value, .radius-value, .effect-value {
+      /* Monospace value displays */
+      .font-size, 
+      .font-weight, 
+      .color-value, 
+      .dimension-value, 
+      .spacing-value, 
+      .radius-value, 
+      .effect-value {
         font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
         font-size: var(--font-size-body);
         background: var(--bg-tertiary);
@@ -1066,40 +1359,14 @@
         border-radius: 2px;
       }
 
-      .effect-preview {
-        width: 20px;
-        height: 20px;
-        border-radius: 4px;
-        display: inline-block;
-        flex-shrink: 0;
-      }
-
-      /* .info-result-item:hover {
-        background: #f5f5f5;
-        border-color: #ccc;
-      }
-
-      .info-result-item.error {
-        border-color: #ef4444;
-        background: #fef2f2;
-      }
-
-      .info-result-item.warning {
-        border-color: #f59e0b;
-        background: #fffbeb;
-      }
-
-      .info-result-item.success {
-        border-color: #10b981;
-        background: #ecfdf5;
-      } */
-
+      /* Result messages */
       .info-result-message {
         font-size: var(--font-size-caption);
         font-weight: bold;
         color: var(--text-primary);
         margin-bottom: 4px;
       }
+      
       .info-result-message.error {
         color: #ef4444;
       }
@@ -1110,10 +1377,15 @@
         line-height: 1.5;
       }
 
-      /* Additional styling classes for InfoPanel content */
+      /* Text styling classes for messages */
       .error-text {
         color: #dc3545;
         font-weight: 600;
+      }
+
+      .warning-text {
+        color: #f57c00;
+        font-weight: 500;
       }
 
       .info-result-message .highlight {
@@ -1126,11 +1398,6 @@
       .info-result-message .error-text {
         color: #dc3545;
         font-weight: 600;
-      }
-      
-      .warning-text {
-        color: #f57c00;
-        font-weight: 500;
       }
 
       .info-result-message .warning-text {
@@ -1153,6 +1420,7 @@
         border: 1px solid var(--border-light);
       }
 
+      /* Badge variants */
       .info-result-message .badge {
         display: inline-block;
         padding: 2px 3px;
@@ -1186,7 +1454,8 @@
         background-color: #0dcaf0;
       }
       
-      .hidden { display: none; }
+      
+      /* End of styles */
     </style>
   </head>
   <body>
