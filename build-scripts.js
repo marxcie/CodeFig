@@ -1,5 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { inlineVendors } = require('./bundle-ui.js');
+
+// No-op: config UI lib (@config-ui.ts) is copied with other scripts by copyScripts()
+function copyConfigUILib() {}
 
 // Check if a file/folder should be excluded
 function shouldExclude(name) {
@@ -147,10 +151,11 @@ function updateUIHtml() {
   }
   
   readScripts(distScriptsDir);
-  
-  // Read ui.html template
+
+  // Read src only; inline vendors (CodeMirror, marked) into string; write result only to dist
   let uiContent = fs.readFileSync(uiTemplatePath, 'utf8');
-  
+  uiContent = inlineVendors(uiContent);
+
   // Embed scripts as base64-encoded JSON in a script tag (imports will be processed at runtime)
   const scriptsJson = JSON.stringify(scripts);
   const scriptsBase64 = Buffer.from(scriptsJson, 'utf8').toString('base64');
@@ -168,11 +173,11 @@ function updateUIHtml() {
   
   // Write the updated ui.html to dist
   fs.writeFileSync(uiDistPath, uiContent);
-  console.log(`✅ Updated ui.html with ${scripts.length} embedded scripts`);
+  console.log(`✅ dist/ui.html (${scripts.length} scripts, vendors inlined)`);
 }
 
-// Run the build
-console.log('🔨 Building scripts...');
+// Run the build (vendors inlined only into dist, src/ui.html never modified)
+console.log('🔨 Building...');
 copyScripts();
 updateUIHtml();
 console.log('✅ Build completed successfully!');

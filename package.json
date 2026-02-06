@@ -13,7 +13,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "codemirror": "^5.65.2"
+    "codemirror": "^5.65.2",
+    "marked": "^17.0.1"
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.88.0",
@@ -29,8 +30,5 @@
     "scripting"
   ],
   "author": "Marton Lakatos",
-  "license": "MIT",
-  "dependencies": {
-    "codemirror": "^5.65.2"
-  }
+  "license": "MIT"
 }

@@ -7,12 +7,13 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/midnight.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+    <!-- INLINE_MARKED -->
     <!-- Config UI CSS is now in main style block (section 9) for better readability -->
     <style id="config-ui-css">/* Placeholder - actual styles in main <style> block below */</style>
     <script id="config-ui-stub">(function(){var g=typeof self!=="undefined"?self:typeof window!=="undefined"?window:typeof global!=="undefined"?global:this;if(g)g.CodeFigConfigUI={parse:function(){return{sections:[]};},serialize:function(){return"";},render:function(schema,opts){var c=opts&&opts.container;if(c)c.innerHTML='<div class="config-ui-empty">Config UI failed to load. Check figma-console.log for errors.</div>';return{getValues:function(){return{};},setValues:function(){},destroy:function(){}};}};}})();</script>
     <script id="config-ui-js">
-(function(r,f){if(typeof define==="function"&&define.amd)define([],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f();else r.ConfigUIParser=f();})(typeof self!=="undefined"?self:this,function(){"use strict";function inferType(v){if(v===null||v===undefined)return"string";if(typeof v==="boolean")return"boolean";if(typeof v==="number"&&!Number.isNaN(v))return"number";if(typeof v==="string")return"string";if(Array.isArray(v))return"array";if(typeof v==="object")return"object";return"string"}function labelFromName(n){if(!n||typeof n!=="string")return"";return n.replace(/([A-Z])/g," $1").replace(/^./,function(s){return s.toUpperCase()}).trim()}function parseValue(s){s=(s||"").trim();if(s==="true")return true;if(s==="false")return false;if(s==="null")return null;if(/^-?\d+$/.test(s))return parseInt(s,10);if(/^-?\d*\.\d+([eE][+-]?\d+)?$/.test(s))return parseFloat(s);if((s.startsWith('"')&&s.endsWith('"'))||(s.startsWith("'")&&s.endsWith("'")))return s.slice(1,-1).replace(/\\'/g,"'").replace(/\\"/g,'"').replace(/\\n/g,"\n").replace(/\\r/g,"\r");if(s.startsWith("[")&&s.endsWith("]")){try{return JSON.parse(s)}catch(_){return s}}if(s.startsWith("{")&&s.endsWith("}")){try{return JSON.parse(s)}catch(_){return s}}return s}function parse(code){var sections=[],current={title:"",fields:[]},lines=(code||"").split(/\r?\n/),i=0;function flush(){if(current.fields.length>0||current.title)sections.push({title:current.title,fields:current.fields});current={title:"",fields:[]}}while(i<lines.length){var line=lines[i],t=line.trim();if(!t){i++;continue}if(t.startsWith("//")){var c=t.slice(2).trim();if(c&&!/^\s*var\s+/.test(c)&&!/^=+$/.test(c)){flush();current.title=c.replace(/^=\s*|\s*=$/g,"").trim()}i++;continue}var m=t.match(/^\s*var\s+(\w+)\s*=\s*(.+?)\s*;(?:\s*\/\/\s*(.*))?$/);if(m){var val=parseValue(m[2].trim());current.fields.push({name:m[1],type:inferType(val),value:val,label:labelFromName(m[1]),tooltip:(m[3]||"").trim()});i++;continue}i++}flush();return{sections:sections}}function serialize(schema,values){if(!schema||!schema.sections)return"";var out=[],vm=values||{};function fmt(v){if(v===null)return"null";if(typeof v==="boolean")return v?"true":"false";if(typeof v==="number")return String(v);return JSON.stringify(v)}schema.sections.forEach(function(sec){if(sec.title)out.push("// "+sec.title),out.push("");sec.fields.forEach(function(f){var v=vm[f.name];if(v===undefined)v=f.value;out.push("var "+f.name+" = "+fmt(v)+";"+(f.tooltip?" // "+f.tooltip:""))});out.push("")});return out.join("\n").replace(/\n{3,}/g,"\n\n").trim()}return{parse:parse,serialize:serialize,inferType:inferType,parseValue:parseValue}});
-(function(r,f){if(typeof define==="function"&&define.amd)define(["./parser"],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f(require("./parser"));else r.ConfigUIRenderer=f(r.ConfigUIParser);})(typeof self!=="undefined"?self:this,function(P){"use strict";var p=P||(typeof ConfigUIParser!=="undefined"?ConfigUIParser:null);if(!p)throw new Error("ConfigUI Renderer requires Parser");function buildField(field,idx){var n=field.name,t=field.type,v=field.value,l=field.label||n,tip=field.tooltip||"",id="config-ui-"+n+"-"+idx,wrap=document.createElement("div");wrap.className="config-ui-field config-ui-field--"+t;var row=document.createElement("div");row.className="config-ui-field__row";var lab=document.createElement("label");lab.className="config-ui-field__label";lab.htmlFor=id;lab.textContent=l;if(tip)lab.title=tip,lab.classList.add("config-ui-field__label--has-tooltip");row.appendChild(lab);var cw=document.createElement("div");cw.className="config-ui-field__control";if(t==="boolean"){var tw=document.createElement("div");tw.className="config-ui-toggle-wrap";var inp=document.createElement("input");inp.type="checkbox";inp.id=id;inp.checked=!!v;inp.className="config-ui-toggle";inp.setAttribute("data-field",n);tw.appendChild(inp);cw.appendChild(tw)}else if(t==="number"){var ni=document.createElement("input");ni.type="number";ni.id=id;ni.value=v;ni.className="config-ui-input config-ui-input--number";ni.setAttribute("data-field",n);cw.appendChild(ni)}else if(t==="select"&&field.options&&field.options.length){var sel=document.createElement("select");sel.id=id;sel.className="config-ui-input config-ui-input--select";sel.setAttribute("data-field",n);var ov=v!=null?String(v):"";field.options.forEach(function(opt){var o=document.createElement("option");o.value=opt;o.textContent=opt;if(opt===ov)o.selected=true;sel.appendChild(o)});if(!sel.value&&field.options[0])sel.value=field.options[0];cw.appendChild(sel)}else{var ti=document.createElement("input");ti.type="text";ti.id=id;ti.value=v==null?"":String(v);ti.className="config-ui-input config-ui-input--text";ti.setAttribute("data-field",n);cw.appendChild(ti)}row.appendChild(cw);wrap.appendChild(row);if(tip){var h=document.createElement("span");h.className="config-ui-field__hint";h.textContent=tip;wrap.appendChild(h)}return wrap}function buildSection(sec,idx){var el=document.createElement("div");el.className="config-ui-section";el.setAttribute("data-section",String(idx));if(sec.title){var h=document.createElement("div");h.className="config-ui-section__header";h.textContent=sec.title;el.appendChild(h)}var fe=document.createElement("div");fe.className="config-ui-section__fields";sec.fields.forEach(function(f,i){fe.appendChild(buildField(f,idx*1000+i))});el.appendChild(fe);return el}function buildForm(schema,container){if(!schema||!schema.sections||!schema.sections.length){container.innerHTML='<div class="config-ui-empty">No configuration options.</div>';return}container.innerHTML="";container.className="config-ui-form";schema.sections.forEach(function(sec,i){container.appendChild(buildSection(sec,i))})}function attachListeners(container,schema,onChange){if(!onChange||typeof onChange!=="function")return;function getValues(){var vals={};container.querySelectorAll("[data-field]").forEach(function(el){var n=el.getAttribute("data-field");if(!n)return;if(el.type==="checkbox")vals[n]=el.checked;else if(el.type==="number"){var x=parseFloat(el.value,10);vals[n]=Number.isNaN(x)?0:x}else vals[n]=el.value});return vals}container.addEventListener("change",function(e){if(e.target.getAttribute("data-field"))onChange(getValues())});container.addEventListener("input",function(e){if(e.target.getAttribute("data-field")&&e.target.type!=="checkbox")onChange(getValues())});return getValues}return{buildForm:buildForm,buildField:buildField,buildSection:buildSection,attachListeners:attachListeners}});
+(function(r,f){if(typeof define==="function"&&define.amd)define([],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f();else r.ConfigUIParser=f();})(typeof self!=="undefined"?self:this,function(){"use strict";function inferType(v){if(v===null||v===undefined)return"string";if(typeof v==="boolean")return"boolean";if(typeof v==="number"&&!Number.isNaN(v))return"number";if(typeof v==="string")return"string";if(Array.isArray(v))return"array";if(typeof v==="object")return"object";return"string"}function labelFromName(n){if(!n||typeof n!=="string")return"";return n.replace(/([A-Z])/g," $1").replace(/^./,function(s){return s.toUpperCase()}).trim()}function parseValue(s){s=(s||"").trim();if(s==="true")return true;if(s==="false")return false;if(s==="null")return null;if(/^-?\d+$/.test(s))return parseInt(s,10);if(/^-?\d*\.\d+([eE][+-]?\d+)?$/.test(s))return parseFloat(s);if((s.startsWith('"')&&s.endsWith('"'))||(s.startsWith("'")&&s.endsWith("'")))return s.slice(1,-1).replace(/\\'/g,"'").replace(/\\"/g,'"').replace(/\\n/g,"\n").replace(/\\r/g,"\r");if(s.startsWith("[")&&s.endsWith("]")){try{return JSON.parse(s)}catch(_){return s}}if(s.startsWith("{")&&s.endsWith("}")){try{return JSON.parse(s)}catch(_){return s}}return s}function parse(code){var sections=[],current={title:"",intro:"",fields:[],lastWasBlank:false,trailingBlank:false},lines=(code||"").split(/\r?\n/),i=0;function flush(){if(current.title||current.intro||current.fields.length)sections.push({title:current.title,intro:current.intro||"",fields:current.fields,trailingBlank:current.trailingBlank||false});current={title:"",intro:"",fields:[],lastWasBlank:false,trailingBlank:false}}while(i<lines.length){var line=lines[i],t=line.trim();if(!t){current.lastWasBlank=true;i++;continue}if(t.startsWith("//")){var c=t.slice(2).trim();if(!c){current.lastWasBlank=true;i++;continue}if(/^\s*var\s+/.test(c)||/^=+$/.test(c)){i++;continue}if(/^(#+)\s+/.test(c)){current.trailingBlank=current.lastWasBlank;flush();current.title=c.replace(/^=\s*|\s*=$/g,"").trim();current.lastWasBlank=false;i++;continue}if(/^(---|\*\*\*|___)\s*$/.test(c)){current.trailingBlank=current.lastWasBlank;flush();sections.push({divider:true});current={title:"",intro:"",fields:[],lastWasBlank:false,trailingBlank:false};i++;continue}if(current.intro)current.intro+=current.lastWasBlank?"\n\n"+c:"\n"+c;else current.intro=c;current.lastWasBlank=false;i++;continue}var m=t.match(/^\s*var\s+(\w+)\s*=\s*(.+?)\s*;(?:\s*\/\/\s*(.*))?$/);if(m){var val=parseValue(m[2].trim());current.fields.push({name:m[1],type:inferType(val),value:val,label:labelFromName(m[1]),tooltip:(m[3]||"").trim()});current.lastWasBlank=false;i++;continue}i++}flush();return{sections:sections}}function serialize(schema,values){if(!schema||!schema.sections)return"";var out=[],vm=values||{};function fmt(v){if(v===null)return"null";if(typeof v==="boolean")return v?"true":"false";if(typeof v==="number")return String(v);return JSON.stringify(v)}schema.sections.forEach(function(sec){if(sec.divider){out.push("// ---");out.push("");return}if(sec.title)out.push("// "+sec.title);if(sec.intro){out.push("");sec.intro.split("\n\n").forEach(function(para){para.split("\n").forEach(function(l){out.push("// "+l)});out.push("")})}sec.fields.forEach(function(f){var v=vm[f.name];if(v===undefined)v=f.value;out.push("var "+f.name+" = "+fmt(v)+";"+(f.tooltip?" // "+f.tooltip:""))});out.push("");if(sec.trailingBlank)out.push("")});return out.join("\n").replace(/\n{3,}/g,"\n\n").trim()}return{parse:parse,serialize:serialize,inferType:inferType,parseValue:parseValue}});
+(function(r,f){if(typeof define==="function"&&define.amd)define(["./parser"],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f(require("./parser"));else r.ConfigUIRenderer=f(r.ConfigUIParser);})(typeof self!=="undefined"?self:this,function(P){"use strict";var p=P||(typeof ConfigUIParser!=="undefined"?ConfigUIParser:null);if(!p)throw new Error("ConfigUI Renderer requires Parser");function buildField(field,idx){var n=field.name,t=field.type,v=field.value,l=field.label||n,tip=field.tooltip||"",id="config-ui-"+n+"-"+idx,wrap=document.createElement("div");wrap.className="config-ui-field config-ui-field--"+t;var row=document.createElement("div");row.className="config-ui-field__row";var lab=document.createElement("label");lab.className="config-ui-field__label";lab.htmlFor=id;lab.textContent=l;if(tip)wrap.title=tip,lab.classList.add("config-ui-field__label--has-tooltip");row.appendChild(lab);var cw=document.createElement("div");cw.className="config-ui-field__control";if(t==="boolean"){var tw=document.createElement("div");tw.className="config-ui-toggle-wrap";var inp=document.createElement("input");inp.type="checkbox";inp.id=id;inp.checked=!!v;inp.className="config-ui-toggle";inp.setAttribute("data-field",n);tw.appendChild(inp);cw.appendChild(tw)}else if(t==="number"){var ni=document.createElement("input");ni.type="number";ni.id=id;ni.value=v;ni.className="config-ui-input config-ui-input--number";ni.setAttribute("data-field",n);cw.appendChild(ni)}else if(t==="select"&&field.options&&field.options.length){var sel=document.createElement("select");sel.id=id;sel.className="config-ui-input config-ui-input--select";sel.setAttribute("data-field",n);var ov=v!=null?String(v):"";field.options.forEach(function(opt){var o=document.createElement("option");o.value=opt;o.textContent=opt;if(opt===ov)o.selected=true;sel.appendChild(o)});if(!sel.value&&field.options[0])sel.value=field.options[0];cw.appendChild(sel)}else{var ti=document.createElement("input");ti.type="text";ti.id=id;ti.value=v==null?"":String(v);ti.className="config-ui-input config-ui-input--text";ti.setAttribute("data-field",n);cw.appendChild(ti)}row.appendChild(cw);wrap.appendChild(row);return wrap}function buildSection(sec,idx){if(sec.divider){var wr=document.createElement("div");wr.className="config-ui-section config-ui-section--divider";wr.setAttribute("data-section",String(idx));wr.appendChild(document.createElement("hr"));return wr}var el=document.createElement("div");el.className="config-ui-section"+(sec.trailingBlank?" config-ui-section--trailing-blank":"");el.setAttribute("data-section",String(idx));if(sec.title||sec.intro){var intro=sec.intro||"";var introForMd=intro.replace(/\n\n/g,"\n\n").replace(/\n/g,"  \n");var md=sec.title?(introForMd?sec.title+"  \n"+introForMd:sec.title):introForMd;var mdWrap=document.createElement("div");mdWrap.className="docs-rendered";mdWrap.innerHTML=typeof window.marked!=="undefined"&&window.marked.parse?window.marked.parse(md,{gfm:true}):md.replace(/&/g,"&amp;").replace(/\x3c/g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");el.appendChild(mdWrap)}var fe=document.createElement("div");fe.className="config-ui-section__fields";sec.fields.forEach(function(f,i){fe.appendChild(buildField(f,idx*1000+i))});el.appendChild(fe);return el}function buildForm(schema,container){if(!schema||!schema.sections||!schema.sections.length){container.innerHTML='<div class="config-ui-empty">No configuration options.</div>';return}container.innerHTML="";container.className="config-ui-form";schema.sections.forEach(function(sec,i){container.appendChild(buildSection(sec,i))})}function attachListeners(container,schema,onChange){if(!onChange||typeof onChange!=="function")return;function getValues(){var vals={};container.querySelectorAll("[data-field]").forEach(function(el){var n=el.getAttribute("data-field");if(!n)return;if(el.type==="checkbox")vals[n]=el.checked;else if(el.type==="number"){var x=parseFloat(el.value,10);vals[n]=Number.isNaN(x)?0:x}else vals[n]=el.value});return vals}container.addEventListener("change",function(e){if(e.target.getAttribute("data-field"))onChange(getValues())});container.addEventListener("input",function(e){if(e.target.getAttribute("data-field")&&e.target.type!=="checkbox")onChange(getValues())});return getValues}return{buildForm:buildForm,buildField:buildField,buildSection:buildSection,attachListeners:attachListeners}});
 (function(r,f){var P=r.ConfigUIParser,R=r.ConfigUIRenderer;if(P&&R)r.ConfigUIFormController=f(P,R);})(typeof self!=="undefined"?self:this,function(P,R){"use strict";function createForm(container,initialSchema,opts){var schema=initialSchema||null,getV=null,onCh=(opts&&opts.onChange)||null;function render(s){schema=s;R.buildForm(schema,container);getV=R.attachListeners(container,schema,onCh?function(v){onCh(v)}:null)}if(schema&&schema.sections&&schema.sections.length)render(schema);return{getValues:function(){return getV?getV():{}},setValues:function(vals){if(!vals||!container)return;Object.keys(vals).forEach(function(n){var el=container.querySelector('[data-field="'+n+'"]');if(!el)return;if(el.type==="checkbox")el.checked=!!vals[n];else el.value=vals[n]==null?"":String(vals[n])})},updateFromCode:function(code){try{var s=P.parse(code);if(s&&s.sections&&s.sections.length){var cur=(getV&&getV())||{};render(s);this.setValues(cur)}}catch(e){console.warn("ConfigUI: updateFromCode parse failed",e)}},destroy:function(){if(container)container.innerHTML="";schema=null;getV=null}}}return{createForm:createForm}});
 (function(r){var P=r.ConfigUIParser,R=r.ConfigUIRenderer,C=r.ConfigUIFormController;if(!P||!R||!C)return;r.CodeFigConfigUI={parse:function(c){return P.parse(c)},serialize:function(s,v){return P.serialize(s,v)},render:function(schema,opts){var c=opts&&opts.container;if(!c)throw new Error("CodeFigConfigUI.render: options.container is required");return C.createForm(c,schema,opts)}}})(typeof self!=="undefined"?self:this);
     </script>
@@ -51,8 +52,8 @@
       
       :root {
         color-scheme: light dark;
-        
-        /* Color tokens */
+
+        /* Colors */
         --bg-primary: #fff;
         --bg-secondary: #fafafa;
         --bg-tertiary: #f5f5f7;
@@ -66,12 +67,46 @@
         --code-bg: #f5f5f7;
         --input-bg: #fff;
 
-        /* Typography scale */
+        /* Typography */
+        --font-family-base: system-ui, -apple-system, sans-serif;
+        --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
         --font-size-caption: 10px;
         --font-size-body: 12px;
         --font-size-subheadline: 14px;
         --font-size-headline: 16px;
         --font-size-display: 20px;
+        --font-weight-normal: 400;
+        --font-weight-medium: 500;
+        --font-weight-semibold: 600;
+        --font-weight-bold: 700;
+        --line-height-tight: 1.3;
+        --line-height-normal: 1.5;
+        --line-height-relaxed: 1.7;
+
+        /* Spacing */
+        --space-xs: 4px;
+        --space-sm: 8px;
+        --space-md: 12px;
+        --space-lg: 16px;
+        --space-xl: 20px;
+        --space-2xl: 24px;
+
+        /* Border radius */
+        --radius-sm: 3px;
+        --radius-md: 6px;
+        --radius-lg: 12px;
+        --radius-full: 9999px;
+
+        /* Transitions */
+        --transition-fast: 0.15s ease;
+        --transition-base: 0.2s ease;
+        --transition-slow: 0.3s ease;
+
+        /* Component dimensions */
+        --sidebar-width: 240px;
+        --sidebar-min-width: 200px;
+        --sidebar-max-width: 400px;
+        --info-panel-width: 300px;
       }
       
       /* Dark mode overrides */
@@ -98,13 +133,14 @@
          Core layout containers and flex structure
          ============================================================ */
       
-      body { 
-        margin: 0; 
-        padding: 0; 
-        font: var(--font-size-body) system-ui; 
-        height: 100vh; 
-        display: flex; 
-        background: var(--bg-primary); 
+      body {
+        margin: 0;
+        padding: 0;
+        font: var(--font-size-body) var(--font-family-base);
+        line-height: var(--line-height-normal);
+        height: 100vh;
+        display: flex;
+        background: var(--bg-primary);
         color: var(--text-primary);
       }
       
@@ -178,7 +214,7 @@
         cursor: col-resize;
         position: relative;
         flex-shrink: 0;
-        transition: background-color 0.2s ease;
+        transition: background-color var(--transition-base);
       }
       
       .resizer:hover {
@@ -214,12 +250,12 @@
          ============================================================ */
       
       /* Sidebar container */
-      .sidebar { 
-        width: 240px; 
-        min-width: 200px;
-        max-width: 400px;
-        background: var(--bg-primary); 
-        display: flex; 
+      .sidebar {
+        width: var(--sidebar-width);
+        min-width: var(--sidebar-min-width);
+        max-width: var(--sidebar-max-width);
+        background: var(--bg-primary);
+        display: flex;
         flex-direction: column;
         overflow: hidden;
       }
@@ -236,12 +272,12 @@
       }
       
       .search-input {
-        padding: 12px 20px 12px 20px; 
+        padding: var(--space-md) var(--space-xl);
         width: 100%;
         height: 56px;
-        border-radius: 6px;
-        font: var(--font-size-caption) system-ui;
-        font-weight: 600;
+        border-radius: var(--radius-md);
+        font: var(--font-size-caption) var(--font-family-base);
+        font-weight: var(--font-weight-semibold);
         outline: none;
         transition: all 0.2s ease;
         border: none;
@@ -282,9 +318,9 @@
       
       /* Section headers (Example Scripts, User Scripts) */
       .section-header {
-        padding: 12px 20px 6px 20px;
-        font: var(--font-size-body) system-ui;
-        font-weight: 600;
+        padding: var(--space-md) var(--space-xl) var(--space-xs) var(--space-xl);
+        font: var(--font-size-body) var(--font-family-base);
+        font-weight: var(--font-weight-semibold);
         color: var(--text-secondary);
         background: transparent;
       }
@@ -369,10 +405,10 @@
       }
       
       .group-header {
-        font: var(--font-size-body) system-ui;
-        font-weight: 500;
+        font: var(--font-size-body) var(--font-family-base);
+        font-weight: var(--font-weight-medium);
         color: var(--text-muted);
-        padding: 12px 20px 8px 20px;
+        padding: var(--space-md) var(--space-xl) var(--space-sm) var(--space-xl);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -411,13 +447,13 @@
       }
       
       /* Individual script items */
-      .script-item { 
-        padding: 8px 20px;
-        cursor: pointer; 
+      .script-item {
+        padding: var(--space-sm) var(--space-xl);
+        cursor: pointer;
         display: flex;
         align-items: center;
-        font: 11px system-ui;
-        font-weight: 400;
+        font: 11px var(--font-family-base);
+        font-weight: var(--font-weight-normal);
         color: var(--text-primary);
       }
       
@@ -442,10 +478,10 @@
       
       /* Empty state */
       .no-results {
-        padding: 20px 12px;
+        padding: var(--space-xl) var(--space-md);
         text-align: center;
         color: var(--text-secondary);
-        font: var(--font-size-caption) system-ui;
+        font: var(--font-size-caption) var(--font-family-base);
         font-style: italic;
       }
       
@@ -475,12 +511,12 @@
       }
       
       /* Editor header (script title, status, actions) */
-      .editor-header { 
-        padding: 12px 16px 12px 24px; 
-        background: var(--bg-primary); 
-        border-bottom: 1px solid var(--border-color); 
-        display: flex; 
-        align-items: center; 
+      .editor-header {
+        padding: var(--space-md) var(--space-lg) var(--space-md) var(--space-2xl);
+        background: var(--bg-primary);
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
         justify-content: space-between;
         width: 100%;
       }
@@ -499,13 +535,13 @@
       }
       
       /* Script title (editable for user scripts) */
-      .script-title { 
-        font-size: var(--font-size-headline); 
-        font-weight: 600; 
+      .script-title {
+        font-size: var(--font-size-headline);
+        font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
-        padding: 4px 8px;
-        border-radius: 4px;
-        transition: background-color 0.2s ease;
+        padding: var(--space-xs) var(--space-sm);
+        border-radius: var(--radius-sm);
+        transition: background-color var(--transition-base);
       }
       
       .script-title.editable {
@@ -523,12 +559,12 @@
         cursor: text;
       }
       
-      .script-status { 
-        font-size: 11px; 
-        color: var(--text-secondary); 
-        background: var(--bg-tertiary); 
-        padding: 2px 8px; 
-        border-radius: 12px;
+      .script-status {
+        font-size: 11px;
+        color: var(--text-secondary);
+        background: var(--bg-tertiary);
+        padding: 2px var(--space-sm);
+        border-radius: var(--radius-lg);
       }
       
       /* Editor tabs (Documentation, Configuration, Code) */
@@ -548,16 +584,16 @@
       }
       
       .editor-tab {
-        padding: 8px 14px;
-        font: var(--font-size-body) system-ui;
-        font-weight: 500;
+        padding: var(--space-sm) 14px;
+        font: var(--font-size-body) var(--font-family-base);
+        font-weight: var(--font-weight-medium);
         color: var(--text-secondary);
         background: none;
         border: none;
         border-bottom: 2px solid transparent;
         cursor: pointer;
-        margin-bottom: -1px; /* Overlap border */
-        transition: color 0.2s ease, border-color 0.2s ease;
+        margin-bottom: -1px;
+        transition: color var(--transition-base), border-color var(--transition-base);
       }
       
       .editor-tab:hover {
@@ -613,65 +649,72 @@
       .docs-rendered {
         flex: 1;
         overflow: auto;
-        padding: 16px 24px;
-        font: 12px system-ui;
-        line-height: 1.5;
+        padding: var(--space-lg) var(--space-2xl);
+        font: var(--font-size-body) var(--font-family-base);
+        line-height: var(--line-height-normal);
         background: var(--bg-primary);
         color: var(--text-primary);
       }
       
-      .docs-rendered h1 { 
-        font-size: var(--font-size-display); 
-        margin: 0 0 12px 0; 
-        font-weight: 600; 
-        color: var(--text-primary); 
+      .docs-rendered h1 {
+        font-size: var(--font-size-display);
+        margin: 0 0 var(--space-md) 0;
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-primary);
+      }
+
+      .docs-rendered h2 {
+        font-size: var(--font-size-headline);
+        margin: var(--space-lg) 0 var(--space-sm) 0;
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-primary);
+      }
+
+      .docs-rendered h3 {
+        font-size: var(--font-size-subheadline);
+        margin: var(--space-md) 0 var(--space-xs) 0;
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-primary);
+      }
+
+      /* Body text (docs + config form labels) */
+      .docs-rendered p,
+      .config-ui-form .config-ui-field__label {
+        margin: 0 0 var(--space-sm) 0;
+        color: var(--text-primary);
       }
       
-      .docs-rendered h2 { 
-        font-size: var(--font-size-headline); 
-        margin: 16px 0 8px 0; 
-        font-weight: 600; 
-        color: var(--text-primary); 
+      .docs-rendered ul,
+      .docs-rendered ol {
+        margin: 0 0 var(--space-sm) 0;
+        padding-left: var(--space-xl);
+      }
+
+      .docs-rendered ol {
+        list-style-type: decimal;
+      }
+
+      .docs-rendered li {
+        margin: 2px 0;
+        color: var(--text-primary);
       }
       
-      .docs-rendered h3 { 
-        font-size: var(--font-size-subheadline); 
-        margin: 12px 0 6px 0; 
-        font-weight: 600; 
-        color: var(--text-primary); 
+      .docs-rendered code {
+        background: var(--code-bg);
+        color: var(--text-primary);
+        padding: 1px var(--space-xs);
+        border-radius: var(--radius-sm);
+        font-size: 11px;
       }
-      
-      .docs-rendered p { 
-        margin: 0 0 8px 0; 
-        color: var(--text-primary); 
-      }
-      
-      .docs-rendered ul { 
-        margin: 0 0 8px 0; 
-        padding-left: 20px; 
-      }
-      
-      .docs-rendered li { 
-        margin: 2px 0; 
-        color: var(--text-primary); 
-      }
-      
-      .docs-rendered code { 
-        background: var(--code-bg); 
-        color: var(--text-primary); 
-        padding: 1px 4px; 
-        border-radius: 3px; 
-        font-size: 11px; 
-      }
-      
-      .docs-rendered pre { 
-        background: var(--code-bg); 
-        color: var(--text-primary); 
-        padding: 12px; 
-        border-radius: 6px; 
-        overflow-x: auto; 
-        margin: 8px 0; 
-        font-size: 11px; 
+
+      .docs-rendered pre {
+        background: var(--code-bg);
+        color: var(--text-primary);
+        padding: var(--space-md);
+        border-radius: var(--radius-md);
+        overflow-x: auto;
+        margin: var(--space-sm) 0;
+        font-size: 11px;
       }
       
       .docs-rendered pre code { 
@@ -680,10 +723,44 @@
         color: inherit; 
       }
       
-      .docs-rendered strong { 
-        font-weight: 600; 
+      .docs-rendered strong {
+        font-weight: var(--font-weight-semibold);
       }
-      
+
+      .docs-rendered blockquote {
+        margin: var(--space-sm) 0;
+        padding-left: var(--space-lg);
+        border-left: 4px solid var(--border-color);
+        color: var(--text-secondary);
+      }
+
+      /* Muted/secondary text (config empty state) */
+      .config-ui-container .config-ui-empty {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: var(--font-size-caption);
+        line-height: var(--line-height-normal);
+      }
+
+      .docs-rendered table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: var(--space-sm) 0;
+        font-size: var(--font-size-body);
+      }
+
+      .docs-rendered th,
+      .docs-rendered td {
+        border: 1px solid var(--border-color);
+        padding: var(--space-sm) var(--space-md);
+        text-align: left;
+      }
+
+      .docs-rendered th {
+        font-weight: 600;
+        background: var(--bg-tertiary);
+      }
+
       /* CodeMirror editor styling */
       .CodeMirror { 
         height: 100%; 
@@ -722,14 +799,14 @@
          ============================================================ */
       
       /* Base button styles */
-      .btn { 
+      .btn {
         height: 32px;
-        padding: 0 10px; 
+        padding: 0 10px;
         border: 1px solid transparent;
         background: transparent;
-        border-radius: 6px; 
-        font: var(--font-size-caption) system-ui;
-        font-weight: 600;
+        border-radius: var(--radius-md);
+        font: var(--font-size-caption) var(--font-family-base);
+        font-weight: var(--font-weight-semibold);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -790,7 +867,7 @@
         width: 32px;
         height: 32px;
         border: none;
-        border-radius: 6px;
+        border-radius: var(--radius-md);
         background: transparent;
         color: #666;
         cursor: pointer;
@@ -855,12 +932,12 @@
       
       /* Plugin footer */
       .plugin-footer {
-        padding: 12px 20px;
+        padding: var(--space-md) var(--space-xl);
         border-top: 1px solid var(--border-light);
         background: var(--bg-primary);
         display: flex;
         flex-direction: row;
-        gap: 12px;
+        gap: var(--space-md);
         justify-content: space-between;
         align-items: center;
         width: 100%;
@@ -885,7 +962,7 @@
          Corresponds to scripts/CODEFIG_LIBRARIES/@config-ui.ts
          ============================================================ */
       
-      /* Form container */
+      /* Form container: same padding and base font as .docs-rendered for visual parity */
       .config-ui-form {
         display: flex;
         flex-direction: column;
@@ -893,68 +970,73 @@
         min-height: 0;
         width: 100%;
         max-width: 100%;
-        padding: 12px 16px;
+        padding: var(--space-lg) var(--space-2xl);
         overflow-y: auto;
         box-sizing: border-box;
+        font: var(--font-size-body) var(--font-family-base);
+        line-height: var(--line-height-normal);
+        background: var(--bg-primary);
+        color: var(--text-primary);
       }
       
       .config-ui-empty {
-        color: var(--text-secondary, #86868b);
-        font-size: 12px;
-        padding: 24px 16px;
+        padding: var(--space-2xl) var(--space-lg);
         text-align: center;
       }
       
-      /* Sections */
+      /* Config UI: layout only; typography from .docs-rendered (markdown) rules above */
       .config-ui-section {
         width: 100%;
         min-width: 0;
-        margin-bottom: 20px;
+        margin-bottom: var(--space-lg);
         flex-shrink: 0;
       }
       
       .config-ui-section:last-child {
         margin-bottom: 0;
       }
+      .config-ui-section--trailing-blank {
+        margin-bottom: var(--space-lg);
+      }
+      .config-ui-form .docs-rendered {
+        padding: 0;
+      }
       
-      .config-ui-section__header {
-        font-size: var(--font-size-headline);
-        font-weight: 600;
-        color: var(--text-secondary, #86868b);
-        margin-bottom: 8px;
-        padding-bottom: 4px;
+      .config-ui-section--divider {
+        margin-bottom: var(--space-md);
+      }
+      .config-ui-section--divider hr {
+        border: 0;
+        border-top: 1px solid var(--color-border, #e0e0e0);
+        margin: 0;
       }
       
       .config-ui-section__fields {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: var(--space-sm);
         width: 100%;
         min-width: 0;
       }
       
-      /* Fields */
       .config-ui-field {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        width: 100%;
-        min-width: 0;
+        gap: var(--space-xs);
+        width: 50%;
+        min-width: 80px;
       }
       
       .config-ui-field__row {
         display: flex;
         flex-direction: row;
         align-items: center;
-        gap: 10px;
+        gap: var(--space-md);
         min-height: 28px;
       }
       
       .config-ui-field__label {
-        font-size: var(--font-size-body);
-        font-weight: 500;
-        color: var(--text-primary, #1d1d1f);
-        flex: 0 0 30%;
+        flex: 0 0 40%;
         min-width: 0;
       }
       
@@ -969,14 +1051,7 @@
         align-items: center;
       }
       
-      .config-ui-field__hint {
-        font-size: var(--font-size-caption);
-        color: var(--text-secondary, #86868b);
-        line-height: 1.3;
-        padding-left: calc(30% + 10px);
-      }
-      
-      /* Toggle switch (checkbox styled as toggle) */
+      /* === Config UI: input elements only (toggles, inputs, selects) === */
       .config-ui-toggle-wrap {
         display: flex;
         align-items: center;
@@ -1069,12 +1144,12 @@
         position: absolute;
         top: 0;
         right: 0;
-        width: 300px;
+        width: var(--info-panel-width);
         height: 100%;
         background: var(--bg-secondary);
         border-left: 1px solid var(--border-light);
         transform: translateX(100%);
-        transition: transform 0.3s ease;
+        transition: transform var(--transition-slow);
         z-index: 100;
         overflow: hidden;
       }
@@ -1351,7 +1426,7 @@
       .spacing-value, 
       .radius-value, 
       .effect-value {
-        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+        font-family: var(--font-family-mono);
         font-size: var(--font-size-body);
         background: var(--bg-tertiary);
         color: var(--text-primary);
@@ -1411,7 +1486,7 @@
       }
 
       .info-result-message .code {
-        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+        font-family: var(--font-family-mono);
         background: var(--bg-tertiary);
         color: var(--text-primary);
         padding: 1px 4px;
@@ -1896,7 +1971,8 @@
           if (scriptHasUIConfig) {
             if (configCodeContainer) configCodeContainer.style.display = 'none';
             if (configUIContainer) { configUIContainer.style.display = 'flex'; configUIContainer.style.flexDirection = 'column'; }
-            initConfigUI(parsedSections && parsedSections.configContent ? parsedSections.configContent : (configEditor ? configEditor.getValue() : ''));
+            const configContent = code && code.getValue ? extractConfigSection(code.getValue(), true) : (parsedSections && parsedSections.configContent) || '';
+            initConfigUI(configContent || '');
           } else {
             if (configCodeContainer) configCodeContainer.style.display = 'block';
             if (configUIContainer) configUIContainer.style.display = 'none';
@@ -1916,8 +1992,16 @@
 
       function renderSimpleMarkdown(text) {
         if (!text || !docsRendererEl) return;
-        const escape = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        let html = escape(text)
+        if (typeof window.marked !== 'undefined') {
+          try {
+            docsRendererEl.innerHTML = window.marked.parse(text, { gfm: true });
+            return;
+          } catch (e) {
+            console.warn('marked parse failed, using fallback', e);
+          }
+        }
+        var escape = function(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+        var html = escape(text)
           .replace(/^### (.+)$/gm, '<h3>$1</h3>')
           .replace(/^## (.+)$/gm, '<h2>$1</h2>')
           .replace(/^# (.+)$/gm, '<h1>$1</h1>')
@@ -1926,9 +2010,9 @@
           .replace(/`([^`]+)`/g, '<code>$1</code>')
           .replace(/^- (.+)$/gm, '<li>$1</li>')
           .replace(/(<li>.*?<\/li>\n?)+/g, '<ul>$&</ul>');
-        const blocks = html.split(/\n\n+/);
-        html = blocks.map(block => {
-          const t = block.trim();
+        var blocks = html.split(/\n\n+/);
+        html = blocks.map(function(block) {
+          var t = block.trim();
           if (!t) return '';
           if (t.startsWith('<h') || t.startsWith('<ul')) return t;
           return '<p>' + t.replace(/\n/g, ' ') + '</p>';

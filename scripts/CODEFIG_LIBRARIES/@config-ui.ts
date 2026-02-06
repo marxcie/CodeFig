@@ -17,6 +17,8 @@
 // - **Code:** `` `code` ``
 // - **List:** `- item` (renders as unordered list)
 //
+// **Spacing:** A single newline between comment lines = line break (no extra gap). A **blank line** or an **empty comment line** (`//`) = new paragraph / extra vertical space between blocks. So: no blank line between `// # Title` and `// Subtitle` gives a line break only; a blank line or `//` between two sections gives extra space in the rendered form.
+//
 // ## Exported functions
 // - **Builder:** section(title), toggle(name, value, opts?), number(name, value, opts?), string(name, value, opts?), select(name, value, options, opts?)
 // - **Send:** sendToUI() – sends the built schema to the plugin UI (Config / Visual or custom panel)
