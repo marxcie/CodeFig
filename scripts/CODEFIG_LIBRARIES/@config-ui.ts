@@ -1,32 +1,40 @@
-// @ConfigUI
+// @CodeFigUI
 // @DOC_START
 // # @ConfigUI
 // Build and send native UI (toggles, inputs, sections) to the plugin so it can be shown in real time.
 //
 // ## Overview
-// Import to define config or custom forms in code. Build a schema with section(), toggle(), number(), string(), select(), then send it to the plugin UI with sendToUI(). The plugin renders native controls (Figma-style toggles, inputs) that users can interact with. You can edit this library to add more component types (e.g. createColorPicker, createSlider).
+// Import to define config or custom forms in code. Build a schema with section(), toggle(), number(), string(), select(), then send it to the plugin UI with sendToUI(). You can edit this library to add more component types (e.g. createColorPicker, createSlider).
 //
-// ## UI Config block in scripts (no builder)
-// In a script, wrap config variables between **// @UI_CONFIG_START** and **// @UI_CONFIG_END**. The Config tab will show the native form only (no code view). Use **// @CONFIG_START** / **// @CONFIG_END** if you want the Config tab to show editable code instead of the form.
+// ## UI Config block in scripts
+// Wrap config variables between **// @UI_CONFIG_START** and **// @UI_CONFIG_END**. The Config tab will show the native form only (no code view). Use **// @CONFIG_START** / **// @CONFIG_END** if you want the Config tab to show editable code instead of the form.
 //
-// ## Markdown in comments
-// Section titles (comment lines like `// # Section`) and inline hints (the comment after `var x = value; // hint`) are rendered as **Markdown**. Supported:
-// - **Headings:** `# H1`, `## H2`, `### H3`
-// - **Bold:** `**text**`
-// - **Italic:** `*text*`
-// - **Code:** `` `code` ``
-// - **List:** `- item` (renders as unordered list)
+// ## Config UI components (built-in)
+// - **Toggle** (boolean) – checkbox-style on/off.
+// - **Number** – numeric input.
+// - **Text** (string) – single-line text input.
+// - **Select** (dropdown) – choice from a list of options; **builder API only** (not available in the config block, because options cannot be expressed there).
 //
-// **Spacing:** A single newline between comment lines = line break (no extra gap). A **blank line** or an **empty comment line** (`//`) = new paragraph / extra vertical space between blocks. So: no blank line between `// # Title` and `// Subtitle` gives a line break only; a blank line or `//` between two sections gives extra space in the rendered form.
+// **In the config block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string (or array/object serialized) → text. Select is not available in the block.
 //
 // ## Exported functions
 // - **Builder:** section(title), toggle(name, value, opts?), number(name, value, opts?), string(name, value, opts?), select(name, value, options, opts?)
 // - **Send:** sendToUI() – sends the built schema to the plugin UI (Config / Visual or custom panel)
 //
-// ## Example
+// ## Example (builder)
 // section('Display').toggle('onlyUsed', true).number('maxNodes', 5);
 // sendToUI();
 // @DOC_END
+
+// Config block showcase (toggle, number, text). Select is only available via the builder API (section().select(...)).
+// @UI_CONFIG_START
+// # Built-in components
+// One of each control type the config block supports.
+var exampleToggle = true; // Boolean → toggle
+var exampleNumber = 42; // Number → number input
+var exampleText = 'Hello'; // String → text input
+// @UI_CONFIG_END
+
 var shared = true;
 
 /**

@@ -1,4 +1,23 @@
 // @Help & documentation
+// @DOC_START
+// # CodeFig – Help & documentation
+// Your TypeScript-powered Figma scripting environment.
+//
+// ## Documentation tab
+// Scripts can define a doc block between **// @DOC_START** and **// @DOC_END**. That block is rendered as **Markdown** in the Documentation tab.
+//
+// **Markdown supported:** headings (`#`, `##`, `###`), **bold**, *italic*, `code`, lists (`- item`), and more.
+//
+// **Spacing:** A single newline between comment lines = line break (no extra gap). A **blank line** or an **empty comment line** (`//`) = new paragraph / extra vertical space. The Config tab uses the same typography and spacing as the Documentation tab.
+//
+// ## Script tab
+// Main code editor: write TypeScript or JavaScript, run with Cmd/Ctrl+R, auto-save as you type. Use the sidebar to open Example Scripts or your saved scripts.
+//
+// ## Config tab
+// Scripts can expose a config form via **// @UI_CONFIG_START** … **// @UI_CONFIG_END** or the @ConfigUI builder; see @ConfigUI for built-in components.
+// @DOC_END
+
+// @Help & documentation
 // Welcome to CodeFig! Your TypeScript-powered Figma scripting environment.
 
 // === GETTING STARTED ===
