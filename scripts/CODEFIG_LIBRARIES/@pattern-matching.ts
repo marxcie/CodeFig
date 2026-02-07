@@ -10,6 +10,7 @@
 // - **Matching:** matchPattern(text, pattern, options), compilePattern, expandWildcards, escapeWildcards
 // - **Filtering:** filterByCollection, getCollections, validateCollection
 // - **Advanced:** fuzzyMatch, regexMatch, globMatch, wildcardMatch
+// - **Rename/Replace:** applyFigmaPlaceholders(replacePattern, context), replaceWithPattern(text, searchPattern, replacePattern, index?, total?)
 // @DOC_END
 
 // ============================================================================
@@ -430,4 +431,118 @@ function getPatternStats(pattern: string): {
     complexity,
     length
   };
+}
+
+// ============================================================================
+// FIGMA PLACEHOLDER SUPPORT (for batch rename)
+// ============================================================================
+
+interface FigmaPlaceholderContext {
+  fullMatch: string;   // $&
+  groups: string[];   // $1, $2, ...
+  index: number;      // 0-based position
+  total: number;      // total items
+}
+
+/**
+ * Detect if pattern looks like regex (contains unescaped regex metacharacters)
+ */
+function looksLikeRegex(pattern: string): boolean {
+  const regexMeta = /[()[\]{}*+?^$|\\.]/;
+  let escaped = false;
+  for (let i = 0; i < pattern.length; i++) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (pattern[i] === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (regexMeta.test(pattern[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Apply Figma-style placeholders to a replace pattern.
+ * Placeholders: $& (full match), $1 $2 (groups), $n $nn $nnn (ascending), $N $NN $NNN (descending)
+ */
+function applyFigmaPlaceholders(
+  replacePattern: string,
+  context: FigmaPlaceholderContext
+): string {
+  let result = replacePattern;
+  const { fullMatch, groups, index, total } = context;
+
+  // $& - full match
+  result = result.replace(/\$&/g, fullMatch);
+
+  // $1, $2, ... - capture groups
+  for (let i = 0; i < groups.length; i++) {
+    const re = new RegExp('\\$' + (i + 1) + '(?![0-9])', 'g');
+    result = result.replace(re, groups[i] || '');
+  }
+
+  // Ascending: $nnn, $nn, $n (replace longest first)
+  const ascVal = index + 1;
+  result = result.replace(/\$nnn/g, String(ascVal).padStart(3, '0'));
+  result = result.replace(/\$nn/g, String(ascVal).padStart(2, '0'));
+  result = result.replace(/\$n(?![nN0-9])/g, String(ascVal));
+
+  // Descending: $NNN, $NN, $N
+  const descVal = total - index;
+  result = result.replace(/\$NNN/g, String(descVal).padStart(3, '0'));
+  result = result.replace(/\$NN(?![0-9])/g, String(descVal).padStart(2, '0'));
+  result = result.replace(/\$N(?![nN0-9])/g, String(descVal));
+
+  return result;
+}
+
+/**
+ * Apply search/replace to text with optional Figma placeholders.
+ * Auto-detects regex: if searchPattern contains regex metacharacters, treats as regex.
+ * index and total are 0-based / count; used for $n, $nn, $nnn, $N, $NN, $NNN.
+ */
+function replaceWithPattern(
+  text: string,
+  searchPattern: string,
+  replacePattern: string,
+  index: number = 0,
+  total: number = 1
+): string {
+  const useRegex = looksLikeRegex(searchPattern);
+  let fullMatch = '';
+  let groups: string[] = [];
+
+  if (useRegex) {
+    try {
+      const regex = new RegExp(searchPattern, 'g');
+      const match = regex.exec(text);
+      if (match) {
+        fullMatch = match[0];
+        groups = match.slice(1);
+        const context: FigmaPlaceholderContext = { fullMatch, groups, index, total };
+        const replacement = applyFigmaPlaceholders(replacePattern, context);
+        return text.replace(regex, replacement);
+      }
+    } catch (e) {
+      // Fall back to literal
+    }
+  }
+
+  // Literal replace (escape special regex chars, support * as wildcard)
+  const escaped = escapeWildcards(searchPattern).replace(/\\\*/g, '.*');
+  const literalRegex = new RegExp(escaped, 'gi');
+  const match = literalRegex.exec(text);
+  if (!match) {
+    return text;
+  }
+  fullMatch = match[0];
+  groups = match.slice(1);
+  const context: FigmaPlaceholderContext = { fullMatch, groups, index, total };
+  const replacement = applyFigmaPlaceholders(replacePattern, context);
+  return text.replace(literalRegex, replacement);
 }

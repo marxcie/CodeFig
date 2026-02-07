@@ -14,7 +14,7 @@
 // Main code editor: write TypeScript or JavaScript, run with Cmd/Ctrl+R, auto-save as you type. Use the sidebar to open Example Scripts or your saved scripts.
 //
 // ## Config tab
-// Scripts can expose a config form via **// @UI_CONFIG_START** … **// @UI_CONFIG_END** or the @ConfigUI builder; see @ConfigUI for built-in components.
+// Scripts can expose a config form via **// @UI_CONFIG_START** … **// @UI_CONFIG_END** or the @ConfigUI builder; see @ConfigUI for built-in components. Use **// @options: &lt;source&gt;** on a var line for dropdowns filled from the plugin (e.g. variable collections, queries); see @ConfigUI for supported sources.
 // @DOC_END
 
 // @Help & documentation

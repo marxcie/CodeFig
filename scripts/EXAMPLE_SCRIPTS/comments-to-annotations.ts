@@ -7,36 +7,34 @@
 // Uses the Figma REST API to read comments, then creates annotations (and optionally anchor frames) at comment positions. Requires a Figma Personal Access Token and a file key or URL.
 //
 // ## Config options
-// - **TOKEN_STORAGE_KEY** – Client storage key for the Personal Access Token.
-// - **FILE_KEY_OR_URL** – Figma file key or file URL; leave empty to use stored key or be prompted.
-// - **ANNOTATION_ANCHORS** – If true, creates invisible anchor frames at comment locations.
-// - **INCLUDE_RESOLVED_COMMENTS** – If true, resolved comments are included; default false.
+// - **tokenStorageKey** – Client storage key for the Personal Access Token.
+// - **fileKeyOrUrl** – Figma file key or file URL; leave empty to use stored key or be prompted.
+// - **annotationAnchors** – If true, creates invisible anchor frames at comment locations.
+// - **resolvedComments** – If true, resolved comments are included; default false.
 // @DOC_END
 
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
 
-// @CONFIG_START
-// Personal Access Token for Figma REST API (stored securely in client storage)
-var TOKEN_STORAGE_KEY = "figma_personal_access_token";
+// @UI_CONFIG_START
+// # Comments to Annotations
 
-// FILE_KEY_OR_URL: Optional - paste either a Figma file key or a URL from your Figma file here
-// If it's a URL, the file key will be automatically extracted from it
-// Examples:
-//   - Direct key: YDJBPC3C4nUOEQyPGF6cyh
-//   - URL: https://www.figma.com/design/YDJBPC3C4nUOEQyPGF6cyh/Website-Exploration?node-id=9700-224736
-// Leave empty to use stored file key or be prompted
-var FILE_KEY_OR_URL = "";
-
-// ANNOTATION_ANCHORS: Create invisible anchor frames at comment locations
-// This allows annotations to be precisely positioned where comments were placed
-var ANNOTATION_ANCHORS = true;
-
-// INCLUDE_RESOLVED_COMMENTS: Whether to include resolved comments in annotations
-// Default is false - only unresolved comments will be converted to annotations
-var INCLUDE_RESOLVED_COMMENTS = false;
-// @CONFIG_END
+var tokenStorageKey = "figma_personal_access_token";
+// Personal Access Token for Figma REST API (stored securely in client storage, it won't be sent to any servers.)
+// Go to "Help & Account" -> "Account Settings" -> "Security" -> "Personal Access Tokens" -> "Generate new token".
+// Scope: Files / file_comments:read, and Generate token. Copy the token and paste it here.
+//
+var fileKeyOrUrl = "https://www.figma.com/design/3OL5s2KgkpD2RIGBXIJzst/CodeFig-test-ground?node-id=35-32&t=RqmlOo3sxABzx1pg-4";
+// Paste either a Figma file key or a URL from your Figma file hereIf it's a URL, the file key will be automatically extracted from it.
+// Just select any element on the artboard, right click and select "Copy link to selection", and paste it here.
+//
+var annotationAnchors = true;
+// Create invisible anchor frames at comment locations. his allows annotations to be precisely positioned where comments were placed
+//
+var resolvedComments = false;
+// Whether to include resolved comments in annotations. Default is false - only unresolved comments will be converted to annotations
+// @UI_CONFIG_END
 
 // ============================================================================
 // MAIN ENTRY POINT
@@ -86,7 +84,7 @@ async function createAnnotationsFromComments() {
     var relevantComments = filterCommentsForNodes(comments, nodeIds);
     
     if (relevantComments.length === 0) {
-      var message = INCLUDE_RESOLVED_COMMENTS 
+      var message = resolvedComments 
         ? "ℹ️ No comments found for selected nodes"
         : "ℹ️ No unresolved comments found for selected nodes";
       figma.notify(message);
@@ -222,14 +220,14 @@ async function createAnnotationsFromComments() {
 
 async function getOrPromptForToken() {
   try {
-    var stored = await figma.clientStorage.getAsync(TOKEN_STORAGE_KEY);
+    var stored = await figma.clientStorage.getAsync(tokenStorageKey);
     if (stored) {
       return stored;
     }
     
     var token = await promptForToken();
     if (token) {
-      await figma.clientStorage.setAsync(TOKEN_STORAGE_KEY, token);
+      await figma.clientStorage.setAsync(tokenStorageKey, token);
       figma.notify("✅ Token saved securely");
     }
     return token;
@@ -267,9 +265,9 @@ async function getFileKey() {
       return fileKey;
     }
     
-    // Next, check if FILE_KEY_OR_URL is configured in the script
-    if (FILE_KEY_OR_URL && FILE_KEY_OR_URL.trim() !== "") {
-      var input = FILE_KEY_OR_URL.trim();
+    // Next, check if fileKeyOrUrl is configured in the script
+    if (fileKeyOrUrl && fileKeyOrUrl.trim() !== "") {
+      var input = fileKeyOrUrl.trim();
       // Try to extract from URL first
       var extracted = extractFileKeyFromUrl(input);
       if (extracted) {
@@ -492,7 +490,7 @@ function filterCommentsForNodes(comments, nodeIds) {
         var nodeId = String(comment.client_meta.node_id);
         if (nodeIdSet.has(nodeId)) {
           // Check if we should include this thread based on resolved status
-          if (!comment.resolved || INCLUDE_RESOLVED_COMMENTS) {
+          if (!comment.resolved || resolvedComments) {
             relevantRootComments.add(comment.id);
             allRelevantComments.add(comment);
           }
@@ -590,7 +588,7 @@ function delay(ms) {
 
 async function createAnchorElement(comment, nodeMap, targetFrame) {
   try {
-    if (!ANNOTATION_ANCHORS) {
+    if (!annotationAnchors) {
       return null;
     }
     

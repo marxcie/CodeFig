@@ -13,9 +13,10 @@
 // - **Toggle** (boolean) – checkbox-style on/off.
 // - **Number** – numeric input.
 // - **Text** (string) – single-line text input.
-// - **Select** (dropdown) – choice from a list of options; **builder API only** (not available in the config block, because options cannot be expressed there).
+// - **Textarea** – multiline text (e.g. batch replacement: one line per "search, replace"). **Builder:** textarea(name, value, opts?). **Config block:** add `// @textarea` on the var line. Same width as text input, max 5 lines by default.
+// - **Select** (dropdown) – choice from a list of options; **builder API only** for static options. In the **config block**, use **Select (dynamic)** with a trailing comment `// @options: <source>` so the plugin fills the dropdown at runtime (e.g. variable collections, queries).
 //
-// **In the config block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string (or array/object serialized) → text. Select is not available in the block.
+// **In the config block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string → text. For a **dropdown with dynamic options**, add `// @options: <source>` to the var line; the plugin then loads options for that source when the form is shown. Supported sources: **variableCollections** (names of local variable collections). More sources (e.g. queries) can be added the same way. The variable value is always a string; in script/code mode it is edited as text.
 //
 // ## Exported functions
 // - **Builder:** section(title), toggle(name, value, opts?), number(name, value, opts?), string(name, value, opts?), select(name, value, options, opts?)
@@ -117,6 +118,25 @@ function string(name, value, opts) {
 }
 
 /**
+ * Add a textarea (multiline text). Same width as string input; default max 5 lines.
+ * @param {string} name - Variable name
+ * @param {string} value - Initial value (can contain newlines)
+ * @param {{ label?: string, tooltip?: string, rows?: number }} opts - Optional label, tooltip, and row count (default 5)
+ */
+function textarea(name, value, opts) {
+  if (!_currentSection) _currentSection = { title: '', fields: [] }; _sections.push(_currentSection);
+  _currentSection.fields.push({
+    name: name,
+    type: 'textarea',
+    value: value != null ? String(value) : '',
+    label: (opts && opts.label) || labelFromName(name),
+    tooltip: (opts && opts.tooltip) || '',
+    rows: (opts && opts.rows != null) ? opts.rows : 5
+  });
+  return builder;
+}
+
+/**
  * Add a select (dropdown). Options are an array of strings.
  * @param {string} name - Variable name
  * @param {string} value - Selected value (must be one of options)
@@ -141,6 +161,7 @@ var builder = {
   toggle: toggle,
   number: number,
   string: string,
+  textarea: textarea,
   select: select,
   sendToUI: sendToUI,
   getSchema: getSchema,

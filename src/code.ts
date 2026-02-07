@@ -208,6 +208,22 @@ figma.ui.onmessage = (msg) => {
         lastOpenedScript: lastOpenedScript || null
       });
     });
+    return;
+  }
+
+  if (msg.type === 'GET_OPTIONS') {
+    const optionSource = msg.optionSource;
+    let options: string[] = [];
+    if (optionSource === 'variableCollections') {
+      const collections = figma.variables.getLocalVariableCollections();
+      options = collections.map((c) => c.name);
+    }
+    figma.ui.postMessage({
+      type: 'OPTIONS',
+      optionSource: optionSource || '',
+      options
+    });
+    return;
   }
 
     if (msg.type === 'SAVE') {

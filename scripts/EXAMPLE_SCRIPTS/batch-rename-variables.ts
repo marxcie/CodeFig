@@ -1,274 +1,290 @@
-// Batch Rename Variables
+// Batch rename Variables
 // @DOC_START
-// # Batch Rename Variables
-// Rename variables in a collection using pattern-based naming.
+// # Batch rename Variables
+// Rename variables using the same pattern as batch-rename-styles: searchIn = scope, searchFor/replaceWith = find/replace in variable name.
 //
 // ## Overview
-// Targets a variable collection (and optional group), filters by name pattern or list, and renames variables according to a template. Supports placeholders: {currentName}, {numberAscending}, {numberDescending}.
+// searchIn selects which collections/groups to include (partial match on "collection / variable path"). searchFor/replaceWith then run on each variable name. Supports Figma-style placeholders: $&, $1 $2, $n $nn $nnn, $N $NN $NNN.
 //
-// ## Config options (Configuration tab)
-// - **collectionName** – Exact name of the variable collection.
-// - **groupFilter** – Group path filter ("" or "/" for root, or e.g. "colors/pine").
-// - **variableNames** – "*" for all, or array of specific names.
-// - **renamePrefix** / **renameSuffix** – String parts for the new name.
-// - **renameSequence** / **renameStartNumber** – Step and start for number placeholders.
-// - **renamePattern** – Template string using placeholders and the variables above.
+// ## Config options
+// - **searchIn** – Scope: partial match on collection and/or group path. Empty = all; set = only what is within that scope gets renamed.
+// - **searchFor** – Pattern to find (partial match, literal or regex).
+// - **replaceWith** – Replacement string; may use placeholders.
+// - **batchReplacement** – Optional array of [search, replace] pairs; overrides searchFor/replaceWith.
+//
+// ## Rename behaviour
+// - **searchIn empty**: Replace in the full hierarchy (collection names and variable paths).
+// - **searchIn set**: Replace only in what is **within** the scope (variable path inside the matched collection/group; collection name is left unchanged).
 // @DOC_END
 
-@import { getAllCollections, getCollection, getCollectionVariables, getVariable } from "@Variables"
+@import { getAllCollections, getCollectionVariables, getVariable } from "@Variables"
+@import { matchPattern, replaceWithPattern } from "@Pattern Matching"
+
+// Fallback when import fails
+if (typeof matchPattern !== 'function') {
+  var matchPattern = function(text, pattern, options) {
+    options = options || {};
+    var t = (options.caseSensitive ? text : text.toLowerCase());
+    var p = (options.caseSensitive ? pattern : pattern.toLowerCase());
+    if (options.exact) return { match: t === p, confidence: t === p ? 1 : 0 };
+    return { match: t.indexOf(p) !== -1, confidence: t.indexOf(p) !== -1 ? 1 : 0 };
+  };
+  console.log('[Batch rename variables] DEBUG: using fallback matchPattern');
+}
+if (typeof replaceWithPattern !== 'function') {
+  var escapeWildcards = function(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+  var applyFigmaPlaceholders = function(replacePattern, context) {
+    var r = replacePattern.replace(/\$&/g, context.fullMatch);
+    for (var g = 0; g < (context.groups || []).length; g++) {
+      r = r.replace(new RegExp('\\$' + (g + 1) + '(?![0-9])', 'g'), context.groups[g] || '');
+    }
+    var i = context.index, tot = context.total;
+    r = r.replace(/\$nnn/g, String(i + 1).padStart(3, '0')).replace(/\$nn/g, String(i + 1).padStart(2, '0')).replace(/\$n(?![nN0-9])/g, String(i + 1));
+    r = r.replace(/\$NNN/g, String(tot - i).padStart(3, '0')).replace(/\$NN(?![0-9])/g, String(tot - i).padStart(2, '0')).replace(/\$N(?![nN0-9])/g, String(tot - i));
+    return r;
+  };
+  var looksLikeRegex = function(p) { return /[()[\]{}*+?^$|\\]/.test(p.replace(/\\./g, '')); };
+  var replaceWithPattern = function(text, searchPattern, replacePattern, index, total) {
+    index = index != null ? index : 0; total = total != null ? total : 1;
+    var fullMatch = '', groups = [];
+    if (looksLikeRegex(searchPattern)) {
+      try {
+        var regex = new RegExp(searchPattern, 'g');
+        var match = regex.exec(text);
+        if (match) {
+          fullMatch = match[0]; groups = match.slice(1);
+          var replacement = applyFigmaPlaceholders(replacePattern, { fullMatch: fullMatch, groups: groups, index: index, total: total });
+          return text.replace(regex, replacement);
+        }
+      } catch (e) {}
+    }
+    var escaped = escapeWildcards(searchPattern).replace(/\\\*/g, '.*');
+    var literalRegex = new RegExp(escaped, 'gi');
+    var match = literalRegex.exec(text);
+    if (!match) return text;
+    fullMatch = match[0]; groups = match.slice(1);
+    var replacement = applyFigmaPlaceholders(replacePattern, { fullMatch: fullMatch, groups: groups, index: index, total: total });
+    return text.replace(literalRegex, replacement);
+  };
+  console.log('[Batch rename variables] DEBUG: using fallback replaceWithPattern');
+}
 
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
 
-// @CONFIG_START
-// Collection to target (exact name match)
-var collectionName = "colors / pine";
+// @UI_CONFIG_START
+// # Batch rename variables
+//
+var searchIn = "";
+// Optional, narrow to variables whose name contains this (e.g. "color/", "Typography/")
+//
+var searchFor = "50";
+var replaceWith = "050";
+// ---
+var batchReplacement = ""; // @textarea
+// Batch replacement: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
+// **Example:**
+// "50, 050",
+// "100, 0100",
+// "200, 0200",
+// @UI_CONFIG_END
 
-// Group filter - empty string or "/" for root, or specific group path
-// Variables are filtered by whether their name starts with this group path
-var groupFilter = ""; // e.g., "" or "/" for root, or "colors/pine" for specific group
-
-// Variable names to rename - "*" for all, or array of specific names
-var variableNames = "*";
-// var variableNames = ["50", "100", "150"];
-
-// Rename configuration
-// Define your pattern components
-var renamePrefix = "pine";
-var renameSuffix = "color";
-var renameSequence = 50;
-var renameStartNumber = 0;
-
-// Define the rename pattern template
-// Use: {currentName}, {numberAscending}, {numberDescending} as placeholders
-// Use: renamePrefix, renameSuffix, renameSequence, renameStartNumber as variables
-// Example patterns:
-//   renamePrefix + "-" + "{currentName}" + "-" + renameSuffix
-//   renamePrefix + "-" + "{numberAscending}"
-//   renamePrefix + "-" + "{numberDescending}" + "-" + renameSuffix
-var renamePattern = renamePrefix + "-" + "{currentName}" + "-" + renameSuffix;
-// var renamePattern = renamePrefix + "-" + "{numberAscending}";
-// var renamePattern = renamePrefix + "-" + "{numberDescending}" + "-" + renameSuffix;
-// @CONFIG_END
+// Batch replacement in script only mode:
+// var batchReplacement = [
+//   ["50", "050"],
+//   ["100", "0100"],
+//   ["200", "0200"]
+// ];
+//
+// or
+// 
+// var batchReplacement = [
+//   { searchPattern: "50", replacePattern: "050" },
+//   { searchPattern: "100", replacePattern: "0100" },
+//   { searchPattern: "200", replacePattern: "0200" }
+// ];
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * Parse the rename pattern template
- */
-function parseRenamePattern(patternString) {
-  // Replace variable references with their values
-  var pattern = patternString
-    .replace(/renamePrefix/g, renamePrefix || "")
-    .replace(/renameSuffix/g, renameSuffix || "")
-    .replace(/renameSequence/g, renameSequence || 1)
-    .replace(/renameStartNumber/g, renameStartNumber || 0);
-  
-  return {
-    template: pattern,
-    hasCurrentName: pattern.indexOf("{currentName}") !== -1,
-    hasNumberAscending: pattern.indexOf("{numberAscending}") !== -1,
-    hasNumberDescending: pattern.indexOf("{numberDescending}") !== -1,
-    sequence: renameSequence || 1,
-    startNumber: renameStartNumber || 0
-  };
+function parseBatchReplacementString(str) {
+  if (!str || typeof str !== 'string') return [];
+  var lines = str.split(/\r?\n/);
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var comma = line.indexOf(',');
+    if (comma === -1) continue;
+    var search = line.slice(0, comma).trim();
+    var replace = line.slice(comma + 1).trim();
+    if (search || replace) out.push([search, replace]);
+  }
+  return out;
 }
 
-/**
- * Generate new name based on pattern template
- */
-function generateNewName(variable, index, total, patternConfig) {
-  var nameParts = variable.name.split("/");
-  var baseName = nameParts.pop(); // Last part (the actual variable name)
-  var groupPath = nameParts.length > 0 ? nameParts.join("/") + "/" : "";
-  
-  var newName = patternConfig.template;
-  
-  // Replace {currentName} with the variable's current name
-  if (patternConfig.hasCurrentName) {
-    newName = newName.replace(/{currentName}/g, variable.name);
-  }
-  
-  // Replace {numberAscending} with ascending number
-  if (patternConfig.hasNumberAscending) {
-    var numberValue = index * patternConfig.sequence;
-    newName = newName.replace(/{numberAscending}/g, numberValue.toString());
-  }
-  
-  // Replace {numberDescending} with descending number
-  if (patternConfig.hasNumberDescending) {
-    var numberValue = patternConfig.startNumber + (total - 1 - index) * patternConfig.sequence;
-    newName = newName.replace(/{numberDescending}/g, numberValue.toString());
-  }
-  
-  // If using numbers but not currentName, preserve group path
-  if ((patternConfig.hasNumberAscending || patternConfig.hasNumberDescending) && !patternConfig.hasCurrentName) {
-    newName = groupPath + newName;
-  }
-  
-  return newName;
+// Build full scope string: "collection name / variable name" (same as Figma hierarchy)
+function getScope(collection, variable) {
+  return collection.name + " / " + variable.name;
 }
 
-/**
- * Filter variables by group
- */
-function filterByGroup(variables, groupFilter) {
-  if (!groupFilter || groupFilter === "" || groupFilter === "/") {
-    // Return variables at root level (no "/" in name)
-    return variables.filter(function(v) {
-      return v.name.indexOf("/") === -1;
-    });
+// Get (collection, variable) pairs from all collections, then filter by searchIn (partial match on scope).
+function getVariablesInScope(searchInValue) {
+  var collections = getAllCollections();
+  var items = [];
+  var i, c, vars, v;
+  for (i = 0; i < collections.length; i++) {
+    c = collections[i];
+    vars = getCollectionVariables(c);
+    for (var j = 0; j < vars.length; j++) {
+      v = vars[j];
+      items.push({ collection: c, variable: v });
+    }
   }
-  
-  // Normalize group filter (remove leading/trailing slashes)
-  var normalizedGroup = groupFilter.replace(/^\/+|\/+$/g, "");
-  
-  // Filter by group path - variable name should start with group path
-  return variables.filter(function(v) {
-    // Check if variable name starts with the group path
-    // e.g., group "colors/pine" matches "colors/pine/50" or "colors/pine"
-    return v.name === normalizedGroup || v.name.startsWith(normalizedGroup + "/");
+  console.log('[Batch rename variables] DEBUG: all collections → ' + items.length + ' variables total');
+
+  if (!searchInValue || String(searchInValue).trim() === "") {
+    console.log('[Batch rename variables] DEBUG: searchIn empty → scope = all');
+    return items;
+  }
+  var pattern = String(searchInValue).trim();
+  var filtered = items.filter(function(item) {
+    var scope = getScope(item.collection, item.variable);
+    var result = matchPattern(scope, pattern, { exact: false, caseSensitive: false });
+    return result && result.match;
   });
+  console.log('[Batch rename variables] DEBUG: searchIn "' + pattern + '" → ' + filtered.length + ' of ' + items.length + ' variables (scope = collection / variable path)');
+  return filtered;
 }
 
-/**
- * Filter variables by name pattern
- */
-function filterByName(variables, namePattern) {
-  if (namePattern === "*") {
-    return variables;
-  }
-  
-  if (Array.isArray(namePattern)) {
-    return variables.filter(function(v) {
-      // Extract variable name (last part after "/")
-      var varName = v.name.split("/").pop();
-      return namePattern.indexOf(varName) !== -1 || namePattern.indexOf(v.name) !== -1;
-    });
-  }
-  
-  // Treat as wildcard pattern
-  var regex = new RegExp(namePattern.replace(/\*/g, ".*"), "i");
-  return variables.filter(function(v) {
-    var varName = v.name.split("/").pop();
-    return regex.test(varName) || regex.test(v.name);
-  });
-}
+function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeIsAll) {
+  var renamedCount = 0;
+  var errors = [];
 
-// ============================================================================
-// MAIN FUNCTION
-// ============================================================================
+  // When scope is "all" (searchIn empty), replace in full hierarchy. When scope is narrowed, replace only in what is within the scope (variable path).
+  if (scopeIsAll) {
+    var seenCollectionIds = {};
+    var uniqueCollections = [];
+    for (var k = 0; k < items.length; k++) {
+      var c = items[k].collection;
+      if (!seenCollectionIds[c.id]) {
+        seenCollectionIds[c.id] = true;
+        uniqueCollections.push(c);
+      }
+    }
+    for (var cIdx = 0; cIdx < uniqueCollections.length; cIdx++) {
+      var coll = uniqueCollections[cIdx];
+      var newCollName = replaceWithPattern(coll.name, searchForVal, replaceWithVal, cIdx, uniqueCollections.length);
+      if (newCollName !== coll.name) {
+        try {
+          var oldCollName = coll.name;
+          coll.name = newCollName;
+          console.log('Renamed collection: "' + oldCollName + '" → "' + newCollName + '"');
+          renamedCount++;
+        } catch (e) {
+          errors.push('Collection "' + coll.name + '": ' + e.message);
+        }
+      }
+    }
+  }
 
-function batchRenameVariables() {
-  try {
-    console.log('🔄 Batch Rename Variables');
-    console.log('========================');
-    
-    // Get collection
-    var collection = getCollection(collectionName);
-    if (!collection) {
-      console.log('❌ Collection not found: "' + collectionName + '"');
-      figma.notify('❌ Collection not found: ' + collectionName);
-      return;
-    }
-    
-    console.log('📦 Collection: "' + collection.name + '"');
-    
-    // Get all variables in collection
-    var allVariables = getCollectionVariables(collection);
-    console.log('📋 Found ' + allVariables.length + ' variables in collection');
-    
-    // Filter by group
-    var filteredByGroup = filterByGroup(allVariables, groupFilter);
-    console.log('📁 After group filter: ' + filteredByGroup.length + ' variables');
-    
-    // Filter by name
-    var filteredByName = filterByName(filteredByGroup, variableNames);
-    console.log('🏷️ After name filter: ' + filteredByName.length + ' variables');
-    
-    if (filteredByName.length === 0) {
-      console.log('⚠️ No variables match the filters');
-      figma.notify('⚠️ No variables match the filters');
-      return;
-    }
-    
-    // Parse rename pattern
-    var patternConfig = parseRenamePattern(renamePattern);
-    console.log('📝 Rename pattern:');
-    console.log('   Template: "' + patternConfig.template + '"');
-    console.log('   Components:');
-    if (patternConfig.hasCurrentName) {
-      console.log('     - {currentName}');
-    }
-    if (patternConfig.hasNumberAscending) {
-      console.log('     - {numberAscending} (sequence: ' + patternConfig.sequence + ')');
-    }
-    if (patternConfig.hasNumberDescending) {
-      console.log('     - {numberDescending} (sequence: ' + patternConfig.sequence + ', start: ' + patternConfig.startNumber + ')');
-    }
-    
-    // Sort variables for consistent numbering
-    var sortedVariables = filteredByName.slice().sort(function(a, b) {
-      return a.name.localeCompare(b.name);
-    });
-    
-    // Generate new names and rename
-    var renamedCount = 0;
-    var errors = [];
-    
-    for (var i = 0; i < sortedVariables.length; i++) {
-      var variable = sortedVariables[i];
-      var newName = generateNewName(variable, i, sortedVariables.length, patternConfig);
-      
-      if (newName === variable.name) {
-        console.log('⏭️ Skipping "' + variable.name + '" (name unchanged)');
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var variable = item.variable;
+    var collection = item.collection;
+    var newName = replaceWithPattern(variable.name, searchForVal, replaceWithVal, i, items.length);
+    if (newName === variable.name) continue;
+    try {
+      var existing = getVariable(collection, newName);
+      if (existing && existing.id !== variable.id) {
+        errors.push('Name already exists: ' + getScope(collection, { name: newName }));
         continue;
       }
-      
-      try {
-        // Check if name already exists
-        var existingVar = getVariable(collection, newName);
-        if (existingVar && existingVar.id !== variable.id) {
-          console.log('⚠️ Skipping "' + variable.name + '" → "' + newName + '" (name already exists)');
-          errors.push('Name already exists: ' + newName);
-          continue;
-        }
-        
-        variable.name = newName;
-        console.log('✅ Renamed: "' + variable.name + '" → "' + newName + '"');
-        renamedCount++;
-      } catch (e) {
-        console.log('❌ Error renaming "' + variable.name + '": ' + e.message);
-        errors.push(variable.name + ': ' + e.message);
-      }
+      var oldName = variable.name;
+      variable.name = newName;
+      console.log('Renamed: "' + getScope(collection, { name: oldName }) + '" → "' + newName + '"');
+      renamedCount++;
+    } catch (e) {
+      errors.push(getScope(collection, variable) + ': ' + e.message);
     }
-    
-    // Summary
-    console.log('');
-    console.log('📊 Results:');
-    console.log('✅ Renamed: ' + renamedCount + ' variables');
-    if (errors.length > 0) {
-      console.log('❌ Errors: ' + errors.length);
-      errors.forEach(function(error) {
-        console.log('   - ' + error);
-      });
-    }
-    
-    if (renamedCount > 0) {
-      figma.notify('✅ Renamed ' + renamedCount + ' variables');
-    } else {
-      figma.notify('⚠️ No variables were renamed');
-    }
-    
-  } catch (error) {
-    console.log('❌ Script error: ' + error.message);
-    figma.notify('❌ Script error: ' + error.message);
   }
+  return { renamedCount: renamedCount, errors: errors };
 }
 
-// Run the script
-batchRenameVariables();
+function renameVariablesBatch(items, batchReplacementList, scopeIsAll) {
+  var totalRenamed = 0;
+  var allErrors = [];
+  for (var op = 0; op < batchReplacementList.length; op++) {
+    var pair = batchReplacementList[op];
+    var search = Array.isArray(pair) ? pair[0] : pair.searchPattern;
+    var replace = Array.isArray(pair) ? pair[1] : pair.replacePattern;
+    console.log('--- Batch op ' + (op + 1) + ': "' + search + '" → "' + replace + '"');
+    var result = renameVariablesSingle(items, search, replace, scopeIsAll);
+    totalRenamed += result.renamedCount;
+    allErrors = allErrors.concat(result.errors);
+  }
+  return { renamedCount: totalRenamed, errors: allErrors };
+}
 
+// ============================================================================
+// MAIN
+// ============================================================================
+
+try {
+  console.log('Batch Rename Variables');
+  console.log('========================');
+
+  var searchInVal = typeof searchIn !== 'undefined' ? searchIn : "";
+  var items = getVariablesInScope(searchInVal);
+
+  var sorted = items.slice().sort(function(a, b) {
+    return getScope(a.collection, a.variable).localeCompare(getScope(b.collection, b.variable));
+  });
+  console.log('[Batch rename variables] DEBUG: ' + sorted.length + ' variables to process');
+
+  if (sorted.length === 0) {
+    figma.notify('No variables in scope (check searchIn in figma-console.log)');
+    return;
+  }
+
+  var scopeIsAll = !searchInVal || String(searchInVal).trim() === "";
+  console.log('[Batch rename variables] DEBUG: scopeIsAll=' + scopeIsAll + ' (replace in full hierarchy when all; when narrowed, only within scope)');
+
+  var batchList = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
+  if (typeof batchList === 'string' && batchList.trim()) {
+    batchList = parseBatchReplacementString(batchList);
+  }
+
+  var totalRenamed = 0;
+  var errors = [];
+
+  if (batchList && batchList.length > 0) {
+    console.log('[Batch rename variables] Mode: batch (' + batchList.length + ' operations)');
+    var batchResult = renameVariablesBatch(sorted, batchList, scopeIsAll);
+    totalRenamed = batchResult.renamedCount;
+    errors = batchResult.errors;
+  } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined') {
+    console.log('[Batch rename variables] Mode: single, searchFor="' + searchFor + '", replaceWith="' + replaceWith + '"');
+    var singleResult = renameVariablesSingle(sorted, searchFor, replaceWith, scopeIsAll);
+    totalRenamed = singleResult.renamedCount;
+    errors = singleResult.errors;
+  } else {
+    console.log('[Batch rename variables] DEBUG: no batch lines and no searchFor/replaceWith set');
+    figma.notify('Configure searchFor and replaceWith, or batch replacement lines');
+    return;
+  }
+
+  if (errors.length > 0) {
+    errors.forEach(function(e) { console.log('Error: ' + e); });
+  }
+  if (totalRenamed > 0) {
+    figma.notify('Renamed ' + totalRenamed + ' variables');
+  } else {
+    figma.notify('No variables were renamed');
+  }
+} catch (error) {
+  console.log('Script error: ' + error.message);
+  figma.notify('Script error: ' + error.message);
+}

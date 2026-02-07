@@ -11,11 +11,12 @@
 // - **newCollectionName** – Name for the new collection.
 // @DOC_END
 
-// @CONFIG_START
-// Configuration - Change these values as needed
-var sourceCollectionName = 'website V3';
+// @UI_CONFIG_START
+// # Duplicate variable collection
+// Source collection (choose from existing). New name for the copy.
+var sourceCollectionName = 'website V3'; // @options: variableCollections
 var newCollectionName = 'website V4';
-// @CONFIG_END
+// @UI_CONFIG_END
 
 function duplicateVariableCollection(collection, newName) {
   var newCollection = figma.variables.createVariableCollection(newName || collection.name + ' Copy');

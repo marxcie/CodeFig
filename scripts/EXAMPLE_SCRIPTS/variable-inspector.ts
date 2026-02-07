@@ -50,7 +50,6 @@
 // Display and filter options for the Variable Inspector.
 
 // ## Display Options
-//
 var onlyUsedVariables = true; // Show only variables used in selection/styles
 var groupByCollection = true; // Group variables by collection
 var showValuePreview = true; // Show actual variable values
@@ -59,7 +58,6 @@ var maxNodesPreview = 5; // Max nodes in usage preview (rest: "Show all X nodes"
 // ---
 //
 // ## Variable Purpose Filters
-//
 var typographicVariables = true; // Typography (fontSize, letterSpacing, etc.)
 var colorVariables = true; // Colors (fills, strokes)
 var dimensionVariables = true; // Dimensions & spacing
@@ -69,7 +67,6 @@ var otherVariables = true; // Other/miscellaneous
 // ---
 //
 // ## Advanced
-//
 var checkStyleUsage = true; // Check usage in text/paint/effect styles
 var showHealthScore = false; // Show variable health score (0-100)
 // @UI_CONFIG_END
