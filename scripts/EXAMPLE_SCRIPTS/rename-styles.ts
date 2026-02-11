@@ -1,16 +1,18 @@
-// Batch rename Styles
+// Rename styles
 // @DOC_START
-// # Batch rename Styles
+// # Rename styles
 // Rename local styles (paint, text, effect, grid) by search/replace patterns.
 //
 // ## Overview
 // Applies find/replace to style names. Use searchIn to narrow by folder, searchFor/replaceWith for single replacement, or batchReplacement for multiple operations. Supports Figma-style placeholders: $& (full match), $1 $2 (regex groups), $n $nn $nnn (ascending), $N $NN $NNN (descending).
 //
 // ## Config options
-// - **searchIn** – Optional filter: only styles whose name contains this (e.g. "color/", "Typography/").
-// - **searchFor** – Pattern to find in style names (literal or regex if pattern contains regex chars).
-// - **replaceWith** – Replacement string; may use placeholders above.
-// - **batchReplacement** – Optional array of [search, replace] pairs; if set, overrides searchFor/replaceWith.
+// | Option | Description |
+// |--------|--------------|
+// | searchIn | Optional filter: only styles whose name contains this (e.g. "color/", "Typography/"). |
+// | searchFor | Pattern to find in style names (literal or regex if pattern contains regex chars). |
+// | replaceWith | Replacement string; may use placeholders above. |
+// | batchReplacement | Optional array of [search, replace] pairs; if set, overrides searchFor/replaceWith. |
 //
 // ## Examples
 // Simple: searchFor = "font-", replaceWith = "text-"
@@ -82,11 +84,11 @@ if (typeof replaceWithPattern !== 'function') {
 
 // @UI_CONFIG_START
 // # Batch rename styles
-var searchIn = "";
+var searchIn = ""; // @placeholder="text/"
 // Optional, narrow to styles whose name contains this (e.g. "color/", "Typography/")
 //
-var searchFor = "font-";
-var replaceWith = "text-";
+var searchFor = ""; // @placeholder="font-"
+var replaceWith = ""; // @placeholder="text-"
 // ---
 var batchReplacement = ""; // @textarea
 // Batch replacement: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)

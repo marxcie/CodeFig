@@ -1,13 +1,18 @@
-// Replace Styles
+// Replace styles
 // @DOC_START
-// # Replace Styles
-// Replaces style bindings on nodes by matching style names to patterns.
+// # Replace styles
+// Replaces style bindings on nodes by matching style names to patterns (rebinds nodes to a different style; does not rename style definitions).
 //
 // ## Overview
-// Uses STYLE_REPLACEMENTS (or overrides when imported): each entry has "from" and "to" for partial matching on style names. Scans selection, finds matching styles, and rebinds nodes to the replacement style. Supports text, paint, and effect styles. Can be run standalone or imported.
+// Same config as batch-rename: searchIn (optional filter on current style name), searchFor/replaceWith for one replacement, batchReplacement for multiple. Only considers bindings whose current style name matches searchIn (if set). Supports text, paint, and effect styles. selectionOnly: process selection vs whole page.
 //
 // ## Config options
-// - **STYLE_REPLACEMENTS** – Array of { from: string, to: string }. "from" is matched partially in style names (e.g. "500" matches "Primary/500"). Use multiple entries for several replacements.
+// | Option | Description |
+// |--------|--------------|
+// | searchIn | Optional: only try to rebind when the current style name (partial) matches this; empty = all styles. |
+// | searchFor / replaceWith | Single find/replace pair applied to style names. |
+// | batchReplacement | Textarea (UI) or array (script): multiple "search, replace" pairs; when non-empty, overrides searchFor/replaceWith. |
+// | selectionOnly | If true, process only selected nodes; if false, process whole page. |
 // @DOC_END
 
 // Import memory management utilities and library functions
@@ -69,29 +74,68 @@ if (typeof matchPattern === 'undefined') {
   };
 }
 
-// Default configuration - can be overridden by importing scripts
-var STYLE_REPLACEMENTS = typeof STYLE_REPLACEMENTS !== 'undefined' ? STYLE_REPLACEMENTS : [
-// @CONFIG_START
-  {
-    from: "500",           // Partial match: "Primary/500" -> "Primary/50"
-    to: "50"
-  },
-  {
-    from: "4xl",           // Partial match: "Typography/4xl" -> "Typography/3xl"
-    to: "3xl"
-  },
-  {
-    from: "Red",           // Partial match: "Red/500" -> "Blue/500"
-    to: "Blue"
-  },
-  {
-    from: "Primary",       // Partial match: "Primary/500" -> "Secondary/500"
-    to: "Secondary"
-  }
-// @CONFIG_END
-];
+// ========================================
+// CONFIGURATION
+// ========================================
 
-var SELECTION_ONLY = typeof SELECTION_ONLY !== 'undefined' ? SELECTION_ONLY : true;
+// @UI_CONFIG_START
+// # Replace styles
+var searchIn = ""; // @placeholder="color/"
+// Optional, only rebind when current style name contains this (e.g. "color/", "Typography/")
+//
+var searchFor = ""; // @placeholder="500"
+var replaceWith = ""; // @placeholder="50"
+// ---
+var batchReplacement = ""; // @textarea
+// Batch: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
+// @UI_CONFIG_END
+//
+// Script-only batch: var batchReplacement = [["500","50"],["4xl","3xl"]]; or [{ searchPattern: "500", replacePattern: "50" }];
+//
+var selectionOnly = typeof selectionOnly !== 'undefined' ? selectionOnly : true;
+
+function styleCacheKey(name, type) {
+  return (name || '') + "|" + (type || 'TEXT');
+}
+
+function parseBatchReplacementString(str) {
+  if (!str || typeof str !== 'string') return [];
+  var lines = str.split(/\r?\n/);
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var comma = line.indexOf(',');
+    if (comma === -1) continue;
+    var search = line.slice(0, comma).trim();
+    var replace = line.slice(comma + 1).trim();
+    if (search || replace) out.push([search, replace]);
+  }
+  return out;
+}
+
+function buildReplacementsFromConfig() {
+  var batch = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
+  if (typeof batch === 'string' && batch.trim()) {
+    batch = parseBatchReplacementString(batch);
+  }
+  if (batch && Array.isArray(batch) && batch.length > 0) {
+    var list = [];
+    for (var i = 0; i < batch.length; i++) {
+      var pair = batch[i];
+      var from = Array.isArray(pair) ? pair[0] : (pair.searchPattern != null ? pair.searchPattern : '');
+      var to = Array.isArray(pair) ? pair[1] : (pair.replacePattern != null ? pair.replacePattern : '');
+      list.push({ from: from, to: to });
+    }
+    return list;
+  }
+  var searchForVal = typeof searchFor !== 'undefined' ? searchFor : '';
+  var replaceWithVal = typeof replaceWith !== 'undefined' ? replaceWith : '';
+  if (searchForVal || replaceWithVal) {
+    return [{ from: searchForVal, to: replaceWithVal }];
+  }
+  return [];
+}
 
 // Helper function to collect all nodes using library function
 // Uses traverseNodes from @Core Library for optimized traversal
@@ -117,22 +161,21 @@ function collectAllNodes(nodes) {
 // Main function - can be called directly or imported
 function replaceAllStyles(customReplacements, customSelectionOnly) {
   try {
-    // Use provided parameters or defaults
-    var replacements = customReplacements || STYLE_REPLACEMENTS;
-    var selectionOnly = customSelectionOnly !== undefined ? customSelectionOnly : SELECTION_ONLY;
+    var replacements = customReplacements || buildReplacementsFromConfig();
+    var selectionOnlyVal = customSelectionOnly !== undefined ? customSelectionOnly : selectionOnly;
     
-    console.log('🎨 Comprehensive Style Replacement');
+    console.log('🎨 Replace Styles');
     console.log('====================================');
     
     if (replacements.length === 0) {
       console.log('❌ No replacements configured');
-      figma.notify('Configure STYLE_REPLACEMENTS first');
+      figma.notify('Configure searchFor/replaceWith or batchReplacement first');
       return Promise.resolve({ success: false, replacements: 0, error: 'No replacements configured' });
     }
     
-    var nodes = selectionOnly ? figma.currentPage.selection : [figma.currentPage];
+    var nodes = selectionOnlyVal ? figma.currentPage.selection : [figma.currentPage];
     
-    if (selectionOnly && nodes.length === 0) {
+    if (selectionOnlyVal && nodes.length === 0) {
       console.log('❌ No elements selected');
       figma.notify('Please select elements to process');
       return Promise.resolve({ success: false, replacements: 0, error: 'No elements selected' });
@@ -174,18 +217,19 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
       
       console.log('📊 Using chunk size: ' + adaptiveChunkSize + ' (adaptive based on ' + allNodes.length + ' nodes)');
       
-      // Process nodes with optimization (chunked processing with memory management)
+      var searchInVal = typeof searchIn !== 'undefined' ? searchIn : '';
+      if (searchInVal && String(searchInVal).trim()) {
+        console.log('[Replace styles] DEBUG: searchIn "' + String(searchInVal).trim() + '" – only rebind when current style name matches');
+      }
+      
       return processWithOptimization(allNodes, function(node) {
         var replacementCount = 0;
         var nodeName = node.name || 'Unnamed';
         
-        // Process text styles
         if (node.type === 'TEXT') {
-          replacementCount += processTextNode(node, styleCache, nodeName, replacements);
+          replacementCount += processTextNode(node, styleCache, nodeName, replacements, searchInVal);
         }
-        
-        // Process other style types
-        replacementCount += processOtherStyles(node, styleCache, nodeName, replacements);
+        replacementCount += processOtherStyles(node, styleCache, nodeName, replacements, searchInVal);
         
         return replacementCount;
       }, {
@@ -193,16 +237,11 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         showProgress: true,
         operation: 'Replacing styles',
         maxNodes: allNodes.length > 10000 ? 10000 : undefined // Limit processing for very large files
-      }).then(function(results) {
+      }).then(function(resolved) {
         var totalReplacements = 0;
-        
-        // Sum up all replacement counts
-        if (Array.isArray(results)) {
-          for (var i = 0; i < results.length; i++) {
-            totalReplacements += results[i] || 0;
-          }
-        } else if (typeof results === 'number') {
-          totalReplacements = results;
+        var resultsArray = resolved && resolved.results ? resolved.results : (Array.isArray(resolved) ? resolved : []);
+        for (var i = 0; i < resultsArray.length; i++) {
+          totalReplacements += resultsArray[i] || 0;
         }
         
         // Final cleanup
@@ -242,9 +281,8 @@ function buildStyleCache() {
     
     for (var i = 0; i < allLocalStyles.length; i++) {
       var style = allLocalStyles[i];
-      var styleType = style.type || 'TEXT'; // Default to TEXT if type not available
-      
-      cache.set(style.name, {
+      var styleType = style.type || 'TEXT';
+      cache.set(styleCacheKey(style.name, styleType), {
         style: style,
         type: styleType,
         key: null,
@@ -350,14 +388,13 @@ function buildStyleCache() {
           
           for (var styleIndex = 0; styleIndex < libraryStyles.length; styleIndex++) {
             var libraryStyle = libraryStyles[styleIndex];
-            
-            // Store library style info for later import
-            cache.set(libraryStyle.name, {
-              style: null, // Will be imported when needed
+            var libType = libraryStyle.type || 'TEXT';
+            cache.set(styleCacheKey(libraryStyle.name, libType), {
+              style: null,
               key: libraryStyle.key,
               isLibrary: true,
               name: libraryStyle.name,
-              type: libraryStyle.type
+              type: libType
             });
           }
           
@@ -436,13 +473,16 @@ function scanDocumentForLibraryStyles(cache) {
               if (segment && segment.textStyleId && segment.textStyleId !== figma.mixed) {
                 try {
                   var style = figma.getStyleById(segment.textStyleId);
-                  if (style && !cache.has(style.name)) {
-                    cache.set(style.name, {
-                      style: style,
-                      type: 'TEXT',
-                      key: style.key || null,
-                      isLibrary: style.remote || false
-                    });
+                  if (style) {
+                    var key = styleCacheKey(style.name, 'TEXT');
+                    if (!cache.has(key)) {
+                      cache.set(key, {
+                        style: style,
+                        type: 'TEXT',
+                        key: style.key || null,
+                        isLibrary: style.remote || false
+                      });
+                    }
                   }
                 } catch (e) {
                   // Style might be inaccessible
@@ -462,16 +502,18 @@ function scanDocumentForLibraryStyles(cache) {
         if (prop in node && node[prop] && node[prop] !== figma.mixed) {
           try {
             var style = figma.getStyleById(node[prop]);
-            if (style && !cache.has(style.name)) {
-              var styleType = 'PAINT';
-              if (prop === 'effectStyleId') styleType = 'EFFECT';
-              
-              cache.set(style.name, {
-                style: style,
-                type: styleType,
-                key: style.key || null,
-                isLibrary: style.remote || false
-              });
+            if (style) {
+              var scanType = 'PAINT';
+              if (prop === 'effectStyleId') scanType = 'EFFECT';
+              var key = styleCacheKey(style.name, scanType);
+              if (!cache.has(key)) {
+                cache.set(key, {
+                  style: style,
+                  type: scanType,
+                  key: style.key || null,
+                  isLibrary: style.remote || false
+                });
+              }
             }
           } catch (e) {
             // Style might be inaccessible
@@ -544,7 +586,7 @@ function scanDocumentForLibraryStyles(cache) {
   });
 }
 
-function processTextNode(node, styleCache, nodeName, replacements) {
+function processTextNode(node, styleCache, nodeName, replacements, searchInVal) {
   var totalReplacements = 0;
   
   try {
@@ -556,7 +598,7 @@ function processTextNode(node, styleCache, nodeName, replacements) {
         try {
           var currentStyle = figma.getStyleById(segment.textStyleId);
           if (currentStyle) {
-            var newStyle = findReplacementStyle(currentStyle, styleCache, 'TEXT', replacements);
+            var newStyle = findReplacementStyle(currentStyle, styleCache, 'TEXT', replacements, searchInVal);
             
             // Handle both synchronous and Promise returns
             if (newStyle && typeof newStyle.then === 'function') {
@@ -588,15 +630,14 @@ function processTextNode(node, styleCache, nodeName, replacements) {
   return totalReplacements;
 }
 
-function processOtherStyles(node, styleCache, nodeName, replacements) {
+function processOtherStyles(node, styleCache, nodeName, replacements, searchInVal) {
   var totalReplacements = 0;
   
-  // Handle fill styles
   if ('fillStyleId' in node && node.fillStyleId && node.fillStyleId !== figma.mixed) {
     try {
       var currentStyle = figma.getStyleById(node.fillStyleId);
       if (currentStyle) {
-        var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements);
+        var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal);
         
         // Handle both synchronous and Promise returns
         if (newStyle && typeof newStyle.then === 'function') {
@@ -614,12 +655,11 @@ function processOtherStyles(node, styleCache, nodeName, replacements) {
     }
   }
   
-  // Handle stroke styles
   if ('strokeStyleId' in node && node.strokeStyleId && node.strokeStyleId !== figma.mixed) {
     try {
       var currentStyle = figma.getStyleById(node.strokeStyleId);
       if (currentStyle) {
-        var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements);
+        var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal);
         
         // Handle both synchronous and Promise returns
         if (newStyle && typeof newStyle.then === 'function') {
@@ -637,12 +677,11 @@ function processOtherStyles(node, styleCache, nodeName, replacements) {
     }
   }
   
-  // Handle effect styles
   if ('effectStyleId' in node && node.effectStyleId && node.effectStyleId !== figma.mixed) {
     try {
       var currentStyle = figma.getStyleById(node.effectStyleId);
       if (currentStyle) {
-        var newStyle = findReplacementStyle(currentStyle, styleCache, 'EFFECT', replacements);
+        var newStyle = findReplacementStyle(currentStyle, styleCache, 'EFFECT', replacements, searchInVal);
         
         // Handle both synchronous and Promise returns
         if (newStyle && typeof newStyle.then === 'function') {
@@ -663,8 +702,15 @@ function processOtherStyles(node, styleCache, nodeName, replacements) {
   return totalReplacements;
 }
 
-// Enhanced replacement function with Team Library import support
-function findReplacementStyle(currentStyle, styleCache, expectedType, replacements) {
+function findReplacementStyle(currentStyle, styleCache, expectedType, replacements, searchInVal) {
+  if (searchInVal != null && String(searchInVal).trim() !== '') {
+    var scopeMatch = matchPattern(currentStyle.name, String(searchInVal).trim(), { exact: false, caseSensitive: false });
+    if (!scopeMatch || !scopeMatch.match) {
+      console.log('[Replace styles] DEBUG: skip "' + currentStyle.name + '" – does not match searchIn');
+      return null;
+    }
+  }
+  
   console.log('🔍 Checking style: "' + currentStyle.name + '" (type: ' + expectedType + ')');
   
   for (var replIndex = 0; replIndex < replacements.length; replIndex++) {
@@ -673,50 +719,39 @@ function findReplacementStyle(currentStyle, styleCache, expectedType, replacemen
     
     console.log('🔍 Testing pattern: "' + findPattern + '" → "' + replacement.to + '"');
     
-    // Use pattern matching library for more robust matching
-    // Don't escape the pattern here - let matchPattern handle it
     var patternMatch = matchPattern(currentStyle.name, findPattern, {
       exact: false,
       caseSensitive: false
     });
     
-    // Check if current style name matches the pattern
     if (patternMatch && patternMatch.match) {
-      // Create new style name by replacing the pattern
-      // Use simple string replacement for the pattern (case-insensitive)
       var newStyleName = currentStyle.name;
       var patternRegex = new RegExp(findPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*'), 'gi');
       newStyleName = newStyleName.replace(patternRegex, replacement.to);
       
-      // Only proceed if the name actually changed
       if (newStyleName !== currentStyle.name) {
         console.log('🔍 Looking for replacement: "' + currentStyle.name + '" → "' + newStyleName + '"');
         
-        // Check if replacement style exists in cache
-        var styleInfo = styleCache.get(newStyleName);
+        var cacheKey = styleCacheKey(newStyleName, expectedType);
+        var styleInfo = styleCache.get(cacheKey);
         if (styleInfo && styleInfo.type === expectedType) {
-          // If it's a local style or already imported library style
           if (styleInfo.style) {
             console.log('✅ Found replacement: "' + newStyleName + '"');
             return styleInfo.style;
           }
           
-          // If it's a library style that needs to be imported
           if (styleInfo.isLibrary && styleInfo.key) {
             console.log('📥 Importing library style: "' + newStyleName + '"');
             try {
               var importedStyle = figma.importStyleByKeyAsync(styleInfo.key);
               return importedStyle.then(function(importedStyle) {
                 console.log('✅ Successfully imported: "' + importedStyle.name + '"');
-                
-                // Update cache with imported style
-                styleCache.set(newStyleName, {
+                styleCache.set(styleCacheKey(importedStyle.name, expectedType), {
                   style: importedStyle,
-                  type: styleInfo.type,
+                  type: expectedType,
                   key: styleInfo.key,
                   isLibrary: true
                 });
-                
                 return importedStyle;
               }).catch(function(importError) {
                 console.log('❌ Failed to import style: ' + importError.message);

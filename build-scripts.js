@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { inlineVendors } = require('./bundle-ui.js');
 
-// No-op: config UI lib (@config-ui.ts) is copied with other scripts by copyScripts()
+// No-op: CodeFigUI lib (@codefig-ui.ts) is copied with other scripts by copyScripts()
 function copyConfigUILib() {}
 
 // Check if a file/folder should be excluded

@@ -7,36 +7,34 @@
 // Clears text/fill/stroke/effect/grid style IDs and variable bindings on selected nodes so they use local values. Can run recursively on children.
 //
 // ## Config options
-// - **recursive** – If true, processes children as well.
-// - **detachAllStyles** – If true, detaches all style types; otherwise use per-type flags (detachFontStyles, detachFillStyles, etc.).
-// - **detachAllVariables** – If true, detaches all variable bindings; otherwise use detachTypographicVariables, detachNumericVariables, or detachExactVariables (array of property names).
+// | Option | Description |
+// |--------|--------------|
+// | recursive | If true, processes children as well. |
+// | allStyles | If true, detaches all style types; otherwise use per-type flags (fontStyles, fillStyles, etc.). |
+// | allVariables | If true, detaches all variable bindings; otherwise use typographicVariables, numericVariables, colorVariables. |
+// | colorVariables | Fills, strokes, opacity (used when allVariables is false). |
 // @DOC_END
 
-// @CONFIG_START
-// Configuration - change these to control what gets detached
+// @UI_CONFIG_START
+// # Detach styles & variables
 var recursive = true;
-var detachAllStyles = true;
-var detachAllVariables = true;
-
-// Detailed config
-// Uncomment the lines below to enable granular control:
-
-//var detachFontStyles = true;
-//var detachFillStyles = false;
-//var detachStrokeStyles = false;
-//var detachEffectStyles = false;
-//var detachGridStyles = false;
-
-//var detachTypographicVariables = true;
-//var detachNumericVariables = true;
-//var detachExactVariables = ["width", "height"];
-
-// Variable properties that can be called:
-// Typography: fontSize, fontWeight, fontFamily, lineHeight, letterSpacing, paragraphSpacing, paragraphIndent, textCase, textDecoration, characters, textRangeFills
-// Dimensions & Spacing: width, height, minWidth, maxWidth, minHeight, maxHeight, paddingTop, paddingRight, paddingBottom, paddingLeft, itemSpacing, cornerRadius, topLeftRadius, topRightRadius, bottomLeftRadius, bottomRightRadius, strokeWeight, strokeTopWeight, strokeRightWeight, strokeBottomWeight, strokeLeftWeight
-// Color: fills, strokes, opacity
-// Grid & Effects: layoutGrids, effects, visible
-// @CONFIG_END
+// ---
+// ## Styles
+var allStyles = true;
+//
+var fontStyles = true;
+var fillStyles = true;
+var strokeStyles = true;
+var effectStyles = true;
+var gridStyles = true;
+// ---
+// ## Variables
+var allVariables = true;
+//
+var typographicVariables = true;
+var numericVariables = true;
+var colorVariables = true;
+// @UI_CONFIG_END
 
 // Helper function to check if a property is typographic
 function isTypographicProperty(property) {
@@ -57,9 +55,15 @@ function isNumericProperty(property) {
   return numericProps.indexOf(property) !== -1;
 }
 
+// Helper function to check if a property is color-related
+function isColorProperty(property) {
+  var colorProps = ['fills', 'strokes', 'opacity'];
+  return colorProps.indexOf(property) !== -1;
+}
+
 function detachStyles(node) {
   // Detach text style if node is text and option enabled
-  if ((detachAllStyles || (typeof detachFontStyles !== 'undefined' && detachFontStyles === true)) && node.type === "TEXT" && "textStyleId" in node) {
+  if ((allStyles || (typeof fontStyles !== 'undefined' && fontStyles === true)) && node.type === "TEXT" && "textStyleId" in node) {
     if (node.textStyleId) {
       node.textStyleId = ""; // Remove link to text style
       console.log("Detached font style from: " + node.name);
@@ -67,7 +71,7 @@ function detachStyles(node) {
   }
 
   // Detach fill style
-  if ((detachAllStyles || (typeof detachFillStyles !== 'undefined' && detachFillStyles === true)) && "fillStyleId" in node) {
+  if ((allStyles || (typeof fillStyles !== 'undefined' && fillStyles === true)) && "fillStyleId" in node) {
     if (node.fillStyleId) {
       node.fillStyleId = "";
       console.log("Detached fill style from: " + node.name);
@@ -75,7 +79,7 @@ function detachStyles(node) {
   }
 
   // Detach stroke style
-  if ((detachAllStyles || (typeof detachStrokeStyles !== 'undefined' && detachStrokeStyles === true)) && "strokeStyleId" in node) {
+  if ((allStyles || (typeof strokeStyles !== 'undefined' && strokeStyles === true)) && "strokeStyleId" in node) {
     if (node.strokeStyleId) {
       node.strokeStyleId = "";
       console.log("Detached stroke style from: " + node.name);
@@ -83,7 +87,7 @@ function detachStyles(node) {
   }
 
   // Detach effect style (e.g., shadows)
-  if ((detachAllStyles || (typeof detachEffectStyles !== 'undefined' && detachEffectStyles === true)) && "effectStyleId" in node) {
+  if ((allStyles || (typeof effectStyles !== 'undefined' && effectStyles === true)) && "effectStyleId" in node) {
     if (node.effectStyleId) {
       node.effectStyleId = "";
       console.log("Detached effect style from: " + node.name);
@@ -91,7 +95,7 @@ function detachStyles(node) {
   }
 
   // Detach grid style (only frames)
-  if ((detachAllStyles || (typeof detachGridStyles !== 'undefined' && detachGridStyles === true)) && "gridStyleId" in node) {
+  if ((allStyles || (typeof gridStyles !== 'undefined' && gridStyles === true)) && "gridStyleId" in node) {
     if (node.gridStyleId) {
       node.gridStyleId = "";
       console.log("Detached grid style from: " + node.name);
@@ -182,7 +186,9 @@ function detachVariables(node) {
       // Check if fills or strokes are in boundVariables
       if (properties.indexOf('fills') !== -1) {
         var shouldDetachFills = false;
-        if (detachAllVariables) {
+        if (allVariables) {
+          shouldDetachFills = true;
+        } else if ((typeof colorVariables !== 'undefined' && colorVariables === true)) {
           shouldDetachFills = true;
         } else if (typeof detachExactVariables !== 'undefined' && Array.isArray(detachExactVariables) && detachExactVariables.indexOf('fills') !== -1) {
           shouldDetachFills = true;
@@ -195,7 +201,9 @@ function detachVariables(node) {
       
       if (properties.indexOf('strokes') !== -1) {
         var shouldDetachStrokes = false;
-        if (detachAllVariables) {
+        if (allVariables) {
+          shouldDetachStrokes = true;
+        } else if ((typeof colorVariables !== 'undefined' && colorVariables === true)) {
           shouldDetachStrokes = true;
         } else if (typeof detachExactVariables !== 'undefined' && Array.isArray(detachExactVariables) && detachExactVariables.indexOf('strokes') !== -1) {
           shouldDetachStrokes = true;
@@ -232,13 +240,15 @@ function detachVariables(node) {
       var shouldDetach = false;
 
       // Check if we should detach this property
-      if (detachAllVariables) {
+      if (allVariables) {
         shouldDetach = true;
       } else if (typeof detachExactVariables !== 'undefined' && Array.isArray(detachExactVariables) && detachExactVariables.indexOf(property) !== -1) {
         shouldDetach = true;
-      } else if (typeof detachTypographicVariables !== 'undefined' && detachTypographicVariables === true && isTypographicProperty(property)) {
+      } else if (typeof typographicVariables !== 'undefined' && typographicVariables === true && isTypographicProperty(property)) {
         shouldDetach = true;
-      } else if (typeof detachNumericVariables !== 'undefined' && detachNumericVariables === true && isNumericProperty(property)) {
+      } else if (typeof numericVariables !== 'undefined' && numericVariables === true && isNumericProperty(property)) {
+        shouldDetach = true;
+      } else if (typeof colorVariables !== 'undefined' && colorVariables === true && isColorProperty(property)) {
         shouldDetach = true;
       }
 
@@ -293,8 +303,8 @@ if (figma.currentPage.selection.length === 0) {
   console.log("=== Starting detach process ===");
   console.log("Selected " + figma.currentPage.selection.length + " node(s)");
   console.log("Recursive mode: " + (recursive ? "enabled" : "disabled"));
-  console.log("Detach all styles: " + detachAllStyles);
-  console.log("Detach all variables: " + detachAllVariables);
+  console.log("All styles: " + allStyles);
+  console.log("All variables: " + allVariables);
   
   for (var i = 0; i < figma.currentPage.selection.length; i++) {
     processNode(figma.currentPage.selection[i]);
@@ -303,15 +313,16 @@ if (figma.currentPage.selection.length === 0) {
   console.log("=== Detach process complete ===");
   
   var message = 'Detached';
-  var hasStyleDetach = detachAllStyles || 
-                       (typeof detachFontStyles !== 'undefined' && detachFontStyles === true) ||
-                       (typeof detachFillStyles !== 'undefined' && detachFillStyles === true) ||
-                       (typeof detachStrokeStyles !== 'undefined' && detachStrokeStyles === true) ||
-                       (typeof detachEffectStyles !== 'undefined' && detachEffectStyles === true) ||
-                       (typeof detachGridStyles !== 'undefined' && detachGridStyles === true);
-  var hasVariableDetach = detachAllVariables || 
-                          (typeof detachTypographicVariables !== 'undefined' && detachTypographicVariables === true) ||
-                          (typeof detachNumericVariables !== 'undefined' && detachNumericVariables === true) ||
+  var hasStyleDetach = allStyles || 
+                       (typeof fontStyles !== 'undefined' && fontStyles === true) ||
+                       (typeof fillStyles !== 'undefined' && fillStyles === true) ||
+                       (typeof strokeStyles !== 'undefined' && strokeStyles === true) ||
+                       (typeof effectStyles !== 'undefined' && effectStyles === true) ||
+                       (typeof gridStyles !== 'undefined' && gridStyles === true);
+  var hasVariableDetach = allVariables || 
+                          (typeof typographicVariables !== 'undefined' && typographicVariables === true) ||
+                          (typeof numericVariables !== 'undefined' && numericVariables === true) ||
+                          (typeof colorVariables !== 'undefined' && colorVariables === true) ||
                           (typeof detachExactVariables !== 'undefined' && detachExactVariables && detachExactVariables.length > 0);
   
   if (hasStyleDetach) {

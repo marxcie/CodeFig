@@ -6,12 +6,14 @@
 // ## Overview
 // Applies either **scale** (transform; content scales) or **resize** (change size only) to each selected node. Use one set of parameters: uniform factor, X/Y factors, width/height, or single dimension with aspect ratio.
 //
-// ## Config options (Configuration tab)
-// - **method** – "scale" or "resize".
-// - **scaledFactor** – Uniform scale (number or { min, max } for per-element random).
-// - **scaledFactorX** / **scaledFactorY** – Per-axis scale factors.
-// - **scaledWidth** / **scaledHeight** – Target dimensions in px (number or { min, max }).
-// - **aspectRatio** – Target ratio, e.g. "16:9", "1:1"; use with one dimension or one factor.
+// ## Config options
+// | Option | Description |
+// |--------|--------------|
+// | method | "scale" or "resize". |
+// | scaledFactor | Uniform scale (number or { min, max } for per-element random). |
+// | scaledFactorX / scaledFactorY | Per-axis scale factors. |
+// | scaledWidth / scaledHeight | Target dimensions in px (number or { min, max }). |
+// | aspectRatio | Target ratio, e.g. "16:9", "1:1"; use with one dimension or one factor. |
 // @DOC_END
 
 // CONFIGURATION OPTIONS

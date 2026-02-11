@@ -8,12 +8,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
     <!-- INLINE_MARKED -->
-    <!-- Config UI CSS is now in main style block (section 9) for better readability -->
+    <!-- CodeFigUI CSS is now in main style block (section 9) for better readability -->
     <style id="config-ui-css">/* Placeholder - actual styles in main <style> block below */</style>
-    <script id="config-ui-stub">(function(){var g=typeof self!=="undefined"?self:typeof window!=="undefined"?window:typeof global!=="undefined"?global:this;if(g)g.CodeFigConfigUI={parse:function(){return{sections:[]};},serialize:function(){return"";},render:function(schema,opts){var c=opts&&opts.container;if(c)c.innerHTML='<div class="config-ui-empty">Config UI failed to load. Check figma-console.log for errors.</div>';return{getValues:function(){return{};},setValues:function(){},destroy:function(){}};}};}})();</script>
+    <script id="config-ui-stub">(function(){var g=typeof self!=="undefined"?self:typeof window!=="undefined"?window:typeof global!=="undefined"?global:this;if(g)g.CodeFigConfigUI={parse:function(){return{sections:[]};},serialize:function(){return"";},render:function(schema,opts){var c=opts&&opts.container;if(c)c.innerHTML='<div class="config-ui-empty">CodeFigUI failed to load. Check figma-console.log for errors.</div>';return{getValues:function(){return{};},setValues:function(){},destroy:function(){}};}};}})();</script>
     <script id="config-ui-js">
-(function(r,f){if(typeof define==="function"&&define.amd)define([],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f();else r.ConfigUIParser=f();})(typeof self!=="undefined"?self:this,function(){"use strict";function inferType(v){if(v===null||v===undefined)return"string";if(typeof v==="boolean")return"boolean";if(typeof v==="number"&&!Number.isNaN(v))return"number";if(typeof v==="string")return"string";if(Array.isArray(v))return"array";if(typeof v==="object")return"object";return"string"}function labelFromName(n){if(!n||typeof n!=="string")return"";return n.replace(/([A-Z])/g," $1").replace(/^./,function(s){return s.toUpperCase()}).trim()}function parseValue(s){s=(s||"").trim();if(s==="true")return true;if(s==="false")return false;if(s==="null")return null;if(/^-?\d+$/.test(s))return parseInt(s,10);if(/^-?\d*\.\d+([eE][+-]?\d+)?$/.test(s))return parseFloat(s);if((s.startsWith('"')&&s.endsWith('"'))||(s.startsWith("'")&&s.endsWith("'")))return s.slice(1,-1).replace(/\\'/g,"'").replace(/\\"/g,'"').replace(/\\n/g,"\n").replace(/\\r/g,"\r");if(s.startsWith("[")&&s.endsWith("]")){try{return JSON.parse(s)}catch(_){return s}}if(s.startsWith("{")&&s.endsWith("}")){try{return JSON.parse(s)}catch(_){return s}}return s}function parse(code){var rows=[],lines=(code||"").split(/\r?\n/),i=0,lastWasBlank=true;while(i<lines.length){var line=lines[i],t=line.trim();if(!t){lastWasBlank=true;i++;continue}if(t.startsWith("//")){var c=t.slice(2).trim();if(!c){rows.push({type:"lineBreak"});lastWasBlank=true;i++;continue}if(/^\s*var\s+/.test(c)||/^=+$/.test(c)){i++;continue}var hm=c.match(/^(#+)\s+(.*)$/);if(hm){var lvl=hm[1].length;rows.push({type:"heading",level:lvl,text:(hm[2]||"").replace(/^=\s*|\s*=$/g,"").trim()});lastWasBlank=false;i++;continue}if(/^(---|\*\*\*|___)\s*$/.test(c)){rows.push({type:"divider"});lastWasBlank=false;i++;continue}if(lastWasBlank||!rows.length||rows[rows.length-1].type!=="paragraph"){rows.push({type:"paragraph",text:c});}else{rows[rows.length-1].text+="\n"+c;}lastWasBlank=false;i++;continue}var m=t.match(/^\s*var\s+(\w+)\s*=\s*(.+?)\s*;(?:\s*\/\/\s*(.*))?$/);if(m){var val=parseValue(m[2].trim());var tip=(m[3]||"").trim();var optsMatch=tip.match(/@options:\s*(\w+)/);var inputType=inferType(val);if(optsMatch){inputType="select";}if(tip.match(/@textarea/)){inputType="textarea";}var f={type:"field",name:m[1],value:val,label:labelFromName(m[1]),tooltip:tip,inputType:inputType};if(optsMatch){f.optionSource=optsMatch[1];}rows.push(f);lastWasBlank=false;i++;continue}i++}return{rows:rows}}function serialize(schema,values){if(!schema||!schema.rows)return"";var out=[],vm=values||{};function fmt(v){if(v===null)return"null";if(typeof v==="boolean")return v?"true":"false";if(typeof v==="number")return String(v);return JSON.stringify(v)}schema.rows.forEach(function(r){if(r.type==="lineBreak"){out.push("//");return}if(r.type==="divider"){out.push("// ---");return}if(r.type==="heading"){var prefix=r.level>=3?"###":r.level===2?"##":"#";out.push("// "+prefix+(prefix.length?" ":"")+r.text);return}if(r.type==="paragraph"){r.text.split("\n").forEach(function(l){out.push("// "+l)});return}if(r.type==="field"){var v=vm[r.name];if(v===undefined)v=r.value;var comment=r.optionSource?" // @options: "+r.optionSource:(r.tooltip?" // "+r.tooltip:"");out.push("var "+r.name+" = "+fmt(v)+";"+comment)}});return out.join("\n").trim()}return{parse:parse,serialize:serialize,inferType:inferType,parseValue:parseValue}});
-(function(r,f){if(typeof define==="function"&&define.amd)define(["./parser"],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f(require("./parser"));else r.ConfigUIRenderer=f(r.ConfigUIParser);})(typeof self!=="undefined"?self:this,function(P){"use strict";var p=P||(typeof ConfigUIParser!=="undefined"?ConfigUIParser:null);if(!p)throw new Error("ConfigUI Renderer requires Parser");function buildField(field,idx){var n=field.name,t=field.type,v=field.value,l=field.label||n,tip=field.tooltip||"",id="config-ui-"+n+"-"+idx,wrap=document.createElement("div");wrap.className="config-ui-field config-ui-field--"+t;var row=document.createElement("div");row.className="config-ui-field__row";var lab=document.createElement("label");lab.className="config-ui-field__label";lab.htmlFor=id;lab.textContent=l;if(tip)wrap.title=tip,lab.classList.add("config-ui-field__label--has-tooltip");row.appendChild(lab);var cw=document.createElement("div");cw.className="config-ui-field__control";if(t==="boolean"){var tw=document.createElement("div");tw.className="config-ui-toggle-wrap";var inp=document.createElement("input");inp.type="checkbox";inp.id=id;inp.checked=!!v;inp.className="config-ui-toggle";inp.setAttribute("data-field",n);tw.appendChild(inp);cw.appendChild(tw)}else if(t==="number"){var ni=document.createElement("input");ni.type="number";ni.id=id;ni.value=v;ni.className="config-ui-input config-ui-input--number";ni.setAttribute("data-field",n);cw.appendChild(ni)}else if(t==="select"&&field.optionSource){var sel=document.createElement("select");sel.id=id;sel.className="config-ui-input config-ui-input--select";sel.setAttribute("data-field",n);sel.setAttribute("data-option-source",field.optionSource);var ov=v!=null?String(v):"";sel.setAttribute("data-initial-value",ov);var placeOpt=document.createElement("option");placeOpt.value=ov||"__loading__";placeOpt.textContent=ov||"Loading...";sel.appendChild(placeOpt);if(ov)sel.value=ov;cw.appendChild(sel);if(typeof parent!=="undefined"&&parent.postMessage){parent.postMessage({pluginMessage:{type:"GET_OPTIONS",optionSource:field.optionSource}},"*")}}else if(t==="select"&&field.options&&field.options.length){var sel=document.createElement("select");sel.id=id;sel.className="config-ui-input config-ui-input--select";sel.setAttribute("data-field",n);var ov=v!=null?String(v):"";field.options.forEach(function(opt){var o=document.createElement("option");o.value=opt;o.textContent=opt;if(opt===ov)o.selected=true;sel.appendChild(o)});if(!sel.value&&field.options[0])sel.value=field.options[0];cw.appendChild(sel)}else if(t==="textarea"){var ta=document.createElement("textarea");ta.id=id;ta.value=v==null?"":String(v);ta.className="config-ui-input config-ui-input--text config-ui-textarea";ta.setAttribute("data-field",n);ta.rows=field.rows||5;cw.appendChild(ta)}else{var ti=document.createElement("input");ti.type="text";ti.id=id;ti.value=v==null?"":String(v);ti.className="config-ui-input config-ui-input--text";ti.setAttribute("data-field",n);cw.appendChild(ti)}row.appendChild(cw);wrap.appendChild(row);return wrap}function buildRow(r,idx){if(r.type==="lineBreak"){var wr=document.createElement("div");wr.className="config-ui-row config-ui-row--line-break";wr.setAttribute("aria-hidden","true");return wr}if(r.type==="divider"){var wr=document.createElement("div");wr.className="config-ui-row config-ui-row--divider";wr.appendChild(document.createElement("hr"));return wr}if(r.type==="heading"){var wrap=document.createElement("div");wrap.className="config-ui-row config-ui-row--heading";var tag=r.level>=3?"h3":r.level===2?"h2":"h1";var h=document.createElement(tag);h.className="config-ui-heading";h.textContent=r.text;wrap.appendChild(h);return wrap}if(r.type==="paragraph"){var wrap=document.createElement("div");wrap.className="config-ui-row config-ui-row--paragraph";var mdWrap=document.createElement("div");mdWrap.className="docs-rendered";var md=r.text.replace(/\n/g,"  \n");mdWrap.innerHTML=typeof window.marked!=="undefined"&&window.marked.parse?window.marked.parse(md,{gfm:true}):md.replace(/&/g,"&amp;").replace(/\x3c/g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");wrap.appendChild(mdWrap);return wrap}if(r.type==="field"){var wrap=document.createElement("div");wrap.className="config-ui-row config-ui-row--field";var f={name:r.name,type:r.inputType,value:r.value,label:r.label,tooltip:r.tooltip,optionSource:r.optionSource,options:r.options};wrap.appendChild(buildField(f,idx));return wrap}return document.createElement("div")}function buildSection(sec,idx){if(sec.divider){var wr=document.createElement("div");wr.className="config-ui-section config-ui-section--divider";wr.setAttribute("data-section",String(idx));wr.appendChild(document.createElement("hr"));return wr}var el=document.createElement("div");el.className="config-ui-section";el.setAttribute("data-section",String(idx));if(sec.title||sec.intro){var intro=sec.intro||"";var introForMd=intro.replace(/\n\n/g,"\n\n").replace(/\n/g,"  \n");var md=sec.title?(introForMd?sec.title+"  \n"+introForMd:sec.title):introForMd;var mdWrap=document.createElement("div");mdWrap.className="docs-rendered";mdWrap.innerHTML=typeof window.marked!=="undefined"&&window.marked.parse?window.marked.parse(md,{gfm:true}):md.replace(/&/g,"&amp;").replace(/\x3c/g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");el.appendChild(mdWrap)}var fe=document.createElement("div");fe.className="config-ui-section__fields";sec.fields.forEach(function(f,i){fe.appendChild(buildField(f,idx*1000+i))});el.appendChild(fe);return el}function buildForm(schema,container){if(!schema){container.innerHTML='<div class="config-ui-empty">No configuration options.</div>';return}if(schema.rows&&schema.rows.length){container.innerHTML="";container.className="config-ui-form config-ui-form--rows";var fieldIdx=0;schema.rows.forEach(function(r,i){var el=buildRow(r,r.type==="field"?fieldIdx++:0);el.setAttribute("data-row-index",String(i));container.appendChild(el)});return}if(schema.sections&&schema.sections.length){container.innerHTML="";container.className="config-ui-form";schema.sections.forEach(function(sec,i){container.appendChild(buildSection(sec,i))});return}container.innerHTML='<div class="config-ui-empty">No configuration options.</div>'}function attachListeners(container,schema,onChange){if(!onChange||typeof onChange!=="function")return;function getValues(){var vals={};container.querySelectorAll("[data-field]").forEach(function(el){var n=el.getAttribute("data-field");if(!n)return;if(el.type==="checkbox")vals[n]=el.checked;else if(el.type==="number"){var x=parseFloat(el.value,10);vals[n]=Number.isNaN(x)?0:x}else vals[n]=el.value});return vals}container.addEventListener("change",function(e){if(e.target.getAttribute("data-field"))onChange(getValues())});container.addEventListener("input",function(e){if(e.target.getAttribute("data-field")&&e.target.type!=="checkbox")onChange(getValues())});return getValues}return{buildForm:buildForm,buildField:buildField,buildSection:buildSection,attachListeners:attachListeners}});
+(function(r,f){if(typeof define==="function"&&define.amd)define([],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f();else r.ConfigUIParser=f();})(typeof self!=="undefined"?self:this,function(){"use strict";function inferType(v){if(v===null||v===undefined)return"string";if(typeof v==="boolean")return"boolean";if(typeof v==="number"&&!Number.isNaN(v))return"number";if(typeof v==="string")return"string";if(Array.isArray(v))return"array";if(typeof v==="object")return"object";return"string"}function labelFromName(n){if(!n||typeof n!=="string")return"";return n.replace(/([A-Z])/g," $1").replace(/^./,function(s){return s.toUpperCase()}).trim()}function parseValue(s){s=(s||"").trim();if(s==="true")return true;if(s==="false")return false;if(s==="null")return null;if(/^-?\d+$/.test(s))return parseInt(s,10);if(/^-?\d*\.\d+([eE][+-]?\d+)?$/.test(s))return parseFloat(s);if((s.startsWith('"')&&s.endsWith('"'))||(s.startsWith("'")&&s.endsWith("'")))return s.slice(1,-1).replace(/\\'/g,"'").replace(/\\"/g,'"').replace(/\\n/g,"\n").replace(/\\r/g,"\r");if(s.startsWith("[")&&s.endsWith("]")){try{return JSON.parse(s)}catch(_){return s}}if(s.startsWith("{")&&s.endsWith("}")){try{return JSON.parse(s)}catch(_){return s}}return s}function parse(code){var rows=[],lines=(code||"").split(/\r?\n/),i=0,lastWasBlank=true;while(i<lines.length){var line=lines[i],t=line.trim();if(!t){lastWasBlank=true;i++;continue}if(t.startsWith("//")){var c=t.slice(2).trim();if(!c){rows.push({type:"lineBreak"});lastWasBlank=true;i++;continue}if(/^\s*var\s+/.test(c)||/^=+$/.test(c)){i++;continue}var hm=c.match(/^(#+)\s+(.*)$/);if(hm){var lvl=hm[1].length;rows.push({type:"heading",level:lvl,text:(hm[2]||"").replace(/^=\s*|\s*=$/g,"").trim()});lastWasBlank=false;i++;continue}if(/^(---|\*\*\*|___)\s*$/.test(c)){rows.push({type:"divider"});lastWasBlank=false;i++;continue}if(lastWasBlank||!rows.length||rows[rows.length-1].type!=="paragraph"){rows.push({type:"paragraph",text:c});}else{rows[rows.length-1].text+="\n"+c;}lastWasBlank=false;i++;continue}var m=t.match(/^\s*var\s+(\w+)\s*=\s*(.+?)\s*;(?:\s*\/\/\s*(.*))?$/);if(m){var val=parseValue(m[2].trim());var tip=(m[3]||"").trim();var phMatch=tip.match(/@placeholder\s*=\s*["']([^"']*)["']/);if(phMatch){tip=tip.replace(/@placeholder\s*=\s*["'][^"']*["']/g,"").trim();}var optsMatch=tip.match(/@options:\s*(.+)/);var inputType=inferType(val);if(optsMatch){inputType="select";}if(tip.match(/@textarea/)){inputType="textarea";}var f={type:"field",name:m[1],value:val,label:labelFromName(m[1]),tooltip:tip,inputType:inputType};if(phMatch)f.placeholder=phMatch[1];if(optsMatch){var optsVal=optsMatch[1].trim();if(optsVal.indexOf("|")>=0){f.options=optsVal.split("|").map(function(s){return s.trim();});}else{f.optionSource=optsVal;}}rows.push(f);lastWasBlank=false;i++;continue}i++}return{rows:rows}}function serialize(schema,values){if(!schema||!schema.rows)return"";var out=[],vm=values||{};function fmt(v){if(v===null)return"null";if(typeof v==="boolean")return v?"true":"false";if(typeof v==="number")return String(v);return JSON.stringify(v)}schema.rows.forEach(function(r){if(r.type==="lineBreak"){out.push("//");return}if(r.type==="divider"){out.push("// ---");return}if(r.type==="heading"){var prefix=r.level>=3?"###":r.level===2?"##":"#";out.push("// "+prefix+(prefix.length?" ":"")+r.text);return}if(r.type==="paragraph"){r.text.split("\n").forEach(function(l){out.push("// "+l)});return}if(r.type==="field"){var v=vm[r.name];if(v===undefined)v=r.value;var parts=[];if(r.options&&r.options.length)parts.push("@options: "+r.options.join("|"));else if(r.optionSource)parts.push("@options: "+r.optionSource);if(r.placeholder)parts.push('@placeholder="'+r.placeholder.replace(/\\/g,"\\\\").replace(/"/g,'\\"')+'"');if(r.tooltip)parts.push(r.tooltip);var comment=parts.length?" // "+parts.join(" "):"";out.push("var "+r.name+" = "+fmt(v)+";"+comment)}});return out.join("\n").trim()}return{parse:parse,serialize:serialize,inferType:inferType,parseValue:parseValue}});
+(function(r,f){if(typeof define==="function"&&define.amd)define(["./parser"],f);else if(typeof module!=="undefined"&&module.exports)module.exports=f(require("./parser"));else r.ConfigUIRenderer=f(r.ConfigUIParser);})(typeof self!=="undefined"?self:this,function(P){"use strict";var p=P||(typeof ConfigUIParser!=="undefined"?ConfigUIParser:null);if(!p)throw new Error("ConfigUI Renderer requires Parser");function buildField(field,idx){var n=field.name,t=field.type,v=field.value,l=field.label||n,tip=field.tooltip||"",id="config-ui-"+n+"-"+idx,wrap=document.createElement("div");wrap.className="config-ui-field config-ui-field--"+t;var row=document.createElement("div");row.className="config-ui-field__row";var lab=document.createElement("label");lab.className="config-ui-field__label";lab.htmlFor=id;lab.textContent=l;if(tip)wrap.title=tip,lab.classList.add("config-ui-field__label--has-tooltip");row.appendChild(lab);var cw=document.createElement("div");cw.className="config-ui-field__control";if(t==="boolean"){var tw=document.createElement("div");tw.className="config-ui-toggle-wrap";var inp=document.createElement("input");inp.type="checkbox";inp.id=id;inp.checked=!!v;inp.className="config-ui-toggle";inp.setAttribute("data-field",n);tw.appendChild(inp);cw.appendChild(tw)}else if(t==="number"){var ni=document.createElement("input");ni.type="number";ni.id=id;ni.value=v;ni.className="config-ui-input config-ui-input--number";ni.setAttribute("data-field",n);if(field.placeholder)ni.setAttribute("placeholder",field.placeholder);cw.appendChild(ni)}else if(t==="select"&&field.optionSource){var sel=document.createElement("select");sel.id=id;sel.className="config-ui-input config-ui-input--select";sel.setAttribute("data-field",n);sel.setAttribute("data-option-source",field.optionSource);var ov=v!=null?String(v):"";sel.setAttribute("data-initial-value",ov);var placeOpt=document.createElement("option");placeOpt.value=ov||"__loading__";placeOpt.textContent=ov||"Loading...";sel.appendChild(placeOpt);if(ov)sel.value=ov;cw.appendChild(sel);if(typeof parent!=="undefined"&&parent.postMessage){parent.postMessage({pluginMessage:{type:"GET_OPTIONS",optionSource:field.optionSource}},"*")}}else if(t==="select"&&field.options&&field.options.length){var sel=document.createElement("select");sel.id=id;sel.className="config-ui-input config-ui-input--select";sel.setAttribute("data-field",n);var ov=v!=null?String(v):"";field.options.forEach(function(opt){var o=document.createElement("option");o.value=opt;o.textContent=opt;if(opt===ov)o.selected=true;sel.appendChild(o)});if(!sel.value&&field.options[0])sel.value=field.options[0];cw.appendChild(sel)}else if(t==="textarea"){var ta=document.createElement("textarea");ta.id=id;ta.value=v==null?"":String(v);ta.className="config-ui-input config-ui-input--text config-ui-textarea";ta.setAttribute("data-field",n);if(field.placeholder)ta.setAttribute("placeholder",field.placeholder);ta.rows=field.rows||5;cw.appendChild(ta)}else{var ti=document.createElement("input");ti.type="text";ti.id=id;ti.value=v==null?"":String(v);ti.className="config-ui-input config-ui-input--text";ti.setAttribute("data-field",n);if(field.placeholder)ti.setAttribute("placeholder",field.placeholder);cw.appendChild(ti)}row.appendChild(cw);wrap.appendChild(row);return wrap}function buildRow(r,idx){if(r.type==="lineBreak"){var wr=document.createElement("div");wr.className="config-ui-row config-ui-row--line-break";wr.setAttribute("aria-hidden","true");return wr}if(r.type==="divider"){var wr=document.createElement("div");wr.className="config-ui-row config-ui-row--divider";wr.appendChild(document.createElement("hr"));return wr}if(r.type==="heading"){var wrap=document.createElement("div");wrap.className="config-ui-row config-ui-row--heading";var tag=r.level>=3?"h3":r.level===2?"h2":"h1";var h=document.createElement(tag);h.className="config-ui-heading";h.textContent=r.text;wrap.appendChild(h);return wrap}if(r.type==="paragraph"){var wrap=document.createElement("div");wrap.className="config-ui-row config-ui-row--paragraph";var mdWrap=document.createElement("div");mdWrap.className="docs-rendered";var md=r.text.replace(/\n/g,"  \n");mdWrap.innerHTML=typeof window.marked!=="undefined"&&window.marked.parse?window.marked.parse(md,{gfm:true}):md.replace(/&/g,"&amp;").replace(/\x3c/g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");wrap.appendChild(mdWrap);return wrap}if(r.type==="field"){var wrap=document.createElement("div");wrap.className="config-ui-row config-ui-row--field";var f={name:r.name,type:r.inputType,value:r.value,label:r.label,tooltip:r.tooltip,optionSource:r.optionSource,options:r.options,placeholder:r.placeholder};wrap.appendChild(buildField(f,idx));return wrap}return document.createElement("div")}function buildSection(sec,idx){if(sec.divider){var wr=document.createElement("div");wr.className="config-ui-section config-ui-section--divider";wr.setAttribute("data-section",String(idx));wr.appendChild(document.createElement("hr"));return wr}var el=document.createElement("div");el.className="config-ui-section";el.setAttribute("data-section",String(idx));if(sec.title||sec.intro){var intro=sec.intro||"";var introForMd=intro.replace(/\n\n/g,"\n\n").replace(/\n/g,"  \n");var md=sec.title?(introForMd?sec.title+"  \n"+introForMd:sec.title):introForMd;var mdWrap=document.createElement("div");mdWrap.className="docs-rendered";mdWrap.innerHTML=typeof window.marked!=="undefined"&&window.marked.parse?window.marked.parse(md,{gfm:true}):md.replace(/&/g,"&amp;").replace(/\x3c/g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");el.appendChild(mdWrap)}var fe=document.createElement("div");fe.className="config-ui-section__fields";sec.fields.forEach(function(f,i){fe.appendChild(buildField(f,idx*1000+i))});el.appendChild(fe);return el}function buildForm(schema,container){if(!schema){container.innerHTML='<div class="config-ui-empty">No configuration options.</div>';return}if(schema.rows&&schema.rows.length){container.innerHTML="";container.className="config-ui-form config-ui-form--rows";var fieldIdx=0;schema.rows.forEach(function(r,i){var el=buildRow(r,r.type==="field"?fieldIdx++:0);el.setAttribute("data-row-index",String(i));container.appendChild(el)});return}if(schema.sections&&schema.sections.length){container.innerHTML="";container.className="config-ui-form";schema.sections.forEach(function(sec,i){container.appendChild(buildSection(sec,i))});return}container.innerHTML='<div class="config-ui-empty">No configuration options.</div>'}function attachListeners(container,schema,onChange){if(!onChange||typeof onChange!=="function")return;function getValues(){var vals={};container.querySelectorAll("[data-field]").forEach(function(el){var n=el.getAttribute("data-field");if(!n)return;if(el.type==="checkbox")vals[n]=el.checked;else if(el.type==="number"){var x=parseFloat(el.value,10);vals[n]=Number.isNaN(x)?0:x}else vals[n]=el.value});return vals}container.addEventListener("change",function(e){if(e.target.getAttribute("data-field"))onChange(getValues())});container.addEventListener("input",function(e){if(e.target.getAttribute("data-field")&&e.target.type!=="checkbox")onChange(getValues())});return getValues}return{buildForm:buildForm,buildField:buildField,buildSection:buildSection,attachListeners:attachListeners}});
 (function(r,f){var P=r.ConfigUIParser,R=r.ConfigUIRenderer;if(P&&R)r.ConfigUIFormController=f(P,R);})(typeof self!=="undefined"?self:this,function(P,R){"use strict";function createForm(container,initialSchema,opts){var schema=initialSchema||null,getV=null,onCh=(opts&&opts.onChange)||null;function render(s){schema=s;R.buildForm(schema,container);getV=R.attachListeners(container,schema,onCh?function(v){onCh(v)}:null)}if(schema&&schema.rows&&schema.rows.length)render(schema);return{getValues:function(){return getV?getV():{}},setValues:function(vals){if(!vals||!container)return;Object.keys(vals).forEach(function(n){var el=container.querySelector('[data-field="'+n+'"]');if(!el)return;if(el.type==="checkbox")el.checked=!!vals[n];else el.value=vals[n]==null?"":String(vals[n])})},updateFromCode:function(code){try{var s=P.parse(code);if(s&&s.rows&&s.rows.length){var cur=(getV&&getV())||{};render(s);this.setValues(cur)}}catch(e){console.warn("ConfigUI: updateFromCode parse failed",e)}},destroy:function(){if(container)container.innerHTML="";schema=null;getV=null}}}return{createForm:createForm}});
 (function(r){var P=r.ConfigUIParser,R=r.ConfigUIRenderer,C=r.ConfigUIFormController;if(!P||!R||!C)return;r.CodeFigConfigUI={parse:function(c){return P.parse(c)},serialize:function(s,v){return P.serialize(s,v)},render:function(schema,opts){var c=opts&&opts.container;if(!c)throw new Error("CodeFigConfigUI.render: options.container is required");return C.createForm(c,schema,opts)}}})(typeof self!=="undefined"?self:this);
     </script>
@@ -37,7 +37,7 @@
          
          LIBRARY COMPONENTS (scripts/CODEFIG_LIBRARIES/)
          -----------------------------------------------
-         9. Config UI (@config-ui.ts)
+         9. CodeFigUI (@codefig-ui.ts)
          10. Info Panel (@infopanel.ts)
          
          ============================================================ */
@@ -60,6 +60,7 @@
         --text-primary: #1d1d1f;
         --text-secondary: #86868b;
         --text-muted: #666;
+        --text-link: #0D99FF;
         --border-color: #e1e5e9;
         --border-light: #e6e6e6;
         --hover-bg: #fafafa;
@@ -208,12 +209,13 @@
         pointer-events: none;
       }
       
-      /* Sidebar resizer */
+      /* Sidebar resizer (divider between script list and editor) */
       .resizer {
         width: 1px;
         cursor: col-resize;
         position: relative;
         flex-shrink: 0;
+        background: var(--border-light);
         transition: background-color var(--transition-base);
       }
       
@@ -321,7 +323,7 @@
         padding: var(--space-md) var(--space-xl) var(--space-xs) var(--space-xl);
         font: var(--font-size-body) var(--font-family-base);
         font-weight: var(--font-weight-semibold);
-        color: var(--text-secondary);
+        color: var(--text-primary);
         background: transparent;
       }
       
@@ -430,7 +432,7 @@
       }
       
       .group-header:hover {
-        color: var(--text-secondary);
+        color: var(--text-primary);
       }
       
       .group-content {
@@ -454,11 +456,12 @@
         align-items: center;
         font: 11px var(--font-family-base);
         font-weight: var(--font-weight-normal);
-        color: var(--text-primary);
+        color: var(--text-muted);
       }
       
       .script-item:hover { 
-        background: var(--hover-bg); 
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
       }
       
       .script-item.active { 
@@ -962,9 +965,9 @@
 
 
       /* ============================================================
-         9. CONFIG UI (@config-ui.ts)
+         9. CodeFigUI (@codefig-ui.ts)
          Form controls, toggles, inputs for configuration UI
-         Corresponds to scripts/CODEFIG_LIBRARIES/@config-ui.ts
+         Corresponds to scripts/CODEFIG_LIBRARIES/@codefig-ui.ts
          ============================================================ */
       
       /* Form container: same padding and base font as .docs-rendered for visual parity */
@@ -1012,7 +1015,7 @@
       }
       .config-ui-section--divider hr {
         border: 0;
-        border-top: 1px solid var(--color-border, #e0e0e0);
+        border-top: 1px solid var(--border-light);
         margin: 0;
       }
       
@@ -1039,7 +1042,7 @@
       }
       .config-ui-row--divider hr {
         border: 0;
-        border-top: 1px solid var(--color-border, #e0e0e0);
+        border-top: 1px solid var(--border-light);
         margin: 0;
       }
       .config-ui-row--paragraph .docs-rendered {
@@ -1166,7 +1169,16 @@
         box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
       }
       
-      .config-ui-input--number,
+      .config-ui-input::placeholder {
+        color: var(--text-muted);
+        opacity: 0.6;
+      }
+      
+      .config-ui-input--number {
+        width: 50%;
+        min-width: 0;
+      }
+      
       .config-ui-input--text,
       .config-ui-input--select {
         width: 100%;
@@ -1648,9 +1660,9 @@
           </div>
           
           <div class="editor-tabs" id="editorTabs">
-            <button class="editor-tab" data-tab="docs" type="button">Documentation</button>
             <button class="editor-tab" data-tab="config" type="button">Configuration</button>
             <button class="editor-tab active" data-tab="script" type="button">Script</button>
+            <button class="editor-tab" data-tab="docs" type="button">Documentation</button>
           </div>
           
           <div class="editor-container">
@@ -1842,7 +1854,7 @@
           configUIInstance = null;
         }
         if (typeof window.CodeFigConfigUI === 'undefined') {
-          configUIContainer.innerHTML = '<div class="config-ui-empty">Config UI script failed to load. Reload the plugin.</div>';
+          configUIContainer.innerHTML = '<div class="config-ui-empty">CodeFigUI failed to load. Reload the plugin.</div>';
           return;
         }
         var content = (configCode && configCode.trim()) || '';
@@ -2202,8 +2214,8 @@
           const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
           const sectionHeaderClass = hasSelectedScript ? 'selected' : '';
           
-          const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" /></svg>`;
-          const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" /></svg>`;
+          const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" /></svg>`;
+          const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" /></svg>`;
           
           html += `
             <div class="section-header ${headerClass} ${sectionHeaderClass}" onclick="toggleSection('${sectionId}')">
@@ -2324,8 +2336,8 @@
             const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
             const groupHeaderClass = hasSelectedScript ? 'selected' : '';
             const groupClass = hasSelectedScript ? 'selected' : '';
-            const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
-            const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
+            const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
+            const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
             
             html += `
               <div class="script-group ${groupClass}">
@@ -2384,7 +2396,13 @@
         
         const tabs = [];
         if (parsedSections.hasDocs) tabs.push('docs');
-        if (parsedSections.hasConfig) tabs.push('config');
+        if (parsedSections.hasConfig) {
+          try {
+            const schema = typeof window.CodeFigConfigUI !== 'undefined' && window.CodeFigConfigUI.parse(parsedSections.configContent || '');
+            const hasOptions = schema && ((schema.rows && schema.rows.length > 0) || (schema.sections && schema.sections.length > 0));
+            if (hasOptions) tabs.push('config');
+          } catch (e) {}
+        }
         tabs.push('script');
         updateTabVisibility(tabs);
         
@@ -2402,8 +2420,10 @@
             if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
           }, 10);
         }
-        currentTab = tabs[0];
-        switchTab(tabs[0]);
+        // First view: Configuration if script has config, otherwise Script
+        const initialTab = scriptHasConfig ? 'config' : 'script';
+        currentTab = initialTab;
+        switchTab(initialTab);
         originalCode = fullCode;
         
         // Check if this script uses @InfoPanel
@@ -2613,7 +2633,7 @@
       function createFilterControls(grouping) {
         const container = document.createElement('div');
         container.className = 'info-filter-controls';
-        container.style.cssText = 'margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e6e6e6;';
+        container.style.cssText = 'margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light);';
         
         const label = document.createElement('span');
         label.textContent = 'Group by: ';
@@ -2628,7 +2648,7 @@
             font-size: 10px; 
             padding: 4px 8px; 
             margin-right: 4px; 
-            border: 1px solid #ccc; 
+            border: 1px solid var(--border-color); 
             background: ${mode === grouping.default ? '#007AFF' : '#fff'}; 
             color: ${mode === grouping.default ? '#fff' : '#333'}; 
             border-radius: 4px; 
@@ -2733,7 +2753,7 @@
             color: #333; 
             margin: 16px 0 8px 0; 
             padding: 0 0 4px 0; 
-            border-bottom: 1px solid #e6e6e6;
+            border-bottom: 1px solid var(--border-light);
             cursor: pointer;
             transition: color 0.2s ease;
           `;
@@ -4216,7 +4236,7 @@
                   container.style.display = 'flex';
                   if (tabConfigEl && scriptHasConfig) switchTab('config');
                 }
-              } catch (e) { console.warn('ConfigUI render failed', e); }
+              } catch (e) { console.warn('CodeFigUI render failed', e); }
             }
             break;
 

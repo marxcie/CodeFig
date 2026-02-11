@@ -1,16 +1,18 @@
-// Comments to Annotations
+// Comments to annotations
 // @DOC_START
-// # Create Annotations from Comments
+// # Comments to annotations
 // Converts file comments into Figma annotations and optional invisible anchor frames.
 //
 // ## Overview
 // Uses the Figma REST API to read comments, then creates annotations (and optionally anchor frames) at comment positions. Requires a Figma Personal Access Token and a file key or URL.
 //
 // ## Config options
-// - **tokenStorageKey** – Client storage key for the Personal Access Token.
-// - **fileKeyOrUrl** – Figma file key or file URL; leave empty to use stored key or be prompted.
-// - **annotationAnchors** – If true, creates invisible anchor frames at comment locations.
-// - **resolvedComments** – If true, resolved comments are included; default false.
+// | Option | Description |
+// |--------|--------------|
+// | tokenStorageKey | Client storage key for the Personal Access Token. |
+// | fileKeyOrUrl | Figma file key or file URL; leave empty to use stored key or be prompted. |
+// | annotationAnchors | If true, creates invisible anchor frames at comment locations. |
+// | resolvedComments | If true, resolved comments are included; default false. |
 // @DOC_END
 
 // ============================================================================
@@ -20,12 +22,12 @@
 // @UI_CONFIG_START
 // # Comments to Annotations
 
-var tokenStorageKey = "figma_personal_access_token";
+var tokenStorageKey = ""; // @placeholder="figma_personal_access_token"
 // Personal Access Token for Figma REST API (stored securely in client storage, it won't be sent to any servers.)
 // Go to "Help & Account" -> "Account Settings" -> "Security" -> "Personal Access Tokens" -> "Generate new token".
 // Scope: Files / file_comments:read, and Generate token. Copy the token and paste it here.
 //
-var fileKeyOrUrl = "https://www.figma.com/design/3OL5s2KgkpD2RIGBXIJzst/CodeFig-test-ground?node-id=35-32&t=RqmlOo3sxABzx1pg-4";
+var fileKeyOrUrl = ""; // @placeholder="https://www.figma.com/design/3OL5s2KgkpD2RIGBXIJzst/CodeFig-test-ground?node-id=35-32&t=RqmlOo3sxABzx1pg"
 // Paste either a Figma file key or a URL from your Figma file hereIf it's a URL, the file key will be automatically extracted from it.
 // Just select any element on the artboard, right click and select "Copy link to selection", and paste it here.
 //

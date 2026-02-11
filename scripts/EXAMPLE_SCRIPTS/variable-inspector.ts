@@ -1,6 +1,6 @@
-// Variable Inspector
+// Variable inspector
 // @DOC_START
-// # 🔍 Variable Inspector
+// # Variable inspector
 // 
 // Comprehensive variable analysis tool showing all variables with their values, health status, and usage in your selection and styles.
 //
@@ -11,25 +11,20 @@
 // - **Smart Filtering**: Filter by variable purpose (typography, color, dimensions, effects)
 // - **Clickable Nodes**: Click individual nodes to select them
 //
-// ## Configuration
-// See CONFIG tab to adjust inspector behavior:
-// 
-// **Display Options:**
-// - `onlyUsedVariables` - Show only variables used in selection/styles
-// - `groupByCollection` - Organize variables by collection
-// - `showValuePreview` - Display actual variable values
-// - `maxNodesPreview` - Number of individual nodes to show (rest clickable as "Show all X nodes")
-//
-// **Variable Purpose Filters:**
-// - `typographicVariables` - Typography (fontSize, letterSpacing, lineHeight, etc.)
-// - `colorVariables` - Colors (fills, strokes, backgrounds)
-// - `dimensionVariables` - Dimensions & spacing (width, height, padding, gap, radius, etc.)
-// - `effectVariables` - Effects & opacity (shadows, blur, opacity)
-// - `otherVariables` - Other/miscellaneous variables
-//
-// **Advanced Options:**
-// - `checkStyleUsage` - Check if variables are used in text/paint/effect styles
-// - `showHealthScore` - Display variable health score (0-100)
+// ## Config options
+// | Option | Description |
+// |--------|--------------|
+// | onlyUsedVariables | Show only variables used in selection/styles. |
+// | groupByCollection | Organize variables by collection. |
+// | showValuePreview | Display actual variable values. |
+// | maxNodesPreview | Number of individual nodes to show (rest clickable as "Show all X nodes"). |
+// | typographicVariables | Typography (fontSize, letterSpacing, lineHeight, etc.). |
+// | colorVariables | Colors (fills, strokes, backgrounds). |
+// | dimensionVariables | Dimensions & spacing (width, height, padding, gap, radius, etc.). |
+// | effectVariables | Effects & opacity (shadows, blur, opacity). |
+// | otherVariables | Other/miscellaneous variables. |
+// | checkStyleUsage | Check if variables are used in text/paint/effect styles. |
+// | showHealthScore | Display variable health score (0-100). |
 //
 // ## Status Indicators
 // - ✅ Healthy - Variable is working correctly

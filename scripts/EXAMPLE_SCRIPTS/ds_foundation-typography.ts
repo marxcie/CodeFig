@@ -6,22 +6,24 @@
 // ## Overview
 // Creates typography variables and optional text styles. Scale is range-first: first step = minFont, base step = baseFont, last step = maxFont per viewport. Steps are spread between min and max (linear or curved), rounded to grid, and enforced distinct (no duplicate sizes). Variables are scoped to their use (font size, line height, letter spacing, etc.). Optionally creates an overview frame showing all scale steps per viewport.
 //
-// ## Config options (Configuration tab)
-// - **fontFamily** – Font family name (e.g. Inter).
-// - **fontWeights** – Map of weight names to numeric values (e.g. regular: 400, semibold: 600).
-// - **structure.variableCollection** – Name of the variable collection.
-// - **structure.variableGroup** – Optional group path within the collection.
-// - **fontScale** – Array of scale step names (e.g. 3xs … 10xl).
-// - **scaling.type** – Curve type: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio (ignored if easeInExponent is set).
-// - **scaling.ease** – Easing: none, in, out, inout, outin. Shapes step distribution (e.g. "in" = more steps near base).
-// - **scaling.easeInExponent** – Optional. If set (e.g. 1.2), use power curve instead of type: in = t^easeInExponent, out = 1-(1-t)^easeOutExponent. Typical 0.2–5.
-// - **scaling.easeOutExponent** – Optional. Used with easeInExponent; defaults to easeInExponent if omitted.
-// - **roundLowerValuesTo** – Grid for steps from min to base (e.g. 2 = finer; 0 = no rounding). Applies to font size and line height.
-// - **roundUpperValuesTo** – Grid for steps above base (e.g. 4 or 8 = coarser; 0 = no rounding). Letter spacing is always fractional.
-// - **debugScaleJson** – If true, log "Generated scales" (labels × type × ease) JSON for the first viewport to the console.
-// - **fontSizes** – Per viewport (desktop, tablet, mobile): minFont, baseFont (level, size, lineHeight, letterSpacing), maxFont (size, lineHeight, letterSpacing). Scale fills [minFont, maxFont]; last step = maxFont.
-// - **styles.createAndUpdateStyles** – If true, creates/updates text styles.
-// - **styles.styleNaming** – Naming template for styles (e.g. {$fontScale}/{$fontWeight}).
+// ## Config options
+// | Option | Description |
+// |--------|--------------|
+// | fontFamily | Font family name (e.g. Inter). |
+// | fontWeights | Map of weight names to numeric values (e.g. regular: 400, semibold: 600). |
+// | structure.variableCollection | Name of the variable collection. |
+// | structure.variableGroup | Optional group path within the collection. |
+// | fontScale | Array of scale step names (e.g. 3xs … 10xl). |
+// | scaling.type | Curve type: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio (ignored if easeInExponent is set). |
+// | scaling.ease | Easing: none, in, out, inout, outin. Shapes step distribution (e.g. "in" = more steps near base). |
+// | scaling.easeInExponent | Optional. If set (e.g. 1.2), use power curve instead of type. Typical 0.2–5. |
+// | scaling.easeOutExponent | Optional. Used with easeInExponent; defaults to easeInExponent if omitted. |
+// | roundLowerValuesTo | Grid for steps from min to base (e.g. 2 = finer; 0 = no rounding). Applies to font size and line height. |
+// | roundUpperValuesTo | Grid for steps above base (e.g. 4 or 8 = coarser; 0 = no rounding). Letter spacing is always fractional. |
+// | debugScaleJson | If true, log "Generated scales" JSON for the first viewport to the console. |
+// | fontSizes | Per viewport (desktop, tablet, mobile): minFont, baseFont, maxFont. Scale fills [minFont, maxFont]; last step = maxFont. |
+// | styles.createAndUpdateStyles | If true, creates/updates text styles. |
+// | styles.styleNaming | Naming template for styles (e.g. {$fontScale}/{$fontWeight}). |
 // @DOC_END
 
 // Import functions from libraries

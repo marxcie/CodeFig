@@ -1,22 +1,51 @@
 // @CodeFigUI
 // @DOC_START
-// # @ConfigUI
+// # CodeFigUI
 // Build and send native UI (toggles, inputs, sections) to the plugin so it can be shown in real time.
+//
+// **Nomenclature:** **CodeFigUI** is this feature (the library and the form rendered in the Config tab). The **@UI_CONFIG** block is the section in your script: wrap config variables between **// @UI_CONFIG_START** and **// @UI_CONFIG_END**. So: use “CodeFigUI” when referring to the feature; use “@UI_CONFIG” when referring to the config block markers.
 //
 // ## Overview
 // Import to define config or custom forms in code. Build a schema with section(), toggle(), number(), string(), select(), then send it to the plugin UI with sendToUI(). You can edit this library to add more component types (e.g. createColorPicker, createSlider).
 //
-// ## UI Config block in scripts
+// ## @UI_CONFIG block in scripts
 // Wrap config variables between **// @UI_CONFIG_START** and **// @UI_CONFIG_END**. The Config tab will show the native form only (no code view). Use **// @CONFIG_START** / **// @CONFIG_END** if you want the Config tab to show editable code instead of the form.
 //
-// ## Config UI components (built-in)
+// ## Components (built-in)
 // - **Toggle** (boolean) – checkbox-style on/off.
 // - **Number** – numeric input.
 // - **Text** (string) – single-line text input.
-// - **Textarea** – multiline text (e.g. batch replacement: one line per "search, replace"). **Builder:** textarea(name, value, opts?). **Config block:** add `// @textarea` on the var line. Same width as text input, max 5 lines by default.
-// - **Select** (dropdown) – choice from a list of options; **builder API only** for static options. In the **config block**, use **Select (dynamic)** with a trailing comment `// @options: <source>` so the plugin fills the dropdown at runtime (e.g. variable collections, queries).
+// - **Textarea** – multiline text (e.g. batch replacement: one line per "search, replace"). **Builder:** textarea(name, value, opts?). **@UI_CONFIG block:** add `// @textarea` on the var line. Same width as text input, max 5 lines by default.
+// - **Select** (dropdown) – choice from a list of options. **Builder API:** section().select(name, value, options, opts?). In the **@UI_CONFIG block**, add `// @options:` on the var line (see **Dropdown** and **Dropdown options** below).
 //
-// **In the config block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string → text. For a **dropdown with dynamic options**, add `// @options: <source>` to the var line; the plugin then loads options for that source when the form is shown. Supported sources: **variableCollections** (names of local variable collections). More sources (e.g. queries) can be added the same way. The variable value is always a string; in script/code mode it is edited as text.
+// **In the @UI_CONFIG block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string → text. For a **dropdown**, use `// @options: <value>` (static list or dynamic source). The variable value is always a string; in script/code mode it is edited as text.
+//
+// ## Dropdown (use in @UI_CONFIG)
+// Use a **dropdown** when the value must be one of a fixed or runtime-defined set (e.g. action type, collection name). In the Config tab the control is a `<select>`; in script mode the line stays editable as `var name = 'value';`.
+//
+// **Static choices** – e.g. action or mode: `var selectedType = 'frame'; // @options: frame|autoLayout`  
+// **Dynamic choices** – e.g. pick a variable collection: `var sourceCollectionName = 'website V3'; // @options: variableCollections`  
+// The script reads the var like any other string; run uses the current selection. See **Dropdown options** for syntax and edge cases.
+//
+// ## Dropdown options (`// @options:`)
+// On a var line, `// @options: <value>` accepts either a **dynamic source** or a **static list**:
+//
+// - **Static list (pipe-separated):** e.g. `var selectedType = 'frame'; // @options: frame|autoLayout`  
+//   The token after `@options:` contains `|`, so it is split by `|`, trimmed, and used as the option list. The Config tab shows a dropdown with those options; script mode keeps the line as editable code. Round-trip serialization preserves the list as `opt1|opt2|...`.
+// - **Dynamic source (single word):** e.g. `var sourceCollectionName = 'website V3'; // @options: variableCollections`  
+//   The token is a single word (no `|`), so the plugin fills the dropdown at runtime. Supported dynamic sources: **variableCollections**.
+//
+// **Rule:** If the token after `@options:` contains a pipe (`|`), it is treated as a static list; otherwise as a dynamic source name.
+//
+// **Edge cases:** Empty or single-option lists are valid (field.options is still set). If the current var value is not in the option list, the current value is still shown and serialized. Existing scripts using `// @options: variableCollections` (no pipe) continue to use dynamic loading unchanged.
+//
+// ## Scope and filtering (config patterns)
+// Many scripts use **scope** and **filtering** vars inside the @UI_CONFIG block. These are normal CodeFigUI fields (no special directive):
+//
+// - **searchIn** (string) – Optional scope filter: which items to process. Empty = all; when set, the script restricts to items whose name or path matches (partial). Examples: variable scripts use "collection / variable path"; style scripts use style name (e.g. `"color/"`, `"Typography/"`). Use a text input or leave empty for "all".
+// - **selectionOnly** (boolean) – When true, process only the current selection; when false, process the whole page (or a full set). Use a toggle in the @UI_CONFIG block. Scripts that support it (e.g. replace-styles) read the var and pass it into the processing logic.
+//
+// These are not CodeFigUI-specific features—they are config variables that your script logic interprets. CodeFigUI only provides the controls (text, toggle, dropdown); the script decides how to apply scope and filtering.
 //
 // ## Exported functions
 // - **Builder:** section(title), toggle(name, value, opts?), number(name, value, opts?), string(name, value, opts?), select(name, value, options, opts?)
@@ -27,13 +56,14 @@
 // sendToUI();
 // @DOC_END
 
-// Config block showcase (toggle, number, text). Select is only available via the builder API (section().select(...)).
+// Config block showcase (toggle, number, text, dropdown). Select is also available via the builder API (section().select(...)).
 // @UI_CONFIG_START
 // # Built-in components
 // One of each control type the config block supports.
 var exampleToggle = true; // Boolean → toggle
 var exampleNumber = 42; // Number → number input
 var exampleText = 'Hello'; // String → text input
+var exampleSelect = 'frame'; // @options: frame|autoLayout
 // @UI_CONFIG_END
 
 var shared = true;
@@ -200,7 +230,7 @@ function sendToUI() {
     try {
       figma.ui.postMessage(payload);
     } catch (e) {
-      console.log('ConfigUI: Could not send to UI:', e.message);
+      console.log('CodeFigUI: Could not send to UI:', e.message);
     }
   }
 }

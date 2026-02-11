@@ -1,16 +1,18 @@
-// Batch rename Variables
+// Rename variables
 // @DOC_START
-// # Batch rename Variables
+// # Rename variables
 // Rename variables using the same pattern as batch-rename-styles: searchIn = scope, searchFor/replaceWith = find/replace in variable name.
 //
 // ## Overview
 // searchIn selects which collections/groups to include (partial match on "collection / variable path"). searchFor/replaceWith then run on each variable name. Supports Figma-style placeholders: $&, $1 $2, $n $nn $nnn, $N $NN $NNN.
 //
 // ## Config options
-// - **searchIn** – Scope: partial match on collection and/or group path. Empty = all; set = only what is within that scope gets renamed.
-// - **searchFor** – Pattern to find (partial match, literal or regex).
-// - **replaceWith** – Replacement string; may use placeholders.
-// - **batchReplacement** – Optional array of [search, replace] pairs; overrides searchFor/replaceWith.
+// | Option | Description |
+// |--------|--------------|
+// | searchIn | Scope: partial match on collection and/or group path. Empty = all; set = only what is within that scope gets renamed. |
+// | searchFor | Pattern to find (partial match, literal or regex). |
+// | replaceWith | Replacement string; may use placeholders. |
+// | batchReplacement | Optional array of [search, replace] pairs; overrides searchFor/replaceWith. |
 //
 // ## Rename behaviour
 // - **searchIn empty**: Replace in the full hierarchy (collection names and variable paths).
@@ -76,11 +78,11 @@ if (typeof replaceWithPattern !== 'function') {
 // @UI_CONFIG_START
 // # Batch rename variables
 //
-var searchIn = "";
+var searchIn = ""; // @placeholder="color/"
 // Optional, narrow to variables whose name contains this (e.g. "color/", "Typography/")
 //
-var searchFor = "50";
-var replaceWith = "050";
+var searchFor = ""; // @placeholder="50"
+var replaceWith = ""; // @placeholder="050"
 // ---
 var batchReplacement = ""; // @textarea
 // Batch replacement: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)

@@ -7,11 +7,14 @@
 // Defines a variable collection for layout grid: columns, gap, padding, viewport width per mode (e.g. Desktop, Tablet, Mobile). Config holds container width, columns, gap, padding per viewport; the script creates the variables.
 //
 // ## Config options
-// - **collectionName** / **structure.variableCollection** – Collection name.
-// - **structure.variableGroup** – Optional group path.
-// - **config** – approximateColumns (when true, tablet/mobile column values map proportionally to desktop so layouts update easily on smaller viewports), and per viewport (desktop, tablet, mobile): containerWidth, columns, gap, padding. Column count (col-1..col-N) is the viewport with the most columns (e.g. desktop 12 → 12 variables).
-// - **variables** – Function(innerConfig) or map of variable names to { type: "FLOAT", values: { modeName: function(config) => number } }. Creates grid/columns, grid/gap, grid/padding, grid/viewport-width, and grid/col-1..col-max (max = viewport with most columns).
-// - One grid style "Grid" is created (COLUMNS, CENTER) with count, sectionSize (grid/col-1), and gutterSize bound to the collection variables so it responds to Desktop/Tablet/Mobile mode.
+// | Option | Description |
+// |--------|--------------|
+// | collectionName / structure.variableCollection | Collection name. |
+// | structure.variableGroup | Optional group path. |
+// | config.approximateColumns | When true, tablet/mobile column values map proportionally to desktop so layouts update easily on smaller viewports. |
+// | config (desktop, tablet, mobile) | Per viewport: containerWidth, columns, gap, padding. Column count (col-1..col-N) is the viewport with the most columns (e.g. desktop 12 → 12 variables). |
+// | variables | Function(innerConfig) or map of variable names. Creates grid/columns, grid/gap, grid/padding, grid/viewport-width, and grid/col-1..col-max. |
+// | Grid style | One grid style "Grid" is created (COLUMNS, CENTER) with count, sectionSize, and gutterSize bound to the collection variables so it responds to Desktop/Tablet/Mobile mode. |
 // @DOC_END
 
 // Import functions from libraries

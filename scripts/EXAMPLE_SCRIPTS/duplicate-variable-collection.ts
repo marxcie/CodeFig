@@ -7,15 +7,17 @@
 // Finds a collection by name, creates a new collection with the given new name, copies all modes and variables with their values and metadata. No recursive option; run once per copy.
 //
 // ## Config options
-// - **sourceCollectionName** – Exact name of the collection to duplicate.
-// - **newCollectionName** – Name for the new collection.
+// | Option | Description |
+// |--------|--------------|
+// | sourceCollectionName | Exact name of the collection to duplicate. |
+// | newCollectionName | Name for the new collection. |
 // @DOC_END
 
 // @UI_CONFIG_START
 // # Duplicate variable collection
 // Source collection (choose from existing). New name for the copy.
 var sourceCollectionName = 'website V3'; // @options: variableCollections
-var newCollectionName = 'website V4';
+var newCollectionName = ''; // @placeholder="website V4"
 // @UI_CONFIG_END
 
 function duplicateVariableCollection(collection, newName) {
