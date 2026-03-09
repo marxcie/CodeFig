@@ -16,13 +16,16 @@
 // @UI_CONFIG_START
 // # Duplicate variable collection
 // Source collection (choose from existing). New name for the copy.
-var sourceCollectionName = 'website V3'; // @options: variableCollections
+var sourceCollectionName = 'website V3'; // @options: localVariableCollections
 var newCollectionName = ''; // @placeholder="website V4"
 // @UI_CONFIG_END
 
 async function duplicateVariableCollection(collection, newName) {
   var newCollection = figma.variables.createVariableCollection(newName || collection.name + ' Copy');
   
+  if (collection.modes[0]) {
+    newCollection.renameMode(newCollection.modes[0].modeId, collection.modes[0].name);
+  }
   var modesToCopy = collection.modes.slice(1);
   modesToCopy.forEach(function(mode) {
     newCollection.addMode(mode.name);

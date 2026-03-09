@@ -244,6 +244,24 @@ figma.ui.onmessage = (msg) => {
       });
       return;
     }
+    if (optionSource === 'localVariableCollections') {
+      figma.variables.getLocalVariableCollectionsAsync().then((localCollections) => {
+        const names = (localCollections || []).map((c) => c && c.name).filter((n) => n != null && String(n).trim() !== '');
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource || '',
+          options: names
+        });
+      }).catch((err) => {
+        console.error('Backend: localVariableCollections fetch failed', err);
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource || '',
+          options: []
+        });
+      });
+      return;
+    }
     figma.ui.postMessage({
       type: 'OPTIONS',
       optionSource: optionSource || '',

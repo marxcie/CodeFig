@@ -431,6 +431,39 @@ function buildStyleCache(scopeNodes, selectionOnly) {
   });
 }
 
+// On-demand: search connected library collections for a style by name (not in cache).
+// Used when replacement target exists in a library but isn't used in the document.
+async function findLibraryStyleByNameAsync(name, expectedType, styleCache) {
+  if (!figma.teamLibrary || typeof figma.teamLibrary.getAvailableLibraryStyleCollectionsAsync !== 'function') {
+    return null;
+  }
+  try {
+    var collections = await figma.teamLibrary.getAvailableLibraryStyleCollectionsAsync();
+    var maxCollections = 15; // Limit to avoid long scan in files with many libs
+    for (var c = 0; c < Math.min(collections.length, maxCollections); c++) {
+      var libStyles = await figma.teamLibrary.getStylesInLibraryCollectionAsync(collections[c].key);
+      for (var s = 0; s < libStyles.length; s++) {
+        var lib = libStyles[s];
+        if (lib.name === name && (lib.type || 'TEXT') === expectedType) {
+          var imported = await figma.importStyleByKeyAsync(lib.key);
+          if (imported && styleCache) {
+            styleCache.set(styleCacheKey(imported.name, expectedType), {
+              style: imported,
+              type: expectedType,
+              key: lib.key,
+              isLibrary: true
+            });
+          }
+          return imported;
+        }
+      }
+    }
+  } catch (e) {
+    console.log('⚠️ Library style lookup failed for "' + name + '": ' + (e && e.message));
+  }
+  return null;
+}
+
 // Fallback: scan nodes for library styles. When selectionOnly, scans only scopeNodes.
 // Limits nodes to avoid memory overflow with large files.
 function scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly) {
@@ -565,20 +598,8 @@ async function processTextNode(node, styleCache, nodeName, replacements, searchI
         try {
           var currentStyle = await figma.getStyleByIdAsync(segment.textStyleId);
           if (currentStyle) {
-            var newStyle = findReplacementStyle(currentStyle, styleCache, 'TEXT', replacements, searchInVal);
-            
-            // Handle both synchronous and Promise returns
-            if (newStyle && typeof newStyle.then === 'function') {
-              // It's a Promise (library style import) - handle synchronously by waiting
-              // Note: This will block, but we're processing in chunks so it's acceptable
-              try {
-                // For now, skip async imports during chunked processing to avoid blocking
-                // They can be handled in a second pass if needed
-                console.log('⚠️ Skipping library style import for "' + currentStyle.name + '" (async import deferred)');
-              } catch (error) {
-                console.log('❌ Failed to import style: ' + error.message);
-              }
-            } else if (newStyle) {
+            var newStyle = await findReplacementStyle(currentStyle, styleCache, 'TEXT', replacements, searchInVal);
+            if (newStyle) {
               await node.setRangeTextStyleIdAsync(segment.start, segment.end, newStyle.id);
               totalReplacements++;
               console.log('✅ Text: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
@@ -603,13 +624,8 @@ async function processOtherStyles(node, styleCache, nodeName, replacements, sear
     try {
       var currentStyle = await figma.getStyleByIdAsync(node.fillStyleId);
       if (currentStyle) {
-        var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal);
-        
-        // Handle both synchronous and Promise returns
-        if (newStyle && typeof newStyle.then === 'function') {
-          // It's a Promise (library style import) - skip during chunked processing
-          console.log('⚠️ Skipping library style import for "' + currentStyle.name + '" (async import deferred)');
-        } else if (newStyle) {
+        var newStyle = await findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal);
+        if (newStyle) {
           await node.setFillStyleIdAsync(newStyle.id);
           totalReplacements++;
           console.log('✅ Fill: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
@@ -624,13 +640,8 @@ async function processOtherStyles(node, styleCache, nodeName, replacements, sear
     try {
       var currentStyle = await figma.getStyleByIdAsync(node.strokeStyleId);
       if (currentStyle) {
-        var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal);
-        
-        // Handle both synchronous and Promise returns
-        if (newStyle && typeof newStyle.then === 'function') {
-          // It's a Promise (library style import) - skip during chunked processing
-          console.log('⚠️ Skipping library style import for "' + currentStyle.name + '" (async import deferred)');
-        } else if (newStyle) {
+        var newStyle = await findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal);
+        if (newStyle) {
           await node.setStrokeStyleIdAsync(newStyle.id);
           totalReplacements++;
           console.log('✅ Stroke: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
@@ -645,13 +656,8 @@ async function processOtherStyles(node, styleCache, nodeName, replacements, sear
     try {
       var currentStyle = await figma.getStyleByIdAsync(node.effectStyleId);
       if (currentStyle) {
-        var newStyle = findReplacementStyle(currentStyle, styleCache, 'EFFECT', replacements, searchInVal);
-        
-        // Handle both synchronous and Promise returns
-        if (newStyle && typeof newStyle.then === 'function') {
-          // It's a Promise (library style import) - skip during chunked processing
-          console.log('⚠️ Skipping library style import for "' + currentStyle.name + '" (async import deferred)');
-        } else if (newStyle) {
+        var newStyle = await findReplacementStyle(currentStyle, styleCache, 'EFFECT', replacements, searchInVal);
+        if (newStyle) {
           await node.setEffectStyleIdAsync(newStyle.id);
           totalReplacements++;
           console.log('✅ Effect: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
@@ -665,7 +671,7 @@ async function processOtherStyles(node, styleCache, nodeName, replacements, sear
   return totalReplacements;
 }
 
-function findReplacementStyle(currentStyle, styleCache, expectedType, replacements, searchInVal) {
+async function findReplacementStyle(currentStyle, styleCache, expectedType, replacements, searchInVal) {
   if (searchInVal != null && String(searchInVal).trim() !== '') {
     var scopeMatch = matchPattern(currentStyle.name, String(searchInVal).trim(), { exact: false, caseSensitive: false });
     if (!scopeMatch || !scopeMatch.match) {
@@ -697,23 +703,25 @@ function findReplacementStyle(currentStyle, styleCache, expectedType, replacemen
           
           if (styleInfo.isLibrary && styleInfo.key) {
             try {
-              var importedStyle = figma.importStyleByKeyAsync(styleInfo.key);
-              return importedStyle.then(function(importedStyle) {
-                styleCache.set(styleCacheKey(importedStyle.name, expectedType), {
-                  style: importedStyle,
+              var imported = await figma.importStyleByKeyAsync(styleInfo.key);
+              if (imported) {
+                styleCache.set(styleCacheKey(imported.name, expectedType), {
+                  style: imported,
                   type: expectedType,
                   key: styleInfo.key,
                   isLibrary: true
                 });
-                return importedStyle;
-              }).catch(function(importError) {
-                console.log('❌ Failed to import style: ' + importError.message);
-                return null;
-              });
+                return imported;
+              }
             } catch (importError) {
-              console.log('❌ Failed to import style: ' + importError.message);
+              console.log('❌ Failed to import style: ' + (importError && importError.message));
             }
+            return null;
           }
+        } else {
+          // Cache miss: search connected libraries for style by name
+          var libStyle = await findLibraryStyleByNameAsync(newStyleName, expectedType, styleCache);
+          if (libStyle) return libStyle;
         }
       }
     }

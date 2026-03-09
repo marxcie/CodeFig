@@ -11,8 +11,9 @@
 // |--------|--------------|
 // | sourceCollection | Limit to bindings from this collection; empty = all collections. |
 // | targetCollection | Look up replacement variable in this collection; empty = same as source, then any. |
-// | searchFor / replaceWith | Find/replace applied to variable path (group and name). |
+// | searchFor / replaceWith | Find/replace applied to variable path (collection + variable). |
 // | batchReplacement | Multiple "search, replace" lines; overrides searchFor/replaceWith. |
+// | **Replace-all mode** | When source + target are set and search/replace empty: replace all variables from source with same-named vars from target. |
 // @DOC_END
 
 @import { matchPattern } from "@Pattern Matching"
@@ -99,7 +100,7 @@ function parseBatchReplacementString(str) {
   return out;
 }
 
-function buildReplacementsFromConfig() {
+function buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal) {
   var batch = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
   if (typeof batch === 'string' && batch.trim()) {
     batch = parseBatchReplacementString(batch);
@@ -118,6 +119,12 @@ function buildReplacementsFromConfig() {
   var replaceWithVal = typeof replaceWith !== 'undefined' ? replaceWith : '';
   if (searchForVal || replaceWithVal) {
     return [{ find: searchForVal, replace: replaceWithVal }];
+  }
+  // Replace-all mode: source + target set, no search/replace = swap collection for all variables
+  sourceCollectionVal = sourceCollectionVal != null ? String(sourceCollectionVal).trim() : '';
+  targetCollectionVal = targetCollectionVal != null ? String(targetCollectionVal).trim() : '';
+  if (sourceCollectionVal && targetCollectionVal) {
+    return [{ find: sourceCollectionVal, replace: targetCollectionVal }];
   }
   return [];
 }
@@ -156,19 +163,141 @@ function normalizeVariablePath(s) {
   return s.trim().replace(/\s*\/\s*/g, '/');
 }
 
-/** Find variable by name. If targetCollection is set, only that collection; else prefer same as currentCollectionName then any. */
-/** Fallback: if full path not in cache (e.g. Figma stores leaf name only), match by leaf name in same collection when unique. */
-function findReplacementInCache(variableCache, newVariableName, currentCollectionName, targetCollectionVal) {
+/** Parse full path "collection / variable" or "collection/variable" into { collectionName, variableName }. */
+function parseFullPath(fullPath) {
+  var s = String(fullPath || '').trim();
+  var sep = ' / ';
+  var idx = s.indexOf(sep);
+  if (idx !== -1) {
+    return { collectionName: s.slice(0, idx).trim(), variableName: s.slice(idx + sep.length).trim() };
+  }
+  var slashIdx = s.indexOf('/');
+  if (slashIdx !== -1) {
+    return { collectionName: s.slice(0, slashIdx).trim(), variableName: s.slice(slashIdx + 1).trim() };
+  }
+  return { collectionName: '', variableName: s };
+}
+
+/** On-demand: search connected library collections for a variable by collection+name (not in cache). */
+async function findLibraryVariableByNameAsync(collectionName, variableName, variableCache, resolvedType) {
+  if (!figma.teamLibrary || typeof figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync !== 'function') {
+    return null;
+  }
+  try {
+    var collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+    var wantNorm = normalizeVariablePath(getScope(collectionName, variableName));
+    var wantName = normalizeVariablePath(variableName);
+    var wantCollection = normalizeVariablePath(collectionName);
+    var maxCollections = 15;
+    for (var c = 0; c < Math.min(collections.length, maxCollections); c++) {
+      var libVars = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(collections[c].key);
+      var libColNorm = normalizeVariablePath(collections[c].name);
+      for (var v = 0; v < libVars.length; v++) {
+        var lib = libVars[v];
+        var libScope = normalizeVariablePath(getScope(collections[c].name, lib.name));
+        var libNameNorm = normalizeVariablePath(lib.name);
+        var fullMatch = libScope === wantNorm;
+        var nameMatch = libNameNorm === wantName && (wantCollection === '' || libColNorm === wantCollection);
+        if (fullMatch || nameMatch) {
+          var imported = await figma.variables.importVariableByKeyAsync(lib.key);
+          if (imported && resolvedType && imported.resolvedType !== resolvedType) continue;
+          if (imported && variableCache) {
+            var scopeKey = getScope(collections[c].name, lib.name);
+            variableCache.set(scopeKey, { id: imported.id, variable: imported, collectionName: collections[c].name, name: imported.name, isLibrary: true });
+          }
+          return imported;
+        }
+      }
+    }
+  } catch (e) {
+    console.log('⚠️ Library variable lookup failed: ' + (e && e.message));
+  }
+  return null;
+}
+
+/** Properties that support setBoundVariable. layoutGrids and similar are NOT supported. */
+var SUPPORTED_BOUND_PROPERTIES = {
+  height: 1, width: 1, minWidth: 1, maxWidth: 1, minHeight: 1, maxHeight: 1,
+  itemSpacing: 1, paddingLeft: 1, paddingRight: 1, paddingTop: 1, paddingBottom: 1,
+  counterAxisSpacing: 1, gridRowGap: 1, gridColumnGap: 1, paragraphSpacing: 1, paragraphIndent: 1,
+  cornerRadius: 1, topLeftRadius: 1, topRightRadius: 1, bottomLeftRadius: 1, bottomRightRadius: 1,
+  strokeWeight: 1, strokeTopWeight: 1, strokeBottomWeight: 1, strokeLeftWeight: 1, strokeRightWeight: 1,
+  characters: 1, fontFamily: 1, fontSize: 1, fontStyle: 1, fontWeight: 1, letterSpacing: 1, lineHeight: 1,
+  visible: 1, opacity: 1
+};
+
+/** Return true if this property's variable binding comes from the node's style (do not replace). */
+async function isVariableFromStyle(node, property, variableId) {
+  try {
+    if (property === 'fontSize' || property === 'fontWeight' || property === 'lineHeight' || property === 'letterSpacing' || property === 'fontFamily' || property === 'paragraphSpacing' || property === 'paragraphIndent') {
+      if (!node.textStyleId || node.textStyleId === figma.mixed) return false;
+      var style = await figma.getStyleByIdAsync(node.textStyleId);
+      if (style && style.boundVariables && style.boundVariables[property]) {
+        var bid = style.boundVariables[property].id || (style.boundVariables[property][0] && style.boundVariables[property][0].id);
+        if (bid === variableId) return true;
+      }
+    } else if (property === 'fills') {
+      if (!('fillStyleId' in node) || !node.fillStyleId || node.fillStyleId === figma.mixed) return false;
+      var fillStyle = await figma.getStyleByIdAsync(node.fillStyleId);
+      if (fillStyle && fillStyle.boundVariables) {
+        var colorBindings = fillStyle.boundVariables.color || fillStyle.boundVariables.paints;
+        if (colorBindings) {
+          var arr = Array.isArray(colorBindings) ? colorBindings : [colorBindings];
+          for (var i = 0; i < arr.length; i++) {
+            var b = arr[i];
+            var pid = (b && b.id) || (b && b[0] && b[0].id);
+            if (pid === variableId) return true;
+          }
+        }
+      }
+    } else if (property === 'strokes') {
+      if (!('strokeStyleId' in node) || !node.strokeStyleId || node.strokeStyleId === figma.mixed) return false;
+      var strokeStyle = await figma.getStyleByIdAsync(node.strokeStyleId);
+      if (strokeStyle && strokeStyle.boundVariables) {
+        var strokeBindings = strokeStyle.boundVariables.color || strokeStyle.boundVariables.strokes;
+        if (strokeBindings) {
+          var sarr = Array.isArray(strokeBindings) ? strokeBindings : [strokeBindings];
+          for (var j = 0; j < sarr.length; j++) {
+            var sb = sarr[j];
+            var sid = (sb && sb.id) || (sb && sb[0] && sb[0].id);
+            if (sid === variableId) return true;
+          }
+        }
+      }
+    } else if (property === 'effects') {
+      if (!('effectStyleId' in node) || !node.effectStyleId || node.effectStyleId === figma.mixed) return false;
+      var effectStyle = await figma.getStyleByIdAsync(node.effectStyleId);
+      if (effectStyle && effectStyle.boundVariables && effectStyle.boundVariables.effects) {
+        var effects = effectStyle.boundVariables.effects;
+        for (var k = 0; k < effects.length; k++) {
+          var eid = (effects[k] && effects[k].id) || (effects[k] && effects[k][0] && effects[k][0].id);
+          if (eid === variableId) return true;
+        }
+      }
+    }
+  } catch (e) { }
+  return false;
+}
+
+/** Find variable by name or full path. If targetCollection is set, only that collection; else prefer same as currentCollectionName then any. */
+/** newFullPathOrName: "Collection / variable" or "variable" (variable-only). */
+function findReplacementInCache(variableCache, newFullPathOrName, currentCollectionName, targetCollectionVal) {
   var target = targetCollectionVal != null ? String(targetCollectionVal).trim() : '';
-  var want = normalizeVariablePath(newVariableName);
+  var parsed = parseFullPath(newFullPathOrName);
+  var searchCollection = parsed.collectionName || currentCollectionName;
+  var searchVariable = parsed.variableName || newFullPathOrName;
+  var wantFull = normalizeVariablePath(getScope(searchCollection, searchVariable));
+  var wantName = normalizeVariablePath(searchVariable);
   var inTarget = null;
   var sameCollection = null;
   var anyMatch = null;
   variableCache.forEach(function(info) {
-    if (normalizeVariablePath(info.name) !== want) return;
+    var infoFull = normalizeVariablePath(getScope(info.collectionName, info.name));
+    var infoName = normalizeVariablePath(info.name);
+    if (infoFull !== wantFull && infoName !== wantName) return;
     if (target !== '' && info.collectionName === target) {
       inTarget = info;
-    } else if (info.collectionName === currentCollectionName) {
+    } else if (info.collectionName === searchCollection || info.collectionName === currentCollectionName) {
       sameCollection = info;
     } else if (!anyMatch) {
       anyMatch = info;
@@ -176,16 +305,13 @@ function findReplacementInCache(variableCache, newVariableName, currentCollectio
   });
   var result = inTarget || sameCollection || anyMatch;
   if (result) return result;
-  // Fallback: bound variable may be "color 1/red" while cache has name "red" (leaf only) in same collection
-  var slashIdx = want.lastIndexOf('/');
-  if (slashIdx === -1) return null;
-  var leafName = want.slice(slashIdx + 1).trim();
+  var leafName = wantName.lastIndexOf('/') !== -1 ? wantName.slice(wantName.lastIndexOf('/') + 1).trim() : wantName;
   if (!leafName) return null;
   var leafMatches = [];
   variableCache.forEach(function(info) {
     if (normalizeVariablePath(info.name) !== leafName) return;
     if (target !== '' && info.collectionName !== target) return;
-    if (target === '' && info.collectionName !== currentCollectionName) return;
+    if (target === '' && info.collectionName !== searchCollection && info.collectionName !== currentCollectionName) return;
     leafMatches.push(info);
   });
   return leafMatches.length === 1 ? leafMatches[0] : null;
@@ -200,14 +326,14 @@ async function findAndReplaceVariables() {
     return;
   }
   
-  var replacements = buildReplacementsFromConfig();
-  if (replacements.length === 0) {
-    figma.notify('Configure searchFor/replaceWith or batchReplacement first');
-    return;
-  }
-  
   var sourceCollectionVal = (typeof sourceCollection !== 'undefined' && sourceCollection != null) ? String(sourceCollection).trim() : '';
   var targetCollectionVal = (typeof targetCollection !== 'undefined' && targetCollection != null) ? String(targetCollection).trim() : '';
+  
+  var replacements = buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal);
+  if (replacements.length === 0) {
+    figma.notify('Configure searchFor/replaceWith, batchReplacement, or source+target collection');
+    return;
+  }
   
   console.log('=== Replace Variables ===');
   console.log('Source collection:', sourceCollectionVal || '(all)');
@@ -283,6 +409,11 @@ async function findAndReplaceVariables() {
       var binding = node.boundVariables[property];
       
       if (!binding) continue;
+      // Skip layoutGrids and other properties that don't support setBoundVariable
+      if (property !== 'fills' && property !== 'strokes' && property !== 'effects' &&
+          !SUPPORTED_BOUND_PROPERTIES[property]) {
+        continue;
+      }
       
       var bindingArray = Array.isArray(binding) ? binding : [binding];
       
@@ -311,48 +442,55 @@ async function findAndReplaceVariables() {
           if (!bindingInSourceCollection(currentCollectionName, sourceCollectionVal)) {
             continue;
           }
+
+          var variableId = currentVariable.id;
+          if (await isVariableFromStyle(node, property, variableId)) {
+            console.log('  ⏭️ Skipping (variable comes from style):', currentVariable.name);
+            skippedCount++;
+            continue;
+          }
           
           console.log('Found bound variable:', currentVariable.name, 'from collection:', currentCollectionName);
           
-          // Use normalized path for match/replace so "color 2 / red" and "color 2/red" behave the same
-          var normalizedCurrentName = normalizeVariablePath(currentVariable.name);
+          // Apply find/replace to full path "collection / variable" so collection names (e.g. v5→v4) work
+          var fullPath = getScope(currentCollectionName, currentVariable.name);
+          var normalizedFullPath = normalizeVariablePath(fullPath);
           var matchedOperation = null;
-          var newVariableName = null;
+          var newFullPath = null;
           
           for (var opIndex = 0; opIndex < replacements.length; opIndex++) {
             var operation = replacements[opIndex];
             var normalizedFind = normalizeVariablePath(operation.find);
             var normalizedReplace = normalizeVariablePath(operation.replace);
             if (!normalizedFind && !normalizedReplace) continue;
-            if (normalizedCurrentName.indexOf(normalizedFind) === -1) continue;
-            newVariableName = replaceAllInName(normalizedCurrentName, normalizedFind, normalizedReplace);
-            if (newVariableName === normalizedCurrentName) continue;
+            if (normalizedFullPath.indexOf(normalizedFind) === -1) continue;
+            newFullPath = replaceAllInName(normalizedFullPath, normalizedFind, normalizedReplace);
+            if (newFullPath === normalizedFullPath) continue;
             matchedOperation = operation;
             break;
           }
           
-          if (!matchedOperation || newVariableName == null) {
+          if (!matchedOperation || newFullPath == null) {
             console.log('  No matching operation');
             continue;
           }
           
-          console.log('  Match! Looking for replacement:', newVariableName);
+          var parsed = parseFullPath(newFullPath);
+          var newCollectionName = parsed.collectionName || currentCollectionName;
+          var newVariableName = parsed.variableName || newFullPath;
+          console.log('  Match! Looking for replacement:', newFullPath);
           
-          var replacementInfo = findReplacementInCache(variableCache, newVariableName, currentCollectionName, targetCollectionVal);
+          var replacementInfo = findReplacementInCache(variableCache, newFullPath, currentCollectionName, targetCollectionVal);
           
           if (!replacementInfo) {
-            console.log('  ❌ Replacement variable not found:', newVariableName);
-            // Debug: list variable names in same collection that share the same normalized prefix
-            var wantNorm = normalizeVariablePath(String(newVariableName));
-            var prefixNorm = wantNorm.indexOf('/') !== -1 ? wantNorm.split('/')[0] : wantNorm;
-            var namesInCollection = [];
-            variableCache.forEach(function(info) {
-              var n = normalizeVariablePath(info.name);
-              if (info.collectionName === currentCollectionName && (n === prefixNorm || n.indexOf(prefixNorm + '/') === 0))
-                namesInCollection.push(info.name);
-            });
-            if (namesInCollection.length > 0)
-              console.log('  (In same collection, names starting with "' + prefixNorm + '":', namesInCollection.slice(0, 15).join(', ') + (namesInCollection.length > 15 ? '...' : '') + ')');
+            var libVar = await findLibraryVariableByNameAsync(newCollectionName, newVariableName, variableCache, currentVariable.resolvedType);
+            if (libVar) {
+              replacementInfo = { variable: libVar, collectionName: newCollectionName, name: libVar.name, isLibrary: true };
+            }
+          }
+          
+          if (!replacementInfo) {
+            console.log('  ❌ Replacement variable not found:', newFullPath);
             skippedCount++;
             continue;
           }
@@ -461,8 +599,8 @@ async function findAndReplaceVariables() {
                 replacementCount++;
               }
             }
-            // Handle all other properties (direct binding; pass Variable object for documentAccess: dynamic-page)
-            else {
+            // Handle other supported properties (direct binding)
+            else if (SUPPORTED_BOUND_PROPERTIES[property]) {
               node.setBoundVariable(property, replacementVariable);
               console.log('  ✅ Replaced property:', property);
               replacementCount++;

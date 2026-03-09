@@ -23,7 +23,7 @@ var searchFor = ""; // @placeholder="Regular"
 var selectMixed = false; // Include elements with mixed style/variable usage (e.g. text with bold + regular)
 //
 // ---
-var selectionOnly = false; // Search within selection only; otherwise search whole page
+var selectionOnly = true; // Search within selection only; otherwise search whole page
 // @UI_CONFIG_END
 
 // @import { traverseNodes } from "@Core Library"

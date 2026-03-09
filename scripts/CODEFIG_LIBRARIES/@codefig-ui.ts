@@ -36,7 +36,7 @@
 // - **Static list (pipe-separated):** e.g. `var selectedType = 'frame'; // @options: frame|autoLayout`  
 //   The token after `@options:` contains `|`, so it is split by `|`, trimmed, and used as the option list. The Config tab shows a dropdown with those options; script mode keeps the line as editable code. Round-trip serialization preserves the list as `opt1|opt2|...`.
 // - **Dynamic source (single word):** e.g. `var sourceCollectionName = 'website V3'; // @options: variableCollections`  
-//   The token is a single word (no `|`), so the plugin fills the dropdown at runtime. Supported dynamic sources: **variableCollections**.
+//   The token is a single word (no `|`), so the plugin fills the dropdown at runtime. Supported dynamic sources: **variableCollections** (local + remote, with “all” option), **localVariableCollections** (local only, no “all”—use when selecting a single collection to duplicate).
 //
 // **Rule:** If the token after `@options:` contains a pipe (`|`), it is treated as a static list; otherwise as a dynamic source name.
 //
