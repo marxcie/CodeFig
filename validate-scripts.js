@@ -291,7 +291,7 @@ function validateImports(scripts) {
   
   const libraryScripts = scripts.filter(script => 
     script.filename === '@core-library.ts' ||
-    script.filename === '@custom-helpers.ts' ||
+    script.filename === '@codefig-ui.ts' ||
     script.filename === '@math-helpers.ts' ||
     script.filename === '@variables.ts' ||
     script.filename === '@infopanel.ts' ||
@@ -337,6 +337,9 @@ function validateImports(scripts) {
     } else if (script.filename === '@styles.ts') {
       scriptLibrary.set('@Styles', functions);
       scriptLibrary.set('@styles', functions);
+    } else if (script.filename === '@codefig-ui.ts') {
+      scriptLibrary.set('CodeFigUI', functions);
+      scriptLibrary.set('@codefig-ui', functions);
     }
   });
   

@@ -13,8 +13,10 @@ function forwardToConsoleBridge(level: 'log' | 'warn' | 'error', args: any[]) {
   } catch (_) { /* UI may not be ready */ }
 }
 
-// Debug logging functions to remove source references
+// Debug logging: set true for verbose backend logs; console bridge and script logs unchanged
+const DEBUG_BACKEND = false;
 function debugLog(message: string, ...args: any[]) {
+  if (!DEBUG_BACKEND) return;
   const log = console.log.bind(console);
   setTimeout(() => log('%cCodeFig: ' + message, 'color: #0066cc; font-weight: bold;', ...args), 0);
   forwardToConsoleBridge('log', [message, ...args]);
@@ -202,9 +204,14 @@ figma.ui.onmessage = (msg) => {
       figma.clientStorage.getAsync('userScripts'),
       figma.clientStorage.getAsync('lastOpenedScript')
     ]).then(([scripts, lastOpenedScript]) => {
+      const items = (scripts || []).map((s: any) => ({
+        name: s.name,
+        code: s.code,
+        type: (s.name && String(s.name).startsWith('@')) ? 'library' : 'user'
+      }));
       figma.ui.postMessage({
         type: 'LIST',
-        items: scripts || [],
+        items,
         lastOpenedScript: lastOpenedScript || null
       });
     });
@@ -213,15 +220,34 @@ figma.ui.onmessage = (msg) => {
 
   if (msg.type === 'GET_OPTIONS') {
     const optionSource = msg.optionSource;
-    let options: string[] = [];
     if (optionSource === 'variableCollections') {
-      const collections = figma.variables.getLocalVariableCollections();
-      options = collections.map((c) => c.name);
+      Promise.all([
+        figma.variables.getLocalVariableCollectionsAsync(),
+        figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync().catch(() => [])
+      ]).then(([localCollections, libraryCollections]) => {
+        const localNames = (localCollections || []).map((c) => c && c.name).filter((n) => n != null && String(n).trim() !== '');
+        const libraryNames = (libraryCollections || []).map((c) => c && c.name).filter((n) => n != null && String(n).trim() !== '');
+        const names = [...new Set([...localNames, ...libraryNames])];
+        const options = [''].concat(names);
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource || '',
+          options
+        });
+      }).catch((err) => {
+        console.error('Backend: variableCollections fetch failed', err);
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource || '',
+          options: []
+        });
+      });
+      return;
     }
     figma.ui.postMessage({
       type: 'OPTIONS',
       optionSource: optionSource || '',
-      options
+      options: []
     });
     return;
   }
@@ -247,7 +273,7 @@ figma.ui.onmessage = (msg) => {
         const scriptData = {
           name: msg.name,
           code: msg.code,
-          type: 'user'
+          type: (msg.name && String(msg.name).startsWith('@')) ? 'library' : 'user'
         };
 
         if (existingIndex >= 0) {

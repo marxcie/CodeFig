@@ -310,12 +310,19 @@ var analyzeVariables = function() {
     console.log('Found', analysis.usedVariables.size, 'variables in use');
   }
   
-  // Check style usage if enabled
+  // Check style usage if enabled (async APIs for documentAccess: dynamic-page)
   if (checkStyleUsage) {
     console.log('Checking styles for variable usage...');
+    return Promise.all([
+      figma.getLocalTextStylesAsync(),
+      figma.getLocalPaintStylesAsync(),
+      figma.getLocalEffectStylesAsync()
+    ]).then(function(results) {
+      var textStyles = results[0];
+      var paintStyles = results[1];
+      var effectStyles = results[2];
     
     // Check text styles
-    var textStyles = figma.getLocalTextStyles();
     for (var i = 0; i < textStyles.length; i++) {
       var style = textStyles[i];
       if (style.boundVariables) {
@@ -349,7 +356,6 @@ var analyzeVariables = function() {
     }
     
     // Check paint styles
-    var paintStyles = figma.getLocalPaintStyles();
     for (var i = 0; i < paintStyles.length; i++) {
       var style = paintStyles[i];
       if (style.boundVariables && style.boundVariables.paints) {
@@ -384,7 +390,6 @@ var analyzeVariables = function() {
     }
     
     // Check effect styles
-    var effectStyles = figma.getLocalEffectStyles();
     for (var i = 0; i < effectStyles.length; i++) {
       var style = effectStyles[i];
       if (style.boundVariables && style.boundVariables.effects) {
@@ -419,11 +424,17 @@ var analyzeVariables = function() {
     }
     
     console.log('Style checking complete');
+    
+    return finishAnalysis();
+    });
   }
   
+  return finishAnalysis();
+  
+  async function finishAnalysis() {
   // Get all variables and collections for detailed analysis
-  var localCollections = figma.variables.getLocalVariableCollections();
-  var localVariables = figma.variables.getLocalVariables();
+  var localCollections = await figma.variables.getLocalVariableCollectionsAsync();
+  var localVariables = await figma.variables.getLocalVariablesAsync();
   
   console.log('Analyzing', localVariables.length, 'local variables in', localCollections.length, 'collections');
   
@@ -462,6 +473,7 @@ var analyzeVariables = function() {
   }
   
   return analysis;
+  }
 };
 
 // ===== RESULT GENERATION =====
@@ -661,26 +673,27 @@ var createVariableResult = function(variableInfo) {
 
 console.log('=== VARIABLE INSPECTOR ===');
 
-var analysis = analyzeVariables();
-var results = generateInspectorResults(analysis);
+analyzeVariables().then(function(analysis) {
+  var results = generateInspectorResults(analysis);
 
-if (results.length > 0) {
-  var title = 'Variable Inspector';
-  if (onlyUsedVariables) {
-    title += ': ' + analysis.usedVariables.size + ' used variables';
-  } else {
-    title += ': ' + analysis.allVariables.size + ' total variables';
-  }
-  
-  displayResults({
-    title: title,
-    results: results,
-    type: 'info'
-  });
+  if (results.length > 0) {
+    var title = 'Variable Inspector';
+    if (onlyUsedVariables) {
+      title += ': ' + analysis.usedVariables.size + ' used variables';
+    } else {
+      title += ': ' + analysis.allVariables.size + ' total variables';
+    }
+    
+    displayResults({
+      title: title,
+      results: results,
+      type: 'info'
+    });
   
   console.log('Variable inspector results displayed');
   console.log('Click on any variable to select all nodes using it');
   console.log('Variables marked with ❌ or ⚠️ may need attention');
-} else {
-  figma.notify('No variables found to inspect');
-}
+  } else {
+    figma.notify('No variables found to inspect');
+  }
+});

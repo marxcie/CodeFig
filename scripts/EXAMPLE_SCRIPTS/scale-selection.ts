@@ -9,57 +9,57 @@
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
-// | method | "scale" or "resize". |
+// | scaleOrResize | "scale" or "resize". |
 // | scaledFactor | Uniform scale (number or { min, max } for per-element random). |
 // | scaledFactorX / scaledFactorY | Per-axis scale factors. |
 // | scaledWidth / scaledHeight | Target dimensions in px (number or { min, max }). |
 // | aspectRatio | Target ratio, e.g. "16:9", "1:1"; use with one dimension or one factor. |
 // @DOC_END
 
-// CONFIGURATION OPTIONS
-// Choose your scaling method and parameters below. Uncomment the options you want to use.
-// 
-// SCALING METHODS:
-// - SCALE: Transforms elements while maintaining their visual appearance (like scaling in Figma)
-// - RESIZE: Changes dimensions without scaling content (like resizing a frame)
-//
-// SCALING PARAMETERS (choose ONE group):
-// 1. Uniform scaling: scaledFactor
-// 2. Independent scaling: scaledFactorX + scaledFactorY  
-// 3. Dimension-based: scaledWidth + scaledHeight
-// 4. Single dimension + aspect ratio: scaledWidth + aspectRatio OR scaledHeight + aspectRatio
-// 5. Single factor + aspect ratio: scaledFactorX + aspectRatio OR scaledFactorY + aspectRatio
-//
-// ASPECT RATIO: Use "3:4", "16:9", "1:1" format to force target aspect ratio
-// NOTE: scaledWidth/scaledHeight cannot be combined with scaledFactor/scaledFactorX/scaledFactorY
-//
-// RANDOM RANGES: Use { min: X, max: Y } to apply a different random value to each element
-// Examples:
-//   var scaledFactor = { min: 0.5, max: 1.5 };
-//   var scaledWidth = { min: 200, max: 500 };
-//   var scaledFactorX = { min: 0.8, max: 1.2 };
+// @UI_CONFIG_START
+// # Method
+var scaleOrResize = "scale"; // @options: scale|resize @radio
+var method = "uniform"; // @options: uniform|factorXY|widthHeight|widthAspect|heightAspect|factorXAspect|factorYAspect
 
-// method = "scale" or "resize" - how to transform the elements
-// scaledFactor = Uniform scaling factor (number or { min, max })
-// scaledFactorX = X-axis scaling factor (number or { min, max })
-// scaledFactorY = Y-axis scaling factor (number or { min, max })
-// scaledWidth = Target width in pixels (number or { min, max })
-// scaledHeight = Target height in pixels (number or { min, max })
-// aspectRatio = Target aspect ratio (e.g., "3:4", "16:9", "1:1") - scales to this ratio
+// ## Parameters
+var scaledFactor = 0.8; // @showWhen: method=uniform
+var scaledFactorX = 0.8; // @showWhen: method=factorXY|factorXAspect
+var scaledFactorY = 0.8; // @showWhen: method=factorXY|factorYAspect
+var scaledWidth = 320; // @showWhen: method=widthHeight|widthAspect
+var scaledHeight = 240; // @showWhen: method=widthHeight|heightAspect
+var aspectRatio = "16:9"; // @showWhen: method=widthAspect|heightAspect|factorXAspect|factorYAspect
+// @UI_CONFIG_END
 
-// @CONFIG_START
-var method = "scale";
-var scaledFactor = 0.8;
-// var scaledFactorX = 0.8;
-// var scaledFactorY = 0.8;
-// var scaledWidth = 320;
-// var scaledHeight = 240;
-// var aspectRatio = "16:9";
-
-// Examples with random ranges:
-// var scaledFactor = { min: 0.5, max: 1.5 }; // Each element gets a random scale between 0.5x and 1.5x
-// var scaledWidth = { min: 200, max: 500 }; // Each element gets a random width between 200px and 500px
-// @CONFIG_END
+// Apply method: clear unused params so existing logic uses only the active group
+(function applymethod() {
+  var u = undefined;
+  switch (method) {
+    case "uniform":
+      scaledFactorX = scaledFactorY = scaledWidth = scaledHeight = aspectRatio = u;
+      break;
+    case "factorXY":
+      scaledFactor = scaledWidth = scaledHeight = aspectRatio = u;
+      break;
+    case "widthHeight":
+      scaledFactor = scaledFactorX = scaledFactorY = aspectRatio = u;
+      break;
+    case "widthAspect":
+      scaledFactor = scaledFactorX = scaledFactorY = scaledHeight = u;
+      break;
+    case "heightAspect":
+      scaledFactor = scaledFactorX = scaledFactorY = scaledWidth = u;
+      break;
+    case "factorXAspect":
+      scaledFactor = scaledFactorY = scaledWidth = scaledHeight = u;
+      break;
+    case "factorYAspect":
+      scaledFactor = scaledFactorX = scaledWidth = scaledHeight = u;
+      break;
+    default:
+      method = "uniform";
+      scaledFactorX = scaledFactorY = scaledWidth = scaledHeight = aspectRatio = u;
+  }
+})();
 
 // Random range helper function
 function random(min, max) {
@@ -158,9 +158,9 @@ function breakDownVariablesAndStyles(node) {
 
 // Validation function to ensure mutually exclusive options
 function validateScalingOptions() {
-  // Validate method
-  if (method !== "scale" && method !== "resize") {
-    throw new Error("method must be either 'scale' or 'resize'");
+  // Validate scaleOrResize
+  if (scaleOrResize !== "scale" && scaleOrResize !== "resize") {
+    throw new Error("scaleOrResize must be either 'scale' or 'resize'");
   }
   
   var hasUniformFactor = typeof scaledFactor !== 'undefined' && scaledFactor !== null;
@@ -183,7 +183,7 @@ function validateScalingOptions() {
     throw new Error("scaledFactorX + scaledFactorY cannot be used with scaledWidth or scaledHeight");
   }
   
-  // At least one scaling method must be specified
+  // At least one scaling scaleOrResize must be specified
   if (!hasUniformFactor && !hasFactorX && !hasFactorY && !hasWidth && !hasHeight) {
     throw new Error("At least one scaling option must be specified");
   }
@@ -205,7 +205,7 @@ function calculateScaling(node) {
   // Parse aspect ratio if provided
   var targetAspectRatio = typeof aspectRatio !== 'undefined' ? parseAspectRatio(aspectRatio) : null;
   
-  // Determine scaling method based on configuration
+  // Determine scaling scaleOrResize based on configuration
   if (resolvedScaledFactor !== null) {
     // Uniform scaling
     newWidth = originalWidth * resolvedScaledFactor;
@@ -331,8 +331,8 @@ function resizeIndividually(node) {
 try {
   validateScalingOptions();
   
-  // Choose the appropriate transformation method
-  var transformFunction = method === "resize" ? resizeIndividually : scaleIndividually;
+  // Choose the appropriate transformation scaleOrResize
+  var transformFunction = scaleOrResize === "resize" ? resizeIndividually : scaleIndividually;
 
 figma.currentPage.selection.forEach(function(node) {
     transformFunction(node);
@@ -340,7 +340,7 @@ figma.currentPage.selection.forEach(function(node) {
   
   // Generate appropriate notification message
   var targetAspectRatio = typeof aspectRatio !== 'undefined' ? parseAspectRatio(aspectRatio) : null;
-  var action = method === "resize" ? "Resized" : "Scaled";
+  var action = scaleOrResize === "resize" ? "Resized" : "Scaled";
   var message = action + ' ' + figma.currentPage.selection.length + ' items';
   
   if (typeof scaledFactor !== 'undefined' && scaledFactor !== null) {
@@ -382,7 +382,7 @@ figma.currentPage.selection.forEach(function(node) {
     }
   }
   
-  message += ' (' + method + ' method)';
+  message += ' (' + scaleOrResize + ' method)';
   figma.notify(message);
 } catch (error) {
   figma.notify('Error: ' + error.message);

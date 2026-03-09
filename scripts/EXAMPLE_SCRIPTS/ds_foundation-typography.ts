@@ -270,9 +270,11 @@ function calculateFluidLetterSpacing(scaleIndex, totalSteps, viewport, config) {
   return Math.round(letterSpacing * 100) / 100;
 }
 
-// Helper: variable name prefix (no leading slash when group is empty — Figma rejects names like "/md/font-size")
+// Helper: variable name prefix (no leading slash or empty path — Figma rejects names like "/md/font-size" or "//3xs/font-size")
 function variableNamePrefix(group) {
-  return group ? group + '/' : '';
+  if (!group || typeof group !== 'string') return '';
+  var trimmed = group.replace(/^\//, '').replace(/\/$/, '');
+  return trimmed ? trimmed + '/' : '';
 }
 
 // Round value to grid (8, 4, or 2 pt). Returns value unchanged if gridSize is falsy or <= 0.
@@ -444,73 +446,66 @@ var typographyConfig = {
 // CORE FUNCTIONS
 // ========================================
 
-function createOrUpdateCollection(config) {
+async function createOrUpdateCollection(config) {
   console.log('=== ADVANCED TYPOGRAPHY SYSTEM MANAGER ===');
   var collectionName = config.config.structure.variableCollection;
   var groupName = config.config.structure.variableGroup;
   console.log('Processing collection: ' + collectionName + ' (group: ' + groupName + ')');
   
-  // Get or create collection using imported function
-  var collection = getOrCreateCollection(collectionName);
+  var collection = await getOrCreateCollection(collectionName);
   
-  // Extract modes from variable values or use default (imported function)
   var modes = extractModes({variables: config.variables});
   console.log('Detected modes: ' + modes.join(', '));
   
-  // Setup modes (imported function)
   setupModes(collection, modes);
   
-  // Process all variables with the same responsive modes (Mobile, Tablet, Desktop)
-  var stats = processVariables(collection, config.variables, config.config, modes);
+  var stats = await processVariables(collection, config.variables, config.config, modes);
   
-  // Create text styles if enabled
   var styleStats = {created: 0, updated: 0};
+
+  function finishTypographySummary(styleStats) {
+    console.log('=== TYPOGRAPHY SYSTEM SUMMARY ===');
+    console.log('Collection: ' + collectionName);
+    console.log('Variables created: ' + stats.created);
+    console.log('Variables updated: ' + stats.updated);
+    console.log('Variables skipped: ' + stats.skipped);
+    console.log('Text styles created: ' + styleStats.created);
+    console.log('Text styles updated: ' + styleStats.updated);
+    if (config.config.debugScaleJson) {
+      var viewport = Object.keys(config.config.fontSizes)[0] || 'desktop';
+      console.log('Generated scales (type × ease) for viewport: ' + viewport);
+      console.log(JSON.stringify(generateScaleJson(config.config, viewport), null, 2));
+    }
+    return { collection: collection, stats: stats, styleStats: styleStats };
+  }
+
   if (config.config.styles.createAndUpdateStyles) {
     console.log('Creating/updating text styles...');
-    styleStats = createOrUpdateTextStyles(config, collection);
+    return createOrUpdateTextStyles(config, collection).then(function(styleStats) {
+      console.log('Creating typography overview frames...');
+      return createOverviewFrames(config, collection).then(function() {
+        return finishTypographySummary(styleStats);
+      });
+    });
   }
-
-  // Create overview frames for viewport preview
   console.log('Creating typography overview frames...');
-  createOverviewFrames(config, collection);
-
-  console.log('=== TYPOGRAPHY SYSTEM SUMMARY ===');
-  console.log('Collection: ' + collectionName);
-  console.log('Variables created: ' + stats.created);
-  console.log('Variables updated: ' + stats.updated);
-  console.log('Variables skipped: ' + stats.skipped);
-  console.log('Text styles created: ' + styleStats.created);
-  console.log('Text styles updated: ' + styleStats.updated);
-
-  if (config.config.debugScaleJson) {
-    var viewport = Object.keys(config.config.fontSizes)[0] || 'desktop';
-    console.log('Generated scales (type × ease) for viewport: ' + viewport);
-    console.log(JSON.stringify(generateScaleJson(config.config, viewport), null, 2));
-  }
-  
-  return {
-    collection: collection,
-    stats: stats,
-    styleStats: styleStats
-  };
+  return createOverviewFrames(config, collection).then(function() {
+    return finishTypographySummary(styleStats);
+  });
 }
 
 // Function to create or update text styles using the variables
 function createOrUpdateTextStyles(config, collection) {
   var stats = {created: 0, updated: 0};
-  var existingStyles = figma.getLocalTextStyles();
-  
-  
+  return figma.getLocalTextStylesAsync().then(async function(existingStyles) {
+  var variableList = await Promise.all(collection.variableIds.map(function(id) { return figma.variables.getVariableByIdAsync(id); }));
   try {
-    // Create styles for each font scale and weight combination
     config.config.fontScale.forEach(function(scaleName) {
       Object.keys(config.config.fontWeights).forEach(function(weightName) {
-        // Generate style name using the naming pattern
         var styleName = config.config.styles.styleNaming
           .replace('{$fontScale}', scaleName)
           .replace('{$fontWeight}', weightName);
         
-        // Check if style already exists
         var existingStyle = existingStyles.find(function(style) {
           return style.name === styleName;
         });
@@ -529,32 +524,18 @@ function createOrUpdateTextStyles(config, collection) {
           stats.created++;
         }
         
-        // Find the corresponding variables in the collection (same naming as generateTypographyVariables)
         var namePrefix = variableNamePrefix(config.config.structure.variableGroup);
-        var fontSizeVar = collection.variableIds
-          .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === namePrefix + scaleName + '/font-size'; });
+        var fontSizeVar = variableList.find(function(v) { return v && v.name === namePrefix + scaleName + '/font-size'; });
         
-        var lineHeightVar = collection.variableIds
-          .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === namePrefix + scaleName + '/line-height'; });
+        var lineHeightVar = variableList.find(function(v) { return v && v.name === namePrefix + scaleName + '/line-height'; });
         
-        var letterSpacingVar = collection.variableIds
-          .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === namePrefix + scaleName + '/letter-spacing'; });
+        var letterSpacingVar = variableList.find(function(v) { return v && v.name === namePrefix + scaleName + '/letter-spacing'; });
         
-        // Look for both numeric font weight and font style variables
-        var fontWeightVar = collection.variableIds
-          .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === namePrefix + 'font-weight/' + weightName; });
+        var fontWeightVar = variableList.find(function(v) { return v && v.name === namePrefix + 'font-weight/' + weightName; });
           
-        var fontStyleVar = collection.variableIds
-          .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === namePrefix + 'font-style/' + weightName; });
+        var fontStyleVar = variableList.find(function(v) { return v && v.name === namePrefix + 'font-style/' + weightName; });
         
-        var fontFamilyVar = collection.variableIds
-          .map(function(id) { return figma.variables.getVariableById(id); })
-          .find(function(v) { return v && v.name === namePrefix + 'font-family/primary'; });
+        var fontFamilyVar = variableList.find(function(v) { return v && v.name === namePrefix + 'font-family/primary'; });
         
         // Apply variables to the text style
         if (fontSizeVar) {
@@ -600,6 +581,7 @@ function createOrUpdateTextStyles(config, collection) {
   }
   
   return stats;
+  });
 }
 
 // Map numeric font weight to Figma style name for loading font
@@ -697,7 +679,6 @@ function createOverviewFrames(config, collection) {
   var viewportNames = Object.keys(config.config.fontSizes);
   var fontFamily = config.config.fontFamily;
   var styleNaming = config.config.styles.styleNaming || '{$fontScale}/{$fontWeight}';
-  var existingStyles = figma.getLocalTextStyles();
   var weightNames = Object.keys(config.config.fontWeights);
   var scalingRoundingLabel = getScalingRoundingLabel(config.config);
 
@@ -709,7 +690,8 @@ function createOverviewFrames(config, collection) {
     return figma.loadFontAsync({ family: fontFamily, style: styleName });
   });
 
-  return Promise.all(fontLoads).then(function() {
+  return Promise.all(fontLoads.concat([figma.getLocalTextStylesAsync()])).then(function(results) {
+    var existingStyles = results[results.length - 1];
     var parentFrame = figma.createFrame();
     parentFrame.name = 'Typography Overview - ' + collectionName + ' (' + scalingRoundingLabel + ')';
     parentFrame.layoutMode = 'HORIZONTAL';
@@ -800,29 +782,26 @@ function createOverviewFrames(config, collection) {
 // EXECUTION
 // ========================================
 
-try {
-  var result = createOrUpdateCollection(typographyConfig);
+createOrUpdateCollection(typographyConfig).then(function(result) {
   var message = '✅ Typography: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' updated';
-  if (result.styleStats.created > 0 || result.styleStats.updated > 0) {
+  if (result.styleStats && (result.styleStats.created > 0 || result.styleStats.updated > 0)) {
     message += ', ' + result.styleStats.created + ' styles created, ' + result.styleStats.updated + ' styles updated';
   }
   figma.notify(message);
-} catch (error) {
+}).catch(function(error) {
   console.error('Error:', error);
   figma.notify('❌ Error: ' + error.message);
-}
+});
 
 // ========================================
 // SIMPLE API FOR CUSTOM CONFIGURATIONS
 // ========================================
 
 // Simple function to create a complete typography system with custom config
-function createTypographySystem(customConfig) {
+async function createTypographySystem(customConfig) {
   try {
-    // Generate variables in the correct format for processVariables
     var typographyVariables = {};
     
-    // Generate font size variables
     customConfig.fontScale.forEach(function(scaleName, index) {
       var viewportNames = Object.keys(customConfig.fontSizes);
       var totalSteps = customConfig.fontScale.length;
@@ -855,11 +834,10 @@ function createTypographySystem(customConfig) {
       });
     });
     
-    // Create collection and process variables
-    var collection = getOrCreateCollection(customConfig.structure.variableCollection);
+    var collection = await getOrCreateCollection(customConfig.structure.variableCollection);
     var modes = extractModes({variables: typographyVariables});
     setupModes(collection, modes);
-    var result = processVariables(collection, typographyVariables, null, modes);
+    var result = await processVariables(collection, typographyVariables, null, modes);
     
     figma.notify('✅ Typography system created: ' + result.created + ' variables created!');
     return result;

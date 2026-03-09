@@ -17,8 +17,11 @@
 // - **Text** (string) – single-line text input.
 // - **Textarea** – multiline text (e.g. batch replacement: one line per "search, replace"). **Builder:** textarea(name, value, opts?). **@UI_CONFIG block:** add `// @textarea` on the var line. Same width as text input, max 5 lines by default.
 // - **Select** (dropdown) – choice from a list of options. **Builder API:** section().select(name, value, options, opts?). In the **@UI_CONFIG block**, add `// @options:` on the var line (see **Dropdown** and **Dropdown options** below).
+// - **Radio** – single choice from options shown as radio buttons (use when all options should be visible). **Builder API:** section().radio(name, value, options, opts?). In the **@UI_CONFIG block**, add `// @options: a|b|c @radio` on the var line.
 //
-// **In the @UI_CONFIG block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string → text. For a **dropdown**, use `// @options: <value>` (static list or dynamic source). The variable value is always a string; in script/code mode it is edited as text.
+// **Conditional visibility (`@showWhen`):** Add `@showWhen: fieldName=value1|value2` so a field is only shown when the controlling field has one of the listed values. Use for parameters that depend on a previous choice (e.g. show `scaledFactor` only when `scaleMode=uniform`).
+//
+// **In the @UI_CONFIG block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string → text. For a **dropdown**, use `// @options: <value>` (static list or dynamic source). For **radio buttons**, use `// @options: a|b|c @radio`. For **conditional visibility** use `// @showWhen: fieldName=val1|val2`. The variable value is always a string; in script/code mode it is edited as text.
 //
 // ## Dropdown (use in @UI_CONFIG)
 // Use a **dropdown** when the value must be one of a fixed or runtime-defined set (e.g. action type, collection name). In the Config tab the control is a `<select>`; in script mode the line stays editable as `var name = 'value';`.
@@ -48,8 +51,10 @@
 // These are not CodeFigUI-specific features—they are config variables that your script logic interprets. CodeFigUI only provides the controls (text, toggle, dropdown); the script decides how to apply scope and filtering.
 //
 // ## Exported functions
-// - **Builder:** section(title), toggle(name, value, opts?), number(name, value, opts?), string(name, value, opts?), select(name, value, options, opts?)
-// - **Send:** sendToUI() – sends the built schema to the plugin UI (Config / Visual or custom panel)
+// | Category | Functions |
+// |----------|-----------|
+// | Builder | section(title), toggle(name, value, opts?), number(name, value, opts?), string(name, value, opts?), textarea(name, value, opts?), select(name, value, options, opts?), radio(name, value, options, opts?) |
+// | Send | sendToUI() – sends the built schema to the plugin UI (Config / Visual or custom panel) |
 //
 // ## Example (builder)
 // section('Display').toggle('onlyUsed', true).number('maxNodes', 5);
@@ -64,6 +69,7 @@ var exampleToggle = true; // Boolean → toggle
 var exampleNumber = 42; // Number → number input
 var exampleText = 'Hello'; // String → text input
 var exampleSelect = 'frame'; // @options: frame|autoLayout
+var exampleRadio = 'scale'; // @options: scale|resize @radio
 // @UI_CONFIG_END
 
 var shared = true;
@@ -186,6 +192,26 @@ function select(name, value, options, opts) {
   return builder;
 }
 
+/**
+ * Add a radio group (single choice from options). Use for small option sets where all choices should be visible.
+ * @param {string} name - Variable name
+ * @param {string} value - Selected value (must be one of options)
+ * @param {string[]} options - List of option strings
+ * @param {{ label?: string, tooltip?: string }} opts - Optional label and tooltip
+ */
+function radio(name, value, options, opts) {
+  if (!_currentSection) _currentSection = { title: '', fields: [] }; _sections.push(_currentSection);
+  _currentSection.fields.push({
+    name: name,
+    type: 'radio',
+    value: value != null ? String(value) : (options && options[0]) || '',
+    options: Array.isArray(options) ? options : [],
+    label: (opts && opts.label) || labelFromName(name),
+    tooltip: (opts && opts.tooltip) || ''
+  });
+  return builder;
+}
+
 var builder = {
   section: section,
   toggle: toggle,
@@ -193,6 +219,7 @@ var builder = {
   string: string,
   textarea: textarea,
   select: select,
+  radio: radio,
   sendToUI: sendToUI,
   getSchema: getSchema,
   reset: reset

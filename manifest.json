@@ -4,10 +4,19 @@
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",
-  "editorType": ["figma", "figjam"],
-  "permissions": ["teamlibrary"],
+  "editorType": [
+    "figma",
+    "figjam"
+  ],
+  "documentAccess": "dynamic-page",
+  "permissions": [
+    "teamlibrary"
+  ],
   "networkAccess": {
-    "allowedDomains": ["https://cdnjs.cloudflare.com", "https://api.figma.com", "http://localhost:8765"],
-    "reasoning": "CDN for CodeMirror. Figma API for comments. localhost:8765 for console bridge (Cursor). For a no-network build, use a manifest without networkAccess or with empty allowedDomains."
+    "allowedDomains": [
+      "https://api.figma.com",
+      "http://localhost:8765"
+    ],
+    "reasoning": "Figma REST API for scripts; localhost for CodeFig console forwarding."
   }
 }

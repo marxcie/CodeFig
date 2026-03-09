@@ -6,16 +6,15 @@
 // ## Overview
 // Import for basic math, rounding, clamping, geometry (distance, center, bounds), interpolation (linear, exponential, sine, cubic, quint, goldenRatio), and easing (easeIn, easeOut, etc.). Used by font-scale and layout scripts. No configuration; use via @import.
 //
-// ## Exported functions (examples)
-// - **Basic:** add, multiply, average, roundToNearest, clamp, lerp
-// - **Geometry:** distance, center, bounds
-// - **Interpolation:** interpolate, linear, exponential, sine, cubic, quint, goldenRatio
-// - **Easing:** easeIn, easeOut, easeInOut, easeOutIn
-// - **Scale curve:** applyEase(type, ease, t) returns u in [0,1] for piecewise scales (type-specific ease-in/out). Use with lerp: size = lerp(min, max, applyEase(type, ease, t)). Types: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. Eases: none, in, out, inout, outin.
-// - **Custom exponents:** applyEaseWithExponents(easeInExponent, easeOutExponent, ease, t) uses power curves t^in and 1-(1-t)^out instead of a named type. Ease still in/out/inout/outin. Exponents in (0, 10], typical 0.2–5.
+// ## Exported functions
+// | Category | Functions |
+// |----------|-----------|
+// | Basic | add, multiply, average, roundToNearest, clamp, lerp |
+// | Geometry | distance, center, bounds |
+// | Interpolation | interpolate, linear, exponential, sine, cubic, quint, goldenRatio |
+// | Easing | easeIn, easeOut, easeInOut, easeOutIn |
+// | Scale curve | applyEase(type, ease, t); applyEaseWithExponents(easeInExponent, easeOutExponent, ease, t) |
 // @DOC_END
-
-console.log('📚 @Math Helpers Library');
 
 // Simple math utilities that other scripts can import
 function add(a, b) {
@@ -355,38 +354,3 @@ function quint(start, end, factor, easing) {
 function goldenRatio(start, end, factor, easing) {
   return interpolate(start, end, factor, 'goldenRatio', easing);
 }
-
-// Demo the functions
-console.log('🧮 Math Helper Functions:');
-console.log('  add(5, 3) =', add(5, 3));
-console.log('  multiply(4, 7) =', multiply(4, 7));
-console.log('  average([1, 2, 3, 4, 5]) =', average([1, 2, 3, 4, 5]));
-console.log('  roundToNearest(23, 5) =', roundToNearest(23, 5));
-console.log('  clamp(15, 0, 10) =', clamp(15, 0, 10));
-console.log('  lerp(0, 100, 0.5) =', lerp(0, 100, 0.5));
-
-console.log('');
-console.log('📐 Geometry Functions:');
-console.log('  distance({x:0, y:0}, {x:3, y:4}) =', distance({x:0, y:0}, {x:3, y:4}));
-console.log('  center({x:10, y:20, width:100, height:50}) =', center({x:10, y:20, width:100, height:50}));
-
-console.log('');
-console.log('📈 Interpolation Functions:');
-console.log('  linear(0, 100, 0.5) =', linear(0, 100, 0.5));
-console.log('  exponential(1, 100, 0.5) =', exponential(1, 100, 0.5));
-console.log('  sine(0, 100, 0.5) =', sine(0, 100, 0.5));
-console.log('  cubic(0, 100, 0.5) =', cubic(0, 100, 0.5));
-console.log('  quint(0, 100, 0.5) =', quint(0, 100, 0.5));
-console.log('  goldenRatio(0, 100, 0.5) =', goldenRatio(0, 100, 0.5));
-
-console.log('');
-console.log('🎭 Easing Functions:');
-console.log('  interpolate(0, 100, 0.5, "linear", "easeIn") =', interpolate(0, 100, 0.5, 'linear', 'easeIn'));
-console.log('  interpolate(0, 100, 0.5, "cubic", "easeOut") =', interpolate(0, 100, 0.5, 'cubic', 'easeOut'));
-console.log('  interpolate(0, 100, 0.5, "sine", "easeInOut") =', interpolate(0, 100, 0.5, 'sine', 'easeInOut'));
-
-console.log('');
-console.log('✅ Math helpers ready for import!');
-console.log('📝 Other scripts can use: @import { add, average, clamp, distance, center, interpolate, linear, exponential } from "@Math Helpers"');
-
-figma.notify('Math helpers library loaded with interpolation functions!');

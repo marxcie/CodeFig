@@ -4,12 +4,19 @@
 // Rename variables using the same pattern as batch-rename-styles: searchIn = scope, searchFor/replaceWith = find/replace in variable name.
 //
 // ## Overview
-// searchIn selects which collections/groups to include (partial match on "collection / variable path"). searchFor/replaceWith then run on each variable name. Supports Figma-style placeholders: $&, $1 $2, $n $nn $nnn, $N $NN $NNN.
+// searchIn selects which collections/groups to include. searchFor/replaceWith then run on each variable name. Supports Figma-style placeholders: $&, $1 $2, $n $nn $nnn, $N $NN $NNN.
+//
+// ## searchIn scope rules (scope = "CollectionName / variableName") — like Figma find/replace
+// | searchIn | Meaning |
+// |----------|--------|
+// | (empty) | All variables. |
+// | Typography | Prefix: any scope starting with "Typography" (Typography, Typography-serif, ...). |
+// | Typography/ | Exact collection only (that collection only). |
 //
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
-// | searchIn | Scope: partial match on collection and/or group path. Empty = all; set = only what is within that scope gets renamed. |
+// | searchIn | Optional: prefix (e.g. Typography) or exact collection (e.g. Typography/); empty = all. |
 // | searchFor | Pattern to find (partial match, literal or regex). |
 // | replaceWith | Replacement string; may use placeholders. |
 // | batchReplacement | Optional array of [search, replace] pairs; overrides searchFor/replaceWith. |
@@ -31,7 +38,6 @@ if (typeof matchPattern !== 'function') {
     if (options.exact) return { match: t === p, confidence: t === p ? 1 : 0 };
     return { match: t.indexOf(p) !== -1, confidence: t.indexOf(p) !== -1 ? 1 : 0 };
   };
-  console.log('[Batch rename variables] DEBUG: using fallback matchPattern');
 }
 if (typeof replaceWithPattern !== 'function') {
   var escapeWildcards = function(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
@@ -68,7 +74,6 @@ if (typeof replaceWithPattern !== 'function') {
     var replacement = applyFigmaPlaceholders(replacePattern, { fullMatch: fullMatch, groups: groups, index: index, total: total });
     return text.replace(literalRegex, replacement);
   };
-  console.log('[Batch rename variables] DEBUG: using fallback replaceWithPattern');
 }
 
 // ============================================================================
@@ -77,8 +82,7 @@ if (typeof replaceWithPattern !== 'function') {
 
 // @UI_CONFIG_START
 // # Batch rename variables
-//
-var searchIn = ""; // @placeholder="color/"
+var searchIn = ""; // @placeholder="Typography" — prefix (Typography) or exact collection (Typography/)
 // Optional, narrow to variables whose name contains this (e.g. "color/", "Typography/")
 //
 var searchFor = ""; // @placeholder="50"
@@ -132,40 +136,45 @@ function getScope(collection, variable) {
   return collection.name + " / " + variable.name;
 }
 
-// Get (collection, variable) pairs from all collections, then filter by searchIn (partial match on scope).
-function getVariablesInScope(searchInValue) {
-  var collections = getAllCollections();
+/** Same rules as replace-variables: empty = all; trailing / = exact collection; else prefix match (like Figma find/replace). */
+function scopeMatchesSearchIn(scope, searchInValue) {
+  var val = searchInValue != null ? String(searchInValue).trim() : '';
+  if (val === '') return true;
+  if (val.slice(-1) === '/') {
+    var exact = val.slice(0, -1).trim();
+    return exact !== '' && scope.indexOf(exact + ' / ') === 0;
+  }
+  return scope.indexOf(val) === 0;
+}
+
+// Get (collection, variable) pairs from all collections, then filter by searchIn.
+async function getVariablesInScope(searchInValue) {
+  var collections = await getAllCollections();
   var items = [];
   var i, c, vars, v;
   for (i = 0; i < collections.length; i++) {
     c = collections[i];
-    vars = getCollectionVariables(c);
+    vars = await getCollectionVariables(c);
     for (var j = 0; j < vars.length; j++) {
       v = vars[j];
       items.push({ collection: c, variable: v });
     }
   }
-  console.log('[Batch rename variables] DEBUG: all collections → ' + items.length + ' variables total');
 
   if (!searchInValue || String(searchInValue).trim() === "") {
-    console.log('[Batch rename variables] DEBUG: searchIn empty → scope = all');
     return items;
   }
-  var pattern = String(searchInValue).trim();
   var filtered = items.filter(function(item) {
     var scope = getScope(item.collection, item.variable);
-    var result = matchPattern(scope, pattern, { exact: false, caseSensitive: false });
-    return result && result.match;
+    return scopeMatchesSearchIn(scope, searchInValue);
   });
-  console.log('[Batch rename variables] DEBUG: searchIn "' + pattern + '" → ' + filtered.length + ' of ' + items.length + ' variables (scope = collection / variable path)');
   return filtered;
 }
 
-function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeIsAll) {
+async function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeIsAll) {
   var renamedCount = 0;
   var errors = [];
 
-  // When scope is "all" (searchIn empty), replace in full hierarchy. When scope is narrowed, replace only in what is within the scope (variable path).
   if (scopeIsAll) {
     var seenCollectionIds = {};
     var uniqueCollections = [];
@@ -199,7 +208,7 @@ function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeIsAll) 
     var newName = replaceWithPattern(variable.name, searchForVal, replaceWithVal, i, items.length);
     if (newName === variable.name) continue;
     try {
-      var existing = getVariable(collection, newName);
+      var existing = await getVariable(collection, newName);
       if (existing && existing.id !== variable.id) {
         errors.push('Name already exists: ' + getScope(collection, { name: newName }));
         continue;
@@ -215,7 +224,7 @@ function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeIsAll) 
   return { renamedCount: renamedCount, errors: errors };
 }
 
-function renameVariablesBatch(items, batchReplacementList, scopeIsAll) {
+async function renameVariablesBatch(items, batchReplacementList, scopeIsAll) {
   var totalRenamed = 0;
   var allErrors = [];
   for (var op = 0; op < batchReplacementList.length; op++) {
@@ -223,7 +232,7 @@ function renameVariablesBatch(items, batchReplacementList, scopeIsAll) {
     var search = Array.isArray(pair) ? pair[0] : pair.searchPattern;
     var replace = Array.isArray(pair) ? pair[1] : pair.replacePattern;
     console.log('--- Batch op ' + (op + 1) + ': "' + search + '" → "' + replace + '"');
-    var result = renameVariablesSingle(items, search, replace, scopeIsAll);
+    var result = await renameVariablesSingle(items, search, replace, scopeIsAll);
     totalRenamed += result.renamedCount;
     allErrors = allErrors.concat(result.errors);
   }
@@ -234,59 +243,58 @@ function renameVariablesBatch(items, batchReplacementList, scopeIsAll) {
 // MAIN
 // ============================================================================
 
-try {
-  console.log('Batch Rename Variables');
-  console.log('========================');
+(async function() {
+  try {
+    console.log('Batch Rename Variables');
+    console.log('========================');
 
-  var searchInVal = typeof searchIn !== 'undefined' ? searchIn : "";
-  var items = getVariablesInScope(searchInVal);
+    var searchInVal = typeof searchIn !== 'undefined' ? searchIn : "";
+    var items = await getVariablesInScope(searchInVal);
 
-  var sorted = items.slice().sort(function(a, b) {
-    return getScope(a.collection, a.variable).localeCompare(getScope(b.collection, b.variable));
-  });
-  console.log('[Batch rename variables] DEBUG: ' + sorted.length + ' variables to process');
+    var sorted = items.slice().sort(function(a, b) {
+      return getScope(a.collection, a.variable).localeCompare(getScope(b.collection, b.variable));
+    });
 
-  if (sorted.length === 0) {
-    figma.notify('No variables in scope (check searchIn in figma-console.log)');
-    return;
+    if (sorted.length === 0) {
+      figma.notify('No variables in scope (check searchIn in figma-console.log)');
+      return;
+    }
+
+    var scopeIsAll = !searchInVal || String(searchInVal).trim() === "";
+
+    var batchList = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
+    if (typeof batchList === 'string' && batchList.trim()) {
+      batchList = parseBatchReplacementString(batchList);
+    }
+
+    var totalRenamed = 0;
+    var errors = [];
+
+    if (batchList && batchList.length > 0) {
+      console.log('[Batch rename variables] Mode: batch (' + batchList.length + ' operations)');
+      var batchResult = await renameVariablesBatch(sorted, batchList, scopeIsAll);
+      totalRenamed = batchResult.renamedCount;
+      errors = batchResult.errors;
+    } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined') {
+      console.log('[Batch rename variables] Mode: single, searchFor="' + searchFor + '", replaceWith="' + replaceWith + '"');
+      var singleResult = await renameVariablesSingle(sorted, searchFor, replaceWith, scopeIsAll);
+      totalRenamed = singleResult.renamedCount;
+      errors = singleResult.errors;
+    } else {
+      figma.notify('Configure searchFor and replaceWith, or batch replacement lines');
+      return;
+    }
+
+    if (errors.length > 0) {
+      errors.forEach(function(e) { console.log('Error: ' + e); });
+    }
+    if (totalRenamed > 0) {
+      figma.notify('Renamed ' + totalRenamed + ' variables');
+    } else {
+      figma.notify('No variables were renamed');
+    }
+  } catch (error) {
+    console.log('Script error: ' + error.message);
+    figma.notify('Script error: ' + error.message);
   }
-
-  var scopeIsAll = !searchInVal || String(searchInVal).trim() === "";
-  console.log('[Batch rename variables] DEBUG: scopeIsAll=' + scopeIsAll + ' (replace in full hierarchy when all; when narrowed, only within scope)');
-
-  var batchList = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
-  if (typeof batchList === 'string' && batchList.trim()) {
-    batchList = parseBatchReplacementString(batchList);
-  }
-
-  var totalRenamed = 0;
-  var errors = [];
-
-  if (batchList && batchList.length > 0) {
-    console.log('[Batch rename variables] Mode: batch (' + batchList.length + ' operations)');
-    var batchResult = renameVariablesBatch(sorted, batchList, scopeIsAll);
-    totalRenamed = batchResult.renamedCount;
-    errors = batchResult.errors;
-  } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined') {
-    console.log('[Batch rename variables] Mode: single, searchFor="' + searchFor + '", replaceWith="' + replaceWith + '"');
-    var singleResult = renameVariablesSingle(sorted, searchFor, replaceWith, scopeIsAll);
-    totalRenamed = singleResult.renamedCount;
-    errors = singleResult.errors;
-  } else {
-    console.log('[Batch rename variables] DEBUG: no batch lines and no searchFor/replaceWith set');
-    figma.notify('Configure searchFor and replaceWith, or batch replacement lines');
-    return;
-  }
-
-  if (errors.length > 0) {
-    errors.forEach(function(e) { console.log('Error: ' + e); });
-  }
-  if (totalRenamed > 0) {
-    figma.notify('Renamed ' + totalRenamed + ' variables');
-  } else {
-    figma.notify('No variables were renamed');
-  }
-} catch (error) {
-  console.log('Script error: ' + error.message);
-  figma.notify('Script error: ' + error.message);
-}
+})();

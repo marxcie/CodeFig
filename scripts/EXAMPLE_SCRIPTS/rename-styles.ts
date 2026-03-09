@@ -35,7 +35,6 @@ if (typeof matchPattern !== 'function') {
     if (exact) return { match: t === p, confidence: t === p ? 1 : 0 };
     return { match: t.indexOf(p) !== -1, confidence: t.indexOf(p) !== -1 ? 1 : 0 };
   };
-  console.log('[Batch rename styles] DEBUG: using fallback matchPattern');
 }
 if (typeof replaceWithPattern !== 'function') {
   var escapeWildcards = function(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
@@ -75,7 +74,6 @@ if (typeof replaceWithPattern !== 'function') {
     var replacement = applyFigmaPlaceholders(replacePattern, { fullMatch: fullMatch, groups: groups, index: index, total: total });
     return text.replace(literalRegex, replacement);
   };
-  console.log('[Batch rename styles] DEBUG: using fallback replaceWithPattern');
 }
 
 // ========================================
@@ -135,7 +133,6 @@ function parseBatchReplacementString(str) {
 
 function filterBySearchIn(styles, searchInValue) {
   if (!searchInValue || String(searchInValue).trim() === "") {
-    console.log('[Batch rename styles] DEBUG: searchIn empty, using all ' + styles.length + ' styles');
     return styles;
   }
   var pattern = String(searchInValue).trim();
@@ -143,7 +140,6 @@ function filterBySearchIn(styles, searchInValue) {
     var result = matchPattern(style.name, pattern, { exact: false, caseSensitive: false });
     return result && result.match;
   });
-  console.log('[Batch rename styles] DEBUG: searchIn "' + pattern + '" → ' + filtered.length + ' of ' + styles.length + ' styles');
   return filtered;
 }
 
@@ -179,27 +175,26 @@ function renameStylesBatch(styles, batchReplacementList) {
 // EXECUTION
 // ========================================
 
-var allStyles = getAllStyles();
-console.log('[Batch rename styles] DEBUG: getAllStyles() returned ' + (allStyles ? allStyles.length : 0) + ' styles');
-var searchInVal = typeof searchIn !== 'undefined' ? searchIn : "";
-var filtered = filterBySearchIn(allStyles, searchInVal);
-var totalCount = 0;
+getAllStyles().then(function(allStyles) {
+  var searchInVal = typeof searchIn !== 'undefined' ? searchIn : "";
+  var filtered = filterBySearchIn(allStyles, searchInVal);
+  var totalCount = 0;
 
-var batchList = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
-if (typeof batchList === 'string' && batchList.trim()) {
-  batchList = parseBatchReplacementString(batchList);
-}
-if (batchList && batchList.length > 0) {
-  console.log('=== BATCH RENAME STYLES ===');
-  console.log('Search in: "' + (searchInVal || '(all)') + '", ' + batchList.length + ' operations, ' + filtered.length + ' styles to process');
-  totalCount = renameStylesBatch(filtered, batchList);
-  figma.notify('Batch complete: Renamed ' + totalCount + ' styles across ' + batchList.length + ' operations');
-} else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined') {
-  console.log('=== RENAME STYLES ===');
-  console.log('Search in: "' + (searchInVal || '(all)') + '", for: "' + searchFor + '", with: "' + replaceWith + '", ' + filtered.length + ' styles to process');
-  totalCount = renameStylesSingle(filtered, searchFor, replaceWith);
-  figma.notify('Renamed ' + totalCount + ' styles');
-} else {
-  console.log('[Batch rename styles] DEBUG: no batchReplacement or searchFor/replaceWith configured');
-  figma.notify('Configure searchFor and replaceWith, or batchReplacement');
-}
+  var batchList = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
+  if (typeof batchList === 'string' && batchList.trim()) {
+    batchList = parseBatchReplacementString(batchList);
+  }
+  if (batchList && batchList.length > 0) {
+    console.log('=== BATCH RENAME STYLES ===');
+    console.log('Search in: "' + (searchInVal || '(all)') + '", ' + batchList.length + ' operations, ' + filtered.length + ' styles to process');
+    totalCount = renameStylesBatch(filtered, batchList);
+    figma.notify('Batch complete: Renamed ' + totalCount + ' styles across ' + batchList.length + ' operations');
+  } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined') {
+    console.log('=== RENAME STYLES ===');
+    console.log('Search in: "' + (searchInVal || '(all)') + '", for: "' + searchFor + '", with: "' + replaceWith + '", ' + filtered.length + ' styles to process');
+    totalCount = renameStylesSingle(filtered, searchFor, replaceWith);
+    figma.notify('Renamed ' + totalCount + ' styles');
+  } else {
+    figma.notify('Configure searchFor and replaceWith, or batchReplacement');
+  }
+});

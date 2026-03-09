@@ -2,6 +2,32 @@ const fs = require('fs');
 const path = require('path');
 const { inlineVendors } = require('./bundle-ui.js');
 
+const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
+const DEV_LOCALHOST = 'http://localhost:8765';
+
+// Write manifest.json: dev mode adds localhost to allowedDomains, build mode removes it
+function writeManifest() {
+  const manifestPath = path.join(__dirname, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return;
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  if (!manifest.networkAccess || !Array.isArray(manifest.networkAccess.allowedDomains)) return;
+  const domains = manifest.networkAccess.allowedDomains;
+  if (isDev) {
+    if (!domains.includes(DEV_LOCALHOST)) {
+      manifest.networkAccess.allowedDomains = [...domains, DEV_LOCALHOST];
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+      console.log('✅ manifest.json: added', DEV_LOCALHOST, '(dev mode)');
+    }
+  } else {
+    const filtered = domains.filter((d) => !/localhost/i.test(d));
+    if (filtered.length !== domains.length) {
+      manifest.networkAccess.allowedDomains = filtered;
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+      console.log('✅ manifest.json: localhost removed (build mode)');
+    }
+  }
+}
+
 // No-op: CodeFigUI lib (@codefig-ui.ts) is copied with other scripts by copyScripts()
 function copyConfigUILib() {}
 
@@ -177,7 +203,8 @@ function updateUIHtml() {
 }
 
 // Run the build (vendors inlined only into dist, src/ui.html never modified)
-console.log('🔨 Building...');
+console.log('🔨 Building...' + (isDev ? ' (dev: localhost allowed)' : ' (build: localhost not allowed)'));
+writeManifest();
 copyScripts();
 updateUIHtml();
 console.log('✅ Build completed successfully!');

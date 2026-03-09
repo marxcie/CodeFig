@@ -7,11 +7,13 @@
 // Import functions into your scripts for node traversal, style listing/replacement, pattern-based rename, progress/memory handling, and color conversion. No configuration; use via @import.
 //
 // ## Exported functions
-// - **Node:** traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone, setupAutoLayout, applyNamingConvention, createComponentFromSelection
-// - **Styles:** getAllStyles, buildStyleCache, replaceStylesByPattern, getStyleByName, replaceByPattern
-// - **Memory:** processWithOptimization, estimateNodeCount, showProgress, cleanupMemory
-// - **Colors:** hexToRgb, rgbToHex
-// - **Utilities:** log, timeOperation, unique, analyzeSelection
+// | Category | Functions |
+// |----------|-----------|
+// | Node | traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone, setupAutoLayout, applyNamingConvention, createComponentFromSelection |
+// | Styles | getAllStyles, buildStyleCache, replaceStylesByPattern, getStyleByName, replaceByPattern |
+// | Memory | processWithOptimization, estimateNodeCount, showProgress, cleanupMemory |
+// | Colors | hexToRgb, rgbToHex |
+// | Utilities | log, timeOperation, unique, analyzeSelection |
 // @DOC_END
 
 // === NODE UTILITIES ===
@@ -38,53 +40,55 @@ function clone(node, parent) {
 }
 
 // === STYLE OPERATIONS ===
+// Async for documentAccess: dynamic-page (Figma requires *Async APIs)
 function getAllStyles() {
-  return figma.getLocalPaintStyles()
-    .concat(figma.getLocalTextStyles())
-    .concat(figma.getLocalEffectStyles())
-    .concat(figma.getLocalGridStyles());
+  return Promise.all([
+    figma.getLocalPaintStylesAsync(),
+    figma.getLocalTextStylesAsync(),
+    figma.getLocalEffectStylesAsync(),
+    figma.getLocalGridStylesAsync()
+  ]).then(function(results) {
+    return results[0].concat(results[1]).concat(results[2]).concat(results[3]);
+  });
 }
 
 function getStyleByName(name, type) {
-  var styles;
   if (type === 'TEXT') {
-    styles = figma.getLocalTextStyles();
-  } else {
-    styles = figma.getLocalPaintStyles();
+    return figma.getLocalTextStylesAsync().then(function(styles) {
+      return styles.find(function(style) { return style.name === name; });
+    });
   }
-  return styles.find(function(style) { return style.name === name; });
+  return figma.getLocalPaintStylesAsync().then(function(styles) {
+    return styles.find(function(style) { return style.name === name; });
+  });
 }
 
 function buildStyleCache() {
-  var cache = {
-    local: getAllStyles(),
-    library: []
-  };
-  
-  // Add library styles if available
-  try {
-    cache.library = figma.getAvailableFonts ? [] : [];
-  } catch (e) {
-    // Library styles not available
-  }
-  
-  return cache;
+  return getAllStyles().then(function(local) {
+    var cache = {
+      local: local,
+      library: []
+    };
+    try {
+      cache.library = figma.getAvailableFonts ? [] : [];
+    } catch (e) {}
+    return cache;
+  });
 }
 
 function replaceStylesByPattern(searchPattern, replacePattern) {
-  var styles = getAllStyles();
-  var count = 0;
-  
-  styles.forEach(function(style) {
-    var newName = style.name.replace(new RegExp(searchPattern, 'g'), replacePattern);
-    if (newName !== style.name) {
-      console.log('Renaming: "' + style.name + '" -> "' + newName + '"');
-      style.name = newName;
-      count++;
-    }
+  return getAllStyles().then(function(styles) {
+    var count = 0;
+    styles.forEach(function(style) {
+      var newName = style.name.replace(new RegExp(searchPattern, 'g'), replacePattern);
+      if (newName !== style.name) {
+        console.log('Renaming: "' + style.name + '" -> "' + newName + '"');
+        style.name = newName;
+        count++;
+      }
+    });
+    return count;
   });
-  
-  return count;
 }
 
 
@@ -121,30 +125,49 @@ function replaceByPattern(items, patterns, getName, setName) {
 }
 
 // === NODE TRAVERSAL ===
-function traverseNodes(nodes, processor) {
+// Iterative traversal to prevent stack overflow on deeply nested structures
+// Options: { maxNodes: N } - stop after collecting/processing N nodes
+function traverseNodes(nodes, processor, options) {
+  options = options || {};
+  var maxNodes = options.maxNodes;
   var processed = new Set();
   var count = 0;
+  var visited = 0;
+  var stack = [];
+  var i;
+  var STOP = {};
   
-  function processNode(node) {
-    if (processed.has(node.id)) return 0;
-    processed.add(node.id);
-    
-    var result = processor(node);
-    count += result || 0;
-    
-    if ('children' in node) {
-      for (var i = 0; i < node.children.length; i++) {
-        processNode(node.children[i]);
-      }
+  function pushChildren(node) {
+    if (!('children' in node)) return;
+    var children = node.children;
+    for (i = children.length - 1; i >= 0; i--) {
+      stack.push(children[i]);
     }
-    
-    return result;
   }
   
   if (Array.isArray(nodes)) {
-    nodes.forEach(processNode);
+    for (i = nodes.length - 1; i >= 0; i--) {
+      stack.push(nodes[i]);
+    }
   } else {
-    processNode(nodes);
+    stack.push(nodes);
+  }
+  
+  while (stack.length > 0) {
+    if (maxNodes != null && visited >= maxNodes) break;
+    
+    var node = stack.pop();
+    if (!node || processed.has(node.id)) continue;
+    processed.add(node.id);
+    visited++;
+    
+    var result = processor(node);
+    if (result === STOP) break;
+    count += (result && result !== true ? result : 0);
+    
+    if (maxNodes == null || visited < maxNodes) {
+      pushChildren(node);
+    }
   }
   
   return count;
@@ -491,8 +514,8 @@ function processWithOptimization(nodes, processor, options) {
   var showProgressUpdates = options.showProgress !== false;
   var operationName = options.operation || 'Processing nodes';
   var nodeFilter = options.nodeFilter || null;
-  var maxNodes = options.maxNodes || 15000; // Increased limit for larger selections
-  
+  var maxNodes = options.maxNodes; // Caller sets limit when needed
+
   return new Promise(function(resolve, reject) {
     // Initialize progress state locally
     var localProgressState = {
@@ -566,127 +589,110 @@ function processWithOptimization(nodes, processor, options) {
           return;
         }
         
-        // Process chunk with timing
+        // Process chunk (smaller chunks = less concurrent async work = lower memory)
         var chunkStartTime = Date.now();
         var chunk = nodes.slice(index, Math.min(index + chunkSize, nodes.length));
-        var chunkResults = [];
-        
-        chunk.forEach(function(node) {
-          // Apply node filter if provided
+        var promises = chunk.map(function(node) {
           if (nodeFilter && !nodeFilter(node)) {
-            return;
+            return Promise.resolve(undefined);
           }
-          
           try {
             var result = processor(node);
-            if (result !== undefined && result !== null) {
-              if (Array.isArray(result)) {
-                chunkResults = chunkResults.concat(result);
-              } else {
-                chunkResults.push(result);
-              }
-            }
+            return Promise.resolve(result);
           } catch (e) {
             errorCount++;
             console.warn('Error processing node ' + node.id + ' (error #' + errorCount + '):', e.message);
-            
-            // If this is a critical error, stop processing
             if (e.message && e.message.includes('Aborted')) {
-              throw e;
+              return Promise.reject(e);
             }
+            return Promise.resolve(undefined);
           }
         });
         
-        var chunkProcessingTime = Date.now() - chunkStartTime;
-        
-        // Adaptive chunk sizing based on processing time
-        if (chunkProcessingTime > 2000) {
-          // If chunk took more than 2 seconds, reduce chunk size significantly
-          chunkSize = Math.max(3, Math.floor(chunkSize * 0.5));
-        } else if (chunkProcessingTime > 1000) {
-          // If chunk took more than 1 second, reduce chunk size
-          chunkSize = Math.max(5, Math.floor(chunkSize * 0.7));
-        } else if (chunkProcessingTime < 50 && chunkSize < 25) {
-          // If chunk was very fast, increase chunk size slightly
-          chunkSize = Math.min(25, Math.floor(chunkSize * 1.1));
-        }
-        
-        results = results.concat(chunkResults);
-        localProgressState.processed = Math.min(index + chunk.length, nodes.length);
-        
-        // Update progress (every 3 nodes for more frequent updates)
-        if (showProgressUpdates && localProgressState.processed % 3 === 0) {
-          showProgress(operationName, localProgressState.processed, nodes.length);
-        }
-        
-        // Cleanup memory more frequently and aggressively
-        if (localProgressState.processed - lastCleanup > 15) {
-          cleanupMemory();
-          lastCleanup = localProgressState.processed;
-          
-          // Force garbage collection if available
-          if (typeof gc !== 'undefined') {
-            try {
-              gc();
-            } catch (e) {
-              // Ignore gc errors
+        Promise.all(promises).then(function(resolvedChunkResults) {
+          var resultsToAdd = [];
+          for (var r = 0; r < resolvedChunkResults.length; r++) {
+            var result = resolvedChunkResults[r];
+            if (result !== undefined && result !== null) {
+              if (Array.isArray(result)) {
+                resultsToAdd = resultsToAdd.concat(result);
+              } else {
+                resultsToAdd.push(result);
+              }
             }
           }
-        }
-        
-        // Clear chunk results to free memory immediately
-        chunkResults = null;
-        
-        index += chunkSize;
-        
-        // Continue processing or finish
-        if (index < nodes.length) {
-          // Use setTimeout to yield control back to Figma
-          setTimeout(processChunk, 1); // Slightly longer delay for better stability
-        } else {
-          // Finished processing
-          localProgressState.isProcessing = false;
-          localProgressState.processed = nodes.length; // Ensure we're at 100%
-          cleanupMemory();
           
-          if (showProgressUpdates) {
-            // Send final progress update to show 100%
-            showProgress(operationName, nodes.length, nodes.length);
-            
-            // Small delay before completion message
-            setTimeout(function() {
-              try {
-                if (typeof window !== 'undefined' && window._infoPanelHandler) {
-                  window._infoPanelHandler({
-                    type: 'PROGRESS_COMPLETE',
-                    operation: operationName,
-                    processed: nodes.length,
-                    total: nodes.length,
-                    message: options.partial ? 
-                      'Processed ' + nodes.length + ' nodes (limit reached)' : 
-                      'Processed ' + nodes.length + ' nodes successfully'
-                  });
-                } else {
-                  // Fallback to Figma notification
-                  figma.notify('Processing complete: ' + nodes.length + ' nodes processed');
-                }
-              } catch (e) {
-                console.log('Progress complete: ' + nodes.length + ' nodes processed');
-              }
-            }, 100);
+          var chunkProcessingTime = Date.now() - chunkStartTime;
+          
+          // Adaptive chunk sizing: prefer smaller chunks to reduce memory
+          if (chunkProcessingTime > 2000) {
+            chunkSize = Math.max(2, Math.floor(chunkSize * 0.5));
+          } else if (chunkProcessingTime > 1000) {
+            chunkSize = Math.max(3, Math.floor(chunkSize * 0.7));
+          } else if (chunkProcessingTime < 50 && chunkSize < 12) {
+            chunkSize = Math.min(12, Math.floor(chunkSize * 1.1));
           }
           
-          resolve({
-            results: results,
-            partial: options.partial || false,
-            processed: localProgressState.processed,
-            total: nodes.length,
-            message: options.partial ? 
-              'Processed ' + nodes.length + ' nodes (limit reached)' : 
-              'Processed ' + nodes.length + ' nodes successfully'
-          });
-        }
-        
+          results = results.concat(resultsToAdd);
+          localProgressState.processed = Math.min(index + chunk.length, nodes.length);
+          
+          if (showProgressUpdates && localProgressState.processed % 3 === 0) {
+            showProgress(operationName, localProgressState.processed, nodes.length);
+          }
+          
+          if (localProgressState.processed - lastCleanup > 15) {
+            cleanupMemory();
+            lastCleanup = localProgressState.processed;
+            if (typeof gc !== 'undefined') {
+              try { gc(); } catch (e) { }
+            }
+          }
+          
+          index += chunkSize;
+          
+          if (index < nodes.length) {
+            setTimeout(processChunk, 1);
+          } else {
+            localProgressState.isProcessing = false;
+            localProgressState.processed = nodes.length;
+            cleanupMemory();
+            
+            if (showProgressUpdates) {
+              showProgress(operationName, nodes.length, nodes.length);
+              setTimeout(function() {
+                try {
+                  if (typeof window !== 'undefined' && window._infoPanelHandler) {
+                    window._infoPanelHandler({
+                      type: 'PROGRESS_COMPLETE',
+                      operation: operationName,
+                      processed: nodes.length,
+                      total: nodes.length,
+                      message: options.partial ? 
+                        'Processed ' + nodes.length + ' nodes (limit reached)' : 
+                        'Processed ' + nodes.length + ' nodes successfully'
+                    });
+                  } else {
+                    figma.notify('Processing complete: ' + nodes.length + ' nodes processed');
+                  }
+                } catch (e) {
+                  console.log('Progress complete: ' + nodes.length + ' nodes processed');
+                }
+              }, 100);
+            }
+            
+            resolve({
+              results: results,
+              partial: options.partial || false,
+              processed: localProgressState.processed,
+              total: nodes.length,
+              message: options.partial ? 
+                'Processed ' + nodes.length + ' nodes (limit reached)' : 
+                'Processed ' + nodes.length + ' nodes successfully'
+            });
+          }
+        }).catch(function(e) {
+          reject(e);
+        });
       } catch (e) {
         localProgressState.isProcessing = false;
         console.error('Critical error in processChunk:', e.message);
@@ -789,16 +795,16 @@ function traverseNodesOptimized(nodes, processor, options) {
 // ============================================================================
 
 /**
- * Collect styles from a node and add to the usedStyles Map
+ * Collect styles from a node and add to the usedStyles Map (async for documentAccess: dynamic-page)
  */
-function collectNodeStyles(node, usedStyles) {
+async function collectNodeStyles(node, usedStyles) {
   try {
     if (!node) return;
     
     // Text styles
     if (node.textStyleId && node.textStyleId !== figma.mixed) {
       try {
-        var textStyle = figma.getStyleById(node.textStyleId);
+        var textStyle = await figma.getStyleByIdAsync(node.textStyleId);
         if (textStyle && textStyle.name) {
           var key = textStyle.name + '::text';
           if (!usedStyles.has(key)) {
@@ -823,7 +829,7 @@ function collectNodeStyles(node, usedStyles) {
     // Fill styles
     if (node.fillStyleId && node.fillStyleId !== figma.mixed) {
       try {
-        var fillStyle = figma.getStyleById(node.fillStyleId);
+        var fillStyle = await figma.getStyleByIdAsync(node.fillStyleId);
         if (fillStyle && fillStyle.name) {
           var key = fillStyle.name + '::fill';
           if (!usedStyles.has(key)) {
@@ -848,7 +854,7 @@ function collectNodeStyles(node, usedStyles) {
     // Stroke styles
     if (node.strokeStyleId && node.strokeStyleId !== figma.mixed) {
       try {
-        var strokeStyle = figma.getStyleById(node.strokeStyleId);
+        var strokeStyle = await figma.getStyleByIdAsync(node.strokeStyleId);
         if (strokeStyle && strokeStyle.name) {
           var key = strokeStyle.name + '::stroke';
           if (!usedStyles.has(key)) {
@@ -873,7 +879,7 @@ function collectNodeStyles(node, usedStyles) {
     // Effect styles
     if (node.effectStyleId && node.effectStyleId !== figma.mixed) {
       try {
-        var effectStyle = figma.getStyleById(node.effectStyleId);
+        var effectStyle = await figma.getStyleByIdAsync(node.effectStyleId);
         if (effectStyle && effectStyle.name) {
           var key = effectStyle.name + '::effect';
           if (!usedStyles.has(key)) {

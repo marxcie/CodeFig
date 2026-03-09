@@ -6,11 +6,13 @@
 // ## Overview
 // Import for matching text against patterns (exact, partial, regex, glob, fuzzy), escaping wildcards, filtering by collection, and normalizing patterns. Used by replace-styles and find-and-replace scripts. No configuration; use via @import.
 //
-// ## Exported functions (examples)
-// - **Matching:** matchPattern(text, pattern, options), compilePattern, expandWildcards, escapeWildcards
-// - **Filtering:** filterByCollection, getCollections, validateCollection
-// - **Advanced:** fuzzyMatch, regexMatch, globMatch, wildcardMatch
-// - **Rename/Replace:** applyFigmaPlaceholders(replacePattern, context), replaceWithPattern(text, searchPattern, replacePattern, index?, total?)
+// ## Exported functions
+// | Category | Functions |
+// |----------|-----------|
+// | Matching | matchPattern, compilePattern, expandWildcards, escapeWildcards |
+// | Filtering | filterByCollection, getCollections, validateCollection |
+// | Advanced | fuzzyMatch, regexMatch, globMatch, wildcardMatch |
+// | Rename/Replace | applyFigmaPlaceholders, replaceWithPattern |
 // @DOC_END
 
 // ============================================================================

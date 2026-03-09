@@ -157,7 +157,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 // CORE FUNCTIONS
 // ========================================
 
-function createOrUpdateCollection(config) {
+async function createOrUpdateCollection(config) {
   var collectionName = (config.structure && config.structure.variableCollection != null) ? config.structure.variableCollection : config.collectionName;
   var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
   var prefix = variableNamePrefix(group);
@@ -168,24 +168,19 @@ function createOrUpdateCollection(config) {
   console.log('=== GRID SYSTEM MANAGER ===');
   console.log('Processing collection: ' + collectionName + (group ? ' (group: ' + group + ')' : ' (no group)'));
   
-  // Get or create collection using imported function
-  var collection = getOrCreateCollection(collectionName);
+  var collection = await getOrCreateCollection(collectionName);
   
-  // Extract modes from variable values or use default (imported function)
   var modes = extractModes({ variables: variables });
   console.log('Detected modes: ' + modes.join(', '));
   
-  // Setup modes (imported function)
   setupModes(collection, modes);
   
-  // Prefix variable names with group when set (no leading slash when group empty)
   var variablesWithPrefix = {};
   for (var key in variables) {
     variablesWithPrefix[prefix + key] = variables[key];
   }
   
-  // Process variables (imported function)
-  var stats = processVariables(collection, variablesWithPrefix, config.config, modes);
+  var stats = await processVariables(collection, variablesWithPrefix, config.config, modes);
   
   console.log('=== GRID SYSTEM SUMMARY ===');
   console.log('Collection: ' + collectionName);
@@ -200,7 +195,7 @@ function createOrUpdateCollection(config) {
 }
 
 // Create one centered layout grid style; count, column width, and gutter bound to collection variables (one style for all viewports, responds to mode)
-function createGridStyles(collection, config) {
+async function createGridStyles(collection, config) {
   var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
   var prefix = variableNamePrefix(group);
   var styleName = "Grid";
@@ -221,7 +216,8 @@ function createGridStyles(collection, config) {
     sectionSize: sectionSize
   };
 
-  var existing = figma.getLocalGridStyles().find(function(s) { return s.name === styleName; });
+  var localGridStyles = await figma.getLocalGridStylesAsync();
+  var existing = localGridStyles.find(function(s) { return s.name === styleName; });
   var gridStyle;
   if (existing) {
     gridStyle = existing;
@@ -232,9 +228,9 @@ function createGridStyles(collection, config) {
     styleStats.created++;
   }
 
-  var columnsVar = getVariable(collection, prefix + "grid/columns");
-  var gapVar = getVariable(collection, prefix + "grid/gap");
-  var col1Var = getVariable(collection, prefix + "grid/col-1");
+  var columnsVar = await getVariable(collection, prefix + "grid/columns");
+  var gapVar = await getVariable(collection, prefix + "grid/gap");
+  var col1Var = await getVariable(collection, prefix + "grid/col-1");
 
   var layoutGridToApply = gridLayoutNumeric;
   if (columnsVar && gapVar && col1Var && typeof figma.variables.setBoundVariableForLayoutGrid === "function") {
@@ -259,15 +255,17 @@ function createGridStyles(collection, config) {
 // EXECUTION
 // ========================================
 
-try {
-  var result = createOrUpdateCollection(gridSystemConfig);
-  var gridStyleStats = createGridStyles(result.collection, gridSystemConfig);
-  var msg = '✅ Grid System: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' vars updated';
-  if (gridStyleStats.created > 0 || gridStyleStats.updated > 0) {
-    msg += '; ' + gridStyleStats.created + ' grid style(s) created, ' + gridStyleStats.updated + ' updated';
+(async function() {
+  try {
+    var result = await createOrUpdateCollection(gridSystemConfig);
+    var gridStyleStats = await createGridStyles(result.collection, gridSystemConfig);
+    var msg = '✅ Grid System: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' vars updated';
+    if (gridStyleStats.created > 0 || gridStyleStats.updated > 0) {
+      msg += '; ' + gridStyleStats.created + ' grid style(s) created, ' + gridStyleStats.updated + ' updated';
+    }
+    figma.notify(msg);
+  } catch (error) {
+    console.error('Error:', error);
+    figma.notify('❌ Error: ' + error.message);
   }
-  figma.notify(msg);
-} catch (error) {
-  console.error('Error:', error);
-  figma.notify('❌ Error: ' + error.message);
-}
+})();

@@ -19,7 +19,7 @@ CodeFig builds on that idea and focuses on scale, structure, and reuse:
 - **Broader example set** — layout, styles, variables, and design-system scripts
 - **TypeScript support** — scripts with typing and editor assistance
 - **Script organization** — categories, search, import/export
-- **Configurable networking** — optional Comments API and dev console bridge; no-network builds supported
+- **No external dependencies** — no CDNs or third-party services; Figma API used only for scripts that need it (e.g. comments-to-annotations)
 
 ## Features
 
@@ -38,7 +38,7 @@ CodeFig builds on that idea and focuses on scale, structure, and reuse:
 
 ## Perfect For
 
-Designers and engineers who want repeatable automation for layout, styles, and variables; design-system setup scripts; and the option to run everything without network access.
+Designers and engineers who want repeatable automation for layout, styles, and variables; design-system setup scripts; and a self-contained plugin (no CDNs; Figma API only when needed).
 
 ## Quick Start
 
@@ -85,20 +85,15 @@ During `dev`, plugin and script logs are written to `figma-console.log`. The fil
 
 ## Network and Builds
 
-The default manifest allows limited network access:
-- CDN (CodeMirror)
-- Figma API (comments → annotations)
-- Localhost (dev console bridge)
+CodeFig does not require external sources, CDNs, or third-party services. All core functionality is self-contained. The default manifest allows **Figma API** only (for scripts such as comments-to-annotations). CodeMirror is bundled into the UI at build time (`npm run build`), so no CDN is needed.
 
-For restricted environments, use a no-network manifest (empty `allowedDomains`) and bundle CodeMirror into the UI via `npm run build:ui`.
-
-No telemetry. Scripts run entirely in the plugin sandbox.
+No telemetry. Scripts run entirely in the plugin sandbox. User scripts and libraries may use network access only if the manifest permits it.
 
 ## Security & Privacy
 
 - No data collection
-- Network access is explicit and optional
-- Fully functional in offline / no-network mode
+- No CDNs or third-party services; Figma API only when needed
+- Fully functional without external network for core features
 
 ## Bundled Scripts
 
@@ -131,7 +126,10 @@ No telemetry. Scripts run entirely in the plugin sandbox.
 | Create annotations from comments | Convert file comments to annotations (API) |
 
 **Libraries**  
-Shared helpers used by scripts: `@core-library`, `@infopanel`, `@math-helpers`, `@pattern-matching`, `@replacement-engine`, `@styles`, `@variables`.
+Shared helpers used by scripts: `@core-library`, `@codefig-ui`, `@infopanel`, `@math-helpers`, `@pattern-matching`, `@replacement-engine`, `@styles`, `@variables`.
+
+**User libraries**  
+Create a script and name it with an `@` prefix (e.g. `@My Utils`) to treat it as a library. Libraries are imported by other scripts, not run directly.
 
 ## Keyboard Shortcuts
 

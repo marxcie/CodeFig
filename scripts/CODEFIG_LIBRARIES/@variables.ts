@@ -6,42 +6,51 @@
 // ## Overview
 // Import to get/create collections, get/set variables by name or mode, list variables, and run batch operations (e.g. getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables). No configuration; use via @import.
 //
-// ## Exported functions (examples)
-// - **Collections:** getAllCollections, getCollection, getOrCreateCollection, setupModes
-// - **Variables:** getVariable, getCollectionVariables, getVariableValue, setVariableValue, createOrUpdateVariable
-// - **Batch:** extractModes, processVariables
+// ## Exported functions
+// | Category | Functions |
+// |----------|-----------|
+// | Collections | getAllCollections, getCollection, getOrCreateCollection, setupModes |
+// | Variables | getVariable, getCollectionVariables, getVariableValue, setVariableValue, createOrUpdateVariable |
+// | Batch | extractModes, processVariables |
 // @DOC_END
-
-console.log('📚 @Variables - Core Variable Management Library');
 
 // ============================================================================
 // CORE VARIABLE FUNCTIONS
 // ============================================================================
 
 /**
- * Get all variable collections
+ * Normalize variable name for Figma API: no empty path segments (e.g. "//" or leading/trailing "/").
+ * Figma throws "name cannot contain empty path" for names like "//3xs/font-size".
  */
-function getAllCollections() {
-  return figma.variables.getLocalVariableCollections();
+function normalizeVariableName(name) {
+  if (typeof name !== 'string') return name;
+  return name.replace(/\/+/g, '/').replace(/^\//, '').replace(/\/$/, '');
+}
+
+/**
+ * Get all variable collections (async for documentAccess: dynamic-page)
+ */
+async function getAllCollections() {
+  return await figma.variables.getLocalVariableCollectionsAsync();
 }
 
 /**
  * Get collection by name
  */
-function getCollection(name) {
-  var collections = getAllCollections();
+async function getCollection(name) {
+  var collections = await getAllCollections();
   return collections.find(function(c) { return c.name === name; });
 }
 
 /**
- * Get variable by name from a collection
+ * Get variable by name from a collection (async for getVariableByIdAsync)
  */
-function getVariable(collection, variableName) {
+async function getVariable(collection, variableName) {
   if (!collection) return null;
   
   for (var i = 0; i < collection.variableIds.length; i++) {
     var variableId = collection.variableIds[i];
-    var variable = figma.variables.getVariableById(variableId);
+    var variable = await figma.variables.getVariableByIdAsync(variableId);
     if (variable && variable.name === variableName) {
       return variable;
     }
@@ -52,8 +61,8 @@ function getVariable(collection, variableName) {
 /**
  * Get variable value for a specific mode
  */
-function getVariableValue(collection, variableName, modeId) {
-  var variable = getVariable(collection, variableName);
+async function getVariableValue(collection, variableName, modeId) {
+  var variable = await getVariable(collection, variableName);
   if (variable && variable.valuesByMode[modeId] !== undefined) {
     return variable.valuesByMode[modeId];
   }
@@ -63,8 +72,8 @@ function getVariableValue(collection, variableName, modeId) {
 /**
  * Set variable value for a specific mode
  */
-function setVariableValue(collection, variableName, modeId, value) {
-  var variable = getVariable(collection, variableName);
+async function setVariableValue(collection, variableName, modeId, value) {
+  var variable = await getVariable(collection, variableName);
   if (variable) {
     variable.setValueForMode(modeId, value);
     return true;
@@ -73,15 +82,15 @@ function setVariableValue(collection, variableName, modeId, value) {
 }
 
 /**
- * Get all variables in a collection
+ * Get all variables in a collection (async for getVariableByIdAsync)
  */
-function getCollectionVariables(collection) {
+async function getCollectionVariables(collection) {
   if (!collection) return [];
   
   var variables = [];
   for (var i = 0; i < collection.variableIds.length; i++) {
     var variableId = collection.variableIds[i];
-    var variable = figma.variables.getVariableById(variableId);
+    var variable = await figma.variables.getVariableByIdAsync(variableId);
     if (variable) {
       variables.push(variable);
     }
@@ -112,8 +121,8 @@ function getModeByName(collection, modeName) {
 /**
  * Find variables by pattern in name
  */
-function findVariablesByPattern(collection, pattern) {
-  var variables = getCollectionVariables(collection);
+async function findVariablesByPattern(collection, pattern) {
+  var variables = await getCollectionVariables(collection);
   var regex = new RegExp(pattern, 'i');
   return variables.filter(function(v) { return regex.test(v.name); });
 }
@@ -121,8 +130,8 @@ function findVariablesByPattern(collection, pattern) {
 /**
  * Find variables with function calls in description
  */
-function findSmartVariables(collection) {
-  var variables = getCollectionVariables(collection);
+async function findSmartVariables(collection) {
+  var variables = await getCollectionVariables(collection);
   return variables.filter(function(v) {
     return v.description && /(\w+)\s*\([^)]*\)/.test(v.description);
   });
@@ -157,7 +166,7 @@ function extractFunctionFromDescription(description) {
 /**
  * Update multiple variables in a collection
  */
-function updateMultipleVariables(collection, updates) {
+async function updateMultipleVariables(collection, updates) {
   var results = {
     success: 0,
     failed: 0,
@@ -167,7 +176,7 @@ function updateMultipleVariables(collection, updates) {
   for (var i = 0; i < updates.length; i++) {
     var update = updates[i];
     try {
-      var success = setVariableValue(collection, update.variableName, update.modeId, update.value);
+      var success = await setVariableValue(collection, update.variableName, update.modeId, update.value);
       if (success) {
         results.success++;
       } else {
@@ -186,8 +195,8 @@ function updateMultipleVariables(collection, updates) {
 /**
  * Get all variable values for a specific mode
  */
-function getModeValues(collection, modeId) {
-  var variables = getCollectionVariables(collection);
+async function getModeValues(collection, modeId) {
+  var variables = await getCollectionVariables(collection);
   var values = {};
   
   for (var i = 0; i < variables.length; i++) {
@@ -203,7 +212,7 @@ function getModeValues(collection, modeId) {
 /**
  * Set all variable values for a specific mode
  */
-function setModeValues(collection, modeId, values) {
+async function setModeValues(collection, modeId, values) {
   var results = {
     success: 0,
     failed: 0,
@@ -212,7 +221,7 @@ function setModeValues(collection, modeId, values) {
   
   for (var variableName in values) {
     try {
-      var success = setVariableValue(collection, variableName, modeId, values[variableName]);
+      var success = await setVariableValue(collection, variableName, modeId, values[variableName]);
       if (success) {
         results.success++;
       } else {
@@ -239,7 +248,7 @@ function createVariable(collection, name, type, description) {
   if (!collection) {
     throw new Error('Collection not found');
   }
-  
+  name = normalizeVariableName(name);
   var variable = figma.variables.createVariable(name, collection, type);
   if (description) {
     variable.description = description;
@@ -285,10 +294,10 @@ function createVariablesFromConfig(collection, config) {
 /**
  * Get collection summary
  */
-function getCollectionSummary(collection) {
+async function getCollectionSummary(collection) {
   if (!collection) return null;
   
-  var variables = getCollectionVariables(collection);
+  var variables = await getCollectionVariables(collection);
   var modes = getCollectionModes(collection);
   
   return {
@@ -303,7 +312,7 @@ function getCollectionSummary(collection) {
 /**
  * Validate collection configuration
  */
-function validateCollection(collection, requiredVariables, requiredModes) {
+async function validateCollection(collection, requiredVariables, requiredModes) {
   var errors = [];
   
   if (!collection) {
@@ -311,7 +320,7 @@ function validateCollection(collection, requiredVariables, requiredModes) {
     return { valid: false, errors: errors };
   }
   
-  var variables = getCollectionVariables(collection);
+  var variables = await getCollectionVariables(collection);
   var variableNames = variables.map(function(v) { return v.name; });
   
   // Check required variables
@@ -338,10 +347,10 @@ function validateCollection(collection, requiredVariables, requiredModes) {
 /**
  * Export collection data
  */
-function exportCollectionData(collection) {
+async function exportCollectionData(collection) {
   if (!collection) return null;
   
-  var variables = getCollectionVariables(collection);
+  var variables = await getCollectionVariables(collection);
   var data = {
     name: collection.name,
     modes: collection.modes,
@@ -368,13 +377,13 @@ function exportCollectionData(collection) {
 /**
  * Log collection information
  */
-function logCollectionInfo(collection) {
+async function logCollectionInfo(collection) {
   if (!collection) {
     console.log('❌ Collection not found');
     return;
   }
   
-  var summary = getCollectionSummary(collection);
+  var summary = await getCollectionSummary(collection);
   console.log('📚 Collection: "' + summary.name + '"');
   console.log('   Variables: ' + summary.variableCount);
   console.log('   Modes: ' + summary.modeCount);
@@ -384,8 +393,8 @@ function logCollectionInfo(collection) {
 /**
  * Log variable values for all modes
  */
-function logVariableValues(collection, variableName) {
-  var variable = getVariable(collection, variableName);
+async function logVariableValues(collection, variableName) {
+  var variable = await getVariable(collection, variableName);
   if (!variable) {
     console.log('❌ Variable not found: ' + variableName);
     return;
@@ -404,10 +413,10 @@ function logVariableValues(collection, variableName) {
 // ============================================================================
 
 /**
- * Get or create a variable collection
+ * Get or create a variable collection (async for documentAccess: dynamic-page)
  */
-function getOrCreateCollection(name) {
-  var collections = figma.variables.getLocalVariableCollections();
+async function getOrCreateCollection(name) {
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
   var existing = collections.find(function(c) { return c.name === name; });
   
   if (existing) {
@@ -451,7 +460,7 @@ function setupModes(collection, modeNames) {
 /**
  * Create or update a variable in a collection
  */
-function createOrUpdateVariable(collection, name, config, modes) {
+async function createOrUpdateVariable(collection, name, config, modes) {
   // Handle both old signature (type, values) and new signature (config, modes)
   var actualConfig, actualModes;
   
@@ -465,7 +474,8 @@ function createOrUpdateVariable(collection, name, config, modes) {
     actualModes = modes;
   }
   
-  var existing = getVariable(collection, name);
+  name = normalizeVariableName(name);
+  var existing = await getVariable(collection, name);
   var action = existing ? 'updated' : 'created';
   
   if (!existing) {
@@ -545,18 +555,18 @@ function extractModes(config) {
 /**
  * Process multiple variables
  */
-function processVariables(collection, variables, configValues, modes) {
+async function processVariables(collection, variables, configValues, modes) {
   var stats = { created: 0, updated: 0, skipped: 0 };
   
   console.log('Processing ' + Object.keys(variables).length + ' variables...');
   
-  // Process all variables
-  Object.keys(variables).forEach(function(varName) {
+  var varNames = Object.keys(variables);
+  for (var idx = 0; idx < varNames.length; idx++) {
+    var varName = varNames[idx];
     try {
       var varConfig = variables[varName];
       console.log('Processing variable: ' + varName);
       
-      // Calculate values using config (include scopes so variable is limited to the right picker)
       var calculatedConfig = {
         type: varConfig.type,
         values: {}
@@ -569,10 +579,8 @@ function processVariables(collection, variables, configValues, modes) {
         if (varConfig.values && varConfig.values[mode]) {
           try {
             if (typeof varConfig.values[mode] === 'function') {
-              // Calculate value using config
               calculatedConfig.values[mode] = varConfig.values[mode](configValues);
             } else {
-              // Use static value
               calculatedConfig.values[mode] = varConfig.values[mode];
             }
           } catch (e) {
@@ -582,7 +590,7 @@ function processVariables(collection, variables, configValues, modes) {
         }
       });
       
-      var result = createOrUpdateVariable(collection, varName, calculatedConfig, modes);
+      var result = await createOrUpdateVariable(collection, varName, calculatedConfig, modes);
       stats[result]++;
     } catch (e) {
       console.error('Error processing variable ' + varName + ':', e);
@@ -594,7 +602,7 @@ function processVariables(collection, variables, configValues, modes) {
       });
       stats.skipped++;
     }
-  });
+  }
   
   return stats;
 }
@@ -618,9 +626,9 @@ function rgbToHex(r, g, b) {
 // ============================================================================
 
 /**
- * Collect variables from a node and add to the usedVariables Map
+ * Collect variables from a node and add to the usedVariables Map (async for getVariableByIdAsync)
  */
-function collectNodeVariables(node, usedVariables) {
+async function collectNodeVariables(node, usedVariables) {
   try {
     if (!node || !node.boundVariables || typeof node.boundVariables !== 'object') return;
     
@@ -632,7 +640,7 @@ function collectNodeVariables(node, usedVariables) {
         var variableId = binding.id || (binding[0] && binding[0].id);
         if (!variableId) continue;
         
-        var variable = figma.variables.getVariableById(variableId);
+        var variable = await figma.variables.getVariableByIdAsync(variableId);
         if (!variable || !variable.name) continue;
         
         var key = variable.name + '::' + property;

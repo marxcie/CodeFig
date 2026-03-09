@@ -138,22 +138,19 @@ function buildReplacementsFromConfig() {
 }
 
 // Helper function to collect all nodes using library function
-// Uses traverseNodes from @Core Library for optimized traversal
+// Uses iterative traverseNodes with maxNodes to prevent memory overload
 function collectAllNodes(nodes) {
   var allNodes = [];
-  var MAX_NODES = 50000; // Hard limit to prevent memory overload
+  var MAX_NODES = 8000; // Conservative limit to prevent memory overload with external libs
   
-  // Use traverseNodes from @Core Library for optimized traversal
   traverseNodes(nodes, function(node) {
-    // Check if we've exceeded the limit
-    if (allNodes.length >= MAX_NODES) {
-      console.log('⚠️ Node collection limit reached (' + MAX_NODES + '). Processing first ' + MAX_NODES + ' nodes only.');
-      return 0; // Stop traversal
-    }
-    
     allNodes.push(node);
-    return 0; // Return value doesn't matter for collection
-  });
+    return 0;
+  }, { maxNodes: MAX_NODES });
+  
+  if (allNodes.length >= MAX_NODES) {
+    console.log('⚠️ Node limit reached (' + MAX_NODES + '). Processing first ' + MAX_NODES + ' nodes.');
+  }
   
   return allNodes;
 }
@@ -190,7 +187,7 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
     }
     
     // Build comprehensive style cache and process nodes
-    return buildStyleCache().then(function(styleCache) {
+    return buildStyleCache(nodes, selectionOnlyVal).then(function(styleCache) {
       console.log('📋 Found ' + styleCache.size + ' styles (text + color + effect)');
       
       // Cleanup memory after building cache
@@ -205,38 +202,37 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         return { success: true, replacements: 0, error: null };
       }
       
-      // Adaptive chunk size based on node count
-      var adaptiveChunkSize = 15; // Default
-      if (allNodes.length > 10000) {
-        adaptiveChunkSize = 5; // Very small chunks for very large files
-      } else if (allNodes.length > 5000) {
-        adaptiveChunkSize = 8; // Small chunks for large files
-      } else if (allNodes.length > 1000) {
-        adaptiveChunkSize = 10; // Medium chunks for medium files
+      // Conservative chunk sizes to reduce memory with external libraries
+      var adaptiveChunkSize = 8; // Default
+      if (allNodes.length > 5000) {
+        adaptiveChunkSize = 3; // Very small for large/deep trees
+      } else if (allNodes.length > 2000) {
+        adaptiveChunkSize = 5;
+      } else if (allNodes.length > 500) {
+        adaptiveChunkSize = 6;
       }
       
       console.log('📊 Using chunk size: ' + adaptiveChunkSize + ' (adaptive based on ' + allNodes.length + ' nodes)');
       
       var searchInVal = typeof searchIn !== 'undefined' ? searchIn : '';
       if (searchInVal && String(searchInVal).trim()) {
-        console.log('[Replace styles] DEBUG: searchIn "' + String(searchInVal).trim() + '" – only rebind when current style name matches');
       }
       
-      return processWithOptimization(allNodes, function(node) {
+      return processWithOptimization(allNodes, async function(node) {
         var replacementCount = 0;
         var nodeName = node.name || 'Unnamed';
         
         if (node.type === 'TEXT') {
-          replacementCount += processTextNode(node, styleCache, nodeName, replacements, searchInVal);
+          replacementCount += await processTextNode(node, styleCache, nodeName, replacements, searchInVal);
         }
-        replacementCount += processOtherStyles(node, styleCache, nodeName, replacements, searchInVal);
+        replacementCount += await processOtherStyles(node, styleCache, nodeName, replacements, searchInVal);
         
         return replacementCount;
       }, {
         chunkSize: adaptiveChunkSize,
         showProgress: true,
         operation: 'Replacing styles',
-        maxNodes: allNodes.length > 10000 ? 10000 : undefined // Limit processing for very large files
+        maxNodes: undefined // Already capped at 8000 in collectAllNodes
       }).then(function(resolved) {
         var totalReplacements = 0;
         var resultsArray = resolved && resolved.results ? resolved.results : (Array.isArray(resolved) ? resolved : []);
@@ -269,16 +265,13 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
 }
 
 // Build comprehensive style cache for all style types (local + library)
-function buildStyleCache() {
-  return new Promise(function(resolve, reject) {
+// scopeNodes/selectionOnly limit fallback scan scope to reduce memory
+function buildStyleCache(scopeNodes, selectionOnly) {
+  scopeNodes = scopeNodes || [figma.currentPage];
+  selectionOnly = !!selectionOnly;
+  return getAllStyles().then(function(allLocalStyles) {
     var cache = new Map();
-    
     console.log('🔍 Building comprehensive style cache with Team Library API...');
-    
-    // Add all local styles
-    // Use getAllStyles from @Core Library for consistency
-    var allLocalStyles = getAllStyles();
-    
     for (var i = 0; i < allLocalStyles.length; i++) {
       var style = allLocalStyles[i];
       var styleType = style.type || 'TEXT';
@@ -289,11 +282,8 @@ function buildStyleCache() {
         isLibrary: false
       });
     }
-    
     console.log('📋 Added ' + allLocalStyles.length + ' local styles');
-    
-  // 🚀 Access Team Library styles (with performance optimization)
-  // Skip Team Library access for very large files to prevent memory issues
+    return new Promise(function(resolve, reject) {
   var skipTeamLibrary = false;
   
   // More robust check for Team Library API availability
@@ -315,7 +305,7 @@ function buildStyleCache() {
   if (skipTeamLibrary) {
     // Skip Team Library and just use local styles + document scanning
     console.log('📋 Using local styles only (Team Library skipped)');
-    scanDocumentForLibraryStyles(cache).then(function() {
+    scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly).then(function() {
       console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
       cleanupMemory();
       resolve(cache);
@@ -340,7 +330,7 @@ function buildStyleCache() {
     } catch (apiError) {
       console.log('⚠️ Team Library API call failed: ' + apiError.message);
       skipTeamLibrary = true;
-      scanDocumentForLibraryStyles(cache).then(function() {
+      scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly).then(function() {
         console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
         cleanupMemory();
         resolve(cache);
@@ -358,10 +348,10 @@ function buildStyleCache() {
     Promise.race([libraryPromise, timeoutPromise]).then(function(libraryCollections) {
       console.log('📚 Found ' + libraryCollections.length + ' library style collections');
       
-      // Performance optimization: Limit collections to prevent timeout
-      var maxCollections = 10; // Limit to prevent timeout in large files
+      // Performance optimization: Limit collections to prevent memory overflow
+      var maxCollections = selectionOnly ? 5 : 8; // Fewer when only selection
       if (libraryCollections.length > maxCollections) {
-        console.log('⚠️ Large file detected: Processing first ' + maxCollections + ' collections only');
+        console.log('⚠️ Processing first ' + maxCollections + ' library collections');
         libraryCollections = libraryCollections.slice(0, maxCollections);
       }
       
@@ -414,8 +404,7 @@ function buildStyleCache() {
       console.log('⚠️ Team Library access failed: ' + error.message);
       console.log('📋 Falling back to document scanning...');
       
-      // Fallback: Scan document for currently used library styles
-      scanDocumentForLibraryStyles(cache).then(function() {
+      scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly).then(function() {
         console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
         
         // Cleanup memory after building cache
@@ -429,8 +418,7 @@ function buildStyleCache() {
       console.log('⚠️ Team Library access failed: ' + error.message);
       console.log('📋 Falling back to document scanning...');
       
-      // Fallback: Scan document for currently used library styles
-      scanDocumentForLibraryStyles(cache).then(function() {
+      scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly).then(function() {
         console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
         
         // Cleanup memory after building cache
@@ -439,26 +427,36 @@ function buildStyleCache() {
         resolve(cache);
       });
     }
+    });
   });
 }
 
-// Fallback function to scan document for library styles
-// Scans all pages with chunked processing to prevent memory issues
-function scanDocumentForLibraryStyles(cache) {
+// Fallback: scan nodes for library styles. When selectionOnly, scans only scopeNodes.
+// Limits nodes to avoid memory overflow with large files.
+function scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly) {
+  scopeNodes = scopeNodes || [figma.currentPage];
+  var MAX_SCAN_NODES = 5000; // Cap to prevent memory overflow
+  var nodesToProcess = [];
+  traverseNodes(scopeNodes, function(node) {
+    nodesToProcess.push(node);
+    return 0;
+  }, { maxNodes: MAX_SCAN_NODES });
+  
+  if (nodesToProcess.length >= MAX_SCAN_NODES) {
+    nodesToProcess = nodesToProcess.slice(0, MAX_SCAN_NODES);
+    console.log('⚠️ Style scan limited to ' + MAX_SCAN_NODES + ' nodes');
+  }
+  
   return new Promise(function(resolve) {
-    var allPages = figma.root.children; // All pages in the document
-    var totalPages = allPages.length;
-    var currentPageIndex = 0;
-    var nodesToProcess = [];
-    var chunkStartIndex = 0; // Position in current page's nodes array
-    var totalNodesScanned = 0; // Total nodes scanned across all pages
-    var CHUNK_SIZE = 500; // Process 500 nodes at a time
-    var YIELD_DELAY = 10; // 10ms delay between chunks to yield to Figma
+    var chunkStartIndex = 0;
+    var totalNodesScanned = 0;
+    var CHUNK_SIZE = 300; // Smaller chunks for memory
+    var YIELD_DELAY = 10;
     
-    console.log('📄 Scanning ' + totalPages + ' pages for styles...');
+    console.log('📄 Scanning ' + nodesToProcess.length + ' nodes for styles...');
     
-    // Helper function to extract styles from a node
-    function extractStylesFromNode(node) {
+    // Helper function to extract styles from a node (async for getStyleByIdAsync)
+    async function extractStylesFromNode(node) {
       if (!node || typeof node !== 'object') {
         return;
       }
@@ -472,7 +470,7 @@ function scanDocumentForLibraryStyles(cache) {
               var segment = segments[segIndex];
               if (segment && segment.textStyleId && segment.textStyleId !== figma.mixed) {
                 try {
-                  var style = figma.getStyleById(segment.textStyleId);
+                  var style = await figma.getStyleByIdAsync(segment.textStyleId);
                   if (style) {
                     var key = styleCacheKey(style.name, 'TEXT');
                     if (!cache.has(key)) {
@@ -501,7 +499,7 @@ function scanDocumentForLibraryStyles(cache) {
         var prop = styleProps[propIndex];
         if (prop in node && node[prop] && node[prop] !== figma.mixed) {
           try {
-            var style = figma.getStyleById(node[prop]);
+            var style = await figma.getStyleByIdAsync(node[prop]);
             if (style) {
               var scanType = 'PAINT';
               if (prop === 'effectStyleId') scanType = 'EFFECT';
@@ -522,71 +520,40 @@ function scanDocumentForLibraryStyles(cache) {
       }
     }
     
-    // Collect all nodes from a page
-    function collectNodesFromPage(page) {
-      nodesToProcess = [];
-      try {
-        traverseNodes([page], function(node) {
-          nodesToProcess.push(node);
-          return 0; // Continue traversal
-        });
-      } catch (e) {
-        console.log('⚠️ Error collecting nodes from page: ' + e.message);
-      }
-    }
-    
-    // Process nodes in chunks with yields
+    // Process nodes in chunks with yields (async for getStyleByIdAsync)
     function processChunk() {
       var chunkEnd = Math.min(chunkStartIndex + CHUNK_SIZE, nodesToProcess.length);
-      
-      // Process chunk
-      for (var i = chunkStartIndex; i < chunkEnd; i++) {
-        extractStylesFromNode(nodesToProcess[i]);
-        totalNodesScanned++;
-      }
-      
-      chunkStartIndex = chunkEnd;
-      
-      // Check if we're done with current page
-      if (chunkStartIndex >= nodesToProcess.length) {
-        // Move to next page or finish
-        currentPageIndex++;
+      (async function runChunk() {
+        for (var i = chunkStartIndex; i < chunkEnd; i++) {
+          await extractStylesFromNode(nodesToProcess[i]);
+          totalNodesScanned++;
+        }
+        chunkStartIndex = chunkEnd;
         
-        if (currentPageIndex < totalPages) {
-          // Collect nodes from next page
-          collectNodesFromPage(allPages[currentPageIndex]);
-          chunkStartIndex = 0;
-          
-          console.log('📄 Scanning page ' + (currentPageIndex + 1) + '/' + totalPages + ' (' + allPages[currentPageIndex].name + ')...');
-          
-          // Process next page
-          setTimeout(processChunk, YIELD_DELAY);
-        } else {
-          // All pages processed
-          console.log('✅ Scanned ' + totalNodesScanned + ' nodes across ' + totalPages + ' pages');
-          console.log('📋 Found ' + cache.size + ' unique styles');
+        if (chunkStartIndex >= nodesToProcess.length) {
+          console.log('✅ Scanned ' + totalNodesScanned + ' nodes, found ' + cache.size + ' unique styles');
+          nodesToProcess = []; // Release reference
           cleanupMemory();
           resolve();
+        } else {
+          setTimeout(processChunk, YIELD_DELAY);
         }
-      } else {
-        // Continue processing current chunk
-        setTimeout(processChunk, YIELD_DELAY);
-      }
+      })().catch(function(e) {
+        console.log('⚠️ Error during style scan: ' + (e && e.message));
+        resolve();
+      });
     }
     
-    // Start processing first page
-    if (totalPages > 0) {
-      collectNodesFromPage(allPages[0]);
-      console.log('📄 Scanning page 1/' + totalPages + ' (' + allPages[0].name + ')...');
+    if (nodesToProcess.length > 0) {
       setTimeout(processChunk, YIELD_DELAY);
     } else {
-      console.log('⚠️ No pages found in document');
+      console.log('⚠️ No nodes to scan');
       resolve();
     }
   });
 }
 
-function processTextNode(node, styleCache, nodeName, replacements, searchInVal) {
+async function processTextNode(node, styleCache, nodeName, replacements, searchInVal) {
   var totalReplacements = 0;
   
   try {
@@ -596,7 +563,7 @@ function processTextNode(node, styleCache, nodeName, replacements, searchInVal) 
       var segment = segments[segIndex];
       if (segment.textStyleId && segment.textStyleId !== figma.mixed) {
         try {
-          var currentStyle = figma.getStyleById(segment.textStyleId);
+          var currentStyle = await figma.getStyleByIdAsync(segment.textStyleId);
           if (currentStyle) {
             var newStyle = findReplacementStyle(currentStyle, styleCache, 'TEXT', replacements, searchInVal);
             
@@ -612,8 +579,7 @@ function processTextNode(node, styleCache, nodeName, replacements, searchInVal) 
                 console.log('❌ Failed to import style: ' + error.message);
               }
             } else if (newStyle) {
-              // It's a synchronous result (local style)
-              node.setRangeTextStyleId(segment.start, segment.end, newStyle.id);
+              await node.setRangeTextStyleIdAsync(segment.start, segment.end, newStyle.id);
               totalReplacements++;
               console.log('✅ Text: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
             }
@@ -630,12 +596,12 @@ function processTextNode(node, styleCache, nodeName, replacements, searchInVal) 
   return totalReplacements;
 }
 
-function processOtherStyles(node, styleCache, nodeName, replacements, searchInVal) {
+async function processOtherStyles(node, styleCache, nodeName, replacements, searchInVal) {
   var totalReplacements = 0;
   
   if ('fillStyleId' in node && node.fillStyleId && node.fillStyleId !== figma.mixed) {
     try {
-      var currentStyle = figma.getStyleById(node.fillStyleId);
+      var currentStyle = await figma.getStyleByIdAsync(node.fillStyleId);
       if (currentStyle) {
         var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal);
         
@@ -644,8 +610,7 @@ function processOtherStyles(node, styleCache, nodeName, replacements, searchInVa
           // It's a Promise (library style import) - skip during chunked processing
           console.log('⚠️ Skipping library style import for "' + currentStyle.name + '" (async import deferred)');
         } else if (newStyle) {
-          // It's a synchronous result (local style)
-          node.fillStyleId = newStyle.id;
+          await node.setFillStyleIdAsync(newStyle.id);
           totalReplacements++;
           console.log('✅ Fill: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
         }
@@ -657,7 +622,7 @@ function processOtherStyles(node, styleCache, nodeName, replacements, searchInVa
   
   if ('strokeStyleId' in node && node.strokeStyleId && node.strokeStyleId !== figma.mixed) {
     try {
-      var currentStyle = figma.getStyleById(node.strokeStyleId);
+      var currentStyle = await figma.getStyleByIdAsync(node.strokeStyleId);
       if (currentStyle) {
         var newStyle = findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal);
         
@@ -666,8 +631,7 @@ function processOtherStyles(node, styleCache, nodeName, replacements, searchInVa
           // It's a Promise (library style import) - skip during chunked processing
           console.log('⚠️ Skipping library style import for "' + currentStyle.name + '" (async import deferred)');
         } else if (newStyle) {
-          // It's a synchronous result (local style)
-          node.strokeStyleId = newStyle.id;
+          await node.setStrokeStyleIdAsync(newStyle.id);
           totalReplacements++;
           console.log('✅ Stroke: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
         }
@@ -679,7 +643,7 @@ function processOtherStyles(node, styleCache, nodeName, replacements, searchInVa
   
   if ('effectStyleId' in node && node.effectStyleId && node.effectStyleId !== figma.mixed) {
     try {
-      var currentStyle = figma.getStyleById(node.effectStyleId);
+      var currentStyle = await figma.getStyleByIdAsync(node.effectStyleId);
       if (currentStyle) {
         var newStyle = findReplacementStyle(currentStyle, styleCache, 'EFFECT', replacements, searchInVal);
         
@@ -688,8 +652,7 @@ function processOtherStyles(node, styleCache, nodeName, replacements, searchInVa
           // It's a Promise (library style import) - skip during chunked processing
           console.log('⚠️ Skipping library style import for "' + currentStyle.name + '" (async import deferred)');
         } else if (newStyle) {
-          // It's a synchronous result (local style)
-          node.effectStyleId = newStyle.id;
+          await node.setEffectStyleIdAsync(newStyle.id);
           totalReplacements++;
           console.log('✅ Effect: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
         }
@@ -706,18 +669,13 @@ function findReplacementStyle(currentStyle, styleCache, expectedType, replacemen
   if (searchInVal != null && String(searchInVal).trim() !== '') {
     var scopeMatch = matchPattern(currentStyle.name, String(searchInVal).trim(), { exact: false, caseSensitive: false });
     if (!scopeMatch || !scopeMatch.match) {
-      console.log('[Replace styles] DEBUG: skip "' + currentStyle.name + '" – does not match searchIn');
       return null;
     }
   }
   
-  console.log('🔍 Checking style: "' + currentStyle.name + '" (type: ' + expectedType + ')');
-  
   for (var replIndex = 0; replIndex < replacements.length; replIndex++) {
     var replacement = replacements[replIndex];
     var findPattern = replacement.from;
-    
-    console.log('🔍 Testing pattern: "' + findPattern + '" → "' + replacement.to + '"');
     
     var patternMatch = matchPattern(currentStyle.name, findPattern, {
       exact: false,
@@ -730,22 +688,17 @@ function findReplacementStyle(currentStyle, styleCache, expectedType, replacemen
       newStyleName = newStyleName.replace(patternRegex, replacement.to);
       
       if (newStyleName !== currentStyle.name) {
-        console.log('🔍 Looking for replacement: "' + currentStyle.name + '" → "' + newStyleName + '"');
-        
         var cacheKey = styleCacheKey(newStyleName, expectedType);
         var styleInfo = styleCache.get(cacheKey);
         if (styleInfo && styleInfo.type === expectedType) {
           if (styleInfo.style) {
-            console.log('✅ Found replacement: "' + newStyleName + '"');
             return styleInfo.style;
           }
           
           if (styleInfo.isLibrary && styleInfo.key) {
-            console.log('📥 Importing library style: "' + newStyleName + '"');
             try {
               var importedStyle = figma.importStyleByKeyAsync(styleInfo.key);
               return importedStyle.then(function(importedStyle) {
-                console.log('✅ Successfully imported: "' + importedStyle.name + '"');
                 styleCache.set(styleCacheKey(importedStyle.name, expectedType), {
                   style: importedStyle,
                   type: expectedType,
@@ -761,8 +714,6 @@ function findReplacementStyle(currentStyle, styleCache, expectedType, replacemen
               console.log('❌ Failed to import style: ' + importError.message);
             }
           }
-        } else {
-          console.log('❌ Replacement style not found: "' + newStyleName + '" (type: ' + expectedType + ')');
         }
       }
     }

@@ -38,7 +38,7 @@ function extractTypographyProperties(node) {
 }
 
 // Extract variable bindings from node, filtering for local variables only
-function extractVariableBindings(node) {
+async function extractVariableBindings(node) {
   try {
     if (!node || !node.boundVariables || typeof node.boundVariables !== 'object') {
       return {};
@@ -53,21 +53,15 @@ function extractVariableBindings(node) {
 
       if (!binding) continue;
 
-      // Handle both single binding and array of bindings
       var variableId = binding.id || (Array.isArray(binding) && binding[0] && binding[0].id);
       if (!variableId) continue;
 
       try {
-        var variable = figma.variables.getVariableById(variableId);
+        var variable = await figma.variables.getVariableByIdAsync(variableId);
         if (!variable) continue;
 
-        // Check if variable is local (not remote)
-        // Local variables don't have remote: true property
-        // We can check by trying to access variable.name - if it's accessible, it's likely local
-        // Remote variables might throw errors or have different properties
         try {
-          // Try to get variable collection to check if it's local
-          var collections = figma.variables.getLocalVariableCollections();
+          var collections = await figma.variables.getLocalVariableCollectionsAsync();
           var isLocal = false;
 
           for (var j = 0; j < collections.length; j++) {
@@ -81,12 +75,9 @@ function extractVariableBindings(node) {
           if (isLocal) {
             bindings[property] = variable;
           } else {
-            // Skip remote variables
             console.log('Skipping remote variable: ' + (variable.name || variableId) + ' for property: ' + property);
           }
         } catch (checkError) {
-          // If we can't check, assume it's local and try to use it
-          // This handles edge cases where the variable might be accessible but collection check fails
           bindings[property] = variable;
         }
       } catch (error) {
@@ -104,8 +95,8 @@ function extractVariableBindings(node) {
 // Create or update text style with node name, applying numeric properties first
 async function createOrUpdateTextStyle(styleName, properties) {
   try {
-    // Check if style already exists
-    var existingStyles = figma.getLocalTextStyles();
+    // Check if style already exists (async for documentAccess: dynamic-page)
+    var existingStyles = await figma.getLocalTextStylesAsync();
     var existingStyle = existingStyles.find(function(style) {
       return style.name === styleName;
     });
@@ -259,7 +250,7 @@ async function createStylesFromNodes() {
         }
 
         // Extract variable bindings
-        var bindings = extractVariableBindings(textNode);
+        var bindings = await extractVariableBindings(textNode);
 
         // Create or update text style (async for font loading)
         var result = await createOrUpdateTextStyle(nodeName, properties);

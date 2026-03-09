@@ -6,9 +6,10 @@
   "scripts": {
     "validate": "node validate-scripts.js",
     "build": "npm run validate || true && tsc && node build-scripts.js",
+    "build:dev": "npm run validate || true && tsc && node build-scripts.js --dev",
     "build:scripts": "node build-scripts.js",
     "build:ui": "node bundle-ui.js",
-    "dev": "npm run build && concurrently \"tsc --watch\" \"chokidar 'src/ui.html' 'scripts/**/*.ts' -c 'node build-scripts.js'\" \"node figma-console-server.js\"",
+    "dev": "npm run build:dev && concurrently \"tsc --watch\" \"chokidar 'src/ui.html' 'scripts/**/*.ts' -c 'node build-scripts.js --dev'\" \"node figma-console-server.js\"",
     "prepare": "node -e \"const fs=require('fs');const p=require('path');const g=p.join(process.cwd(),'.git','info','exclude');if(!fs.existsSync(p.join(process.cwd(),'.git'))) process.exit(0);let c=fs.existsSync(g)?fs.readFileSync(g,'utf8'):'';if(!c.includes('figma-console.log')) fs.appendFileSync(g,'\\nfigma-console.log\\n');\"",
     "clean": "rm -rf dist"
   },

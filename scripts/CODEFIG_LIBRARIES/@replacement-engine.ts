@@ -6,11 +6,13 @@
 // ## Overview
 // Import for find/replace with options (collection, type, property, exact, caseSensitive, dryRun, batchSize), planning (createReplacementPlan, validateReplacement, estimateImpact), execution (executeReplacement, rollbackReplacement, previewReplacement), and reporting (generateReport, createSummary, exportResults). No configuration; use via @import.
 //
-// ## Exported functions (examples)
-// - **Find & Replace:** findAndReplace, batchReplace, findMatches, replaceMatches
-// - **Planning:** createReplacementPlan, validateReplacement, estimateImpact
-// - **Execution:** executeReplacement, rollbackReplacement, previewReplacement
-// - **Reporting:** generateReport, createSummary, exportResults
+// ## Exported functions
+// | Category | Functions |
+// |----------|-----------|
+// | Find & Replace | findAndReplace, batchReplace, findMatches, replaceMatches |
+// | Planning | createReplacementPlan, validateReplacement, estimateImpact |
+// | Execution | executeReplacement, rollbackReplacement, previewReplacement |
+// | Reporting | generateReport, createSummary, exportResults |
 // @DOC_END
 
 // ============================================================================
@@ -68,15 +70,15 @@ interface ReplacementResult {
 /**
  * Find and replace with advanced options
  */
-function findAndReplace(
+async function findAndReplace(
   selection: ReadonlyArray<any>,
   options: ReplacementOptions
-): ReplacementResult {
+): Promise<ReplacementResult> {
   const startTime = Date.now();
   
   try {
     // Create replacement plan
-    const plan = createReplacementPlan(selection, options);
+    const plan = await createReplacementPlan(selection, options);
     
     if (plan.matches.length === 0) {
       return {
@@ -93,7 +95,7 @@ function findAndReplace(
     }
     
     // Execute replacement
-    const result = executeReplacement(plan, options);
+    const result = await executeReplacement(plan, options);
     result.executionTime = Date.now() - startTime;
     
     return result;
@@ -117,17 +119,17 @@ function findAndReplace(
 /**
  * Batch replace with progress tracking
  */
-function batchReplace(
+async function batchReplace(
   selection: ReadonlyArray<any>,
   options: ReplacementOptions,
   onProgress?: (progress: { current: number; total: number; percentage: number }) => void
-): ReplacementResult {
+): Promise<ReplacementResult> {
   const startTime = Date.now();
   const batchSize = options.batchSize || 50;
   
   try {
     // Create replacement plan
-    const plan = createReplacementPlan(selection, options);
+    const plan = await createReplacementPlan(selection, options);
     
     if (plan.matches.length === 0) {
       return {
@@ -160,7 +162,7 @@ function batchReplace(
     
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
-      const batchResult = executeBatch(batch, options);
+      const batchResult = await executeBatch(batch, options);
       
       // Merge results
       result.successful += batchResult.successful;
@@ -214,10 +216,10 @@ function batchReplace(
 /**
  * Create replacement plan
  */
-function createReplacementPlan(
+async function createReplacementPlan(
   selection: ReadonlyArray<any>,
   options: ReplacementOptions
-): ReplacementPlan {
+): Promise<ReplacementPlan> {
   const matches: ReplacementMatch[] = [];
   const warnings: string[] = [];
   const rollbackData: any[] = [];
@@ -225,7 +227,7 @@ function createReplacementPlan(
   const allNodes = collectAllNodes(selection);
   
   for (const node of allNodes) {
-    const nodeMatches = findMatchesInNode(node, options);
+    const nodeMatches = await findMatchesInNode(node, options);
     matches.push(...nodeMatches);
     
     // Collect rollback data
@@ -264,9 +266,9 @@ function createReplacementPlan(
 }
 
 /**
- * Find matches in a single node
+ * Find matches in a single node (async for getStyleByIdAsync)
  */
-function findMatchesInNode(node: any, options: ReplacementOptions): ReplacementMatch[] {
+async function findMatchesInNode(node: any, options: ReplacementOptions): Promise<ReplacementMatch[]> {
   const matches: ReplacementMatch[] = [];
   
   // Check bound variables
@@ -278,7 +280,7 @@ function findMatchesInNode(node: any, options: ReplacementOptions): ReplacementM
       const variableId = binding.id || (binding[0] && binding[0].id);
       if (!variableId) continue;
       
-      const variable = figma.variables.getVariableById(variableId);
+      const variable = await figma.variables.getVariableByIdAsync(variableId);
       if (!variable) continue;
       
       const match = createVariableMatch(node, property, variable, options);
@@ -288,13 +290,13 @@ function findMatchesInNode(node: any, options: ReplacementOptions): ReplacementM
     }
   }
   
-  // Check direct style properties
+  // Check direct style properties (async for documentAccess: dynamic-page)
   const styleProperties = getNodeStyleProperties(node);
   for (const [property, styleId] of Object.entries(styleProperties)) {
     if (options.property && property !== options.property) continue;
     if (!styleId || styleId === figma.mixed) continue;
     
-    const style = figma.getStyleById(styleId);
+    const style = await figma.getStyleByIdAsync(styleId);
     if (!style) continue;
     
     const match = createStyleMatch(node, property, style, options);
@@ -388,7 +390,7 @@ function createStyleMatch(
 /**
  * Execute replacement plan
  */
-function executeReplacement(plan: ReplacementPlan, options: ReplacementOptions): ReplacementResult {
+async function executeReplacement(plan: ReplacementPlan, options: ReplacementOptions): Promise<ReplacementResult> {
   const result: ReplacementResult = {
     successful: 0,
     failed: 0,
@@ -412,7 +414,7 @@ function executeReplacement(plan: ReplacementPlan, options: ReplacementOptions):
         continue;
       }
       
-      const success = executeMatch(match);
+      const success = await executeMatch(match);
       
       if (success) {
         result.successful++;
@@ -447,12 +449,12 @@ function executeReplacement(plan: ReplacementPlan, options: ReplacementOptions):
 /**
  * Execute a single match
  */
-function executeMatch(match: ReplacementMatch): boolean {
+async function executeMatch(match: ReplacementMatch): Promise<boolean> {
   try {
     if (match.metadata?.type === 'variable') {
       return executeVariableReplacement(match);
     } else if (match.metadata?.type === 'style') {
-      return executeStyleReplacement(match);
+      return await executeStyleReplacement(match);
     }
     
     return false;
@@ -473,23 +475,23 @@ function executeVariableReplacement(match: ReplacementMatch): boolean {
 }
 
 /**
- * Execute style replacement
+ * Execute style replacement (async for documentAccess: dynamic-page)
  */
-function executeStyleReplacement(match: ReplacementMatch): boolean {
+async function executeStyleReplacement(match: ReplacementMatch): Promise<boolean> {
   try {
     const { node, property, newValue } = match;
     
     if (property === 'textStyleId' && newValue.type === 'TEXT') {
-      node.textStyleId = newValue.id;
+      await node.setTextStyleIdAsync(newValue.id);
       return true;
     } else if (property === 'fillStyleId' && newValue.type === 'PAINT') {
-      node.fillStyleId = newValue.id;
+      await node.setFillStyleIdAsync(newValue.id);
       return true;
     } else if (property === 'strokeStyleId' && newValue.type === 'PAINT') {
-      node.strokeStyleId = newValue.id;
+      await node.setStrokeStyleIdAsync(newValue.id);
       return true;
     } else if (property === 'effectStyleId' && newValue.type === 'EFFECT') {
-      node.effectStyleId = newValue.id;
+      await node.setEffectStyleIdAsync(newValue.id);
       return true;
     }
     
@@ -503,7 +505,7 @@ function executeStyleReplacement(match: ReplacementMatch): boolean {
 /**
  * Execute batch of matches
  */
-function executeBatch(matches: ReplacementMatch[], options: ReplacementOptions): ReplacementResult {
+async function executeBatch(matches: ReplacementMatch[], options: ReplacementOptions): Promise<ReplacementResult> {
   const result: ReplacementResult = {
     successful: 0,
     failed: 0,
@@ -523,7 +525,7 @@ function executeBatch(matches: ReplacementMatch[], options: ReplacementOptions):
         continue;
       }
       
-      const success = executeMatch(match);
+      const success = await executeMatch(match);
       
       if (success) {
         result.successful++;

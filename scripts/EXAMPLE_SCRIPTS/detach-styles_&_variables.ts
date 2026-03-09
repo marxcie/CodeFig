@@ -61,45 +61,55 @@ function isColorProperty(property) {
   return colorProps.indexOf(property) !== -1;
 }
 
-function detachStyles(node) {
-  // Detach text style if node is text and option enabled
-  if ((allStyles || (typeof fontStyles !== 'undefined' && fontStyles === true)) && node.type === "TEXT" && "textStyleId" in node) {
-    if (node.textStyleId) {
-      node.textStyleId = ""; // Remove link to text style
-      console.log("Detached font style from: " + node.name);
-    }
+async function detachStyles(node) {
+  if ((allStyles || (typeof fontStyles !== 'undefined' && fontStyles === true)) && node.type === "TEXT" && "setTextStyleIdAsync" in node) {
+    try {
+      var textStyleId = node.textStyleId;
+      if (textStyleId && textStyleId !== figma.mixed) {
+        await node.setTextStyleIdAsync("");
+        console.log("Detached font style from: " + node.name);
+      }
+    } catch (e) { console.warn("Could not detach text style: " + e.message); }
   }
 
-  // Detach fill style
-  if ((allStyles || (typeof fillStyles !== 'undefined' && fillStyles === true)) && "fillStyleId" in node) {
-    if (node.fillStyleId) {
-      node.fillStyleId = "";
-      console.log("Detached fill style from: " + node.name);
-    }
+  if ((allStyles || (typeof fillStyles !== 'undefined' && fillStyles === true)) && "setFillStyleIdAsync" in node) {
+    try {
+      var fillId = node.fillStyleId;
+      if (fillId && fillId !== figma.mixed) {
+        await node.setFillStyleIdAsync("");
+        console.log("Detached fill style from: " + node.name);
+      }
+    } catch (e) { console.warn("Could not detach fill style: " + e.message); }
   }
 
-  // Detach stroke style
-  if ((allStyles || (typeof strokeStyles !== 'undefined' && strokeStyles === true)) && "strokeStyleId" in node) {
-    if (node.strokeStyleId) {
-      node.strokeStyleId = "";
-      console.log("Detached stroke style from: " + node.name);
-    }
+  if ((allStyles || (typeof strokeStyles !== 'undefined' && strokeStyles === true)) && "setStrokeStyleIdAsync" in node) {
+    try {
+      var strokeId = node.strokeStyleId;
+      if (strokeId && strokeId !== figma.mixed) {
+        await node.setStrokeStyleIdAsync("");
+        console.log("Detached stroke style from: " + node.name);
+      }
+    } catch (e) { console.warn("Could not detach stroke style: " + e.message); }
   }
 
-  // Detach effect style (e.g., shadows)
-  if ((allStyles || (typeof effectStyles !== 'undefined' && effectStyles === true)) && "effectStyleId" in node) {
-    if (node.effectStyleId) {
-      node.effectStyleId = "";
-      console.log("Detached effect style from: " + node.name);
-    }
+  if ((allStyles || (typeof effectStyles !== 'undefined' && effectStyles === true)) && "setEffectStyleIdAsync" in node) {
+    try {
+      var effectId = node.effectStyleId;
+      if (effectId && effectId !== figma.mixed) {
+        await node.setEffectStyleIdAsync("");
+        console.log("Detached effect style from: " + node.name);
+      }
+    } catch (e) { console.warn("Could not detach effect style: " + e.message); }
   }
 
-  // Detach grid style (only frames)
-  if ((allStyles || (typeof gridStyles !== 'undefined' && gridStyles === true)) && "gridStyleId" in node) {
-    if (node.gridStyleId) {
-      node.gridStyleId = "";
-      console.log("Detached grid style from: " + node.name);
-    }
+  if ((allStyles || (typeof gridStyles !== 'undefined' && gridStyles === true)) && "setGridStyleIdAsync" in node) {
+    try {
+      var gridId = node.gridStyleId;
+      if (gridId && gridId !== figma.mixed) {
+        await node.setGridStyleIdAsync("");
+        console.log("Detached grid style from: " + node.name);
+      }
+    } catch (e) { console.warn("Could not detach grid style: " + e.message); }
   }
 }
 
@@ -272,22 +282,20 @@ function detachVariables(node) {
   }
 }
 
-function processNode(node) {
+async function processNode(node) {
   if (!node) {
     return;
   }
 
   console.log("Processing node: " + node.name + " (type: " + node.type + ")");
-  
-  // Detach styles and variables from this node
-  detachStyles(node);
+
+  await detachStyles(node);
   detachVariables(node);
 
-  // Traverse children if recursive is enabled
   if (recursive && "children" in node && node.children && node.children.length > 0) {
     console.log("  → Recursively processing " + node.children.length + " children");
     for (var i = 0; i < node.children.length; i++) {
-      processNode(node.children[i]);
+      await processNode(node.children[i]);
     }
   } else if (recursive && "children" in node) {
     console.log("  → Node has children property but no children array or empty");
@@ -297,34 +305,36 @@ function processNode(node) {
 }
 
 // Apply to all selected nodes
-if (figma.currentPage.selection.length === 0) {
-  figma.notify('No selection found');
-} else {
+(async function () {
+  if (figma.currentPage.selection.length === 0) {
+    figma.notify('No selection found');
+    return;
+  }
   console.log("=== Starting detach process ===");
   console.log("Selected " + figma.currentPage.selection.length + " node(s)");
   console.log("Recursive mode: " + (recursive ? "enabled" : "disabled"));
   console.log("All styles: " + allStyles);
   console.log("All variables: " + allVariables);
-  
+
   for (var i = 0; i < figma.currentPage.selection.length; i++) {
-    processNode(figma.currentPage.selection[i]);
+    await processNode(figma.currentPage.selection[i]);
   }
-  
+
   console.log("=== Detach process complete ===");
-  
+
   var message = 'Detached';
-  var hasStyleDetach = allStyles || 
-                       (typeof fontStyles !== 'undefined' && fontStyles === true) ||
-                       (typeof fillStyles !== 'undefined' && fillStyles === true) ||
-                       (typeof strokeStyles !== 'undefined' && strokeStyles === true) ||
-                       (typeof effectStyles !== 'undefined' && effectStyles === true) ||
-                       (typeof gridStyles !== 'undefined' && gridStyles === true);
-  var hasVariableDetach = allVariables || 
-                          (typeof typographicVariables !== 'undefined' && typographicVariables === true) ||
-                          (typeof numericVariables !== 'undefined' && numericVariables === true) ||
-                          (typeof colorVariables !== 'undefined' && colorVariables === true) ||
-                          (typeof detachExactVariables !== 'undefined' && detachExactVariables && detachExactVariables.length > 0);
-  
+  var hasStyleDetach = allStyles ||
+    (typeof fontStyles !== 'undefined' && fontStyles === true) ||
+    (typeof fillStyles !== 'undefined' && fillStyles === true) ||
+    (typeof strokeStyles !== 'undefined' && strokeStyles === true) ||
+    (typeof effectStyles !== 'undefined' && effectStyles === true) ||
+    (typeof gridStyles !== 'undefined' && gridStyles === true);
+  var hasVariableDetach = allVariables ||
+    (typeof typographicVariables !== 'undefined' && typographicVariables === true) ||
+    (typeof numericVariables !== 'undefined' && numericVariables === true) ||
+    (typeof colorVariables !== 'undefined' && colorVariables === true) ||
+    (typeof detachExactVariables !== 'undefined' && detachExactVariables && detachExactVariables.length > 0);
+
   if (hasStyleDetach) {
     message += ' styles';
   }
@@ -335,6 +345,6 @@ if (figma.currentPage.selection.length === 0) {
     message += ' variables';
   }
   message += ' from selection';
-  
+
   figma.notify(message);
-}
+})();

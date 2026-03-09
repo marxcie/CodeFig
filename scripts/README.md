@@ -20,7 +20,7 @@ Contains example scripts that demonstrate various Figma automation capabilities.
 Contains importable library scripts (prefixed with `@`) that provide reusable functions and utilities.
 - **Type**: `prebuilt`
 - **Purpose**: Core libraries and utilities that can be imported by other scripts
-- **Files**: `@variables.ts`, `@styles.ts`, `@core-library.ts`, `@math-helpers.ts`, `@replacement-engine.ts`, `@infopanel.ts`
+- **Files**: `@core-library.ts`, `@codefig-ui.ts`, `@infopanel.ts`, `@math-helpers.ts`, `@pattern-matching.ts`, `@replacement-engine.ts`, `@styles.ts`, `@variables.ts`
 
 ### Excluded Folders
 Folders and files starting with `_` or `.` are automatically excluded from the build:
@@ -101,12 +101,16 @@ Scripts can import functions from library scripts using `@import` statements:
 ```
 
 Available library scripts:
-- `@core-library.ts` - Core utility functions
-- `@math-helpers.ts` - Math and calculation functions
-- `@variables.ts` - Variable management functions
-- `@infopanel.ts` - InfoPanel display functions
+- `@core-library.ts` - Core utility functions (nodes, styles, memory, colors)
+- `@codefig-ui.ts` - CodeFigUI config forms (section, toggle, number, string, select, sendToUI)
+- `@infopanel.ts` - InfoPanel display (displayResults, createResult, etc.)
+- `@math-helpers.ts` - Math, geometry, interpolation, easing
+- `@pattern-matching.ts` - Pattern matching and wildcards
+- `@replacement-engine.ts` - Find/replace with planning and reporting
+- `@styles.ts` - Style finding, analysis, replacement
+- `@variables.ts` - Variable and collection management
 
-Imports are processed at build time, so the imported functions are included directly in the script code.
+Imports are resolved at runtime when you run a script; user scripts can also import from other user scripts or user libraries (name with `@` prefix).
 
 ## Validation
 

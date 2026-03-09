@@ -48,7 +48,9 @@
 // @import { myFunction } from "My Custom Script"
 // ```
 //
-// **Libraries:** @Core Library, @Math Helpers, @Variables, @InfoPanel, @codefig-ui
+// **Libraries:** @Core Library, @Math Helpers, @Variables, @InfoPanel, @Pattern Matching, @Replacement Engine, @Styles, @codefig-ui
+//
+// **User libraries:** Name a script with an `@` prefix (e.g. `@My Utils`) to make it a library. Other scripts can `@import` from it; libraries are not run directly.
 //
 // ## Common patterns
 //

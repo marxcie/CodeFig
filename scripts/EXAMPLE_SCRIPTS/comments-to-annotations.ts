@@ -9,7 +9,7 @@
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
-// | tokenStorageKey | Client storage key for the Personal Access Token. |
+// | tokenStorageKey | Client storage key for the Personal Access Token, or paste the token itself (figd_...) here. |
 // | fileKeyOrUrl | Figma file key or file URL; leave empty to use stored key or be prompted. |
 // | annotationAnchors | If true, creates invisible anchor frames at comment locations. |
 // | resolvedComments | If true, resolved comments are included; default false. |
@@ -22,10 +22,9 @@
 // @UI_CONFIG_START
 // # Comments to Annotations
 
-var tokenStorageKey = ""; // @placeholder="figma_personal_access_token"
-// Personal Access Token for Figma REST API (stored securely in client storage, it won't be sent to any servers.)
-// Go to "Help & Account" -> "Account Settings" -> "Security" -> "Personal Access Tokens" -> "Generate new token".
-// Scope: Files / file_comments:read, and Generate token. Copy the token and paste it here.
+var tokenStorageKey = ""; // @placeholder="figd_... or figma_personal_access_token"
+// Paste your Personal Access Token (figd_...) here, or a storage key name if you've already saved a token.
+// Create at: Help & Account -> Account Settings -> Security -> Personal Access Tokens. Scope: Files / file_comments:read
 //
 var fileKeyOrUrl = ""; // @placeholder="https://www.figma.com/design/3OL5s2KgkpD2RIGBXIJzst/CodeFig-test-ground?node-id=35-32&t=RqmlOo3sxABzx1pg"
 // Paste either a Figma file key or a URL from your Figma file hereIf it's a URL, the file key will be automatically extracted from it.
@@ -48,7 +47,6 @@ async function createAnnotationsFromComments() {
     var selection = figma.currentPage.selection;
     if (selection.length === 0) {
       figma.notify("⚠️ Please select at least one frame or section");
-      figma.closePlugin();
       return;
     }
     
@@ -56,7 +54,6 @@ async function createAnnotationsFromComments() {
     var token = await getOrPromptForToken();
     if (!token) {
       figma.notify("❌ Personal Access Token is required");
-      figma.closePlugin();
       return;
     }
     
@@ -64,7 +61,6 @@ async function createAnnotationsFromComments() {
     var fileKey = await getFileKey();
     if (!fileKey) {
       figma.notify("❌ Could not determine file key");
-      figma.closePlugin();
       return;
     }
     
@@ -72,7 +68,6 @@ async function createAnnotationsFromComments() {
     var comments = await fetchCommentsFromFile(fileKey, token);
     if (!comments || comments.length === 0) {
       figma.notify("ℹ️ No comments found in this file");
-      figma.closePlugin();
       return;
     }
     
@@ -90,7 +85,6 @@ async function createAnnotationsFromComments() {
         ? "ℹ️ No comments found for selected nodes"
         : "ℹ️ No unresolved comments found for selected nodes";
       figma.notify(message);
-      figma.closePlugin();
       return;
     }
     
@@ -207,12 +201,10 @@ async function createAnnotationsFromComments() {
     }
     
     figma.notify("✅ Created " + createdCount + " annotation(s) from " + relevantComments.length + " comment(s)");
-    figma.closePlugin();
     
   } catch (error) {
     console.error("Error in createAnnotationsFromComments:", error);
     figma.notify("❌ Error: " + error.message);
-    figma.closePlugin();
   }
 }
 
@@ -222,14 +214,23 @@ async function createAnnotationsFromComments() {
 
 async function getOrPromptForToken() {
   try {
-    var stored = await figma.clientStorage.getAsync(tokenStorageKey);
+    var val = (tokenStorageKey && tokenStorageKey.trim()) ? tokenStorageKey.trim() : "";
+    var storageKey = "figma_personal_access_token";
+    if (val && val.startsWith("figd_")) {
+      var token = val;
+      await figma.clientStorage.setAsync(storageKey, token);
+      return token;
+    }
+    if (val) {
+      storageKey = val;
+    }
+    var stored = await figma.clientStorage.getAsync(storageKey);
     if (stored) {
       return stored;
     }
-    
     var token = await promptForToken();
     if (token) {
-      await figma.clientStorage.setAsync(tokenStorageKey, token);
+      await figma.clientStorage.setAsync(storageKey, token);
       figma.notify("✅ Token saved securely");
     }
     return token;
@@ -239,9 +240,11 @@ async function getOrPromptForToken() {
   }
 }
 
+var TOKEN_PROMPT_HTML = '<html><head><style>body{font-family:system-ui,sans-serif;padding:16px;margin:0;font-size:12px}input{width:100%;padding:8px;margin:8px 0;box-sizing:border-box;border:1px solid #ccc;border-radius:4px}button{padding:8px 16px;margin:4px;cursor:pointer;border-radius:4px;border:1px solid #ccc;background:#fff}.primary{background:#0d99ff;color:#fff;border-color:#0d99ff}p{margin:0 0 8px 0;color:#666}</style></head><body><p>Paste your Figma Personal Access Token:</p><input type="password" id="token" placeholder="figd_..." autocomplete="off"><div><button class="primary" id="submit">Submit</button><button id="cancel">Cancel</button></div><script>var inp=document.getElementById("token");document.getElementById("submit").onclick=function(){var v=inp.value.trim();if(v)parent.postMessage({pluginMessage:{type:"token",token:v}},"*")};document.getElementById("cancel").onclick=function(){parent.postMessage({pluginMessage:{type:"cancel"}},"*")};inp.focus();</script></body></html>';
+
 function promptForToken() {
   return new Promise(function(resolve) {
-    figma.showUI(__html__, { width: 400, height: 300, title: "Figma Personal Access Token" });
+    figma.showUI(TOKEN_PROMPT_HTML, { width: 400, height: 220, title: "Figma Personal Access Token" });
     
     figma.ui.onmessage = function(msg) {
       if (msg.type === 'token') {
@@ -338,9 +341,11 @@ function extractFileKeyFromUrl(url) {
   }
 }
 
+var FILE_URL_PROMPT_HTML = '<html><head><style>body{font-family:system-ui,sans-serif;padding:16px;margin:0;font-size:12px}input{width:100%;padding:8px;margin:8px 0;box-sizing:border-box;border:1px solid #ccc;border-radius:4px}button{padding:8px 16px;margin:4px;cursor:pointer;border-radius:4px;border:1px solid #ccc;background:#fff}.primary{background:#0d99ff;color:#fff;border-color:#0d99ff}p{margin:0 0 8px 0;color:#666}</style></head><body><p>Paste Figma file URL or file key:</p><input type="text" id="url" placeholder="https://figma.com/design/... or file key" autocomplete="off"><div><button class="primary" id="submit">Submit</button><button id="cancel">Cancel</button></div><script>var inp=document.getElementById("url");document.getElementById("submit").onclick=function(){var v=inp.value.trim();if(v)parent.postMessage({pluginMessage:{type:"fileUrl",url:v}},"*")};document.getElementById("cancel").onclick=function(){parent.postMessage({pluginMessage:{type:"cancel"}},"*")};inp.focus();</script></body></html>';
+
 function promptForFileUrlOrKey() {
   return new Promise(function(resolve) {
-    figma.showUI(__html__, { width: 400, height: 250, title: "File URL or Key" });
+    figma.showUI(FILE_URL_PROMPT_HTML, { width: 400, height: 220, title: "File URL or Key" });
     
     figma.ui.onmessage = function(msg) {
       if (msg.type === 'fileUrl') {
@@ -367,11 +372,19 @@ async function fetchCommentsFromFile(fileKey, token) {
       }
     });
     
+    var data = null;
+    try {
+      data = await response.json();
+    } catch (_) {}
+    
     if (!response.ok) {
-      throw new Error("API request failed: " + response.status);
+      var errMsg = (data && data.err) ? data.err : "HTTP " + response.status;
+      if (response.status === 403) {
+        errMsg = "Invalid token or missing file_comments:read scope. Check token at figma.com/settings.";
+      }
+      throw new Error(errMsg);
     }
     
-    var data = await response.json();
     return data.comments || [];
   } catch (error) {
     console.error("Error fetching comments:", error);
