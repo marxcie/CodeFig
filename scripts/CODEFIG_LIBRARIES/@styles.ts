@@ -12,6 +12,7 @@
 // | Finding | findStyles, findStylesByPattern, getStyleById, findStylesInCollection |
 // | Analysis | analyzeStyles, categorizeStyle, getStyleProperties |
 // | Replacement | replaceStyles, applyStyleToNode, validateStyleMatch |
+// | Variable rebind (definitions) | buildTargetVariableLookup, rebindStyleVariableBindingsOnStyle |
 // | Operations | createStylePreview, getStyleUsage, getStyleHierarchy |
 // @DOC_END
 
@@ -570,4 +571,293 @@ function uniqueBy<T>(array: T[], property: keyof T): T[] {
     seen.add(value);
     return true;
   });
+}
+
+// ============================================================================
+// VARIABLE REBINDING ON STYLE DEFINITIONS (text / paint / effect)
+// ============================================================================
+//
+// Remap VARIABLE_ALIAS bindings on **local** styles to same-named variables in a target collection.
+// Pass non-empty sourceCollectionName to only touch bindings whose variable lives in that collection; pass "" to consider every binding.
+
+function bindingMatchesSourceCollectionFilter(colName, sourceCollectionName) {
+  var s = sourceCollectionName != null ? String(sourceCollectionName).trim() : "";
+  if (!s) return true;
+  return colName === s;
+}
+
+async function resolveVariableFromAliasForStyleRebind(alias) {
+  if (!alias) return null;
+  if (typeof alias.id === "string") {
+    try {
+      return await figma.variables.getVariableByIdAsync(alias.id);
+    } catch (e) {
+      return null;
+    }
+  }
+  if (typeof alias.key === "string") {
+    try {
+      return await figma.variables.importVariableByKeyAsync(alias.key);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function collectionNameForVariableForStyleRebind(variable) {
+  if (!variable) return "";
+  try {
+    var col = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+    return col ? col.name : "";
+  } catch (e) {
+    return "";
+  }
+}
+
+/**
+ * Build lookup: variableName + tab + resolvedType -> replacement Variable (local or imported from library).
+ */
+async function buildTargetVariableLookup(targetCollectionName) {
+  var name = String(targetCollectionName || "").trim();
+  var map = new Map();
+
+  var localCols = await figma.variables.getLocalVariableCollectionsAsync();
+  for (var i = 0; i < localCols.length; i++) {
+    if (localCols[i].name !== name) continue;
+    for (var j = 0; j < localCols[i].variableIds.length; j++) {
+      var v = await figma.variables.getVariableByIdAsync(localCols[i].variableIds[j]);
+      if (v) {
+        map.set(v.name + "\t" + v.resolvedType, { variable: v });
+      }
+    }
+  }
+
+  if (map.size === 0 && figma.teamLibrary && typeof figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync === "function") {
+    try {
+      var libs = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+      for (var c = 0; c < libs.length; c++) {
+        if (libs[c].name !== name) continue;
+        var lvars = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(libs[c].key);
+        for (var k = 0; k < lvars.length; k++) {
+          var lv = lvars[k];
+          var ty = lv.resolvedType || "COLOR";
+          map.set(lv.name + "\t" + ty, { key: lv.key, resolvedType: ty });
+        }
+        break;
+      }
+    } catch (e) {
+      console.log("⚠️ Library target lookup: " + (e && e.message));
+    }
+  }
+
+  var imported = new Map();
+  async function getReplacement(variableName, resolvedType) {
+    var key = variableName + "\t" + resolvedType;
+    var entry = map.get(key);
+    if (!entry) return null;
+    if (entry.variable) return entry.variable;
+    if (entry.key) {
+      if (imported.has(key)) return imported.get(key);
+      try {
+        var imp = await figma.variables.importVariableByKeyAsync(entry.key);
+        if (imp && imp.resolvedType === resolvedType) {
+          imported.set(key, imp);
+          return imp;
+        }
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  return { map: map, getReplacement: getReplacement };
+}
+
+async function rebindProcessTextStyle(style, sourceName, lookup, breakUnmatched) {
+  if (!style.boundVariables || style.remote) return 0;
+  var n = 0;
+  var props = Object.keys(style.boundVariables);
+  for (var f = 0; f < props.length; f++) {
+    var prop = props[f];
+    var binding = style.boundVariables[prop];
+    if (!binding) continue;
+    var alias = Array.isArray(binding) ? binding[0] : binding;
+    var current = await resolveVariableFromAliasForStyleRebind(alias);
+    if (!current) continue;
+    var colName = await collectionNameForVariableForStyleRebind(current);
+    if (!bindingMatchesSourceCollectionFilter(colName, sourceName)) continue;
+    var repl = await lookup.getReplacement(current.name, current.resolvedType);
+    if (repl && repl.id !== current.id) {
+      try {
+        style.setBoundVariable(prop, repl);
+        n++;
+        console.log('  ✅ Text style "' + style.name + '" · ' + prop + " · " + current.name + " → target collection");
+      } catch (e) {
+        console.log("  ❌ " + style.name + " · " + prop + ": " + (e && e.message));
+      }
+    } else if (breakUnmatched && !repl) {
+      try {
+        style.setBoundVariable(prop, null);
+        n++;
+        console.log('  🔓 Text style "' + style.name + '" · ' + prop + " · detached (no target match)");
+      } catch (e) {
+        console.log("  ❌ detach " + style.name + " · " + prop + ": " + (e && e.message));
+      }
+    }
+  }
+  return n;
+}
+
+async function rebindProcessPaintStyle(style, sourceName, lookup, breakUnmatched) {
+  if (!style.boundVariables || !style.boundVariables.paints || style.remote) return 0;
+  var bv = style.boundVariables.paints;
+  if (!Array.isArray(bv) || !style.paints || !style.paints.length) return 0;
+
+  var paints = JSON.parse(JSON.stringify(style.paints));
+  var changed = false;
+  var n = 0;
+
+  for (var j = 0; j < paints.length && j < bv.length; j++) {
+    var alias = bv[j];
+    if (!alias || (!alias.id && !alias.key)) continue;
+    var current = await resolveVariableFromAliasForStyleRebind(alias);
+    if (!current) continue;
+    var colName = await collectionNameForVariableForStyleRebind(current);
+    if (!bindingMatchesSourceCollectionFilter(colName, sourceName)) continue;
+    if (current.resolvedType !== "COLOR") continue;
+    var repl = await lookup.getReplacement(current.name, current.resolvedType);
+    if (repl && repl.id !== current.id) {
+      if (paints[j].type === "SOLID" || paints[j].boundVariables) {
+        if (!paints[j].boundVariables) paints[j].boundVariables = {};
+        paints[j].boundVariables.color = { type: "VARIABLE_ALIAS", id: repl.id };
+        changed = true;
+        n++;
+      }
+    } else if (breakUnmatched && !repl) {
+      if (paints[j].boundVariables && paints[j].boundVariables.color) {
+        delete paints[j].boundVariables.color;
+        if (Object.keys(paints[j].boundVariables).length === 0) {
+          delete paints[j].boundVariables;
+        }
+        changed = true;
+        n++;
+      }
+    }
+  }
+
+  if (changed) {
+    try {
+      style.paints = paints;
+      console.log('  ✅ Paint style "' + style.name + '" · ' + n + " color binding(s)");
+    } catch (e) {
+      console.log('  ❌ Paint "' + style.name + '": ' + (e && e.message));
+      return 0;
+    }
+  }
+  return n;
+}
+
+async function rebindProcessEffectStyle(style, sourceName, lookup, breakUnmatched) {
+  if (style.remote || !style.effects || !style.effects.length) return 0;
+  var effects = JSON.parse(JSON.stringify(style.effects));
+  var ebv = style.boundVariables && style.boundVariables.effects;
+  var n = 0;
+
+  for (var j = 0; j < effects.length; j++) {
+    if (ebv && Array.isArray(ebv) && ebv[j] && (ebv[j].id || ebv[j].key)) {
+      var current = await resolveVariableFromAliasForStyleRebind(ebv[j]);
+      if (current) {
+        var colName = await collectionNameForVariableForStyleRebind(current);
+        if (bindingMatchesSourceCollectionFilter(colName, sourceName)) {
+          var repl = await lookup.getReplacement(current.name, current.resolvedType);
+          if (repl && repl.id !== current.id) {
+            var eff = effects[j];
+            if (!eff.boundVariables) eff.boundVariables = {};
+            var hit = false;
+            for (var k in eff.boundVariables) {
+              if (eff.boundVariables.hasOwnProperty(k) && eff.boundVariables[k] && eff.boundVariables[k].id === current.id) {
+                eff.boundVariables[k] = { type: "VARIABLE_ALIAS", id: repl.id };
+                hit = true;
+                n++;
+              }
+            }
+            if (!hit) {
+              eff.boundVariables.color = { type: "VARIABLE_ALIAS", id: repl.id };
+              n++;
+            }
+          } else if (breakUnmatched && !repl) {
+            var eff2 = effects[j];
+            var hit2 = false;
+            if (eff2.boundVariables) {
+              for (var k2 in eff2.boundVariables) {
+                if (eff2.boundVariables.hasOwnProperty(k2) && eff2.boundVariables[k2] && eff2.boundVariables[k2].id === current.id) {
+                  delete eff2.boundVariables[k2];
+                  hit2 = true;
+                  n++;
+                }
+              }
+              if (eff2.boundVariables && Object.keys(eff2.boundVariables).length === 0) {
+                delete eff2.boundVariables;
+              }
+            }
+            if (!hit2) {
+              var ev = JSON.parse(JSON.stringify(eff2));
+              if (ev.boundVariables) delete ev.boundVariables;
+              effects[j] = ev;
+              n++;
+            }
+          }
+        }
+      }
+    }
+    if (!effects[j].boundVariables) continue;
+    var keysToDelete = [];
+    for (var key in effects[j].boundVariables) {
+      if (!effects[j].boundVariables.hasOwnProperty(key)) continue;
+      var ent = effects[j].boundVariables[key];
+      if (!ent || typeof ent.id !== "string") continue;
+      var cur2 = await resolveVariableFromAliasForStyleRebind(ent);
+      if (!cur2) continue;
+      var cn2 = await collectionNameForVariableForStyleRebind(cur2);
+      if (!bindingMatchesSourceCollectionFilter(cn2, sourceName)) continue;
+      var rep2 = await lookup.getReplacement(cur2.name, cur2.resolvedType);
+      if (rep2 && rep2.id !== cur2.id) {
+        effects[j].boundVariables[key] = { type: "VARIABLE_ALIAS", id: rep2.id };
+        n++;
+      } else if (breakUnmatched && !rep2) {
+        keysToDelete.push(key);
+        n++;
+      }
+    }
+    for (var kd = 0; kd < keysToDelete.length; kd++) {
+      delete effects[j].boundVariables[keysToDelete[kd]];
+    }
+    if (effects[j].boundVariables && Object.keys(effects[j].boundVariables).length === 0) {
+      delete effects[j].boundVariables;
+    }
+  }
+
+  if (n > 0) {
+    try {
+      style.effects = effects;
+      console.log('  ✅ Effect style "' + style.name + '" · ' + n + " binding(s)");
+    } catch (e) {
+      console.log('  ❌ Effect "' + style.name + '": ' + (e && e.message));
+      return 0;
+    }
+  }
+  return n;
+}
+
+/**
+ * Rebind variables on one style to matching names in `lookup` (from buildTargetVariableLookup).
+ * @param sourceCollectionName If non-empty, only bindings in that collection are updated. If empty, every binding is eligible.
+ */
+async function rebindStyleVariableBindingsOnStyle(style, sourceCollectionName, lookup, breakUnmatched) {
+  var t = style.type;
+  var n = 0;
+  if (t === "TEXT") n += await rebindProcessTextStyle(style, sourceCollectionName, lookup, breakUnmatched);
+  else if (t === "PAINT") n += await rebindProcessPaintStyle(style, sourceCollectionName, lookup, breakUnmatched);
+  else if (t === "EFFECT") n += await rebindProcessEffectStyle(style, sourceCollectionName, lookup, breakUnmatched);
+  return n;
 }
