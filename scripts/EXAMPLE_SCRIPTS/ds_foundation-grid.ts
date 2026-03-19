@@ -11,10 +11,10 @@
 // |--------|--------------|
 // | collectionName / structure.variableCollection | Collection name. |
 // | structure.variableGroup | Optional group path. |
-// | config.approximateColumns | When true, tablet/mobile column values map proportionally to desktop so layouts update easily on smaller viewports. |
-// | config (desktop, tablet, mobile) | Per viewport: containerWidth, columns, gap, padding. Column count (col-1..col-N) is the viewport with the most columns (e.g. desktop 12 → 12 variables). |
+// | config (e.g. desktop, tablet, mobile) | Any named viewports: containerWidth, columns, gap, padding. **Mode order in Figma follows the order of keys in this object.** Keys must be valid JS identifiers *or* quoted strings (e.g. `"desktop-large"` — hyphens require quotes). Mode names are the key with only the first letter uppercased (`desktop-large` → `Desktop-large`). Column count (col-1..col-N) follows the viewport with the most columns. |
 // | variables | Function(innerConfig) or map of variable names. Creates grid/columns, grid/gap, grid/padding, grid/viewport-width, and grid/col-1..col-max. |
-// | Grid style | One grid style "Grid" is created (COLUMNS, CENTER) with count, sectionSize, and gutterSize bound to the collection variables so it responds to Desktop/Tablet/Mobile mode. |
+// | Grid style | One grid style "Grid" (COLUMNS, left/MIN): count, sectionSize (col-1), gutter, and offset (padding) bound to variables; one style for all modes. |
+// | Preview frames | One frame per viewport: width bound to grid/viewport-width, explicit variable mode, grid style applied. |
 // @DOC_END
 
 // Import functions from libraries
@@ -30,19 +30,27 @@ function variableNamePrefix(group) {
   return group ? group + '/' : '';
 }
 
-// Helper: compute column variable value for a viewport (supports approximateColumns)
-function calculateColumnVariable(colNum, viewportConfig, maxColumns, approximate) {
-  if (!approximate && colNum > viewportConfig.columns) {
-    return viewportConfig.containerWidth - (viewportConfig.padding * 2);
-  }
-  var targetCol = approximate
-    ? Math.ceil((colNum / maxColumns) * viewportConfig.columns)
-    : Math.min(colNum, viewportConfig.columns);
-  if (targetCol > viewportConfig.columns) {
+// Viewport keys under config.config; only objects with layout fields count as viewports
+function getViewportConfigKeys(innerConfig) {
+  if (!innerConfig || typeof innerConfig !== 'object') return [];
+  return Object.keys(innerConfig).filter(function(k) {
+    var vc = innerConfig[k];
+    return !!(vc && typeof vc === 'object' && typeof vc.containerWidth === 'number' && typeof vc.columns === 'number');
+  });
+}
+
+function modeLabelFromViewportKey(key) {
+  if (!key || typeof key !== 'string') return 'Default';
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+// Pixel width for col-1..col-N: spans up to N columns, or full content width when N exceeds this viewport's column count
+function calculateColumnVariable(colNum, viewportConfig) {
+  if (colNum > viewportConfig.columns) {
     return viewportConfig.containerWidth - (viewportConfig.padding * 2);
   }
   var colWidth = calculateColumnWidth(viewportConfig);
-  return (colWidth * targetCol) + (viewportConfig.gap * (targetCol - 1));
+  return (colWidth * colNum) + (viewportConfig.gap * (colNum - 1));
 }
 
 var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfig : {
@@ -55,10 +63,6 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   },
 
   config: {
-    // experimental feature
-    // when true: tablet/mobile column values map proportionally to desktop for easier layout updates on smaller viewports
-    approximateColumns: false, 
-    
     // desktop config
     desktop: {
       containerWidth: 1920,
@@ -85,66 +89,62 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // @CONFIG_END
   // Variables to be created in Figma (function of config; max columns = viewport with most columns)
   variables: function(innerConfig) {
-    if (!innerConfig || !innerConfig.desktop || !innerConfig.tablet || !innerConfig.mobile) {
+    var viewportKeys = getViewportConfigKeys(innerConfig);
+    if (viewportKeys.length === 0) {
       return {};
     }
-    var maxCols = Math.max(
-      innerConfig.desktop.columns,
-      innerConfig.tablet.columns,
-      innerConfig.mobile.columns
-    );
-    var approximate = !!(innerConfig && innerConfig.approximateColumns);
+    var maxCols = 0;
+    for (var mi = 0; mi < viewportKeys.length; mi++) {
+      var cols = innerConfig[viewportKeys[mi]].columns;
+      if (cols > maxCols) maxCols = cols;
+    }
+
+    function valuesPerViewport(valueFn) {
+      var values = {};
+      for (var vi = 0; vi < viewportKeys.length; vi++) {
+        (function(vk) {
+          var modeName = modeLabelFromViewportKey(vk);
+          values[modeName] = function(config) {
+            return valueFn(config[vk]);
+          };
+        })(viewportKeys[vi]);
+      }
+      return values;
+    }
 
     var basicVariables = {
       "grid/columns": {
         type: "FLOAT",
-        values: {
-          "Desktop": function(config) { return config.desktop.columns; },
-          "Tablet": function(config) { return config.tablet.columns; },
-          "Mobile": function(config) { return config.mobile.columns; }
-        }
+        values: valuesPerViewport(function(vc) { return vc.columns; })
       },
       "grid/gap": {
         type: "FLOAT",
-        values: {
-          "Desktop": function(config) { return config.desktop.gap; },
-          "Tablet": function(config) { return config.tablet.gap; },
-          "Mobile": function(config) { return config.mobile.gap; }
-        }
+        values: valuesPerViewport(function(vc) { return vc.gap; })
       },
       "grid/padding": {
         type: "FLOAT",
-        values: {
-          "Desktop": function(config) { return config.desktop.padding; },
-          "Tablet": function(config) { return config.tablet.padding; },
-          "Mobile": function(config) { return config.mobile.padding; }
-        }
+        values: valuesPerViewport(function(vc) { return vc.padding; })
       },
       "grid/viewport-width": {
         type: "FLOAT",
-        values: {
-          "Desktop": function(config) { return config.desktop.containerWidth; },
-          "Tablet": function(config) { return config.tablet.containerWidth; },
-          "Mobile": function(config) { return config.mobile.containerWidth; }
-        }
+        values: valuesPerViewport(function(vc) { return vc.containerWidth; })
       }
     };
 
     for (var colNum = 1; colNum <= maxCols; colNum++) {
       (function(c) {
+        var colValues = {};
+        for (var vi = 0; vi < viewportKeys.length; vi++) {
+          (function(vk) {
+            var modeName = modeLabelFromViewportKey(vk);
+            colValues[modeName] = function(config) {
+              return calculateColumnVariable(c, config[vk]);
+            };
+          })(viewportKeys[vi]);
+        }
         basicVariables['grid/col-' + c] = {
           type: "FLOAT",
-          values: {
-            "Desktop": function(config) {
-              return calculateColumnVariable(c, config.desktop, maxCols, approximate);
-            },
-            "Tablet": function(config) {
-              return calculateColumnVariable(c, config.tablet, maxCols, approximate);
-            },
-            "Mobile": function(config) {
-              return calculateColumnVariable(c, config.mobile, maxCols, approximate);
-            }
-          }
+          values: colValues
         };
       })(colNum);
     }
@@ -170,8 +170,12 @@ async function createOrUpdateCollection(config) {
   
   var collection = await getOrCreateCollection(collectionName);
   
-  var modes = extractModes({ variables: variables });
-  console.log('Detected modes: ' + modes.join(', '));
+  // Mode order follows config object key order (not Object.keys on variable.values, which can differ)
+  var modes = getViewportConfigKeys(config.config).map(modeLabelFromViewportKey);
+  if (modes.length === 0) {
+    modes = extractModes({ variables: variables });
+  }
+  console.log('Detected modes (config order): ' + modes.join(', '));
   
   setupModes(collection, modes);
   
@@ -194,26 +198,28 @@ async function createOrUpdateCollection(config) {
   };
 }
 
-// Create one centered layout grid style; count, column width, and gutter bound to collection variables (one style for all viewports, responds to mode)
+// One layout grid style: COLUMNS, left (MIN); count, width (col-1), gutter, offset (padding) bound to variables
 async function createGridStyles(collection, config) {
   var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
   var prefix = variableNamePrefix(group);
   var styleName = "Grid";
   var styleStats = { created: 0, updated: 0 };
 
-  var desktop = config.config && config.config.desktop;
-  if (!desktop) {
-    console.warn("Grid style skipped: no desktop config");
-    return styleStats;
+  var viewportKeys = getViewportConfigKeys(config.config);
+  var firstVc = viewportKeys.length > 0 ? config.config[viewportKeys[0]] : null;
+  if (!firstVc) {
+    console.warn("Grid style skipped: no viewport configs");
+    return { styleStats: styleStats, gridStyle: null };
   }
 
-  var sectionSize = calculateColumnWidth(desktop);
+  var sectionSize = calculateColumnWidth(firstVc);
   var gridLayoutNumeric = {
     pattern: "COLUMNS",
-    alignment: "CENTER",
-    count: desktop.columns,
-    gutterSize: desktop.gap,
-    sectionSize: sectionSize
+    alignment: "MIN",
+    count: firstVc.columns,
+    gutterSize: firstVc.gap,
+    sectionSize: sectionSize,
+    offset: firstVc.padding
   };
 
   var localGridStyles = await figma.getLocalGridStylesAsync();
@@ -231,24 +237,106 @@ async function createGridStyles(collection, config) {
   var columnsVar = await getVariable(collection, prefix + "grid/columns");
   var gapVar = await getVariable(collection, prefix + "grid/gap");
   var col1Var = await getVariable(collection, prefix + "grid/col-1");
+  var paddingVar = await getVariable(collection, prefix + "grid/padding");
 
   var layoutGridToApply = gridLayoutNumeric;
-  if (columnsVar && gapVar && col1Var && typeof figma.variables.setBoundVariableForLayoutGrid === "function") {
+  if (columnsVar && gapVar && col1Var && paddingVar && typeof figma.variables.setBoundVariableForLayoutGrid === "function") {
     try {
       layoutGridToApply = figma.variables.setBoundVariableForLayoutGrid(layoutGridToApply, "count", columnsVar);
       layoutGridToApply = figma.variables.setBoundVariableForLayoutGrid(layoutGridToApply, "gutterSize", gapVar);
       layoutGridToApply = figma.variables.setBoundVariableForLayoutGrid(layoutGridToApply, "sectionSize", col1Var);
-      console.log("Grid style: " + styleName + " (COLUMNS, CENTER; count, gutterSize, sectionSize bound to variables)");
+      layoutGridToApply = figma.variables.setBoundVariableForLayoutGrid(layoutGridToApply, "offset", paddingVar);
+      console.log("Grid style: " + styleName + " (COLUMNS, MIN; count, gutterSize, sectionSize, offset bound to variables)");
     } catch (e) {
       console.warn("Grid style: variable binding failed: " + (e.message || e));
     }
-  } else if (!columnsVar || !gapVar || !col1Var) {
-    console.log("Grid style: " + styleName + " (COLUMNS, CENTER; grid/columns, grid/gap, or grid/col-1 not found, using numeric values)");
+  } else if (!columnsVar || !gapVar || !col1Var || !paddingVar) {
+    console.log("Grid style: " + styleName + " (COLUMNS, MIN; missing grid/columns, grid/gap, grid/col-1, or grid/padding — using numeric values)");
   }
 
   gridStyle.layoutGrids = [layoutGridToApply];
 
-  return styleStats;
+  return { styleStats: styleStats, gridStyle: gridStyle };
+}
+
+// One frame per viewport: width → grid/viewport-width, explicit mode, grid style
+async function createGridPreviewFrames(collection, config, gridStyle) {
+  var stats = { created: 0, removed: 0 };
+  if (!gridStyle) {
+    console.warn("Preview frames skipped: no grid style");
+    return stats;
+  }
+
+  var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
+  var prefix = variableNamePrefix(group);
+  var viewportKeys = getViewportConfigKeys(config.config);
+  if (viewportKeys.length === 0) return stats;
+
+  var parentName = "Grid System Preview";
+  var i;
+  var ch = figma.currentPage.children;
+  for (i = ch.length - 1; i >= 0; i--) {
+    if (ch[i].name === parentName && ch[i].type === "FRAME") {
+      ch[i].remove();
+      stats.removed++;
+    }
+  }
+
+  var viewportWidthVar = await getVariable(collection, prefix + "grid/viewport-width");
+  var previewHeight = 480;
+
+  var parentFrame = figma.createFrame();
+  parentFrame.name = parentName;
+  parentFrame.layoutMode = "HORIZONTAL";
+  parentFrame.primaryAxisSizingMode = "AUTO";
+  parentFrame.counterAxisSizingMode = "AUTO";
+  parentFrame.itemSpacing = 32;
+  parentFrame.paddingLeft = 40;
+  parentFrame.paddingRight = 40;
+  parentFrame.paddingTop = 40;
+  parentFrame.paddingBottom = 40;
+  parentFrame.fills = [{ type: "SOLID", color: { r: 0.96, g: 0.96, b: 0.97 } }];
+
+  for (i = 0; i < viewportKeys.length; i++) {
+    var vk = viewportKeys[i];
+    var modeLabel = modeLabelFromViewportKey(vk);
+    var vc = config.config[vk];
+
+    var viewportFrame = figma.createFrame();
+    viewportFrame.name = modeLabel;
+    viewportFrame.layoutMode = "NONE";
+    viewportFrame.resize(vc.containerWidth, previewHeight);
+    viewportFrame.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
+    viewportFrame.strokes = [{ type: "SOLID", color: { r: 0.85, g: 0.85, b: 0.88 } }];
+    viewportFrame.strokeWeight = 1;
+
+    var mode = collection.modes.find(function(m) { return m.name === modeLabel; });
+    if (mode && typeof viewportFrame.setExplicitVariableModeForCollection === "function") {
+      viewportFrame.setExplicitVariableModeForCollection(collection, mode.modeId);
+    }
+
+    if (viewportWidthVar && typeof viewportFrame.setBoundVariable === "function") {
+      try {
+        viewportFrame.setBoundVariable("width", viewportWidthVar);
+      } catch (e) {
+        console.warn("Preview frame " + modeLabel + ": width binding failed: " + (e.message || e));
+      }
+    }
+
+    if ("setGridStyleIdAsync" in viewportFrame && typeof viewportFrame.setGridStyleIdAsync === "function") {
+      await viewportFrame.setGridStyleIdAsync(gridStyle.id);
+    } else {
+      viewportFrame.gridStyleId = gridStyle.id;
+    }
+
+    parentFrame.appendChild(viewportFrame);
+    stats.created++;
+  }
+
+  figma.currentPage.appendChild(parentFrame);
+  figma.viewport.scrollAndZoomIntoView([parentFrame]);
+  console.log("Grid preview: " + stats.created + " frame(s) (" + viewportKeys.map(modeLabelFromViewportKey).join(", ") + ")");
+  return stats;
 }
 
 // ========================================
@@ -258,10 +346,15 @@ async function createGridStyles(collection, config) {
 (async function() {
   try {
     var result = await createOrUpdateCollection(gridSystemConfig);
-    var gridStyleStats = await createGridStyles(result.collection, gridSystemConfig);
+    var gridOut = await createGridStyles(result.collection, gridSystemConfig);
+    var gridStyleStats = gridOut.styleStats;
+    var previewStats = await createGridPreviewFrames(result.collection, gridSystemConfig, gridOut.gridStyle);
     var msg = '✅ Grid System: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' vars updated';
     if (gridStyleStats.created > 0 || gridStyleStats.updated > 0) {
       msg += '; ' + gridStyleStats.created + ' grid style(s) created, ' + gridStyleStats.updated + ' updated';
+    }
+    if (previewStats.created > 0) {
+      msg += '; ' + previewStats.created + ' preview frame(s)';
     }
     figma.notify(msg);
   } catch (error) {

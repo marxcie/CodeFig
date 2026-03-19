@@ -12,12 +12,22 @@
 // | searchIn | Optional: only try to rebind when the current style name (partial) matches this; empty = all styles. |
 // | searchFor / replaceWith | Single find/replace pair applied to style names. |
 // | batchReplacement | Textarea (UI) or array (script): multiple "search, replace" pairs; when non-empty, overrides searchFor/replaceWith. |
-// | selectionOnly | If true, process only selected nodes; if false, process whole page. |
+// | selectionOnly | If true, **replace bindings** only on/under the current selection; if false, whole page. **Style cache** (finding target styles) always scans the **current page** so a **Render styles** overview frame and other layers on the page are visible. |
 //
 // ## Script-only (edit in file, not in plugin UI)
 // - **`replaceStylesDebug`** — `true` by default: `[ReplaceStyles]` logs, `[detail]` samples, inventory hints, and a run summary. Set **`false`** once behavior is verified (summary still prints when zero replacements).
 // - **`localStylesOnly`** — `false` by default (local **and** remote/team library). Set **`true`** only while isolating local resolution issues.
+// - **`replaceStylesMaxLibraryCollections`** — `0` = load style metadata from **all** connected library collections (recommended for remote replacement). Set a positive number to cap (faster, may miss a library).
+// - **`replaceStylesTeamLibraryTimeoutMs`** — Max wait for `getAvailableLibraryStyleCollectionsAsync` (default `30000`). Use `0` to disable the timeout (wait as long as Figma needs).
 // - **`replaceStylesNameFallbackRewrites`** — After `searchFor`/`replaceWith`, if the computed name is missing from the cache, try extra string variants (regex → replacement), e.g. `✅ `→`🚫 ` when V5 styles use ✅ and V4 styles use 🚫. See script body for default.
+// - **`replaceStylesRemoteTargetAliases`** — Optional map `{ "computed name after replace": "exact published style name" }` when the string from your rule doesn’t match the library’s style name (Team Library lookup is exact). Values get the same slash / prefix variants as other candidates.
+// - **`replaceStylesLimitCacheScanToSelection`** — Default `false`. Set `true` only for legacy behavior: limit **cache** document scan to the selection (breaks overview frames outside the selection).
+//
+// ### Remote / Team Library (honest limits)
+// Figma’s **styles** plugin API is thinner than **variables**: there is no “list all styles in file + libraries” like variables. This script uses `getAvailableLibraryStyleCollectionsAsync` + `getStylesInLibraryCollectionAsync` + `importStyleByKeyAsync`, plus a **document scan** for styles already on nodes. If the catalog API isn’t available (wrong runtime, timeout), remote targets only resolve if the style is **already used** on the scoped nodes—or you fix names via **aliases** / **pre-place** targets once on a scratch frame.
+// For a guided “pre-place” workflow, use **render-styles-overview** in the library source file, then copy the generated frame into the target file.
+// - **`replaceStylesScanMaxNodes`** — Max nodes in the **main** page walk (default `40000`). Lower values (e.g. `5000`) can stop before an overview frame at the **bottom** of the layer list.
+// - **`replaceStylesPriorityScanFrameNameSubstrings`** — Matching frames/sections are scanned **in full first** (no node cap). Default includes `Render styles` / `styles overview` (and legacy `warm-up` markers).
 // @DOC_END
 
 // Import memory management utilities and library functions
@@ -40,9 +50,10 @@ if (typeof escapeWildcards === 'undefined') {
 // # Replace styles
 var searchIn = ""; // @placeholder="color/"
 // Optional, only rebind when current style name contains this (e.g. "color/", "Typography/")
-//
-var searchFor = ""; // @placeholder="500"
-var replaceWith = ""; // @placeholder="50"
+// ## Important
+// Due to Figma’s style cache quirks, style replacement works with local styles, but for library styles they must exist in the document first. The current workaround is to use Render styles in the library file, which creates a style overview frame with all styles and their bindings. Copy this frame into the target file so the styles become available, then you can replace them.
+var searchFor = ""; // @placeholder="Text V1"
+var replaceWith = ""; // @placeholder="Text V2"
 // ---
 var batchReplacement = ""; // @textarea
 // Batch: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
@@ -59,12 +70,55 @@ var replaceStylesDebug = true;
 var localStylesOnly = false;
 
 /**
+ * If `true`, document scan for **cache** (finding replacement targets) is limited to the same roots as `selectionOnly`
+ * (legacy / debugging). Default `false` = always scan **figma.currentPage** so targets on a pasted **Render styles** overview count.
+ */
+var replaceStylesLimitCacheScanToSelection = false;
+
+/**
+ * Cap how many connected library collections we pull metadata from. `0` = no cap (all collections).
+ * Lower this only if the file has many libraries and cache build is too slow.
+ */
+var replaceStylesMaxLibraryCollections = 0;
+
+/**
+ * Timeout for the initial Team Library list call. `0` = no timeout (no Promise.race).
+ * Increase if you see false "timeout" fallbacks on slow connections.
+ */
+var replaceStylesTeamLibraryTimeoutMs = 30000;
+
+/**
  * After find/replace on the style name, if there is no exact cache hit, try these rewrites on the **computed** name (each adds a lookup candidate).
  * Default: `✅ …` → `🚫 …` so a rule `V5`→`V4` can resolve `✅ V5/…` → `✅ V4/…` → `🚫 V4/…` when your V4 styles use 🚫.
  * Set to `[]` to require exact names only.
  */
 var replaceStylesNameFallbackRewrites = [
   { pattern: /^✅\s+/, replacement: '🚫 ' }
+];
+
+/**
+ * When the computed target name still doesn’t match the **exact** name in the published library, map it here.
+ * Keys: any candidate name after replace + variants (try the primary computed string first).
+ * Example: `{ "✅ V4/3xl/SemiBold": "🚫 V4 / 3xl / SemiBold" }`
+ */
+var replaceStylesRemoteTargetAliases = {};
+
+/**
+ * Max nodes visited in the **main** page scan (after priority overview frames). Increase if summary shows scan truncated and targets missing.
+ * Frames whose names match `replaceStylesPriorityScanFrameNameSubstrings` are fully traversed first.
+ */
+var replaceStylesScanMaxNodes = 40000;
+
+/** Frame / section names containing any of these substrings get a full subtree scan before the capped page walk. */
+var replaceStylesPriorityScanFrameNameSubstrings = [
+  'render styles',
+  'styles overview',
+  'style overview',
+  'warm-up',
+  'style warm',
+  'warm styles',
+  'warmup',
+  'cache warm',
 ];
 
 /** Max per-run detailed lines (avoid console flood on huge files). */
@@ -77,6 +131,12 @@ function rsDebugEnabled() {
   return typeof replaceStylesDebug !== 'undefined' && replaceStylesDebug === true;
 }
 
+/** Effective max library collections to process (`0` = all). */
+function getReplaceStylesLibraryCollectionCap() {
+  var n = typeof replaceStylesMaxLibraryCollections === 'number' ? replaceStylesMaxLibraryCollections : 0;
+  return n > 0 ? n : 1e9;
+}
+
 function rsResetStats() {
   _rsStats = {
     // Inventory / cache
@@ -85,9 +145,17 @@ function rsResetStats() {
     scanNodesPlanned: 0,
     scanNodesDone: 0,
     scanStylesAdded: 0,
+    scanStylesHydrated: 0,
     libraryMetaAdded: 0,
+    teamLibraryCollectionsLoaded: 0,
     librarySkippedLocalWins: 0,
     teamLibraryPathUsed: false,
+    teamLibraryUnavailable: false,
+    teamLibraryUnavailableReason: '',
+    scanPriorityFrames: 0,
+    scanPriorityNodes: 0,
+    scanMaxNodesCap: 0,
+    scanTruncated: false,
     // Traversal
     nodesVisited: 0,
     textNodesSeen: 0,
@@ -146,6 +214,51 @@ function classifyStyleType(t) {
   return 'OTHER';
 }
 
+/** Frames/sections whose names match Render styles overview / user markers — scanned in full before the capped page walk. */
+function findReplaceStylesPriorityScanFrameRoots(page) {
+  page = page || figma.currentPage;
+  var roots = [];
+  var subs = typeof replaceStylesPriorityScanFrameNameSubstrings !== 'undefined' && Array.isArray(replaceStylesPriorityScanFrameNameSubstrings)
+    ? replaceStylesPriorityScanFrameNameSubstrings
+    : ['render styles', 'styles overview', 'warm-up'];
+  function walk(n) {
+    if (!n || typeof n !== 'object') return;
+    var t = n.type;
+    if (t === 'FRAME' || t === 'COMPONENT' || t === 'COMPONENT_SET' || t === 'INSTANCE' || t === 'SECTION') {
+      var nm = String(n.name || '').toLowerCase();
+      for (var i = 0; i < subs.length; i++) {
+        if (nm.indexOf(String(subs[i] || '').toLowerCase()) !== -1) {
+          roots.push(n);
+          return;
+        }
+      }
+    }
+    if ('children' in n && n.children) {
+      for (var c = 0; c < n.children.length; c++) {
+        walk(n.children[c]);
+      }
+    }
+  }
+  walk(page);
+  return roots;
+}
+
+function dedupeNodeListsPriorityFirst(firstList, secondList) {
+  var seen = {};
+  var out = [];
+  function addList(arr) {
+    for (var i = 0; i < arr.length; i++) {
+      var n = arr[i];
+      if (!n || seen[n.id]) continue;
+      seen[n.id] = true;
+      out.push(n);
+    }
+  }
+  addList(firstList || []);
+  addList(secondList || []);
+  return out;
+}
+
 function logReplaceStylesSummary(searchInVal, replacements, localStylesOnlyVal, totalReplacements) {
   var s = _rsStats;
   if (!s) return;
@@ -160,8 +273,20 @@ function logReplaceStylesSummary(searchInVal, replacements, localStylesOnlyVal, 
     ' | debug=' + rsDebugEnabled());
   console.log('── Inventory / cache ──');
   console.log('  Local styles in file: ' + s.localStylesAdded + ' (by type: TEXT=' + s.localByType.TEXT + ', PAINT=' + s.localByType.PAINT + ', EFFECT=' + s.localByType.EFFECT + ', GRID=' + s.localByType.GRID + ', other=' + s.localByType.OTHER + ')');
-  console.log('  Document scan: nodes=' + s.scanNodesDone + '/' + s.scanNodesPlanned + ' | styles newly added to cache from scan=' + s.scanStylesAdded);
-  console.log('  Team library metadata entries added=' + s.libraryMetaAdded + ' | skipped (local wins)=' + s.librarySkippedLocalWins + ' | teamLibraryPathUsed=' + s.teamLibraryPathUsed);
+  console.log('  Document scan: nodes=' + s.scanNodesDone + '/' + s.scanNodesPlanned + ' | new keys from scan=' + s.scanStylesAdded + ' | placeholders hydrated from nodes=' + s.scanStylesHydrated);
+  console.log('  Scan cap: maxNodes=' + s.scanMaxNodesCap + ' | priority overview frame(s) matched=' + s.scanPriorityFrames + ' | nodes in those subtrees=' + s.scanPriorityNodes + ' | main walk truncated=' + s.scanTruncated);
+  if (s.scanTruncated) {
+    console.log('  ⚠️ Main scan hit the node cap — layers after the ' + s.scanMaxNodesCap + 'th visited node were skipped. Raise replaceStylesScanMaxNodes or move the **Render styles** frame higher in the layer list.');
+  }
+  console.log('  Team library: collections loaded=' + s.teamLibraryCollectionsLoaded + ' | metadata entries added=' + s.libraryMetaAdded + ' | skipped (local wins)=' + s.librarySkippedLocalWins + ' | teamLibraryPathUsed=' + s.teamLibraryPathUsed);
+  if (!localStylesOnlyVal && s.teamLibraryUnavailable) {
+    console.log('── Remote: Team Library catalog ──');
+    console.log('  ⚠️ NOT loaded: ' + (s.teamLibraryUnavailableReason || '(unknown)'));
+    console.log('  → Run inside Figma (desktop/web) with libraries enabled; try replaceStylesTeamLibraryTimeoutMs=0; or rely on styles already on the canvas in scope.');
+  }
+  if (s.teamLibraryPathUsed && s.importStyleFailed > 0) {
+    console.log('  ⚠️ importStyleByKeyAsync failed ' + s.importStyleFailed + 'x — check edit access, style still published, and team.');
+  }
   console.log('── Nodes / bindings seen ──');
   console.log('  Nodes visited: ' + s.nodesVisited);
   console.log('  TEXT: nodes=' + s.textNodesSeen + ' | segments=' + s.textSegmentsTotal + ' | segments with textStyleId=' + s.textSegmentsWithStyleId);
@@ -197,7 +322,9 @@ function logReplaceStylesSummary(searchInVal, replacements, localStylesOnlyVal, 
     console.log('  • searchFor must partially match; the target style must exist for **one of** the tried names (computed name + variants: see `replaceStylesNameFallbackRewrites` and slash spacing).');
     console.log('  • If summary shows "Target not in cache": add styles, edit `replaceStylesNameFallbackRewrites`, or use a longer search/replace (e.g. `✅ V5` → `🚫 V4`). Check [detail] for "HINT — existing …".');
     console.log('  • selectionOnly=false to scan whole page; select nodes that actually use the style.');
-    console.log('  • If Team Library is skipped in logs, remote styles won’t resolve until the library API is available in your environment.');
+    console.log('  • Remote: if the summary shows Team Library catalog NOT loaded, only **local** + **styles already on nodes** can resolve targets—use `replaceStylesRemoteTargetAliases` or apply each target style once in the file.');
+    console.log('  • Remote: exact published **style name** must match one of the lookup candidates (or an alias). Variables have richer APIs; styles do not.');
+    console.log('  • **Render styles** overview: frame name should contain e.g. "Render styles" (default); include every **target** style in that file; if scan truncated, raise `replaceStylesScanMaxNodes`.');
   }
 }
 
@@ -270,6 +397,34 @@ function expandReplacementStyleNameCandidates(primaryName) {
     if (spaced !== n && spaced !== compact) withSlashes.push(spaced);
   }
   return uniqueStringList(withSlashes);
+}
+
+/**
+ * Add explicit remote target names when published library names differ from computed replace strings.
+ */
+function expandCandidatesWithRemoteAliases(candidates) {
+  if (!candidates || !candidates.length) return candidates || [];
+  var aliasMap = typeof replaceStylesRemoteTargetAliases !== 'undefined' && replaceStylesRemoteTargetAliases && typeof replaceStylesRemoteTargetAliases === 'object'
+    ? replaceStylesRemoteTargetAliases : null;
+  if (!aliasMap) return candidates;
+  var extra = [];
+  for (var i = 0; i < candidates.length; i++) {
+    var c = candidates[i];
+    var mapped = aliasMap[c];
+    if (mapped != null && String(mapped).trim() !== '') {
+      var sub = expandReplacementStyleNameCandidates(String(mapped));
+      for (var j = 0; j < sub.length; j++) {
+        extra.push(sub[j]);
+      }
+    }
+  }
+  return extra.length ? uniqueStringList(candidates.concat(extra)) : candidates;
+}
+
+function rsMarkTeamLibraryUnavailable(reason, localStylesOnlyFlag) {
+  if (!_rsStats || localStylesOnlyFlag || !reason) return;
+  _rsStats.teamLibraryUnavailable = true;
+  _rsStats.teamLibraryUnavailableReason = String(reason);
 }
 
 /**
@@ -393,6 +548,14 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
     var searchInVal = typeof searchIn !== 'undefined' ? searchIn : '';
     rsLog('Starting run | selectionOnly=' + selectionOnlyVal + ' | localStylesOnly=' + localStylesOnlyVal);
     rsLog('searchIn=' + JSON.stringify(String(searchInVal || '')) + ' | rules: ' + JSON.stringify(replacements));
+    rsLog(
+      'Cache scan: ' +
+        (typeof replaceStylesLimitCacheScanToSelection !== 'undefined' && replaceStylesLimitCacheScanToSelection
+          ? 'same scope as replacement (legacy)'
+          : 'full current page (Render styles overview may be outside selection)') +
+        ' | replacement scope: ' +
+        (selectionOnlyVal ? 'selection only' : 'whole page')
+    );
     
     var nodes = selectionOnlyVal ? figma.currentPage.selection : [figma.currentPage];
     
@@ -488,8 +651,16 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
   }
 }
 
+/** Roots for traversing the file to discover styles on nodes (overview frame, etc.). Default = whole current page. */
+function getReplaceStylesCacheScanRoots(scopeNodes) {
+  if (typeof replaceStylesLimitCacheScanToSelection !== 'undefined' && replaceStylesLimitCacheScanToSelection === true) {
+    return scopeNodes && scopeNodes.length ? scopeNodes : [figma.currentPage];
+  }
+  return [figma.currentPage];
+}
+
 // Build comprehensive style cache for all style types (local + library)
-// scopeNodes/selectionOnly limit fallback scan scope to reduce memory
+// Document scan for cache uses getReplaceStylesCacheScanRoots (usually full page), not only the replacement selection.
 function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
   scopeNodes = scopeNodes || [figma.currentPage];
   selectionOnly = !!selectionOnly;
@@ -516,6 +687,7 @@ function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
     rsLog('Cache phase: loaded local file styles=' + allLocalStyles.length + ' | by type ' + JSON.stringify(_rsStats ? _rsStats.localByType : {}));
     return new Promise(function(resolve, reject) {
   var skipTeamLibrary = localStylesOnly;
+  var teamLibSkipReason = '';
   if (localStylesOnly) {
     console.log('📋 localStylesOnly: skipping Team Library (local replacement targets only)');
   }
@@ -524,22 +696,28 @@ function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
   try {
     if (!skipTeamLibrary && !figma.teamLibrary) {
       skipTeamLibrary = true;
+      teamLibSkipReason = 'figma.teamLibrary is undefined (run in Figma with team libraries; not all plugin hosts expose this API).';
     } else if (!skipTeamLibrary) {
       // Check if the method exists and is callable
       var method = figma.teamLibrary.getAvailableLibraryStyleCollectionsAsync;
       if (typeof method !== 'function') {
         skipTeamLibrary = true;
+        teamLibSkipReason = 'getAvailableLibraryStyleCollectionsAsync is missing (update Figma / plugin manifest).';
       }
     }
   } catch (e) {
     console.log('⚠️ Team Library API check failed: ' + e.message);
     skipTeamLibrary = true;
+    teamLibSkipReason = 'Team Library API check failed: ' + e.message;
   }
   
   if (skipTeamLibrary) {
     // Skip Team Library and just use local styles + document scanning
     console.log('📋 Using local styles only (Team Library skipped)');
-    scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly).then(function() {
+    if (teamLibSkipReason) {
+      rsMarkTeamLibraryUnavailable(teamLibSkipReason, localStylesOnly);
+    }
+    scanDocumentForLibraryStyles(cache, getReplaceStylesCacheScanRoots(scopeNodes)).then(function() {
       console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
       cleanupMemory();
       resolve(cache);
@@ -563,8 +741,8 @@ function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
       }
     } catch (apiError) {
       console.log('⚠️ Team Library API call failed: ' + apiError.message);
-      skipTeamLibrary = true;
-      scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly).then(function() {
+      rsMarkTeamLibraryUnavailable('getAvailableLibraryStyleCollectionsAsync: ' + apiError.message, localStylesOnly);
+      scanDocumentForLibraryStyles(cache, getReplaceStylesCacheScanRoots(scopeNodes)).then(function() {
         console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
         cleanupMemory();
         resolve(cache);
@@ -572,23 +750,27 @@ function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
       return;
     }
     
-    // Add timeout to prevent hanging
-    var timeoutPromise = new Promise(function(resolve, reject) {
-      setTimeout(function() {
-        reject(new Error('Team Library access timeout (10s)'));
-      }, 10000); // 10 second timeout
-    });
+    var timeoutMs = typeof replaceStylesTeamLibraryTimeoutMs === 'number' ? replaceStylesTeamLibraryTimeoutMs : 30000;
+    var listPromise = libraryPromise;
+    if (timeoutMs > 0) {
+      var timeoutPromise = new Promise(function(resolve, reject) {
+        setTimeout(function() {
+          reject(new Error('Team Library access timeout (' + timeoutMs + 'ms)'));
+        }, timeoutMs);
+      });
+      listPromise = Promise.race([libraryPromise, timeoutPromise]);
+    }
     
-    Promise.race([libraryPromise, timeoutPromise]).then(function(libraryCollections) {
+    listPromise.then(function(libraryCollections) {
       if (_rsStats) _rsStats.teamLibraryPathUsed = true;
       console.log('📚 Found ' + libraryCollections.length + ' library style collections');
-      rsLog('Team Library: loading metadata from up to N collections (see logs above)');
       
-      // Performance optimization: Limit collections to prevent memory overflow
-      var maxCollections = selectionOnly ? 5 : 8; // Fewer when only selection
-      if (libraryCollections.length > maxCollections) {
-        console.log('⚠️ Processing first ' + maxCollections + ' library collections');
-        libraryCollections = libraryCollections.slice(0, maxCollections);
+      var cap = getReplaceStylesLibraryCollectionCap();
+      if (libraryCollections.length > cap) {
+        console.log('⚠️ Processing first ' + cap + ' of ' + libraryCollections.length + ' library collections (replaceStylesMaxLibraryCollections)');
+        libraryCollections = libraryCollections.slice(0, cap);
+      } else {
+        rsLog('Team Library: loading metadata from all ' + libraryCollections.length + ' collection(s)');
       }
       
       // Process collections sequentially to avoid Promise complexity
@@ -597,12 +779,14 @@ function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
       
       function processNextCollection() {
         if (processedCollections >= totalCollections) {
-          var endTime = Date.now();
-          console.log('⏱️ Team Library access took: ' + (endTime - startTime) + 'ms');
-          console.log('📋 Total styles in cache: ' + cache.size + ' (local + library)');
-          // Cleanup memory after building cache
-          cleanupMemory();
-          resolve(cache);
+          console.log('📄 Merging in-document library styles into cache (after Team Library metadata)...');
+          scanDocumentForLibraryStyles(cache, getReplaceStylesCacheScanRoots(scopeNodes)).then(function() {
+            var endTime = Date.now();
+            console.log('⏱️ Team Library + document scan took: ' + (endTime - startTime) + 'ms');
+            console.log('📋 Total styles in cache: ' + cache.size + ' (local + library + scanned)');
+            cleanupMemory();
+            resolve(cache);
+          });
           return;
         }
         
@@ -610,6 +794,7 @@ function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
         processedCollections++;
         
         figma.teamLibrary.getStylesInLibraryCollectionAsync(libraryCollection.key).then(function(libraryStyles) {
+          if (_rsStats) _rsStats.teamLibraryCollectionsLoaded++;
           console.log('📋 Collection "' + libraryCollection.name + '": ' + libraryStyles.length + ' styles');
           
           for (var styleIndex = 0; styleIndex < libraryStyles.length; styleIndex++) {
@@ -647,8 +832,9 @@ function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
     }).catch(function(error) {
       console.log('⚠️ Team Library access failed: ' + error.message);
       console.log('📋 Falling back to document scanning...');
+      rsMarkTeamLibraryUnavailable(error.message || 'Team Library list failed', localStylesOnly);
       
-      scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly).then(function() {
+      scanDocumentForLibraryStyles(cache, getReplaceStylesCacheScanRoots(scopeNodes)).then(function() {
         console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
         
         // Cleanup memory after building cache
@@ -661,8 +847,9 @@ function buildStyleCache(scopeNodes, selectionOnly, localStylesOnly) {
     } catch (error) {
       console.log('⚠️ Team Library access failed: ' + error.message);
       console.log('📋 Falling back to document scanning...');
+      rsMarkTeamLibraryUnavailable(error.message || 'Team Library sync error', localStylesOnly);
       
-      scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly).then(function() {
+      scanDocumentForLibraryStyles(cache, getReplaceStylesCacheScanRoots(scopeNodes)).then(function() {
         console.log('📋 Total styles in cache: ' + cache.size + ' (local + scanned)');
         
         // Cleanup memory after building cache
@@ -683,8 +870,9 @@ async function findLibraryStyleByNameAsync(name, expectedType, styleCache) {
   }
   try {
     var collections = await figma.teamLibrary.getAvailableLibraryStyleCollectionsAsync();
-    var maxCollections = 15; // Limit to avoid long scan in files with many libs
-    for (var c = 0; c < Math.min(collections.length, maxCollections); c++) {
+    var cap = getReplaceStylesLibraryCollectionCap();
+    var collLimit = Math.min(collections.length, cap);
+    for (var c = 0; c < collLimit; c++) {
       var libStyles = await figma.teamLibrary.getStylesInLibraryCollectionAsync(collections[c].key);
       for (var s = 0; s < libStyles.length; s++) {
         var lib = libStyles[s];
@@ -708,23 +896,46 @@ async function findLibraryStyleByNameAsync(name, expectedType, styleCache) {
   return null;
 }
 
-// Fallback: scan nodes for library styles. When selectionOnly, scans only scopeNodes.
-// Limits nodes to avoid memory overflow with large files.
-function scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly) {
-  scopeNodes = scopeNodes || [figma.currentPage];
-  var MAX_SCAN_NODES = 5000; // Cap to prevent memory overflow
-  var nodesToProcess = [];
-  traverseNodes(scopeNodes, function(node) {
-    nodesToProcess.push(node);
-    return 0;
-  }, { maxNodes: MAX_SCAN_NODES });
+// Discover styles used on nodes (library + local) and merge into cache. `traverseRoots` is usually [currentPage].
+// Priority overview frames (name matches) are fully traversed first; then a capped walk of the page (see replaceStylesScanMaxNodes).
+function scanDocumentForLibraryStyles(cache, traverseRoots) {
+  var scopeNodes = traverseRoots && traverseRoots.length ? traverseRoots : [figma.currentPage];
+  var maxScan =
+    typeof replaceStylesScanMaxNodes === 'number' && replaceStylesScanMaxNodes > 0 ? replaceStylesScanMaxNodes : 40000;
 
-  if (_rsStats) _rsStats.scanNodesPlanned = nodesToProcess.length;
-  
-  if (nodesToProcess.length >= MAX_SCAN_NODES) {
-    nodesToProcess = nodesToProcess.slice(0, MAX_SCAN_NODES);
-    console.log('⚠️ Style scan limited to ' + MAX_SCAN_NODES + ' nodes');
+  var priorityScanRoots = findReplaceStylesPriorityScanFrameRoots(figma.currentPage);
+  var priorityNodes = [];
+  for (var wi = 0; wi < priorityScanRoots.length; wi++) {
+    traverseNodes([priorityScanRoots[wi]], function(node) {
+      priorityNodes.push(node);
+      return 0;
+    }, { maxNodes: null });
   }
+
+  var mainNodes = [];
+  traverseNodes(scopeNodes, function(node) {
+    mainNodes.push(node);
+    return 0;
+  }, { maxNodes: maxScan });
+
+  var truncated = mainNodes.length >= maxScan;
+  var nodesToProcess = dedupeNodeListsPriorityFirst(priorityNodes, mainNodes);
+
+  if (_rsStats) {
+    _rsStats.scanNodesPlanned = nodesToProcess.length;
+    _rsStats.scanPriorityFrames = priorityScanRoots.length;
+    _rsStats.scanPriorityNodes = priorityNodes.length;
+    _rsStats.scanMaxNodesCap = maxScan;
+    _rsStats.scanTruncated = truncated;
+  }
+
+  if (priorityScanRoots.length > 0) {
+    console.log('🔥 Priority style-overview scan: ' + priorityScanRoots.length + ' frame(s), ' + priorityNodes.length + ' nodes (full subtree)');
+  }
+  if (truncated) {
+    console.log('⚠️ Style scan: main page walk hit cap (' + maxScan + ' nodes) — raise replaceStylesScanMaxNodes if targets are missing');
+  }
+  rsLog('Style scan plan: priority overview subtrees=' + priorityNodes.length + ' nodes | main walk≤' + maxScan + ' → unique total=' + nodesToProcess.length + (truncated ? ' (main truncated)' : ''));
   
   return new Promise(function(resolve) {
     var chunkStartIndex = 0;
@@ -733,6 +944,31 @@ function scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly) {
     var YIELD_DELAY = 10;
     
     console.log('📄 Scanning ' + nodesToProcess.length + ' nodes for styles...');
+    
+    /** Add or upgrade cache entry from a resolved BaseStyle on a node (hydrates Team Library placeholders). */
+    function mergeScannedStyleIntoCache(key, scanType, style) {
+      if (!style) return;
+      var existing = cache.get(key);
+      if (!existing) {
+        cache.set(key, {
+          style: style,
+          type: scanType,
+          key: style.key || null,
+          isLibrary: style.remote || false
+        });
+        rsIncr('scanStylesAdded');
+        return;
+      }
+      if (!existing.style) {
+        cache.set(key, {
+          style: style,
+          type: scanType,
+          key: style.key || existing.key || null,
+          isLibrary: !!(style.remote || existing.isLibrary)
+        });
+        rsIncr('scanStylesHydrated');
+      }
+    }
     
     // Helper function to extract styles from a node (async for getStyleByIdAsync)
     async function extractStylesFromNode(node) {
@@ -752,15 +988,7 @@ function scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly) {
                   var style = await figma.getStyleByIdAsync(segment.textStyleId);
                   if (style) {
                     var key = styleCacheKey(style.name, 'TEXT');
-                    if (!cache.has(key)) {
-                      cache.set(key, {
-                        style: style,
-                        type: 'TEXT',
-                        key: style.key || null,
-                        isLibrary: style.remote || false
-                      });
-                      rsIncr('scanStylesAdded');
-                    }
+                    mergeScannedStyleIntoCache(key, 'TEXT', style);
                   }
                 } catch (e) {
                   // Style might be inaccessible
@@ -784,15 +1012,7 @@ function scanDocumentForLibraryStyles(cache, scopeNodes, selectionOnly) {
               var scanType = 'PAINT';
               if (prop === 'effectStyleId') scanType = 'EFFECT';
               var key = styleCacheKey(style.name, scanType);
-              if (!cache.has(key)) {
-                cache.set(key, {
-                  style: style,
-                  type: scanType,
-                  key: style.key || null,
-                  isLibrary: style.remote || false
-                });
-                rsIncr('scanStylesAdded');
-              }
+              mergeScannedStyleIntoCache(key, scanType, style);
             }
           } catch (e) {
             // Style might be inaccessible
@@ -1026,7 +1246,7 @@ async function findReplacementStyle(currentStyle, styleCache, expectedType, repl
       continue;
     }
 
-    var candidates = expandReplacementStyleNameCandidates(newStyleName);
+    var candidates = expandCandidatesWithRemoteAliases(expandReplacementStyleNameCandidates(newStyleName));
     if (rsDebugEnabled() && candidates.length > 1) {
       rsDetail(ctxLabel + ' | rule #' + replIndex + ': lookup tries ' + candidates.length + ' name variant(s); primary after replace="' + newStyleName + '"');
     }

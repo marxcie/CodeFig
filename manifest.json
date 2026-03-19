@@ -14,7 +14,8 @@
   ],
   "networkAccess": {
     "allowedDomains": [
-      "https://api.figma.com"
+      "https://api.figma.com",
+      "http://localhost:8765"
     ],
     "reasoning": "Figma REST API for scripts; localhost for CodeFig console forwarding."
   }

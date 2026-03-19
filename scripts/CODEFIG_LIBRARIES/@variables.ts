@@ -433,10 +433,14 @@ async function getOrCreateCollection(name) {
  * Figma creates new collections with a default first mode (e.g. "Mode 1").
  * We replace that with only the desired mode names so we don't end up with
  * Mode 1 + Desktop + Tablet + Mobile (or similar).
+ *
+ * When the collection has no variables yet, we rebuild mode order to match `modeNames`
+ * (Figma otherwise keeps existing mode order and only appends new modes).
  */
 function setupModes(collection, modeNames) {
   console.log('Setting up modes: ' + modeNames.join(', '));
-  
+  var hadVariables = !!(collection.variableIds && collection.variableIds.length > 0);
+
   // 1. Add any missing modes (so we have at least our desired set before removing defaults)
   for (var i = 0; i < modeNames.length; i++) {
     var modeName = modeNames[i];
@@ -445,7 +449,7 @@ function setupModes(collection, modeNames) {
       collection.addMode(modeName);
     }
   }
-  
+
   // 2. Remove any mode not in our list (e.g. default "Mode 1" from createVariableCollection)
   for (var j = collection.modes.length - 1; j >= 0; j--) {
     var mode = collection.modes[j];
@@ -453,8 +457,39 @@ function setupModes(collection, modeNames) {
       collection.removeMode(mode.modeId);
     }
   }
-  
-  console.log('Modes setup complete: ' + collection.modes.map(function(m) { return m.name; }).join(', '));
+
+  // 3. Align order with modeNames when the collection is still empty (no variables)
+  var curNames = collection.modes.map(function(m) {
+    return m.name;
+  });
+  var orderOk = modeNames.length === curNames.length && modeNames.every(function(n, idx) {
+    return curNames[idx] === n;
+  });
+  if (!orderOk && modeNames.length > 0) {
+    var sameMultiset = modeNames.length === curNames.length &&
+      modeNames.every(function(n) {
+        return curNames.indexOf(n) !== -1;
+      }) &&
+      curNames.every(function(n) {
+        return modeNames.indexOf(n) !== -1;
+      });
+    if (sameMultiset && !hadVariables && typeof collection.renameMode === 'function') {
+      while (collection.modes.length > 1) {
+        collection.removeMode(collection.modes[collection.modes.length - 1].modeId);
+      }
+      collection.renameMode(collection.modes[0].modeId, modeNames[0]);
+      for (var r = 1; r < modeNames.length; r++) {
+        collection.addMode(modeNames[r]);
+      }
+      console.log('Modes reordered to match requested order (collection had no variables yet).');
+    } else if (sameMultiset && hadVariables) {
+      console.warn('Variable collection "' + collection.name + '": modes match your config but order differs. Figma cannot reorder modes when the collection already has variables. Delete this collection in the Variables panel and re-run the script to apply config order.');
+    }
+  }
+
+  console.log('Modes setup complete: ' + collection.modes.map(function(m) {
+    return m.name;
+  }).join(', '));
 }
 
 /**
