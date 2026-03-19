@@ -3,6 +3,8 @@
 // # Replace variables
 // Replaces variable bindings on nodes: choose source/target collection (dropdowns) and find/replace on variable path (groups + variable name). Rebinds nodes to a different variable; does not rename variable definitions.
 //
+// **Style vs native:** Bindings that come from an applied **text**, **color (fill)**, **stroke**, or **effect** style are **not** replaced—only **native** bindings on the layer (no matching variable on that applied style for that slot) are updated.
+//
 // ## Overview
 // **Collections:** Source collection = which bindings to consider (empty = all). Target collection = where to look up the replacement variable (empty = same collection as source, then any). **Path find/replace:** Applied to the variable path (e.g. "color 2 / red" → find "color 2", replace "color 1" → "color 1 / red"). Supports same-collection group swap and cross-collection replacement.
 //
@@ -226,54 +228,120 @@ var SUPPORTED_BOUND_PROPERTIES = {
   visible: 1, opacity: 1
 };
 
-/** Return true if this property's variable binding comes from the node's style (do not replace). */
-async function isVariableFromStyle(node, property, variableId) {
-  try {
-    if (property === 'fontSize' || property === 'fontWeight' || property === 'lineHeight' || property === 'letterSpacing' || property === 'fontFamily' || property === 'paragraphSpacing' || property === 'paragraphIndent') {
-      if (!node.textStyleId || node.textStyleId === figma.mixed) return false;
-      var style = await figma.getStyleByIdAsync(node.textStyleId);
-      if (style && style.boundVariables && style.boundVariables[property]) {
-        var bid = style.boundVariables[property].id || (style.boundVariables[property][0] && style.boundVariables[property][0].id);
-        if (bid === variableId) return true;
+/** Extract variable id from a style binding entry (alias object or nested). */
+function bindingEntryVariableId(entry) {
+  if (!entry) return null;
+  if (typeof entry.id === 'string') return entry.id;
+  if (entry.color && typeof entry.color.id === 'string') return entry.color.id;
+  if (Array.isArray(entry) && entry[0]) return bindingEntryVariableId(entry[0]);
+  return null;
+}
+
+/** True if any entry in the list at slotIndex (or whole list if null) matches variableId. */
+function stylePaintSlotMatchesVariable(paintsOrStrokes, slotIndex, variableId) {
+  if (!variableId || !paintsOrStrokes) return false;
+  var arr = Array.isArray(paintsOrStrokes) ? paintsOrStrokes : [paintsOrStrokes];
+  if (slotIndex != null && slotIndex >= 0) {
+    if (slotIndex < arr.length) {
+      var id = bindingEntryVariableId(arr[slotIndex]);
+      return id === variableId;
+    }
+    return false;
+  }
+  for (var i = 0; i < arr.length; i++) {
+    if (bindingEntryVariableId(arr[i]) === variableId) return true;
+  }
+  return false;
+}
+
+/** Typography / text-style-bound fields: variable is from style if applied text style defines it (whole node or per-segment). */
+async function isTextTypographyFromStyle(node, property, variableId) {
+  var textProps = {
+    fontSize: 1, fontWeight: 1, lineHeight: 1, letterSpacing: 1, fontFamily: 1,
+    paragraphSpacing: 1, paragraphIndent: 1, fontStyle: 1
+  };
+  if (!textProps[property] || node.type !== 'TEXT' || !variableId) return false;
+  async function styleDefinesVariable(styleId) {
+    if (!styleId || styleId === figma.mixed) return false;
+    try {
+      var style = await figma.getStyleByIdAsync(styleId);
+      if (!style || !style.boundVariables) return false;
+      var b = style.boundVariables[property];
+      if (!b) return false;
+      var bid = bindingEntryVariableId(Array.isArray(b) ? b[0] : b) || (typeof b.id === 'string' ? b.id : null);
+      if (bid === variableId) return true;
+      if (Array.isArray(b)) {
+        for (var i = 0; i < b.length; i++) {
+          if (bindingEntryVariableId(b[i]) === variableId) return true;
+        }
       }
-    } else if (property === 'fills') {
+    } catch (e) { }
+    return false;
+  }
+  if (node.textStyleId && node.textStyleId !== figma.mixed) {
+    if (await styleDefinesVariable(node.textStyleId)) return true;
+  }
+  try {
+    var segments = node.getStyledTextSegments(['textStyleId']);
+    for (var s = 0; s < segments.length; s++) {
+      if (await styleDefinesVariable(segments[s].textStyleId)) return true;
+    }
+  } catch (e) { }
+  return false;
+}
+
+/**
+ * True if this binding is driven by an applied library/document style (skip replacement).
+ * bindIndex: for fills/strokes/effects, index of the paint/effect slot when boundVariables uses an array.
+ */
+async function isVariableFromStyle(node, property, variableId, bindIndex) {
+  try {
+    if (property === 'fontSize' || property === 'fontWeight' || property === 'lineHeight' || property === 'letterSpacing' ||
+        property === 'fontFamily' || property === 'paragraphSpacing' || property === 'paragraphIndent' || property === 'fontStyle') {
+      return await isTextTypographyFromStyle(node, property, variableId);
+    }
+    if (property === 'fills') {
       if (!('fillStyleId' in node) || !node.fillStyleId || node.fillStyleId === figma.mixed) return false;
       var fillStyle = await figma.getStyleByIdAsync(node.fillStyleId);
-      if (fillStyle && fillStyle.boundVariables) {
-        var colorBindings = fillStyle.boundVariables.color || fillStyle.boundVariables.paints;
-        if (colorBindings) {
-          var arr = Array.isArray(colorBindings) ? colorBindings : [colorBindings];
-          for (var i = 0; i < arr.length; i++) {
-            var b = arr[i];
-            var pid = (b && b.id) || (b && b[0] && b[0].id);
-            if (pid === variableId) return true;
-          }
-        }
+      if (!fillStyle || !fillStyle.boundVariables) return false;
+      var bv = fillStyle.boundVariables;
+      if (bv.paints && (Array.isArray(bv.paints) ? bv.paints.length : 0) > 0) {
+        return stylePaintSlotMatchesVariable(bv.paints, bindIndex != null ? bindIndex : null, variableId);
       }
-    } else if (property === 'strokes') {
+      if (bv.color && (bindIndex == null || bindIndex === 0)) {
+        return bindingEntryVariableId(bv.color) === variableId || bindingEntryVariableId(Array.isArray(bv.color) ? bv.color[0] : bv.color) === variableId;
+      }
+      return false;
+    }
+    if (property === 'strokes') {
       if (!('strokeStyleId' in node) || !node.strokeStyleId || node.strokeStyleId === figma.mixed) return false;
       var strokeStyle = await figma.getStyleByIdAsync(node.strokeStyleId);
-      if (strokeStyle && strokeStyle.boundVariables) {
-        var strokeBindings = strokeStyle.boundVariables.color || strokeStyle.boundVariables.strokes;
-        if (strokeBindings) {
-          var sarr = Array.isArray(strokeBindings) ? strokeBindings : [strokeBindings];
-          for (var j = 0; j < sarr.length; j++) {
-            var sb = sarr[j];
-            var sid = (sb && sb.id) || (sb && sb[0] && sb[0].id);
-            if (sid === variableId) return true;
-          }
-        }
+      if (!strokeStyle || !strokeStyle.boundVariables) return false;
+      var sbv = strokeStyle.boundVariables;
+      if (sbv.strokes && (Array.isArray(sbv.strokes) ? sbv.strokes.length : 0) > 0) {
+        return stylePaintSlotMatchesVariable(sbv.strokes, bindIndex != null ? bindIndex : null, variableId);
       }
-    } else if (property === 'effects') {
+      if (sbv.paints && (Array.isArray(sbv.paints) ? sbv.paints.length : 0) > 0) {
+        return stylePaintSlotMatchesVariable(sbv.paints, bindIndex != null ? bindIndex : null, variableId);
+      }
+      if (sbv.color && (bindIndex == null || bindIndex === 0)) {
+        return bindingEntryVariableId(sbv.color) === variableId;
+      }
+      return false;
+    }
+    if (property === 'effects') {
       if (!('effectStyleId' in node) || !node.effectStyleId || node.effectStyleId === figma.mixed) return false;
       var effectStyle = await figma.getStyleByIdAsync(node.effectStyleId);
-      if (effectStyle && effectStyle.boundVariables && effectStyle.boundVariables.effects) {
-        var effects = effectStyle.boundVariables.effects;
-        for (var k = 0; k < effects.length; k++) {
-          var eid = (effects[k] && effects[k].id) || (effects[k] && effects[k][0] && effects[k][0].id);
-          if (eid === variableId) return true;
-        }
+      if (!effectStyle || !effectStyle.boundVariables || !effectStyle.boundVariables.effects) return false;
+      var effects = effectStyle.boundVariables.effects;
+      var effArr = Array.isArray(effects) ? effects : [effects];
+      if (bindIndex != null && bindIndex >= 0 && bindIndex < effArr.length) {
+        return bindingEntryVariableId(effArr[bindIndex]) === variableId;
       }
+      for (var k = 0; k < effArr.length; k++) {
+        if (bindingEntryVariableId(effArr[k]) === variableId) return true;
+      }
+      return false;
     }
   } catch (e) { }
   return false;
@@ -444,7 +512,7 @@ async function findAndReplaceVariables() {
           }
 
           var variableId = currentVariable.id;
-          if (await isVariableFromStyle(node, property, variableId)) {
+          if (await isVariableFromStyle(node, property, variableId, bindIndex)) {
             console.log('  ⏭️ Skipping (variable comes from style):', currentVariable.name);
             skippedCount++;
             continue;

@@ -31,7 +31,7 @@
 // Browse **Example Scripts** in the sidebar for ready-to-use scripts. They cover:
 //
 // - **Variables:** duplicate-variable-collection, replace-variables, rename-variables
-// - **Styles:** replace-styles, rename-styles, text-to-styles
+// - **Styles:** replace-styles, replace-style-variable-bindings, rename-styles, text-to-styles
 // - **Layout:** frame-or-auto-layout-selected, scale-selection
 // - **Utilities:** variable-inspector, comments-to-annotations
 //
