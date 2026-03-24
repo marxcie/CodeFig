@@ -1,29 +1,25 @@
-// DS Foundation: Typography
+// Typography
 // @DOC_START
-// # DS Foundation: Typography
+// # Typography
 // Responsive typography system with range-first scaling and style generation.
 //
 // ## Overview
-// Creates typography variables and optional text styles. Scale is range-first: first step = minFont, base step = baseFont, last step = maxFont per viewport. Steps are spread between min and max (linear or curved), rounded to grid, and enforced distinct (no duplicate sizes). Variables are scoped to their use (font size, line height, letter spacing, etc.). Optionally creates an overview frame showing all scale steps per viewport.
+// Creates typography variables and optional text styles. **Range mode:** min → base → max per viewport with easing between steps. **Modular mode** (`fontScaling.type` = minorSecond … perfectFifth, `phi`): font size = base × ratio^(step−base), clamped to min/max. Line height and letter spacing always use the range model. Optionally creates overview frames.
 //
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
 // | fontFamily | Font family name (e.g. Inter). |
-// | fontWeights | Map of weight names to numeric values (e.g. regular: 400, semibold: 600). |
-// | structure.variableCollection | Name of the variable collection. |
-// | structure.variableGroup | Optional group path within the collection. |
-// | fontScale | Array of scale step names (e.g. 3xs … 10xl). |
-// | scaling.type | Curve type: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio (ignored if easeInExponent is set). |
-// | scaling.ease | Easing: none, in, out, inout, outin. Shapes step distribution (e.g. "in" = more steps near base). |
-// | scaling.easeInExponent | Optional. If set (e.g. 1.2), use power curve instead of type. Typical 0.2–5. |
-// | scaling.easeOutExponent | Optional. Used with easeInExponent; defaults to easeInExponent if omitted. |
-// | roundLowerValuesTo | Grid for steps from min to base (e.g. 2 = finer; 0 = no rounding). Applies to font size and line height. |
-// | roundUpperValuesTo | Grid for steps above base (e.g. 4 or 8 = coarser; 0 = no rounding). Letter spacing is always fractional. |
-// | debugScaleJson | If true, log "Generated scales" JSON for the first viewport to the console. |
-// | fontSizes | Per viewport (desktop, tablet, mobile): minFont, baseFont, maxFont. Scale fills [minFont, maxFont]; last step = maxFont. |
-// | styles.createAndUpdateStyles | If true, creates/updates text styles. |
-// | styles.styleNaming | Naming template for styles (e.g. {$fontScale}/{$fontWeight}). |
+// | fontWeights | Map of style names to numeric weight (400, 600) or Figma style name string (`"Regular"`, `"Light"`). |
+// | collectionName | Figma variable collection (e.g. same as grid: `Responsive System`). |
+// | group | Optional variable name prefix; empty = collection root. |
+// | modes | Ordered `{ name, minFont, baseFont, maxFont }` per viewport. Legacy: `fontSizes` object. |
+// | fontScale | Ordered step names; `baseFont.level` must match one entry. |
+// | fontScaling.type | **Range curve** (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Modular scale** (like [typescale.com](https://typescale.com/)): minorSecond, majorSecond, minorThird, majorThird, perfectFourth, augmentedFourth, perfectFifth, phi (1.618). Modular uses `baseFont.size × ratio^(step−base)` clamped to min/max. |
+// | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for modular types (font size); still used for line height / letter spacing with a linear ramp when type is modular. |
+// | fontScaling.roundLowerValuesTo / roundUpperValuesTo | Rounding grid for font size and line height. |
+// | figmaStyles | `createAndUpdateStyles`, `styleNaming` (e.g. `Typography/{$fontScale}/{$fontWeight}`). Legacy: `styles`. |
+// | scaling / round* (legacy) | Old top-level keys; use `fontScaling` instead. |
 // @DOC_END
 
 // Import functions from libraries
@@ -31,104 +27,218 @@
 @import { applyEase, applyEaseWithExponents, lerp } from "@Math Helpers"
 
 // ========================================
+// CONFIG HELPERS (collection / modes / fontSizes)
+// ========================================
+
+function typographyModesToFontSizes(modes) {
+  var out = {};
+  if (!Array.isArray(modes)) return out;
+  for (var i = 0; i < modes.length; i++) {
+    var m = modes[i];
+    if (!m || typeof m !== 'object' || typeof m.name !== 'string' || !m.name) continue;
+    if (!m.minFont || !m.baseFont || !m.maxFont) continue;
+    out[m.name] = {
+      minFont: m.minFont,
+      baseFont: m.baseFont,
+      maxFont: m.maxFont
+    };
+  }
+  return out;
+}
+
+function resolveFontSizes(config) {
+  if (config.modes && Array.isArray(config.modes) && config.modes.length > 0) {
+    return typographyModesToFontSizes(config.modes);
+  }
+  if (config.fontSizes && typeof config.fontSizes === 'object') {
+    return config.fontSizes;
+  }
+  return {};
+}
+
+function materializeFontSizes(config) {
+  if (!config || typeof config !== 'object') return;
+  config.fontSizes = resolveFontSizes(config);
+}
+
+/** Merge `fontScaling` → `scaling` + rounding; `figmaStyles` → `styles` for existing code paths. */
+function ensureCompatTypographyConfig(config) {
+  if (!config || typeof config !== 'object') return;
+  if (config.fontScaling && typeof config.fontScaling === 'object') {
+    var fs = config.fontScaling;
+    config.scaling = {
+      type: fs.type,
+      ease: fs.ease,
+      easeInExponent: fs.easeInExponent,
+      easeOutExponent: fs.easeOutExponent
+    };
+    if (fs.roundLowerValuesTo !== undefined) config.roundLowerValuesTo = fs.roundLowerValuesTo;
+    if (fs.roundUpperValuesTo !== undefined) config.roundUpperValuesTo = fs.roundUpperValuesTo;
+  }
+  if (config.figmaStyles && typeof config.figmaStyles === 'object') {
+    config.styles = config.figmaStyles;
+  }
+  if (!config.scaling || typeof config.scaling !== 'object') {
+    config.scaling = { type: 'linear', ease: 'none' };
+  }
+}
+
+function getFigmaStyles(config) {
+  if (!config || typeof config !== 'object') return {};
+  return config.figmaStyles || config.styles || {};
+}
+
+// Musical-interval ratios (same as typescale.com presets); phi ≈ golden ratio 1.618
+function getModularScaleRatio(type) {
+  if (!type || typeof type !== 'string') return null;
+  var map = {
+    minorSecond: 1.067,
+    majorSecond: 1.125,
+    minorThird: 1.2,
+    majorThird: 1.25,
+    perfectFourth: 1.333,
+    augmentedFourth: 1.414,
+    perfectFifth: 1.5,
+    phi: 1.618
+  };
+  return map[type] !== undefined ? map[type] : null;
+}
+
+/** Resolve collection name from wrapper `{ config, collectionName }` or raw data object. */
+function resolveCollectionName(config) {
+  if (config.collectionName != null && config.collectionName !== '') {
+    return config.collectionName;
+  }
+  var data = config.config || config;
+  if (data.collectionName != null && data.collectionName !== '') {
+    return data.collectionName;
+  }
+  if (data.structure && data.structure.variableCollection != null) {
+    return data.structure.variableCollection;
+  }
+  return 'Responsive System';
+}
+
+function resolveGroup(config) {
+  if (config.group !== undefined && config.group !== null) {
+    return config.group;
+  }
+  var data = config.config || config;
+  if (data.group !== undefined && data.group !== null) {
+    return data.group;
+  }
+  if (data.structure && data.structure.variableGroup !== undefined) {
+    return data.structure.variableGroup;
+  }
+  return '';
+}
+
+// ========================================
 // ADVANCED TYPOGRAPHY SYSTEM CONFIGURATION
 // ========================================
 
 var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typographyConfigData : {
   // @CONFIG_START
-  // Configuration values (NOT added as variables)
+  collectionName: "Responsive System",
+  group: "Typography",
+
   fontFamily: "Inter",
   fontWeights: {
-    regular: 400,
-    semibold: 600
+    "Regular": 400,
+    "Semibold": 600
   },
-  // Alternative font weight configurations (examples):
-  // fontWeights: { 'primary': 400, 'secondary': 600 },
-  // fontWeights: { 'regular': 'Light', 'semibold': 'Bold' },
-  // fontWeights: { 'normal': 'Regular', 'quote': 'Italic' },
-  structure: {
-    variableCollection: "Typography",
-    variableGroup: ""
+
+  fontScale: [
+    "Text-Tiny",
+    "Text-Small",
+    "Text-Regular",
+    "Text-Large",
+    "Heading-6",
+    "Heading-5",
+    "Heading-4",
+    "Heading-3",
+    "Heading-2",
+    "Heading-1"
+  ],
+
+  fontScaling: {
+    type: "sine",
+    // Range curve (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. 
+    // Modular scale (like typescale.com): minorSecond, majorSecond, minorThird, majorThird, perfectFourth, augmentedFourth, perfectFifth. 
+    ease: "in",
+    roundLowerValuesTo: 1,
+    roundUpperValuesTo: 2
   },
-  fontScale: ["3xs", "2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl", "7xl", "8xl", "9xl", "10xl"],
-  styles: {
+
+  figmaStyles: {
     createAndUpdateStyles: true,
-    styleNaming: "{$fontScale}/{$fontWeight}"
+    styleNaming: "Typography/{$fontScale}/{$fontWeight}"
   },
-  scaling: {
-    type: "sine", // linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio (ignored if easeInExponent set)
-    ease: "in",   // none, in, out, inout, outin
-    // Optional two-number alternative: set easeInExponent (and optionally easeOutExponent) to use power curves instead of type
-    // easeInExponent: 3,
-    // easeOutExponent: 0.6
-  },
-  roundLowerValuesTo: 1,  // grid for steps from min to base (e.g. 2 = finer; 0 = no rounding)
-  roundUpperValuesTo: 2,  // grid for steps above base (e.g. 4 or 8 = coarser; 0 = no rounding)
-  debugScaleJson: false,  // if true, log "Generated scales" JSON for first viewport to console
-  fontSizes: {
-    desktop: {
+
+  modes: [
+    {
+      name: "desktop",
       minFont: {
-        size: 8,
+        size: 8,  // Only when Range curve mode is used
         lineHeight: 1.25,
         letterSpacing: 0
       },
       baseFont: {
-        level: "md",
+        level: "Text-Regular",
         size: 18,
         lineHeight: 1.5,
         letterSpacing: -0.2
       },
       maxFont: {
-        size: 200,
+        size: 200, // Only when Range curve mode is used
         lineHeight: 1,
         letterSpacing: -3
       }
     },
-    tablet: {
+    {
+      name: "tablet",
       minFont: {
-        size: 8,
+        size: 8,  // Only when Range curve mode is used
         lineHeight: 1.25,
         letterSpacing: 0
       },
       baseFont: {
-        level: "md",
+        level: "Text-Regular",
         size: 16,
         lineHeight: 1.5,
         letterSpacing: -0.2
       },
       maxFont: {
-        size: 160,
+        size: 160, // Only when Range curve mode is used
         lineHeight: 1,
         letterSpacing: -2.5
       }
     },
-    mobile: {
+    {
+      name: "mobile",
       minFont: {
-        size: 8,
+        size: 8,  // Only when Range curve mode is used
         lineHeight: 1.5,
         letterSpacing: 0
       },
       baseFont: {
-        level: "md",
+        level: "Text-Regular",
         size: 16,
         lineHeight: 1.25,
         letterSpacing: -0.2
       },
       maxFont: {
-        size: 120,
+        size: 120, // Only when Range curve mode is used
         lineHeight: 1,
         letterSpacing: -2
       }
     }
-  }
+  ]
   // @CONFIG_END
 };
 
-// Create the main configuration object that the execution section expects
-var typographyConfig = typeof typographyConfig !== 'undefined' ? typographyConfig : {
-  collectionName: typographyConfigData.structure.variableCollection,
-  config: typographyConfigData
-};
+ensureCompatTypographyConfig(typographyConfigData);
+materializeFontSizes(typographyConfigData);
 
 // Grid for a given step: lower steps (min→base) use roundLowerValuesTo; upper steps (above base) use roundUpperValuesTo.
 function getGridSizeForStep(config, scaleIndex, baseIndex) {
@@ -139,16 +249,6 @@ function getGridSizeForStep(config, scaleIndex, baseIndex) {
   return scaleIndex <= baseIndex ? gridLower : gridUpper;
 }
 
-// Map user ease (in, out, inout, outin, none) to library (easeIn, easeOut, etc.)
-function mapEaseToLibrary(ease) {
-  if (!ease || ease === "none") return "none";
-  if (ease === "in") return "easeIn";
-  if (ease === "out") return "easeOut";
-  if (ease === "inout") return "easeInOut";
-  if (ease === "outin") return "easeOutIn";
-  return "none";
-}
-
 // Map user type (expo) to library (exponential)
 function mapTypeToLibrary(type) {
   if (!type) return "linear";
@@ -156,6 +256,31 @@ function mapTypeToLibrary(type) {
   if (type === "goldenratio") return "goldenRatio";
   // quad, quart, circ passed through as-is
   return type;
+}
+
+function isModularScaleType(type) {
+  return getModularScaleRatio(type) != null;
+}
+
+/** When font size uses a modular ratio, line/letter spacing use range lerp with linear curve (not modular names). */
+function getSpacingScalingType(config) {
+  var scaling = config.scaling || {};
+  var st = scaling.type || 'linear';
+  if (isModularScaleType(st)) return 'linear';
+  return mapTypeToLibrary(st);
+}
+
+function getEasedFactorForSpacing(config, t) {
+  var scaling = config.scaling || {};
+  var easeName = scaling.ease || 'none';
+  var useExponents = typeof scaling.easeInExponent === 'number' && scaling.easeInExponent > 0;
+  if (useExponents) {
+    var outExp = (typeof scaling.easeOutExponent === 'number' && scaling.easeOutExponent > 0)
+      ? scaling.easeOutExponent : scaling.easeInExponent;
+    return applyEaseWithExponents(scaling.easeInExponent, outExp, easeName, t);
+  }
+  var curveType = getSpacingScalingType(config);
+  return applyEase(curveType, easeName, t);
 }
 
 // Returns u in [0,1] for the scale curve. Uses easeInExponent/easeOutExponent when set, else type + ease.
@@ -172,13 +297,26 @@ function getEasedFactor(config, t) {
   return applyEase(curveType, easeName, t);
 }
 
-// Range-first: steps from minFont to baseFont to maxFont. Use getEasedFactor then lerp from @Math Helpers.
+// Range-first OR modular ratio (typescale-style): baseSize × ratio^(step − base), clamped to min/max.
 function calculateFluidFontSize(scaleIndex, totalSteps, viewport, config) {
   var minSize = config.fontSizes[viewport].minFont.size;
   var maxSize = config.fontSizes[viewport].maxFont.size;
   var baseSize = config.fontSizes[viewport].baseFont.size;
   var baseIndex = config.fontScale.indexOf(config.fontSizes[viewport].baseFont.level);
+  if (baseIndex < 0) {
+    console.warn('baseFont.level not found in fontScale, using middle step');
+    baseIndex = Math.max(0, Math.floor((totalSteps - 1) / 2));
+  }
   var gridSize = getGridSizeForStep(config, scaleIndex, baseIndex);
+
+  var scaling = config.scaling || {};
+  var modularRatio = getModularScaleRatio(scaling.type);
+  if (modularRatio != null) {
+    var exp = scaleIndex - baseIndex;
+    var rawMod = baseSize * Math.pow(modularRatio, exp);
+    rawMod = Math.max(minSize, Math.min(maxSize, rawMod));
+    return roundToGrid(Math.round(rawMod * 100) / 100, gridSize);
+  }
 
   if (scaleIndex === baseIndex) {
     return roundToGrid(baseSize, gridSize);
@@ -233,7 +371,7 @@ function calculateFluidLineHeight(scaleIndex, totalSteps, viewport, config) {
     endVal = maxLineHeight;
   }
 
-  var u = getEasedFactor(config, t);
+  var u = getEasedFactorForSpacing(config, t);
   return lerp(startVal, endVal, u);
 }
 
@@ -265,7 +403,7 @@ function calculateFluidLetterSpacing(scaleIndex, totalSteps, viewport, config) {
     endVal = maxLetterSpacing;
   }
 
-  var u = getEasedFactor(config, t);
+  var u = getEasedFactorForSpacing(config, t);
   var letterSpacing = lerp(startVal, endVal, u);
   return Math.round(letterSpacing * 100) / 100;
 }
@@ -283,48 +421,10 @@ function roundToGrid(value, gridSize) {
   return Math.round(value / gridSize) * gridSize;
 }
 
-// Scale sizes for one viewport and one (type, ease): piecewise + curve + rounding (no distinct-step nudge).
-// Used for variable generation (which then applies nudge) and for "Generated scales" JSON export.
-function getScaleSizesForViewport(config, viewport, curveType, ease) {
-  var override = {
-    fontScale: config.fontScale,
-    fontSizes: config.fontSizes,
-    scaling: { type: curveType, ease: ease },
-    roundLowerValuesTo: config.roundLowerValuesTo,
-    roundUpperValuesTo: config.roundUpperValuesTo,
-    structure: config.structure
-  };
-  var n = config.fontScale.length;
-  var out = [];
-  for (var i = 0; i < n; i++) {
-    out.push(calculateFluidFontSize(i, n, viewport, override));
-  }
-  return out;
-}
-
-// All curve types and eases for the "Generated scales" matrix (labels × type × ease).
-var SCALE_JSON_TYPES = ["linear", "sine", "quad", "cubic", "quart", "quint", "circ", "exponential", "goldenratio"];
-var SCALE_JSON_EASES = ["none", "in", "out", "inout", "outin"];
-
-// Build { labels, scales: { [type]: { [ease]: [ ... ] } } } for a viewport (e.g. desktop).
-function generateScaleJson(config, viewport) {
-  var scales = {};
-  SCALE_JSON_TYPES.forEach(function(type) {
-    scales[type] = {};
-    SCALE_JSON_EASES.forEach(function(ease) {
-      scales[type][ease] = getScaleSizesForViewport(config, viewport, type, ease);
-    });
-  });
-  return {
-    labels: config.fontScale.slice(),
-    scales: scales
-  };
-}
-
 // Generate variables programmatically
 function generateTypographyVariables(config) {
   var variables = {};
-  var prefix = variableNamePrefix(config.structure.variableGroup);
+  var prefix = variableNamePrefix(resolveGroup({ config: config }));
   
   var viewportNames = Object.keys(config.fontSizes);
   var baseIndex = config.fontScale.indexOf(config.fontSizes[viewportNames[0]].baseFont.level);
@@ -386,10 +486,7 @@ function generateTypographyVariables(config) {
     };
   });
   
-  // Font weights - handle both numeric (400, 600) and string ('Light', 'Bold') values
-  // Use the same modes as font sizes for consistency
-  var viewportNames = Object.keys(config.fontSizes);
-  
+  // Font weights - handle both numeric (400, 600) and string ('Light', 'Bold') values (same viewports as above)
   Object.keys(config.fontWeights).forEach(function(weightName) {
     var weightValue = config.fontWeights[weightName]; // Capture the value
     
@@ -437,7 +534,9 @@ function generateTypographyVariables(config) {
 }
 
 // Create the final configuration object
-var typographyConfig = {
+var typographyConfig = typeof typographyConfig !== 'undefined' ? typographyConfig : {
+  collectionName: resolveCollectionName(typographyConfigData),
+  group: resolveGroup(typographyConfigData),
   config: typographyConfigData,
   variables: generateTypographyVariables(typographyConfigData)
 };
@@ -447,15 +546,24 @@ var typographyConfig = {
 // ========================================
 
 async function createOrUpdateCollection(config) {
+  var data = config.config || config;
+  ensureCompatTypographyConfig(data);
+  materializeFontSizes(data);
+
   console.log('=== ADVANCED TYPOGRAPHY SYSTEM MANAGER ===');
-  var collectionName = config.config.structure.variableCollection;
-  var groupName = config.config.structure.variableGroup;
-  console.log('Processing collection: ' + collectionName + ' (group: ' + groupName + ')');
+  var collectionName = resolveCollectionName(config);
+  var groupName = resolveGroup(config);
+  console.log('Processing collection: ' + collectionName + (groupName ? ' (group: ' + groupName + ')' : ' (no group)'));
   
   var collection = await getOrCreateCollection(collectionName);
   
-  var modes = extractModes({variables: config.variables});
-  console.log('Detected modes: ' + modes.join(', '));
+  var modes = Object.keys(data.fontSizes || {}).map(function(k) {
+    return k.charAt(0).toUpperCase() + k.slice(1);
+  });
+  if (modes.length === 0) {
+    modes = extractModes({ variables: config.variables });
+  }
+  console.log('Detected modes (config order): ' + modes.join(', '));
   
   setupModes(collection, modes);
   
@@ -471,15 +579,10 @@ async function createOrUpdateCollection(config) {
     console.log('Variables skipped: ' + stats.skipped);
     console.log('Text styles created: ' + styleStats.created);
     console.log('Text styles updated: ' + styleStats.updated);
-    if (config.config.debugScaleJson) {
-      var viewport = Object.keys(config.config.fontSizes)[0] || 'desktop';
-      console.log('Generated scales (type × ease) for viewport: ' + viewport);
-      console.log(JSON.stringify(generateScaleJson(config.config, viewport), null, 2));
-    }
     return { collection: collection, stats: stats, styleStats: styleStats };
   }
 
-  if (config.config.styles.createAndUpdateStyles) {
+  if (getFigmaStyles(config.config).createAndUpdateStyles) {
     console.log('Creating/updating text styles...');
     return createOrUpdateTextStyles(config, collection).then(function(styleStats) {
       console.log('Creating typography overview frames...');
@@ -502,7 +605,7 @@ function createOrUpdateTextStyles(config, collection) {
   try {
     config.config.fontScale.forEach(function(scaleName) {
       Object.keys(config.config.fontWeights).forEach(function(weightName) {
-        var styleName = config.config.styles.styleNaming
+        var styleName = (getFigmaStyles(config.config).styleNaming || '{$fontScale}/{$fontWeight}')
           .replace('{$fontScale}', scaleName)
           .replace('{$fontWeight}', weightName);
         
@@ -524,7 +627,7 @@ function createOrUpdateTextStyles(config, collection) {
           stats.created++;
         }
         
-        var namePrefix = variableNamePrefix(config.config.structure.variableGroup);
+        var namePrefix = variableNamePrefix(resolveGroup(config));
         var fontSizeVar = variableList.find(function(v) { return v && v.name === namePrefix + scaleName + '/font-size'; });
         
         var lineHeightVar = variableList.find(function(v) { return v && v.name === namePrefix + scaleName + '/line-height'; });
@@ -674,11 +777,11 @@ function getStyleDescription(config) {
 
 // Create overview frames: one row per scale; each row = vertical stack of weights (same folder), no gap. Scaling/rounding in frame name.
 function createOverviewFrames(config, collection) {
-  var collectionName = config.config.structure.variableCollection;
-  var prefix = variableNamePrefix(config.config.structure.variableGroup);
+  var collectionName = resolveCollectionName(config);
+  var prefix = variableNamePrefix(resolveGroup(config));
   var viewportNames = Object.keys(config.config.fontSizes);
   var fontFamily = config.config.fontFamily;
-  var styleNaming = config.config.styles.styleNaming || '{$fontScale}/{$fontWeight}';
+  var styleNaming = getFigmaStyles(config.config).styleNaming || '{$fontScale}/{$fontWeight}';
   var weightNames = Object.keys(config.config.fontWeights);
   var scalingRoundingLabel = getScalingRoundingLabel(config.config);
 
@@ -800,6 +903,8 @@ createOrUpdateCollection(typographyConfig).then(function(result) {
 // Simple function to create a complete typography system with custom config
 async function createTypographySystem(customConfig) {
   try {
+    ensureCompatTypographyConfig(customConfig);
+    materializeFontSizes(customConfig);
     var typographyVariables = {};
     
     customConfig.fontScale.forEach(function(scaleName, index) {
@@ -822,7 +927,7 @@ async function createTypographySystem(customConfig) {
         }
         
         // Store variables in the correct format (no leading slash when group empty)
-        var variableName = variableNamePrefix(customConfig.structure.variableGroup) + scaleName + '/font-size';
+        var variableName = variableNamePrefix(resolveGroup({ config: customConfig })) + scaleName + '/font-size';
         
         if (!typographyVariables[variableName]) {
           typographyVariables[variableName] = {
@@ -834,7 +939,7 @@ async function createTypographySystem(customConfig) {
       });
     });
     
-    var collection = await getOrCreateCollection(customConfig.structure.variableCollection);
+    var collection = await getOrCreateCollection(resolveCollectionName(customConfig));
     var modes = extractModes({variables: typographyVariables});
     setupModes(collection, modes);
     var result = await processVariables(collection, typographyVariables, null, modes);

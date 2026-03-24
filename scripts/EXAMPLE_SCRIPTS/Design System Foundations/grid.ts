@@ -1,20 +1,22 @@
-// DS Foundation: Grid
+// Grid
 // @DOC_START
-// # DS Foundation: Grid
+// # Grid
 // Create and update grid system variables programmatically.
 //
 // ## Overview
-// Defines a variable collection for layout grid: columns, gap, padding, viewport width per mode (e.g. Desktop, Tablet, Mobile). Config holds container width, columns, gap, padding per viewport; the script creates the variables.
+// Defines a variable collection for layout grid: columns, gap, padding, viewport width per mode (e.g. Desktop, Tablet, Mobile). Each mode specifies container width, columns, gap, padding; the script creates the variables.
 //
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
-// | collectionName / structure.variableCollection | Collection name. |
-// | structure.variableGroup | Optional group path. |
-// | config (e.g. desktop, tablet, mobile) | Any named viewports: containerWidth, columns, gap, padding. **Mode order in Figma follows the order of keys in this object.** Keys must be valid JS identifiers *or* quoted strings (e.g. `"desktop-large"` — hyphens require quotes). Mode names are the key with only the first letter uppercased (`desktop-large` → `Desktop-large`). Column count (col-1..col-N) follows the viewport with the most columns. |
-// | variables | Function(innerConfig) or map of variable names. Creates grid/columns, grid/gap, grid/padding, grid/viewport-width, and grid/col-1..col-max. |
+// | collectionName | Figma variable collection name. |
+// | group | Optional folder prefix for variable names (e.g. `layout` → `layout/columns`). When empty, variables are at the collection root (`columns`, `gap`, …). |
+// | modes | Ordered array of `{ name, containerWidth, columns, gap, padding }`. **Figma mode order matches array order.** Mode display names use `name` with only the first letter uppercased (`desktop-large` → `Desktop-large`). Column count (col-1..col-N) follows the mode with the most columns. |
+// | config (legacy) | Optional keyed object of viewports; ignored when `modes` is non-empty. |
+// | variables | Function(innerConfig) or map of variable names. Creates columns, gap, padding, viewport-width, and col-1..col-max (optionally under `group/`). |
 // | Grid style | One grid style "Grid" (COLUMNS, left/MIN): count, sectionSize (col-1), gutter, and offset (padding) bound to variables; one style for all modes. |
-// | Preview frames | One frame per viewport: width bound to grid/viewport-width, explicit variable mode, grid style applied. |
+// | Preview frames | One frame per viewport: width bound to viewport-width variable, explicit variable mode, grid style applied. |
+// | (output scopes) | `columns` → `EFFECT_FLOAT` (layout grid count in the Effects / layout guide picker). `gap`, `padding`, `viewport-width`, `col-*` → `WIDTH_HEIGHT` and `GAP`. |
 // @DOC_END
 
 // Import functions from libraries
@@ -25,12 +27,61 @@
 // GRID SYSTEM CONFIGURATION
 // ========================================
 
-// Helper: variable name prefix (no leading slash when group is empty — Figma rejects names like "/grid/columns")
+// Helper: optional folder prefix (no leading slash when empty — Figma rejects names like "/columns")
 function variableNamePrefix(group) {
   return group ? group + '/' : '';
 }
 
-// Viewport keys under config.config; only objects with layout fields count as viewports
+// Build keyed viewport map from modes[] (insertion order preserved for Object.keys)
+function gridModesToInnerConfig(modes) {
+  var out = {};
+  if (!Array.isArray(modes)) return out;
+  for (var i = 0; i < modes.length; i++) {
+    var m = modes[i];
+    if (!m || typeof m !== 'object') continue;
+    if (typeof m.name !== 'string' || !m.name) continue;
+    if (typeof m.containerWidth !== 'number' || typeof m.columns !== 'number') continue;
+    out[m.name] = {
+      containerWidth: m.containerWidth,
+      columns: m.columns,
+      gap: typeof m.gap === 'number' ? m.gap : 0,
+      padding: typeof m.padding === 'number' ? m.padding : 0
+    };
+  }
+  return out;
+}
+
+function resolveGridInnerConfig(config) {
+  if (config.modes && Array.isArray(config.modes) && config.modes.length > 0) {
+    return gridModesToInnerConfig(config.modes);
+  }
+  if (config.config && typeof config.config === 'object') {
+    return config.config;
+  }
+  return {};
+}
+
+function resolveCollectionName(config) {
+  if (config.collectionName != null && config.collectionName !== '') {
+    return config.collectionName;
+  }
+  if (config.structure && config.structure.variableCollection != null) {
+    return config.structure.variableCollection;
+  }
+  return 'Responsive System';
+}
+
+function resolveGroup(config) {
+  if (config.group !== undefined && config.group !== null) {
+    return config.group;
+  }
+  if (config.structure && config.structure.variableGroup !== undefined) {
+    return config.structure.variableGroup;
+  }
+  return '';
+}
+
+// Viewport keys on inner config object; only objects with layout fields count as viewports
 function getViewportConfigKeys(innerConfig) {
   if (!innerConfig || typeof innerConfig !== 'object') return [];
   return Object.keys(innerConfig).filter(function(k) {
@@ -56,36 +107,33 @@ function calculateColumnVariable(colNum, viewportConfig) {
 var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfig : {
   // @CONFIG_START
   // Use existing config if already defined, otherwise use default
-  collectionName: "Grid System",
-  structure: {
-    variableCollection: "Grid System",
-    variableGroup: ""
-  },
+  collectionName: "Responsive System",
+  group: "Grid",
 
-  config: {
-    // desktop config
-    desktop: {
+  modes: [
+    {
+      name: "desktop",
       containerWidth: 1920,
       columns: 12,
       gap: 40,
       padding: 80
     },
-    // tablet config
-    tablet: {
+    {
+      name: "tablet",
       containerWidth: 768,
       columns: 8,
       gap: 24,
       padding: 40
     },
-    // mobile config
-    mobile: {
+    {
+      name: "mobile",
       containerWidth: 375,
       columns: 4,
       gap: 16,
       padding: 20
     }
-  },
-  
+  ],
+
   // @CONFIG_END
   // Variables to be created in Figma (function of config; max columns = viewport with most columns)
   variables: function(innerConfig) {
@@ -113,20 +161,24 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
     }
 
     var basicVariables = {
-      "grid/columns": {
+      "columns": {
         type: "FLOAT",
+        scopes: ["EFFECT_FLOAT"],
         values: valuesPerViewport(function(vc) { return vc.columns; })
       },
-      "grid/gap": {
+      "gap": {
         type: "FLOAT",
+        scopes: ["WIDTH_HEIGHT", "GAP"],
         values: valuesPerViewport(function(vc) { return vc.gap; })
       },
-      "grid/padding": {
+      "padding": {
         type: "FLOAT",
+        scopes: ["WIDTH_HEIGHT", "GAP"],
         values: valuesPerViewport(function(vc) { return vc.padding; })
       },
-      "grid/viewport-width": {
+      "viewport-width": {
         type: "FLOAT",
+        scopes: ["WIDTH_HEIGHT", "GAP"],
         values: valuesPerViewport(function(vc) { return vc.containerWidth; })
       }
     };
@@ -142,8 +194,9 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
             };
           })(viewportKeys[vi]);
         }
-        basicVariables['grid/col-' + c] = {
+        basicVariables['col-' + c] = {
           type: "FLOAT",
+          scopes: ["WIDTH_HEIGHT", "GAP"],
           values: colValues
         };
       })(colNum);
@@ -158,20 +211,21 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 // ========================================
 
 async function createOrUpdateCollection(config) {
-  var collectionName = (config.structure && config.structure.variableCollection != null) ? config.structure.variableCollection : config.collectionName;
-  var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
+  var collectionName = resolveCollectionName(config);
+  var group = resolveGroup(config);
   var prefix = variableNamePrefix(group);
+  var innerConfig = resolveGridInnerConfig(config);
 
   // Resolve variables (may be a function of config for dynamic column count)
-  var variables = typeof config.variables === 'function' ? config.variables(config.config) : config.variables;
+  var variables = typeof config.variables === 'function' ? config.variables(innerConfig) : config.variables;
 
   console.log('=== GRID SYSTEM MANAGER ===');
   console.log('Processing collection: ' + collectionName + (group ? ' (group: ' + group + ')' : ' (no group)'));
   
   var collection = await getOrCreateCollection(collectionName);
   
-  // Mode order follows config object key order (not Object.keys on variable.values, which can differ)
-  var modes = getViewportConfigKeys(config.config).map(modeLabelFromViewportKey);
+  // Mode order follows modes[] array or legacy config key order
+  var modes = getViewportConfigKeys(innerConfig).map(modeLabelFromViewportKey);
   if (modes.length === 0) {
     modes = extractModes({ variables: variables });
   }
@@ -184,7 +238,7 @@ async function createOrUpdateCollection(config) {
     variablesWithPrefix[prefix + key] = variables[key];
   }
   
-  var stats = await processVariables(collection, variablesWithPrefix, config.config, modes);
+  var stats = await processVariables(collection, variablesWithPrefix, innerConfig, modes);
   
   console.log('=== GRID SYSTEM SUMMARY ===');
   console.log('Collection: ' + collectionName);
@@ -200,13 +254,14 @@ async function createOrUpdateCollection(config) {
 
 // One layout grid style: COLUMNS, left (MIN); count, width (col-1), gutter, offset (padding) bound to variables
 async function createGridStyles(collection, config) {
-  var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
+  var group = resolveGroup(config);
   var prefix = variableNamePrefix(group);
   var styleName = "Grid";
   var styleStats = { created: 0, updated: 0 };
 
-  var viewportKeys = getViewportConfigKeys(config.config);
-  var firstVc = viewportKeys.length > 0 ? config.config[viewportKeys[0]] : null;
+  var innerConfig = resolveGridInnerConfig(config);
+  var viewportKeys = getViewportConfigKeys(innerConfig);
+  var firstVc = viewportKeys.length > 0 ? innerConfig[viewportKeys[0]] : null;
   if (!firstVc) {
     console.warn("Grid style skipped: no viewport configs");
     return { styleStats: styleStats, gridStyle: null };
@@ -234,10 +289,10 @@ async function createGridStyles(collection, config) {
     styleStats.created++;
   }
 
-  var columnsVar = await getVariable(collection, prefix + "grid/columns");
-  var gapVar = await getVariable(collection, prefix + "grid/gap");
-  var col1Var = await getVariable(collection, prefix + "grid/col-1");
-  var paddingVar = await getVariable(collection, prefix + "grid/padding");
+  var columnsVar = await getVariable(collection, prefix + "columns");
+  var gapVar = await getVariable(collection, prefix + "gap");
+  var col1Var = await getVariable(collection, prefix + "col-1");
+  var paddingVar = await getVariable(collection, prefix + "padding");
 
   var layoutGridToApply = gridLayoutNumeric;
   if (columnsVar && gapVar && col1Var && paddingVar && typeof figma.variables.setBoundVariableForLayoutGrid === "function") {
@@ -251,7 +306,7 @@ async function createGridStyles(collection, config) {
       console.warn("Grid style: variable binding failed: " + (e.message || e));
     }
   } else if (!columnsVar || !gapVar || !col1Var || !paddingVar) {
-    console.log("Grid style: " + styleName + " (COLUMNS, MIN; missing grid/columns, grid/gap, grid/col-1, or grid/padding — using numeric values)");
+    console.log("Grid style: " + styleName + " (COLUMNS, MIN; missing columns, gap, col-1, or padding — using numeric values)");
   }
 
   gridStyle.layoutGrids = [layoutGridToApply];
@@ -259,7 +314,7 @@ async function createGridStyles(collection, config) {
   return { styleStats: styleStats, gridStyle: gridStyle };
 }
 
-// One frame per viewport: width → grid/viewport-width, explicit mode, grid style
+// One frame per viewport: width → viewport-width variable, explicit mode, grid style
 async function createGridPreviewFrames(collection, config, gridStyle) {
   var stats = { created: 0, removed: 0 };
   if (!gridStyle) {
@@ -267,9 +322,10 @@ async function createGridPreviewFrames(collection, config, gridStyle) {
     return stats;
   }
 
-  var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
+  var group = resolveGroup(config);
   var prefix = variableNamePrefix(group);
-  var viewportKeys = getViewportConfigKeys(config.config);
+  var innerConfig = resolveGridInnerConfig(config);
+  var viewportKeys = getViewportConfigKeys(innerConfig);
   if (viewportKeys.length === 0) return stats;
 
   var parentName = "Grid System Preview";
@@ -282,7 +338,7 @@ async function createGridPreviewFrames(collection, config, gridStyle) {
     }
   }
 
-  var viewportWidthVar = await getVariable(collection, prefix + "grid/viewport-width");
+  var viewportWidthVar = await getVariable(collection, prefix + "viewport-width");
   var previewHeight = 480;
 
   var parentFrame = figma.createFrame();
@@ -300,7 +356,7 @@ async function createGridPreviewFrames(collection, config, gridStyle) {
   for (i = 0; i < viewportKeys.length; i++) {
     var vk = viewportKeys[i];
     var modeLabel = modeLabelFromViewportKey(vk);
-    var vc = config.config[vk];
+    var vc = innerConfig[vk];
 
     var viewportFrame = figma.createFrame();
     viewportFrame.name = modeLabel;

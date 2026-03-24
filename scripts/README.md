@@ -12,7 +12,7 @@ Contains help and documentation scripts that appear in the "Help" category.
 - **Purpose**: Documentation, tutorials, and help content
 
 ### `/EXAMPLE_SCRIPTS/`
-Contains example scripts that demonstrate various Figma automation capabilities.
+Contains utility scripts that demonstrate various Figma automation capabilities.
 - **Type**: `prebuilt` 
 - **Purpose**: Ready-to-use scripts for common tasks
 
@@ -64,7 +64,7 @@ Scripts are automatically named using this priority:
 
 The script will automatically appear in the plugin interface!
 
-## Example Script Template
+## Utility script template
 
 ```typescript
 // REPLACE TEXT STYLES

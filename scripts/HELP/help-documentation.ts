@@ -14,7 +14,7 @@
 //
 // ## Script tab
 //
-// Main code editor: write TypeScript or JavaScript, run with Cmd/Ctrl+R, auto-save as you type. Use the sidebar to open Example Scripts or your saved scripts.
+// Main code editor: write TypeScript or JavaScript, run with Cmd/Ctrl+R, auto-save as you type. Use the sidebar to open Utility Scripts or your saved scripts.
 //
 // ## Keyboard shortcuts
 //
@@ -26,16 +26,16 @@
 // | Cmd/Ctrl + E | Export current script as JSON |
 // | Cmd/Ctrl + I | Import script from JSON file |
 //
-// ## Example Scripts
+// ## Utility Scripts
 //
-// Browse **Example Scripts** in the sidebar for ready-to-use scripts. They cover:
+// Browse **Utility Scripts** in the sidebar for ready-to-use scripts. They cover:
 //
 // - **Variables:** duplicate-variable-collection, replace-variables, rename-variables
 // - **Styles:** duplicate-styles, replace-styles, replace-style-variable-bindings, rename-styles, text-to-styles, render-styles-overview
 // - **Layout:** frame-or-auto-layout-selected, scale-selection
 // - **Utilities:** variable-inspector, comments-to-annotations
 //
-// Scripts with a **Config** tab expose options (e.g. dropdowns, text inputs) defined via **// @UI_CONFIG_START** … **// @UI_CONFIG_END** in the script. See any Example Script with a Config tab for the pattern.
+// Scripts with a **Config** tab expose options (e.g. dropdowns, text inputs) defined via **// @UI_CONFIG_START** … **// @UI_CONFIG_END** in the script. See any utility script with a Config tab for the pattern.
 //
 // ## @import system
 //

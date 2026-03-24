@@ -7,7 +7,7 @@
 ## What is CodeFig?
 
 **CodeFig** is a script runner for Figma, inspired by the [Scripter plugin](https://www.figma.com/community/plugin/757836922707087381/Scripter) by **@rsms**.  
-It comes with a curated set of example scripts covering frame and auto-layout utilities, style and variable batch operations, design-system foundations (grid, color, typography), and small workflow helpers (e.g. annotations from comments).
+It comes with a curated set of utility scripts covering frame and auto-layout utilities, style and variable batch operations, design-system foundations (grid, color, typography), and small workflow helpers (e.g. annotations from comments).
 
 Variables are supported as a first-class use case, but CodeFig is intentionally broader than variable tooling.
 
@@ -80,7 +80,7 @@ During `dev`, plugin and script logs are written to `figma-console.log`. The fil
 
 **Project structure**
 - `src/` – plugin code and UI
-- `scripts/` – example scripts and shared libraries
+- `scripts/` – utility scripts and shared libraries
 - `dist/` – build output
 
 ## Network and Builds
@@ -103,7 +103,7 @@ No telemetry. Scripts run entirely in the plugin sandbox. User scripts and libra
 |------|-------------|
 | Help & documentation | Plugin overview and usage notes |
 
-**Example scripts**
+**Utility scripts**
 
 | Name | Description |
 |------|-------------|

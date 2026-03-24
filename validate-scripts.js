@@ -100,6 +100,28 @@ function shouldExclude(name) {
   return false;
 }
 
+/** Match src/code.ts extractScriptMetadata: nested EXAMPLE_SCRIPTS subfolders become their own group name. */
+function getPrebuiltDisplayName(relativePath, scriptType, metadataName) {
+  if (scriptType !== 'prebuilt') {
+    return metadataName;
+  }
+  if (relativePath === 'EXAMPLE_SCRIPTS' || relativePath.startsWith('EXAMPLE_SCRIPTS/')) {
+    if (relativePath === 'EXAMPLE_SCRIPTS') {
+      return `Utility Scripts / ${metadataName}`;
+    }
+    const rest = relativePath.slice('EXAMPLE_SCRIPTS/'.length);
+    if (!rest) {
+      return `Utility Scripts / ${metadataName}`;
+    }
+    const groupLabel = rest.includes('/') ? rest.split('/').join(' · ') : rest;
+    return `${groupLabel} / ${metadataName}`;
+  }
+  if (relativePath.includes('CODEFIG_LIBRARIES')) {
+    return `CodeFig Libraries / ${metadataName}`;
+  }
+  return `Utility Scripts / ${metadataName}`;
+}
+
 // Recursively find all .ts files in the scripts directory
 function findAllScripts(scriptsDir) {
   const scripts = [];
@@ -132,7 +154,7 @@ function findAllScripts(scriptsDir) {
         // Get script metadata (same logic as build-scripts.js)
         const metadata = getScriptMetadata(itemPath, item);
         const scriptType = getCategoryType(folderName);
-        const displayName = scriptType === 'prebuilt' ? `Example Scripts / ${metadata.name}` : metadata.name;
+        const displayName = getPrebuiltDisplayName(relativePath, scriptType, metadata.name);
         
         scripts.push({
           name: displayName,
@@ -385,9 +407,10 @@ function validateImports(scripts) {
             s.filename === scriptName
           );
           
-          // If not found, try with "Example Scripts / " prefix
+          // If not found, try with "Utility Scripts / " or legacy "Example Scripts / " prefix
           if (!foundScript) {
             foundScript = scripts.find(s => 
+              s.name === `Utility Scripts / ${scriptName}` ||
               s.name === `Example Scripts / ${scriptName}` ||
               s.name.endsWith(` / ${scriptName}`)
             );
@@ -433,9 +456,10 @@ function validateImports(scripts) {
           s.filename === scriptName
         );
         
-        // If not found, try with "Example Scripts / " prefix
+        // If not found, try with "Utility Scripts / " or legacy "Example Scripts / " prefix
         if (!foundScript) {
           foundScript = scripts.find(s => 
+            s.name === `Utility Scripts / ${scriptName}` ||
             s.name === `Example Scripts / ${scriptName}` ||
             s.name.endsWith(` / ${scriptName}`)
           );

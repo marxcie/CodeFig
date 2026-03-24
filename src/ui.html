@@ -302,7 +302,7 @@
         margin-bottom: 20px;
       }
       
-      /* Section headers (Example Scripts, User Scripts) */
+      /* Section headers (Utility Scripts, User Scripts) */
       .section-header {
         padding: var(--space-md) var(--space-xl) var(--space-xs) var(--space-xl);
         font: var(--font-size-body) var(--font-family-base);
@@ -311,7 +311,7 @@
         background: transparent;
       }
       
-      .section-header.example-scripts, 
+      .section-header.utility-scripts, 
       .section-header.user-scripts {
         cursor: pointer;
         display: flex;
@@ -321,7 +321,7 @@
         user-select: none;
       }
       
-      .section-header.example-scripts:hover, 
+      .section-header.utility-scripts:hover, 
       .section-header.user-scripts:hover {
         color: var(--text-primary);
       }
@@ -1674,14 +1674,14 @@
           </div>
           
           <div class="editor-tabs" id="editorTabs">
+            <button class="editor-tab" data-tab="docs" type="button">Documentation</button>
             <button class="editor-tab" data-tab="config" type="button">Configuration</button>
             <button class="editor-tab active" data-tab="script" type="button">Script</button>
-            <button class="editor-tab" data-tab="docs" type="button">Documentation</button>
           </div>
           
           <div class="editor-container">
-            <div class="tab-content active" id="tabScript">
-              <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
+            <div class="tab-content" id="tabDocs">
+              <div id="docsRenderer" class="docs-rendered"></div>
             </div>
             <div class="tab-content" id="tabConfig">
               <div class="config-code-container" id="configCodeContainer">
@@ -1691,8 +1691,8 @@
                 <!-- Rendered when script uses // @UI_CONFIG_START … // @UI_CONFIG_END -->
               </div>
             </div>
-            <div class="tab-content" id="tabDocs">
-              <div id="docsRenderer" class="docs-rendered"></div>
+            <div class="tab-content active" id="tabScript">
+              <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
             </div>
             
             <!-- Info Panel -->
@@ -1832,7 +1832,7 @@
         lineNumbers: true,
         indentUnit: 2,
         tabSize: 2,
-        lineWrapping: false,
+        lineWrapping: true,
         autoCloseBrackets: true,
         matchBrackets: true,
         foldGutter: true,
@@ -1849,7 +1849,7 @@
           lineNumbers: true,
           indentUnit: 2,
           tabSize: 2,
-          lineWrapping: false,
+          lineWrapping: true,
           autoCloseBrackets: true,
           matchBrackets: true,
           gutters: ['CodeMirror-linenumbers'],
@@ -2200,7 +2200,7 @@
             });
           }
           
-          // Example Scripts (with grouping)
+          // Utility Scripts (with grouping)
           if (prebuiltScripts.length > 0) {
             html += createScriptsWithGroups(prebuiltScripts, 'prebuilt');
           }
@@ -2227,7 +2227,7 @@
         let html = '';
         
         if (!hideHeader && title) {
-          const headerClass = title === 'Example Scripts' ? 'example-scripts' : 'user-scripts';
+          const headerClass = title === 'Utility Scripts' ? 'utility-scripts' : 'user-scripts';
           const sectionId = title.replace(/\s+/g, '-').toLowerCase();
           const isCollapsed = collapsedSections.has(sectionId);
           const toggleClass = isCollapsed ? 'collapsed' : '';
@@ -2249,9 +2249,9 @@
             </div>
           `;
           
-          // Handle regular sections (Example Scripts, etc.)
+          // Handle regular sections (Utility Scripts, etc.)
           {
-            // Regular section for Example Scripts
+            // Regular section for Utility Scripts
             const contentMaxHeight = isCollapsed ? '0' : `${scripts.length * 32 + 20}px`;
             const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
             const sectionContentClass = hasSelectedScript ? 'selected' : '';
@@ -2418,13 +2418,8 @@
         
         const tabs = [];
         if (parsedSections.hasDocs) tabs.push('docs');
-        if (parsedSections.hasConfig) {
-          try {
-            const schema = typeof window.CodeFigConfigUI !== 'undefined' && window.CodeFigConfigUI.parse(parsedSections.configContent || '');
-            const hasOptions = schema && ((schema.rows && schema.rows.length > 0) || (schema.sections && schema.sections.length > 0));
-            if (hasOptions) tabs.push('config');
-          } catch (e) {}
-        }
+        // Show Configuration whenever @CONFIG_START exists — not only when @UI-style `var x =` rows parse to a form (object-literal configs use the code editor).
+        if (parsedSections.hasConfig) tabs.push('config');
         tabs.push('script');
         updateTabVisibility(tabs);
         
@@ -2455,11 +2450,11 @@
         // The script name already contains the group info if it exists (Group / Script Name)
         scriptTitle.textContent = script.name;
         
-        // Only show badge for Example Scripts, hide for User Scripts
+        // Only show badge for Utility Scripts, hide for User Scripts
         if (script.type === 'prebuilt') {
-          scriptStatus.textContent = 'Example Script';
+          scriptStatus.textContent = 'Utility Script';
           scriptStatus.style.display = 'block';
-          // Remove editable class for example scripts
+          // Remove editable class for utility scripts
           scriptTitle.classList.remove('editable');
         } else if (script.type === 'help') {
           scriptStatus.textContent = 'Help';
@@ -3372,7 +3367,7 @@
           // Filename match (high priority) - check if script has filename property
           if (script.filename && script.filename === scriptName + '.ts') return true;
           
-          // Handle @ prefixed names specifically (e.g., "@Variables" matches "Example Scripts / @Variables")
+          // Handle @ prefixed names specifically (e.g., "@Variables" matches "Utility Scripts / @Variables")
           if (scriptName.startsWith('@')) {
             // Check if script name ends with the @-prefixed name
             if (script.name.endsWith(' / ' + scriptName)) return true;
@@ -3382,7 +3377,7 @@
             if (script.filename && script.filename === scriptName.replace('@', '') + '.ts') return true;
           }
           
-          // End-of-name match (e.g., "Replace Styles" matches "Example Scripts / Replace Styles")
+          // End-of-name match (e.g., "Replace Styles" matches "Utility Scripts / Replace Styles")
           if (script.name.endsWith(' / ' + scriptName)) return true;
           
           // Case insensitive end-of-name match
@@ -4438,7 +4433,7 @@
           console.error('Scripts script tag not found in HTML');
         }
         
-        // Load example scripts and user scripts
+        // Load utility scripts and user scripts
         uiDebugLog('Posting LOAD_EXAMPLE_SCRIPTS and LIST');
         post('LOAD_EXAMPLE_SCRIPTS');
         post('LIST');

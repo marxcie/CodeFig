@@ -55,7 +55,16 @@ function extractScriptMetadata(code: string, filePath: string): { name: string; 
     folderPrefix = 'CodeFig Libraries';
   } else if (filePath.includes('/EXAMPLE_SCRIPTS/')) {
     type = 'prebuilt';
-    folderPrefix = 'Example Scripts';
+    const marker = '/EXAMPLE_SCRIPTS/';
+    const idx = filePath.indexOf(marker);
+    const after = idx !== -1 ? filePath.slice(idx + marker.length) : '';
+    const segments = after.split('/').filter(Boolean);
+    segments.pop();
+    if (segments.length === 0) {
+      folderPrefix = 'Utility Scripts';
+    } else {
+      folderPrefix = segments.join(' · ');
+    }
   }
   
   // Extract name from code comments
@@ -162,10 +171,10 @@ async function loadExampleScripts() {
       };
     });
     
-    debugLog(`Loaded ${processedScripts.length} example scripts`);
+    debugLog(`Loaded ${processedScripts.length} utility scripts`);
     return processedScripts;
   } catch (error) {
-    debugError('Failed to load example scripts:', error);
+    debugError('Failed to load utility scripts:', error);
     return [];
   }
 }
