@@ -4,6 +4,8 @@ This directory contains all scripts for the CodeFig plugin. The build system aut
 
 **Location**: This `scripts/` folder is at the root level of the project (not in `src/` or `dist/`). This is the single source of truth for all scripts. The build copies `.ts` files into `dist/scripts/` and embeds them as base64 JSON in `dist/ui.html` (see the `scripts-data` block in the built HTML). There is no separate `scripts-manifest.json` file.
 
+**Language:** Files use a `.ts` extension, but the plugin runs script code as **plain JavaScript** (no TypeScript compile step). Avoid TypeScript-only syntax (`interface`, `type` aliases, `as` casts, etc.) so scripts run without errors.
+
 ## Folder Structure
 
 ### `/HELP/`
@@ -66,7 +68,7 @@ The script will automatically appear in the plugin interface!
 
 ## Utility script template
 
-```typescript
+```javascript
 // REPLACE TEXT STYLES
 // or
 // SCRIPT_NAME: My Custom Script Name
@@ -89,7 +91,7 @@ The build system (`build-scripts.js`) automatically:
 
 Scripts can import functions from library scripts using `@import` statements:
 
-```typescript
+```javascript
 // Import specific functions
 @import { getAllStyles, generateScale } from "@Core Library"
 

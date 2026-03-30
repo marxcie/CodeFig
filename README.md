@@ -1,7 +1,8 @@
 <div align="center">
   <img src="icon-16x16@512px.png" alt="CodeFig Icon" width="64" height="64">
   <h1>CodeFig</h1>
-  <p><em>A Figma plugin for running TypeScript/JavaScript scripts, with practical examples for layout, styles, variables, and design-system tooling.</em></p>
+  <p><em>Run JavaScript inside Figma. Built for variables, styles, design system workflows and interacting with Figma programmatically.</em></p>
+  <script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="codefig" data-color="#FFDD00" data-emoji=""  data-font="Cookie" data-text="Buy me a coffee" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#ffffff" ></script>
 </div>
 
 ## What is CodeFig?
@@ -11,23 +12,33 @@ It comes with a curated set of utility scripts covering framing and auto-layout,
 
 Variables are supported as a first-class use case, but CodeFig is intentionally broader than variable tooling.
 
+Scripts run as plain JavaScript in the Figma plugin sandbox.
+
 ### Why CodeFig instead of Original Scripter?
 
 **Original Scripter** introduced script-based automation in Figma and remains an excellent minimal tool.  
 CodeFig builds on that idea and focuses on scale, structure, and reuse:
 
 - **Broader example set** — layout, styles, variables, and design-system scripts
-- **TypeScript support** — scripts with typing and editor assistance
+- **JavaScript scripts** — `.ts` filenames for IDE convenience; runtime is ES2017-style JS the Figma runtime accepts
 - **Script organization** — categories, search, import/export
 - **No external dependencies** — no CDNs or third-party services; Figma API used only for scripts that need it (e.g. comments-to-annotations)
 
 ## Features
 
 **Core**
-- TypeScript support
-- Built-in code editor (syntax highlighting, completion)
+- Built-in code editor
 - Script categories, search, import/export
 - Keyboard shortcuts
+- Prebuilt utility scripts and libraries
+- User scripts with autosave (see note below)
+- UI config support (variables, booleans → visual controls)
+- Real-time console logging in dev mode
+
+**Notes**
+- Only user scripts are auto-saved. Prebuilt scripts are read-only by default — duplicate them to edit and persist changes.
+- In dev mode, logs are written in real time to `figma-console.log`, allowing direct debugging without copying errors.
+
 
 **Bundled examples**
 - **Layout & frames:** frame or auto-layout selection, scale or resize, remove unnecessary nesting
@@ -46,23 +57,18 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 2. Open the plugin in any file.
 3. Browse the bundled scripts in the sidebar.
 4. Run a script via the Run button or `Cmd/Ctrl + R`.
-5. Create or extend scripts using TypeScript.
-
-**Typical workflows**
-- Variable replacement via `searchPattern` / `replacePattern` (and related options in **Replace variables**)
-- Batch renaming styles with pattern rules
-- Framing or scaling selections, or trimming redundant wrapper frames
+5. Create or extend scripts using **JavaScript** (syntax must be valid JS at run time).
 
 ## Development
 
 **Local setup:**  
 `npm install` → `npm run dev`
 
-- Builds once, then watches `src/code.ts`, `src/ui.html`, and `scripts/`
-- Starts the local console log server
+- Watches `src/code.ts`, `src/ui.html`, and `scripts/`
+- Starts the local console log server (writes to `figma-console.log`)
 - Reload the plugin in Figma to test
 
-**Production build (releases, CI):** `npm run build:production` — compiles TypeScript, bundles scripts into `dist/ui.html`, and keeps **`manifest.json` free of `localhost`** (enterprise-safe for submission).
+**Production build (releases, CI):** `npm run build:production` — runs `tsc` on **`src/code.ts`** only, embeds script **sources** into `dist/ui.html`, and keeps **`manifest.json` free of `localhost`** (enterprise-safe for submission).
 
 **One-off dev build:** `npm run build:dev` — same as production, but adds `http://localhost:8765` to `manifest.json` so the console log bridge can run.
 
@@ -88,17 +94,18 @@ During `dev`, plugin and script logs are written to `figma-console.log`. The fil
 
 ## Network and Builds
 
-CodeFig does not require external sources, CDNs, or third-party services. All core functionality is self-contained. The **committed** manifest and **`npm run build:production`** allow only **Figma REST API** (`https://api.figma.com`) plus the **`teamlibrary`** permission for Team Library styles and variables — suitable for enterprise review and store submission.
+CodeFig is self-contained:
+- No CDNs or third-party services
+- Uses Figma API only when needed
+- No telemetry
 
-**`http://localhost:8765`** is added to `manifest.json` **only** when you run **`npm run build:dev`** or **`npm run dev`**, so local console output can be forwarded to `figma-console.log`. It is not part of the production bundle. CodeMirror and related UI assets are inlined by `build-scripts.js` whenever you run a full build (`build:production` or `build:dev`).
-
-No telemetry. Scripts run entirely in the plugin sandbox. User scripts and libraries may use network access only if the manifest permits it.
+`http://localhost:8765` is added only in dev mode for console logging.
 
 ## Security & Privacy
 
 - No data collection
-- No CDNs or third-party services; Figma API only when needed
-- Fully functional without external network for core features
+- No external dependencies
+- Runs entirely in the Figma plugin sandbox
 
 ## Bundled Scripts
 
@@ -171,12 +178,6 @@ Create a script and name it with an `@` prefix (e.g. `@My Utils`) to treat it as
 
 User scripts **autosave** after you pause typing (there is no separate Save shortcut).
 
-## Credits
-
-- **Scripter** by [@rsms](https://github.com/rsms) — the original Figma script runner  
-- **Figma Plugin API**
-- **CodeMirror**
-
 ## Contributing
 
 - Open issues for bugs or proposals
@@ -187,12 +188,6 @@ User scripts **autosave** after you pause typing (there is no separate Save shor
 
 MIT — free for commercial and non-commercial use.
 
-## Links
-
-- **Original Scripter**: [Figma Community](https://www.figma.com/community/plugin/757836922707087381/Scripter) · [GitHub](https://github.com/rsms/scripter)  
-- **Figma Variables**: [Figma Help Center](https://help.figma.com/hc/en-us/articles/15339657135383-Guide-to-variables-in-Figma)  
-- **TypeScript**: [Handbook](https://www.typescriptlang.org/docs/)
-
 ---
 
-Built for the Figma automation community.
+Built for the Figma community.

@@ -2,7 +2,7 @@
 // @DOC_START
 // # CodeFig – Help & documentation
 //
-// Your TypeScript-powered Figma scripting environment.
+// Your JavaScript Figma scripting environment (scripts run as JS; .ts is for filenames/editor only).
 //
 // ## Documentation tab
 //
@@ -14,7 +14,7 @@
 //
 // ## Script tab
 //
-// Main code editor: write TypeScript or JavaScript, run with Cmd/Ctrl+R, auto-save as you type. Use the sidebar to open Utility Scripts or your saved scripts.
+// Main code editor: write **JavaScript** (must be valid JS at run time — no TypeScript-only syntax). Run with Cmd/Ctrl+R, auto-save as you type. Use the sidebar to open Utility Scripts or your saved scripts.
 //
 // ## Keyboard shortcuts
 //

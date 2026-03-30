@@ -14,7 +14,8 @@
   ],
   "networkAccess": {
     "allowedDomains": [
-      "https://api.figma.com"
+      "https://api.figma.com",
+      "http://localhost:8765"
     ],
     "reasoning": "Figma REST API for scripts that need REST access (e.g. file comments). Team Library permission is declared separately for published styles and variables."
   }
