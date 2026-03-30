@@ -2,7 +2,7 @@
   <img src="icon-16x16@512px.png" alt="CodeFig Icon" width="64" height="64">
   <h1>CodeFig</h1>
   <p><em>Run JavaScript inside Figma. Built for variables, styles, design system workflows and interacting with Figma programmatically.</em></p>
-  <script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="codefig" data-color="#FFDD00" data-emoji=""  data-font="Cookie" data-text="Buy me a coffee" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#ffffff" ></script>
+  <a href="https://www.buymeacoffee.com/codefig" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 </div>
 
 ## What is CodeFig?
