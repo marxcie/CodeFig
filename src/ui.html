@@ -947,6 +947,32 @@
         gap: 12px;
       }
 
+      /* Buy Me a Coffee (brand SVG); height matches .btn (32px) */
+      .bmc-btn {
+        height: 32px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        border-radius: var(--radius-md);
+        line-height: 0;
+      }
+      .bmc-btn:hover:not(:disabled) {
+        opacity: 0.9;
+      }
+      .bmc-btn:focus-visible {
+        outline: 2px solid #0d99ff;
+        outline-offset: 2px;
+      }
+      .bmc-btn__svg {
+        height: 32px;
+        width: auto;
+        display: block;
+      }
 
       /* ============================================================
          9. CodeFigUI (@codefig-ui.ts)
@@ -1727,6 +1753,9 @@
       <div class="plugin-footer">
         <div class="footer-left">
           <button class="btn secondary" id="newScript" title="Create New Script (⌘N)">New Script</button>
+          <button type="button" class="bmc-btn" id="buyMeACoffeeBtn" title="Support CodeFig on Buy Me a Coffee (opens in browser)" aria-label="Buy me a coffee">
+            <!-- INLINE_BMC_SVG -->
+          </button>
         </div>
         <div class="footer-right">
           <button class="btn secondary" id="exportBtn" title="Export Current Script (⌘E)">Export Script</button>
@@ -1809,6 +1838,7 @@
       const tabConfigEl = document.getElementById('tabConfig');
       const tabDocsEl = document.getElementById('tabDocs');
       const docsRendererEl = document.getElementById('docsRenderer');
+      const buyMeACoffeeBtn = document.getElementById('buyMeACoffeeBtn');
       const newScriptBtn = document.getElementById('newScript');
       const runBtn = document.getElementById('runBtn');
       const deleteBtn = document.getElementById('deleteBtn');
@@ -2019,7 +2049,45 @@
         }
         const before = mainCode.slice(0, i + startMarker.length);
         const after = mainCode.slice(j);
-        code.setValue(before + '\n' + configContent.replace(/\n\s*$/, '') + '\n' + after);
+        const trimmed = configContent.replace(/\n\s*$/, '');
+        const newCode = before + '\n' + trimmed + '\n' + after;
+        if (newCode === mainCode) return;
+
+        // Only write merged config back into the main editor while the Configuration
+        // tab is active (user is editing the form / split config editor). On Script or
+        // Docs, the main editor is authoritative: applying merge here would replace
+        // inline edits with stale CodeFigUI/config-editor state, make the buffer match
+        // originalCode, and skip autosave — feeling like a revert to the last save.
+        if (currentTab !== 'config') return;
+
+        const startReplace = i + startMarker.length;
+        const oldSegLen = j - startReplace;
+        const newSegLen = newCode.length - before.length - after.length;
+        const delta = newSegLen - oldSegLen;
+
+        function mapOffset(pos) {
+          if (pos < startReplace) return pos;
+          if (pos >= j) return pos + delta;
+          const rel = pos - startReplace;
+          if (oldSegLen <= 0 || newSegLen <= 0) return startReplace;
+          const mapped = Math.round((rel * newSegLen) / oldSegLen);
+          return startReplace + Math.min(mapped, Math.max(0, newSegLen - 1));
+        }
+
+        const doc = code.getDoc();
+        const scroll = code.getScrollInfo();
+        const fromIdx = doc.indexFromPos(code.getCursor('from'));
+        const toIdx = doc.indexFromPos(code.getCursor('to'));
+        const newLen = newCode.length;
+        const newFrom = Math.max(0, Math.min(mapOffset(fromIdx), newLen));
+        const newTo = Math.max(0, Math.min(mapOffset(toIdx), newLen));
+
+        code.setValue(newCode);
+        code.setSelection(
+          doc.posFromIndex(Math.min(newFrom, newTo)),
+          doc.posFromIndex(Math.max(newFrom, newTo))
+        );
+        code.scrollTo(scroll.left, scroll.top);
       }
 
       function getFullCode() {
@@ -4076,6 +4144,11 @@
       }
 
       // Event listeners
+      if (buyMeACoffeeBtn) {
+        buyMeACoffeeBtn.addEventListener('click', function () {
+          post('OPEN_EXTERNAL', { url: 'https://buymeacoffee.com/codefig' });
+        });
+      }
       newScriptBtn.addEventListener('click', createNewScript);
       runBtn.addEventListener('click', runCurrentScript);
       deleteBtn.addEventListener('click', deleteCurrentScript);

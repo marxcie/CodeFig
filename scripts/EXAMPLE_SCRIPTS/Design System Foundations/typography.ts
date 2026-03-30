@@ -15,8 +15,8 @@
 // | group | Optional variable name prefix; empty = collection root. |
 // | modes | Ordered `{ name, minFont, baseFont, maxFont }` per viewport. Legacy: `fontSizes` object. |
 // | fontScale | Ordered step names; `baseFont.level` must match one entry. |
-// | fontScaling.type | **Range curve** (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Modular scale** (like [typescale.com](https://typescale.com/)): minorSecond, majorSecond, minorThird, majorThird, perfectFourth, augmentedFourth, perfectFifth, phi (1.618). Modular uses `baseFont.size × ratio^(step−base)` clamped to min/max. |
-// | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for modular types (font size); still used for line height / letter spacing with a linear ramp when type is modular. |
+// | fontScaling.type | **Range curve** (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise** (font size only): `piecewise`, `piecewise2`, `piecewise4` — snapped ramp from min→max over all steps ([Carbon spacing](https://carbondesignsystem.com/elements/spacing/overview/) rhythm); **Modular scale** (like [typescale.com](https://typescale.com/)): minorSecond, majorSecond, minorThird, majorThird, perfectFourth, augmentedFourth, perfectFifth, phi (1.618). Modular uses `baseFont.size × ratio^(step−base)` clamped to min/max. |
+// | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for modular types (font size); still used for line height / letter spacing with a linear ramp when type is modular. **Piecewise (font size):** use `ease: "none"`; line height / letter spacing still use a linear ramp in `t`. |
 // | fontScaling.roundLowerValuesTo / roundUpperValuesTo | Rounding grid for font size and line height. |
 // | figmaStyles | `createAndUpdateStyles`, `styleNaming` (e.g. `Typography/{$fontScale}/{$fontWeight}`). Legacy: `styles`. |
 // | scaling / round* (legacy) | Old top-level keys; use `fontScaling` instead. |
@@ -24,7 +24,7 @@
 
 // Import functions from libraries
 @import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
-@import { applyEase, applyEaseWithExponents, lerp } from "@Math Helpers"
+@import { applyEase, applyEaseWithExponents, lerp, generatePiecewiseSnappedScale, isPiecewiseScaleType } from "@Math Helpers"
 
 // ========================================
 // CONFIG HELPERS (collection / modes / fontSizes)
@@ -104,6 +104,49 @@ function getModularScaleRatio(type) {
   return map[type] !== undefined ? map[type] : null;
 }
 
+/** Range / piecewise `scaling.type` values for typography (modular types checked via getModularScaleRatio). */
+var KNOWN_TYPOGRAPHY_RANGE_SCALING_TYPES = {
+  linear: true,
+  sine: true,
+  quad: true,
+  cubic: true,
+  quart: true,
+  quint: true,
+  circ: true,
+  exponential: true,
+  goldenratio: true,
+  expo: true
+};
+
+function notifyUnknownTypographyScalingType(rawType) {
+  var label = typeof rawType === 'string' ? rawType : String(rawType);
+  var msg = 'Typography: scaling.type "' + label + '" is not recognized. Use a modular scale (minorSecond, majorSecond, …, phi) or a range curve: linear, sine, quad, …, exponential, piecewise, piecewise2, piecewise4.';
+  console.warn(msg);
+  try {
+    if (typeof figma !== 'undefined' && figma.notify) {
+      figma.notify(msg, { error: true, timeout: 10000 });
+    }
+  } catch (e) {}
+}
+
+function validateTypographyScalingTypeConfig(config) {
+  if (!config || typeof config !== 'object') return;
+  var scaling = config.scaling || {};
+  var raw = scaling.type;
+  if (raw === undefined || raw === null || raw === '') return;
+  if (typeof raw !== 'string') {
+    notifyUnknownTypographyScalingType(raw);
+    return;
+  }
+  var t = raw.trim();
+  if (!t) return;
+  if (getModularScaleRatio(t) != null) return;
+  if (isPiecewiseScaleType(t)) return;
+  var k = t.toLowerCase();
+  if (KNOWN_TYPOGRAPHY_RANGE_SCALING_TYPES[k]) return;
+  notifyUnknownTypographyScalingType(raw);
+}
+
 /** Resolve collection name from wrapper `{ config, collectionName }` or raw data object. */
 function resolveCollectionName(config) {
   if (config.collectionName != null && config.collectionName !== '') {
@@ -160,14 +203,17 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
     "Heading-2",
     "Heading-1"
   ],
+  // Array ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"] or string template "Text-{$fontScale}". If string template is selected, steps is required.
+  // steps: 10
 
   fontScaling: {
     type: "sine",
-    // Range curve (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. 
-    // Modular scale (like typescale.com): minorSecond, majorSecond, minorThird, majorThird, perfectFourth, augmentedFourth, perfectFifth. 
-    ease: "in",
-    roundLowerValuesTo: 1,
-    roundUpperValuesTo: 2
+    // Range curve (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio.  
+    // Modular scale: minorSecond, majorSecond, minorThird, majorThird, perfectFourth, augmentedFourth, perfectFifth.
+    // Piecewise: piecewise, piecewise2, piecewise4
+    ease: "in", // none, in, out, inout, outin. Only used for range curves. Ignored for piecewise types.
+    roundLowerValuesTo: 1, // Rounding grid for font size and line height.
+    roundUpperValuesTo: 2 // Rounding grid for font size and line height.
   },
 
   figmaStyles: {
@@ -239,6 +285,7 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
 
 ensureCompatTypographyConfig(typographyConfigData);
 materializeFontSizes(typographyConfigData);
+validateTypographyScalingTypeConfig(typographyConfigData);
 
 // Grid for a given step: lower steps (min→base) use roundLowerValuesTo; upper steps (above base) use roundUpperValuesTo.
 function getGridSizeForStep(config, scaleIndex, baseIndex) {
@@ -262,11 +309,23 @@ function isModularScaleType(type) {
   return getModularScaleRatio(type) != null;
 }
 
+/** Single snap grid for piecewise font ramp: prefer roundUpperValuesTo, else roundLowerValuesTo. */
+function resolveTypographyPiecewiseSnapGrid(config) {
+  var lower = config.roundLowerValuesTo;
+  var upper = config.roundUpperValuesTo;
+  var gl = (typeof lower === 'number' && lower > 0) ? lower : 0;
+  var gu = (typeof upper === 'number' && upper > 0) ? upper : 0;
+  if (gu > 0) return gu;
+  if (gl > 0) return gl;
+  return 0;
+}
+
 /** When font size uses a modular ratio, line/letter spacing use range lerp with linear curve (not modular names). */
 function getSpacingScalingType(config) {
   var scaling = config.scaling || {};
   var st = scaling.type || 'linear';
   if (isModularScaleType(st)) return 'linear';
+  if (isPiecewiseScaleType(st)) return 'linear';
   return mapTypeToLibrary(st);
 }
 
@@ -316,6 +375,23 @@ function calculateFluidFontSize(scaleIndex, totalSteps, viewport, config) {
     var rawMod = baseSize * Math.pow(modularRatio, exp);
     rawMod = Math.max(minSize, Math.min(maxSize, rawMod));
     return roundToGrid(Math.round(rawMod * 100) / 100, gridSize);
+  }
+
+  if (isPiecewiseScaleType(scaling.type)) {
+    var pwGrid = resolveTypographyPiecewiseSnapGrid(config);
+    var piecewiseVals = generatePiecewiseSnappedScale({
+      steps: totalSteps,
+      min: minSize,
+      max: maxSize,
+      roundTo: pwGrid,
+      type: scaling.type
+    });
+    if (scaleIndex === baseIndex) {
+      return roundToGrid(baseSize, gridSize);
+    }
+    var pvv = piecewiseVals[scaleIndex];
+    if (typeof pvv !== 'number' || isNaN(pvv)) return minSize;
+    return Math.max(minSize, Math.min(maxSize, pvv));
   }
 
   if (scaleIndex === baseIndex) {
@@ -549,6 +625,7 @@ async function createOrUpdateCollection(config) {
   var data = config.config || config;
   ensureCompatTypographyConfig(data);
   materializeFontSizes(data);
+  validateTypographyScalingTypeConfig(data);
 
   console.log('=== ADVANCED TYPOGRAPHY SYSTEM MANAGER ===');
   var collectionName = resolveCollectionName(config);
@@ -905,6 +982,7 @@ async function createTypographySystem(customConfig) {
   try {
     ensureCompatTypographyConfig(customConfig);
     materializeFontSizes(customConfig);
+    validateTypographyScalingTypeConfig(customConfig);
     var typographyVariables = {};
     
     customConfig.fontScale.forEach(function(scaleName, index) {

@@ -69,8 +69,19 @@ if (require.main === module) {
   }
   const distDir = path.dirname(distPath);
   if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
-  const html = fs.readFileSync(srcPath, 'utf8');
-  fs.writeFileSync(distPath, inlineVendors(html), 'utf8');
+  let html = fs.readFileSync(srcPath, 'utf8');
+  html = inlineVendors(html);
+  const bmcSvgPath = path.join(__dirname, 'src', 'bmc-button.svg');
+  if (fs.existsSync(bmcSvgPath) && html.includes('<!-- INLINE_BMC_SVG -->')) {
+    let bmcSvg = fs.readFileSync(bmcSvgPath, 'utf8').trim();
+    bmcSvg = bmcSvg.replace(
+      /<svg(\s)/,
+      '<svg class="bmc-btn__svg" focusable="false" aria-hidden="true"$1'
+    );
+    bmcSvg = bmcSvg.replace(/\s*width="[^"]*"/, '').replace(/\s*height="[^"]*"/, '');
+    html = html.replace('<!-- INLINE_BMC_SVG -->', bmcSvg);
+  }
+  fs.writeFileSync(distPath, html, 'utf8');
   console.log('Wrote dist/ui.html with inlined vendors');
 }
 

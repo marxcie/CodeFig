@@ -187,6 +187,14 @@ figma.ui.onmessage = (msg) => {
     debugLog('[UI]', msg.message || msg.payload || '');
     return;
   }
+
+  if (msg.type === 'OPEN_EXTERNAL') {
+    const url = typeof (msg as { url?: string }).url === 'string' ? (msg as { url: string }).url : '';
+    if (/^https:\/\/buymeacoffee\.com\//i.test(url)) {
+      figma.openExternal(url);
+    }
+    return;
+  }
   
   if (msg.type === 'SET_SCRIPTS') {
     // Cache scripts received from UI

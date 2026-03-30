@@ -1,25 +1,25 @@
-// Spacing
+// Corner radius
 // @DOC_START
-// # Spacing
-// Responsive spacing scale with range-first scaling (min → base → max per viewport).
+// # Corner radius
+// Responsive corner-radius scale with range-first scaling (min → base → max per viewport).
 //
 // ## Overview
-// Creates FLOAT variables only (no preview frames). **Two range layouts:** (1) **`linear`** (default auto) uses one ramp from each mode’s **`min` → `max`** across all tokens (`t = index / (lastIndex)`), so steps are evenly spaced in value when the curve is linear (matches a “linear scale”). (2) **Non-linear** types (sine, quad, …) default to **`min` → `base` → `max`** in two segments (like typography). Set **`scaling.rangeMode: 'twoSegment'`** to force two segments for linear too, or **`'full'`** to force a single min→max ramp for any curve type. One **`roundTo`** grid applies to every step. Variables use **`WIDTH_HEIGHT`** and **`GAP`**.
+// Creates FLOAT variables only (no preview frames). **Two range layouts:** (1) **`linear`** (default auto) uses one ramp from each mode’s **`min` → `max`** across all tokens (`t = index / (lastIndex)`), so steps are evenly spaced in value when the curve is linear. (2) **Non-linear** types (sine, quad, …) default to **`min` → `base` → `max`** in two segments (like typography). Set **`scaling.rangeMode: 'twoSegment'`** to force two segments for linear too, or **`'full'`** to force a single min→max ramp for any curve type. One **`roundTo`** grid applies to every step. Variables use **`CORNER_RADIUS`** only (numeric bindings appear in corner-radius fields, not width/gap).
 //
 // ## Config options
 // | Option | Description |
 // |--------|-------------|
 // | collectionName | Figma variable collection (e.g. `Responsive System`). |
-// | group | Variable name prefix folder (e.g. `Spacing` → `Spacing/md`). |
-// | spacings | **Either** an ordered array of token names (smallest → largest), e.g. `["px","xs","sm",…]` — `base.level` must match one entry — **or** a **string template** used with **`steps`** to generate names, e.g. `"spacings-{$step}"` → `spacings-1` … `spacings-N`. Placeholders: `{$index}` (0-based), `{$index1}` / `{$step}` (1-based), `{$steps}` (total count). |
-// | steps | Required with the **string** form of **`spacings`**: positive integer = number of tokens. If **`spacings`** is omitted, `[]`, or only whitespace, **`steps`** alone fills names using the default pattern `space-{$index}`. Ignored when **`spacings`** is a non-empty **array**. |
+// | group | Variable name prefix folder (e.g. `Corner radius` → `Corner radius/md`). |
+// | radii | **Either** an ordered array of token names (smallest → largest), e.g. `["none","xs","sm",…]` — `base.level` must match one entry — **or** a **string template** used with **`steps`** to generate names, e.g. `"radius-{$step}"` → `radius-1` … `radius-N`. Placeholders: `{$index}` (0-based), `{$index1}` / `{$step}` (1-based), `{$steps}` (total count). |
+// | steps | Required with the **string** form of **`radii`**: positive integer = number of tokens. If **`radii`** is omitted, `[]`, or only whitespace, **`steps`** alone fills names using the default pattern `radius-{$index}`. Ignored when **`radii`** is a non-empty **array**. |
 // | modes | `{ name, min, max }` per viewport; optional `base: { level, size }` — if omitted, defaults to `md` and a size derived from min/max. |
-// | scaling.type | Range curve: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise:** `piecewise`, `piecewise2`, `piecewise4` — snapped Carbon-like ramp (see [Carbon spacing](https://carbondesignsystem.com/elements/spacing/overview/)); single segment `min`→`max` over all tokens. |
+// | scaling.type | Range curve: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise:** `piecewise`, `piecewise2`, `piecewise4` — snapped ramp; single segment `min`→`max` over all tokens. |
 // | scaling.rangeMode | `full` — single ramp `min`→`max` over all tokens. `twoSegment` — `min`→`base`→`max` (typography-style). **Omitted (auto):** `linear` → `full`; other types → `twoSegment`. |
 // | scaling.ease | Applied to the curve (`getEasedFactor`). **Note:** in `@Math Helpers`, **`ease` is ignored when `type === 'linear'`** (output equals `t`); use a non-linear `type` if you want easing. **Piecewise:** use `ease: "none"`; easing does not reshape the piecewise ladder (tabular generator). |
 // | fontScaling | Optional alias; merged into `scaling` when set. |
-// | scaling.roundTo | Snap all spacing values to multiples of this number (e.g. `2` → 2, 4, 6, …). Omit or `0` for no snapping. Legacy: `roundUpperValuesTo` is accepted as an alias for `roundTo`. |
-// | (output) | Variables use `scopes: ['WIDTH_HEIGHT', 'GAP']`. |
+// | scaling.roundTo | Snap all radius values to multiples of this number (e.g. `2` → 0, 2, 4, …). Omit or `0` for no snapping. Legacy: `roundUpperValuesTo` is accepted as an alias for `roundTo`. |
+// | (output) | Variables use `scopes: ['CORNER_RADIUS']`. |
 // @DOC_END
 
 @import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
@@ -29,12 +29,12 @@
 // CONFIG HELPERS
 // ========================================
 
-function spacingModesToSpacingSizes(modes, spacings, defaultBaseLevel) {
+function modesToRadiusSizes(modes, radii, defaultBaseLevel) {
   var out = {};
   if (!Array.isArray(modes)) return out;
   var baseLevel = typeof defaultBaseLevel === 'string' && defaultBaseLevel
     ? defaultBaseLevel
-    : (Array.isArray(spacings) && spacings.length ? spacings[Math.floor(spacings.length / 2)] : 'md');
+    : (Array.isArray(radii) && radii.length ? radii[Math.floor(radii.length / 2)] : 'md');
 
   function defaultBaseSize(min, max) {
     var lo = typeof min === 'number' ? min : 0;
@@ -60,26 +60,26 @@ function spacingModesToSpacingSizes(modes, spacings, defaultBaseLevel) {
   return out;
 }
 
-function resolveSpacingSizes(config) {
+function resolveRadiusSizes(config) {
   if (config.modes && Array.isArray(config.modes) && config.modes.length > 0) {
-    return spacingModesToSpacingSizes(config.modes, config.spacings, config.defaultBaseLevel);
+    return modesToRadiusSizes(config.modes, config.radii, config.defaultBaseLevel);
   }
-  if (config.spacingSizes && typeof config.spacingSizes === 'object') {
-    return config.spacingSizes;
+  if (config.radiusSizes && typeof config.radiusSizes === 'object') {
+    return config.radiusSizes;
   }
   return {};
 }
 
-function materializeSpacingSizes(config) {
+function materializeRadiusSizes(config) {
   if (!config || typeof config !== 'object') return;
-  config.spacingSizes = resolveSpacingSizes(config);
+  config.radiusSizes = resolveRadiusSizes(config);
 }
 
 /**
- * Expands `spacings` from a string template + `steps`, or fills default names when only `steps` is set.
- * Non-empty `spacings` array is left unchanged.
+ * Expands `radii` from a string template + `steps`, or fills default names when only `steps` is set.
+ * Non-empty `radii` array is left unchanged.
  */
-function applySpacingNameTemplate(template, index, totalSteps) {
+function applyRadiiNameTemplate(template, index, totalSteps) {
   var s = String(template);
   var i0 = index;
   var i1 = index + 1;
@@ -90,38 +90,38 @@ function applySpacingNameTemplate(template, index, totalSteps) {
     .replace(/\{\$index\}/g, String(i0));
 }
 
-function materializeSpacingsFromSteps(config) {
+function materializeRadiiFromSteps(config) {
   if (!config || typeof config !== 'object') return;
-  var raw = config.spacings;
+  var raw = config.radii;
   if (Array.isArray(raw) && raw.length > 0) {
     return;
   }
   var n = typeof config.steps === 'number' ? config.steps : 0;
   if (typeof raw === 'string' && raw.trim()) {
     if (n < 1) {
-      console.warn('Spacing: `steps` (positive integer) is required when `spacings` is a name template string.');
-      config.spacings = [];
+      console.warn('Corner radius: `steps` (positive integer) is required when `radii` is a name template string.');
+      config.radii = [];
       return;
     }
     var tplStr = raw.trim();
     var outStr = [];
     var j;
     for (j = 0; j < n; j++) {
-      outStr.push(applySpacingNameTemplate(tplStr, j, n));
+      outStr.push(applyRadiiNameTemplate(tplStr, j, n));
     }
-    config.spacings = outStr;
+    config.radii = outStr;
     return;
   }
   if (n < 1) {
     return;
   }
-  var tplDefault = 'space-{$index}';
+  var tplDefault = 'radius-{$index}';
   var out = [];
   var i;
   for (i = 0; i < n; i++) {
-    out.push(applySpacingNameTemplate(tplDefault, i, n));
+    out.push(applyRadiiNameTemplate(tplDefault, i, n));
   }
-  config.spacings = out;
+  config.radii = out;
 }
 
 /** Single rounding step: `roundTo` on scaling, or top-level `roundTo`, or legacy `roundUpperValuesTo`. */
@@ -135,12 +135,14 @@ function resolveRoundTo(config) {
   return 0;
 }
 
-/** Merge `spacingScaling` or `fontScaling` → `scaling` + `roundTo`. `spacingScaling` wins if both are set. */
-function ensureCompatSpacingConfig(config) {
+/** Merge `radiusScaling`, `cornerRadiusScaling`, or `fontScaling` → `scaling` + `roundTo`. Order: cornerRadiusScaling > radiusScaling > fontScaling. */
+function ensureCompatRadiusConfig(config) {
   if (!config || typeof config !== 'object') return;
-  var src = config.spacingScaling && typeof config.spacingScaling === 'object'
-    ? config.spacingScaling
-    : (config.fontScaling && typeof config.fontScaling === 'object' ? config.fontScaling : null);
+  var src = config.cornerRadiusScaling && typeof config.cornerRadiusScaling === 'object'
+    ? config.cornerRadiusScaling
+    : (config.radiusScaling && typeof config.radiusScaling === 'object'
+      ? config.radiusScaling
+      : (config.fontScaling && typeof config.fontScaling === 'object' ? config.fontScaling : null));
   if (src) {
     config.scaling = {
       type: src.type,
@@ -200,8 +202,8 @@ function resolveGroup(config) {
   return '';
 }
 
-/** Known `scaling.type` values for spacing (case-insensitive, except piecewise names). */
-var KNOWN_SPACING_SCALING_TYPES = {
+/** Known `scaling.type` values for corner radius (case-insensitive, except piecewise names). */
+var KNOWN_RADIUS_SCALING_TYPES = {
   linear: true,
   sine: true,
   quad: true,
@@ -217,9 +219,9 @@ var KNOWN_SPACING_SCALING_TYPES = {
   piecewise4: true
 };
 
-function notifyUnknownSpacingScalingType(rawType) {
+function notifyUnknownRadiusScalingType(rawType) {
   var label = typeof rawType === 'string' ? rawType : String(rawType);
-  var msg = 'Spacing: scaling.type "' + label + '" is not a recognized curve. Use linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio (aliases: expo, goldenratio), or piecewise / piecewise2 / piecewise4.';
+  var msg = 'Corner radius: scaling.type "' + label + '" is not a recognized curve. Use linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio (aliases: expo, goldenratio), or piecewise / piecewise2 / piecewise4.';
   console.warn(msg);
   try {
     if (typeof figma !== 'undefined' && figma.notify) {
@@ -228,72 +230,72 @@ function notifyUnknownSpacingScalingType(rawType) {
   } catch (e) {}
 }
 
-function validateSpacingScalingTypeConfig(config) {
+function validateRadiusScalingTypeConfig(config) {
   if (!config || typeof config !== 'object') return;
   var scaling = config.scaling || {};
   var raw = scaling.type;
   if (raw === undefined || raw === null || raw === '') return;
   if (typeof raw !== 'string') {
-    notifyUnknownSpacingScalingType(raw);
+    notifyUnknownRadiusScalingType(raw);
     return;
   }
   var t = raw.trim();
   if (!t) return;
   if (isPiecewiseScaleType(t)) return;
   var k = t.toLowerCase();
-  if (KNOWN_SPACING_SCALING_TYPES[k]) return;
-  notifyUnknownSpacingScalingType(raw);
+  if (KNOWN_RADIUS_SCALING_TYPES[k]) return;
+  notifyUnknownRadiusScalingType(raw);
 }
 
 // ========================================
 // DEFAULT CONFIG
 // ========================================
 
-var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfigData : {
+var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cornerRadiusConfigData : {
   // @CONFIG_START
   collectionName: "Responsive System",
-  group: "Spacing",
+  group: "Corner radius",
 
-  spacings: [
-    "px", "xs", "sm", "md", "lg", "xl"
+  radii: [
+    "none", "xs", "sm", "md", "lg", "xl"
   ],
-  // Array ["s", "m", "l"] or string template "spacings-{$step}".
+  // Array ["s", "m", "l"] or string template "radius-{$step}".
   // steps: 10 // If string template is selected, steps is required.
 
   scaling: {
-    type: "sine", 
-    // Range curve: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. 
-    // Piecewise: `piecewise`, `piecewise2`, `piecewise4
-    ease: "in", 
+    type: "sine",
+    // Range curve: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio.
+    // Piecewise: `piecewise`, `piecewise2`, `piecewise4`
+    ease: "in",
     // none, in, out, inout, outin. Only used for range curves. Ignored for piecewise types.
     roundTo: 2,
-    // Snap all spacing values to multiples of this number (e.g. `2` → 2, 4, 6, …). Omit or `0` for no snapping.
+    // Snap all radius values to multiples of this number (e.g. `2` → 0, 2, 4, …). Omit or `0` for no snapping.
   },
 
   modes: [
     {
       name: "desktop",
-      min: 1,
-      max: 200
+      min: 0,
+      max: 48
     },
     {
       name: "tablet",
-      min: 1,
-      max: 120
+      min: 0,
+      max: 32
     },
     {
       name: "mobile",
-      min: 1,
-      max: 80
+      min: 0,
+      max: 24
     }
   ]
   // @CONFIG_END
 };
 
-ensureCompatSpacingConfig(spacingConfigData);
-materializeSpacingsFromSteps(spacingConfigData);
-materializeSpacingSizes(spacingConfigData);
-validateSpacingScalingTypeConfig(spacingConfigData);
+ensureCompatRadiusConfig(cornerRadiusConfigData);
+materializeRadiiFromSteps(cornerRadiusConfigData);
+materializeRadiusSizes(cornerRadiusConfigData);
+validateRadiusScalingTypeConfig(cornerRadiusConfigData);
 
 function mapTypeToLibrary(type) {
   if (!type) return "linear";
@@ -302,8 +304,8 @@ function mapTypeToLibrary(type) {
   return type;
 }
 
-/** One grid for all spacing steps (see `roundTo` / `resolveRoundTo`). */
-function getSpacingRoundGrid(config) {
+/** One grid for all radius steps (see `roundTo` / `resolveRoundTo`). */
+function getRadiusRoundGrid(config) {
   return resolveRoundTo(config);
 }
 
@@ -339,20 +341,20 @@ function useFullRangeRamp(config) {
 }
 
 /** Range curve: either one segment min→max (linear default) or min→base→max; snap with `roundTo`. */
-function calculateFluidSpacing(scaleIndex, totalSteps, viewport, config) {
-  var sizes = config.spacingSizes[viewport];
+function calculateFluidRadius(scaleIndex, totalSteps, viewport, config) {
+  var sizes = config.radiusSizes[viewport];
   if (!sizes || !sizes.base) {
     return 0;
   }
   var minSize = sizes.min;
   var maxSize = sizes.max;
   var baseSize = sizes.base.size;
-  var baseIndex = config.spacings.indexOf(sizes.base.level);
+  var baseIndex = config.radii.indexOf(sizes.base.level);
   if (baseIndex < 0) {
-    console.warn('base.level not found in spacings, using middle step');
+    console.warn('base.level not found in radii, using middle step');
     baseIndex = Math.max(0, Math.floor((totalSteps - 1) / 2));
   }
-  var gridSize = getSpacingRoundGrid(config);
+  var gridSize = getRadiusRoundGrid(config);
   var scaling = config.scaling || {};
 
   if (isPiecewiseScaleType(scaling.type)) {
@@ -416,51 +418,51 @@ function variableNamePrefix(group) {
   return trimmed ? trimmed + '/' : '';
 }
 
-function generateSpacingVariables(config) {
+function generateCornerRadiusVariables(config) {
   var variables = {};
   var prefix = variableNamePrefix(resolveGroup({ config: config }));
-  var viewportNames = Object.keys(config.spacingSizes || {});
-  if (viewportNames.length === 0 || !Array.isArray(config.spacings) || config.spacings.length === 0) {
+  var viewportNames = Object.keys(config.radiusSizes || {});
+  if (viewportNames.length === 0 || !Array.isArray(config.radii) || config.radii.length === 0) {
     return variables;
   }
 
-  var lastSpacingPerViewport = {};
+  var lastRadiusPerViewport = {};
   viewportNames.forEach(function(viewport) {
     var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
-    lastSpacingPerViewport[viewportKey] = -1;
+    lastRadiusPerViewport[viewportKey] = -1;
   });
 
-  var gridSize = getSpacingRoundGrid(config);
+  var gridSize = getRadiusRoundGrid(config);
 
-  config.spacings.forEach(function(scaleName, index) {
+  config.radii.forEach(function(scaleName, index) {
     var values = {};
 
     viewportNames.forEach(function(viewport) {
       var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
-      var minSize = config.spacingSizes[viewport].min;
-      var maxSize = config.spacingSizes[viewport].max;
-      var spacingVal = calculateFluidSpacing(index, config.spacings.length, viewport, config);
-      var previous = lastSpacingPerViewport[viewportKey];
+      var minSize = config.radiusSizes[viewport].min;
+      var maxSize = config.radiusSizes[viewport].max;
+      var radiusVal = calculateFluidRadius(index, config.radii.length, viewport, config);
+      var previous = lastRadiusPerViewport[viewportKey];
       var step = gridSize > 0 ? gridSize : 1;
       var guard = 0;
-      while (index > 0 && spacingVal <= previous && previous >= 0 && guard++ < 32) {
+      while (index > 0 && radiusVal <= previous && previous >= 0 && guard++ < 32) {
         var nextRaw = Math.min(maxSize, previous + step);
         if (nextRaw <= previous) {
           break;
         }
-        spacingVal = nextRaw;
+        radiusVal = nextRaw;
         if (gridSize > 0) {
-          spacingVal = roundToGrid(spacingVal, gridSize);
+          radiusVal = roundToGrid(radiusVal, gridSize);
         }
-        spacingVal = Math.max(minSize, Math.min(maxSize, spacingVal));
+        radiusVal = Math.max(minSize, Math.min(maxSize, radiusVal));
       }
-      lastSpacingPerViewport[viewportKey] = spacingVal;
-      values[viewportKey] = spacingVal;
+      lastRadiusPerViewport[viewportKey] = radiusVal;
+      values[viewportKey] = radiusVal;
     });
 
     variables[prefix + scaleName] = {
       type: "FLOAT",
-      scopes: ["WIDTH_HEIGHT", "GAP"],
+      scopes: ["CORNER_RADIUS"],
       values: values
     };
   });
@@ -468,11 +470,11 @@ function generateSpacingVariables(config) {
   return variables;
 }
 
-var spacingConfig = typeof spacingConfig !== 'undefined' ? spacingConfig : {
-  collectionName: resolveCollectionName(spacingConfigData),
-  group: resolveGroup(spacingConfigData),
-  config: spacingConfigData,
-  variables: generateSpacingVariables(spacingConfigData)
+var cornerRadiusConfig = typeof cornerRadiusConfig !== 'undefined' ? cornerRadiusConfig : {
+  collectionName: resolveCollectionName(cornerRadiusConfigData),
+  group: resolveGroup(cornerRadiusConfigData),
+  config: cornerRadiusConfigData,
+  variables: generateCornerRadiusVariables(cornerRadiusConfigData)
 };
 
 // ========================================
@@ -481,19 +483,19 @@ var spacingConfig = typeof spacingConfig !== 'undefined' ? spacingConfig : {
 
 async function createOrUpdateCollection(config) {
   var data = config.config || config;
-  ensureCompatSpacingConfig(data);
-  materializeSpacingsFromSteps(data);
-  materializeSpacingSizes(data);
-  validateSpacingScalingTypeConfig(data);
+  ensureCompatRadiusConfig(data);
+  materializeRadiiFromSteps(data);
+  materializeRadiusSizes(data);
+  validateRadiusScalingTypeConfig(data);
 
-  console.log('=== SPACING SYSTEM MANAGER ===');
+  console.log('=== CORNER RADIUS SYSTEM MANAGER ===');
   var collectionName = resolveCollectionName(config);
   var groupName = resolveGroup(config);
   console.log('Processing collection: ' + collectionName + (groupName ? ' (group: ' + groupName + ')' : ' (no group)'));
 
   var collection = await getOrCreateCollection(collectionName);
 
-  var modes = Object.keys(data.spacingSizes || {}).map(function(k) {
+  var modes = Object.keys(data.radiusSizes || {}).map(function(k) {
     return k.charAt(0).toUpperCase() + k.slice(1);
   });
   if (modes.length === 0) {
@@ -503,10 +505,10 @@ async function createOrUpdateCollection(config) {
 
   setupModes(collection, modes);
 
-  var variables = generateSpacingVariables(data);
+  var variables = generateCornerRadiusVariables(data);
   var stats = await processVariables(collection, variables, data, modes);
 
-  console.log('=== SPACING SYSTEM SUMMARY ===');
+  console.log('=== CORNER RADIUS SYSTEM SUMMARY ===');
   console.log('Collection: ' + collectionName);
   console.log('Variables created: ' + stats.created);
   console.log('Variables updated: ' + stats.updated);
@@ -519,8 +521,8 @@ async function createOrUpdateCollection(config) {
 // EXECUTION
 // ========================================
 
-createOrUpdateCollection(spacingConfig).then(function(result) {
-  figma.notify('✅ Spacing: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' updated');
+createOrUpdateCollection(cornerRadiusConfig).then(function(result) {
+  figma.notify('✅ Corner radius: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' updated');
 }).catch(function(error) {
   console.error('Error:', error);
   figma.notify('❌ Error: ' + error.message);

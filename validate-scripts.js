@@ -504,6 +504,69 @@ function validateImports(scripts) {
   return { errors, warnings };
 }
 
+/** Regression anchors for piecewise scale (min=0, max=160, roundTo=2, type=piecewise). */
+function validatePiecewiseScaleFixtures() {
+  const errors = [];
+  const mathPath = path.join(__dirname, 'scripts', 'CODEFIG_LIBRARIES', '@math-helpers.ts');
+  if (!fs.existsSync(mathPath)) {
+    return errors;
+  }
+  const code = fs.readFileSync(mathPath, 'utf8');
+  const functions = extractFunctions(code);
+  const genCode = functions.get('generatePiecewiseSnappedScale');
+  if (!genCode) {
+    errors.push({
+      type: 'piecewise',
+      file: 'CodeFig Libraries / Math helpers',
+      message: 'generatePiecewiseSnappedScale not found in @math-helpers.ts'
+    });
+    return errors;
+  }
+  const ctx = { console };
+  vm.createContext(ctx);
+  try {
+    vm.runInContext(genCode, ctx);
+    const fn = ctx.generatePiecewiseSnappedScale;
+    if (typeof fn !== 'function') {
+      errors.push({
+        type: 'piecewise',
+        file: 'CodeFig Libraries / Math helpers',
+        message: 'generatePiecewiseSnappedScale did not bind in VM'
+      });
+      return errors;
+    }
+    function arraysEqual(a, b) {
+      if (!a || !b || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (Math.abs(a[i] - b[i]) > 1e-6) return false;
+      }
+      return true;
+    }
+    const cases = [
+      { steps: 8, expected: [0, 2, 8, 16, 32, 48, 80, 160] },
+      { steps: 10, expected: [0, 2, 4, 8, 16, 24, 40, 64, 96, 160] },
+      { steps: 12, expected: [0, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 160] }
+    ];
+    for (const c of cases) {
+      const got = fn({ steps: c.steps, min: 0, max: 160, roundTo: 2, type: 'piecewise' });
+      if (!arraysEqual(got, c.expected)) {
+        errors.push({
+          type: 'piecewise',
+          file: 'CodeFig Libraries / Math helpers',
+          message: `piecewise fixture steps=${c.steps}: expected [${c.expected.join(', ')}], got [${got.join(', ')}]`
+        });
+      }
+    }
+  } catch (e) {
+    errors.push({
+      type: 'piecewise',
+      file: 'CodeFig Libraries / Math helpers',
+      message: `piecewise fixture run failed: ${e.message}`
+    });
+  }
+  return errors;
+}
+
 // Check for SCRIPT_NAME metadata
 function validateMetadata(scripts) {
   const warnings = [];
@@ -566,6 +629,11 @@ function validateScripts() {
   const importValidation = validateImports(scripts);
   allErrors.push(...importValidation.errors);
   allWarnings.push(...importValidation.warnings);
+
+  // Piecewise scale regression (Carbon-like anchors @ max=160, min=0, roundTo=2)
+  console.log(`${colors.cyan}📐 Checking piecewise scale fixtures...${colors.reset}`);
+  const piecewiseFixtureErrors = validatePiecewiseScaleFixtures();
+  allErrors.push(...piecewiseFixtureErrors);
   
   // Validate metadata
   console.log(`${colors.cyan}📝 Checking metadata...${colors.reset}`);

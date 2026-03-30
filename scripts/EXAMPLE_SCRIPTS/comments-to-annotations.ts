@@ -634,8 +634,13 @@ async function createAnchorElement(comment, nodeMap, targetFrame) {
       
       targetFrame.appendChild(anchor);
       
-      // Step 4: Set to absolute positioning
-      if ('layoutPositioning' in anchor) {
+      // Step 4: Absolute overlay positioning only works when the parent uses auto-layout.
+      // For layoutMode === "NONE" (default frames), x/y are already local to the parent — skip ABSOLUTE or Figma throws.
+      if (
+        'layoutPositioning' in anchor &&
+        'layoutMode' in targetFrame &&
+        targetFrame.layoutMode !== 'NONE'
+      ) {
         anchor.layoutPositioning = 'ABSOLUTE';
       }
       
@@ -687,7 +692,19 @@ async function createAnchorElement(comment, nodeMap, targetFrame) {
     
     return anchor;
   } catch (e) {
-    console.error("Error creating anchor element:", e.message);
+    var meta = "";
+    try {
+      if (comment && comment.client_meta && comment.client_meta.node_id) {
+        meta = " node_id=" + String(comment.client_meta.node_id);
+      }
+      if (targetFrame && targetFrame.id) {
+        meta += " targetFrame=" + targetFrame.id;
+        if ('layoutMode' in targetFrame) {
+          meta += " parentLayoutMode=" + targetFrame.layoutMode;
+        }
+      }
+    } catch (_) {}
+    console.error("Error creating anchor element:" + meta + " — " + e.message);
     return null;
   }
 }

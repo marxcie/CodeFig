@@ -182,6 +182,18 @@ function updateUIHtml() {
   let uiContent = fs.readFileSync(uiTemplatePath, 'utf8');
   uiContent = inlineVendors(uiContent);
 
+  // Inline Buy Me a Coffee brand SVG (src/bmc-button.svg) into footer button
+  const bmcSvgPath = path.join(__dirname, 'src', 'bmc-button.svg');
+  if (fs.existsSync(bmcSvgPath) && uiContent.includes('<!-- INLINE_BMC_SVG -->')) {
+    let bmcSvg = fs.readFileSync(bmcSvgPath, 'utf8').trim();
+    bmcSvg = bmcSvg.replace(
+      /<svg(\s)/,
+      '<svg class="bmc-btn__svg" focusable="false" aria-hidden="true"$1'
+    );
+    bmcSvg = bmcSvg.replace(/\s*width="[^"]*"/, '').replace(/\s*height="[^"]*"/, '');
+    uiContent = uiContent.replace('<!-- INLINE_BMC_SVG -->', bmcSvg);
+  }
+
   // Embed scripts as base64-encoded JSON in a script tag (imports will be processed at runtime)
   const scriptsJson = JSON.stringify(scripts);
   const scriptsBase64 = Buffer.from(scriptsJson, 'utf8').toString('base64');
