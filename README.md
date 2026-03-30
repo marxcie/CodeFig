@@ -7,7 +7,7 @@
 ## What is CodeFig?
 
 **CodeFig** is a script runner for Figma, inspired by the [Scripter plugin](https://www.figma.com/community/plugin/757836922707087381/Scripter) by **@rsms**.  
-It comes with a curated set of utility scripts covering frame and auto-layout utilities, style and variable batch operations, design-system foundations (grid, color, typography), and small workflow helpers (e.g. annotations from comments).
+It comes with a curated set of utility scripts covering framing and auto-layout, style and variable batch operations, design-system foundations (grid, typography, spacing, corner radius), and small workflow helpers (e.g. annotations from comments).
 
 Variables are supported as a first-class use case, but CodeFig is intentionally broader than variable tooling.
 
@@ -30,10 +30,10 @@ CodeFig builds on that idea and focuses on scale, structure, and reuse:
 - Keyboard shortcuts
 
 **Bundled examples**
-- **Layout & frames:** auto-layout helpers, framing selections, scaling/resizing
-- **Styles:** batch rename, replace, create from nodes, detach
-- **Variables:** find/replace, batch rename, duplicate collections, detach, interactive workflows
-- **Design-system foundations:** grid, colors, typography, font scale utilities
+- **Layout & frames:** frame or auto-layout selection, scale or resize, remove unnecessary nesting
+- **Styles:** batch rename and replace, duplicate collections, text-to-styles, render-styles overview, detach
+- **Variables:** find/replace bindings, batch rename, duplicate collections, inspector
+- **Design-system foundations:** grid, typography, spacing, corner radius (responsive scale variables)
 - **Other:** annotations generated from Figma comments (API-based)
 
 ## Perfect For
@@ -49,9 +49,9 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 5. Create or extend scripts using TypeScript.
 
 **Typical workflows**
-- Variable replacement via `searchPattern` / `replacePattern`
+- Variable replacement via `searchPattern` / `replacePattern` (and related options in **Replace variables**)
 - Batch renaming styles with pattern rules
-- Applying or removing auto layout across selections
+- Framing or scaling selections, or trimming redundant wrapper frames
 
 ## Development
 
@@ -62,30 +62,35 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 - Starts the local console log server
 - Reload the plugin in Figma to test
 
-**One-off build:** `npm run build`
+**Production build (releases, CI):** `npm run build:production` — compiles TypeScript, bundles scripts into `dist/ui.html`, and keeps **`manifest.json` free of `localhost`** (enterprise-safe for submission).
+
+**One-off dev build:** `npm run build:dev` — same as production, but adds `http://localhost:8765` to `manifest.json` so the console log bridge can run.
 
 ### Scripts
 
 | Command | Description |
 |-------|-------------|
-| `npm run build` | Full build: validate, compile TypeScript, embed scripts into `dist/`. |
-| `npm run build:scripts` | Rebuild scripts + UI embed only (skip `tsc`). |
-| `npm run build:ui` | Bundle CodeMirror into UI for offline/no-network use. |
-| `npm run dev` | Build + watch code, UI, and scripts; start console log server. Agent can read `figma-console.log` directly. |
+| `npm run build:production` | Validation (non-blocking), `tsc`, then `build-scripts.js` without `--dev` — **removes** localhost from the manifest. Use before publishing. |
+| `npm run build:dev` | Same, with `--dev` — **adds** localhost for local console forwarding to `figma-console.log`. |
+| `npm run dev` | Runs `build:dev`, then watches `src/` and `scripts/`, rebuilds on change, starts the console log server. |
 | `npm run validate` | Validate script syntax, imports, and metadata. |
 | `npm run clean` | Remove `dist/`. |
 
 **Console logging:**  
-During `dev`, plugin and script logs are written to `figma-console.log`. The file is un-ignored so the agent can read it directly. The `prepare` script adds it to `.git/info/exclude` so it is not committed. For locked-down environments, use a manifest without `http://localhost:8765`.
+During `dev`, plugin and script logs are written to `figma-console.log`. The file is un-ignored so the agent can read it directly. The `prepare` script adds it to `.git/info/exclude` so it is not committed. If you used `npm run dev` or `build:dev`, run **`npm run build:production`** before committing or publishing so `manifest.json` does not retain localhost.
 
 **Project structure**
 - `src/` – plugin code and UI
 - `scripts/` – utility scripts and shared libraries
-- `dist/` – build output
+- `dist/` – build output (`code.js`, `ui.html` with embedded script bundle)
+
+**Shipped vs dev-only scripts:** The build skips any script file or folder whose name starts with `_` (for example `_auto-layout-all-selected.ts` or `_DEBUG_SCRIPTS/`). Those files stay in the repo for experiments and debugging but are not included in the published plugin.
 
 ## Network and Builds
 
-CodeFig does not require external sources, CDNs, or third-party services. All core functionality is self-contained. The default manifest allows **Figma API** only (for scripts such as comments-to-annotations). CodeMirror is bundled into the UI at build time (`npm run build`), so no CDN is needed.
+CodeFig does not require external sources, CDNs, or third-party services. All core functionality is self-contained. The **committed** manifest and **`npm run build:production`** allow only **Figma REST API** (`https://api.figma.com`) plus the **`teamlibrary`** permission for Team Library styles and variables — suitable for enterprise review and store submission.
+
+**`http://localhost:8765`** is added to `manifest.json` **only** when you run **`npm run build:dev`** or **`npm run dev`**, so local console output can be forwarded to `figma-console.log`. It is not part of the production bundle. CodeMirror and related UI assets are inlined by `build-scripts.js` whenever you run a full build (`build:production` or `build:dev`).
 
 No telemetry. Scripts run entirely in the plugin sandbox. User scripts and libraries may use network access only if the manifest permits it.
 
@@ -97,33 +102,58 @@ No telemetry. Scripts run entirely in the plugin sandbox. User scripts and libra
 
 ## Bundled Scripts
 
+These are the utility and help scripts included in the build (see **Shipped vs dev-only scripts** under Development). Display names in the plugin follow each file’s title comment.
+
 **Help**
 
 | Name | Description |
 |------|-------------|
-| Help & documentation | Plugin overview and usage notes |
+| Help & documentation | In-plugin overview: editor, Documentation tab, `@import`, shortcuts |
 
-**Utility scripts**
+**Layout & structure**
 
 | Name | Description |
 |------|-------------|
-| Auto layout all selected | Wrap each selected node in its own auto-layout frame |
-| Frame all selected | Wrap each selected node in a frame |
-| Remove auto layout recursively | Remove auto layout from selection and descendants |
-| Scale selection | Scale or resize by factor, dimensions, or ratio |
-| Batch rename styles | Rename text/color/effect styles by pattern |
-| Replace styles | Replace styles with partial matching |
-| Create styles from nodes | Generate text styles from selected text nodes |
-| Detach styles & variables | Remove bindings from selection |
-| Find and replace variables | Replace variable bindings by name pattern |
-| Batch rename variables | Rename variables in a collection |
+| Frame or auto layout selected | Wrap selection in new frames or auto-layout containers |
+| Scale or resize elements | Scale or resize by factor, dimensions, or ratio |
+| Remove unnecessary nesting | Remove redundant wrapper frames |
+
+**Styles**
+
+| Name | Description |
+|------|-------------|
+| Rename styles | Rename text, paint, and effect styles by pattern |
+| Replace styles | Rebind nodes to different styles by name pattern (local and Team Library) |
+| Duplicate styles collection | Duplicate a published styles collection |
+| Text to styles | Create text styles from selected text layers |
+| Render styles overview | Generate a “render styles” overview frame for library workflows |
+| Replace style variable bindings | Replace variable bindings on style definitions |
+
+**Variables**
+
+| Name | Description |
+|------|-------------|
+| Rename variables | Rename variables in a collection |
+| Replace variables | Replace variable bindings on layers by path pattern |
 | Duplicate variable collection | Copy a variable collection with metadata |
-| Replace variables workflow | Interactive variable replacement |
-| DS Foundation: Grid | Create/update grid system variables |
-| DS Foundation: Colors | Create/update color system variables |
-| DS Foundation: Typography | Responsive typography variables and styles |
-| Font scale calculator | Generate font sizes from scales |
-| Create annotations from comments | Convert file comments to annotations (API) |
+| Variable inspector (WIP) | Inspect variable bindings and usage |
+
+**Selection & utilities**
+
+| Name | Description |
+|------|-------------|
+| Select by styles or variables | Select nodes that use given styles or variables |
+| Detach styles & variables | Remove style and variable bindings from the selection |
+| Comments to annotations | Create annotations from file comments (Figma REST API + token) |
+
+**Design System Foundations**
+
+| Name | Description |
+|------|-------------|
+| Grid | Grid system variables, layout grid style, preview frames |
+| Typography | Responsive typography variables and optional text styles |
+| Spacing | Responsive spacing scale variables (width, height, gap) |
+| Corner radius | Responsive corner-radius scale variables |
 
 **Libraries**  
 Shared helpers used by scripts: `@core-library`, `@codefig-ui`, `@infopanel`, `@math-helpers`, `@pattern-matching`, `@replacement-engine`, `@styles`, `@variables`.
@@ -134,10 +164,12 @@ Create a script and name it with an `@` prefix (e.g. `@My Utils`) to treat it as
 ## Keyboard Shortcuts
 
 - `Cmd/Ctrl + R` — Run script
-- `Cmd/Ctrl + S` — Save script  
+- `Cmd/Ctrl + /` — Toggle line comments in the editor
 - `Cmd/Ctrl + E` — Export script
 - `Cmd/Ctrl + I` — Import script
 - `Cmd/Ctrl + N` — New script
+
+User scripts **autosave** after you pause typing (there is no separate Save shortcut).
 
 ## Credits
 

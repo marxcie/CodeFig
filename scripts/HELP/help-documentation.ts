@@ -30,10 +30,14 @@
 //
 // Browse **Utility Scripts** in the sidebar for ready-to-use scripts. They cover:
 //
-// - **Variables:** duplicate-variable-collection, replace-variables, rename-variables
+// - **Variables:** duplicate-variable-collection, replace-variables, rename-variables, variable-inspector
 // - **Styles:** duplicate-styles, replace-styles, replace-style-variable-bindings, rename-styles, text-to-styles, render-styles-overview
-// - **Layout:** frame-or-auto-layout-selected, scale-selection
-// - **Utilities:** variable-inspector, comments-to-annotations
+// - **Layout:** frame-or-auto-layout-selected, scale-selection (see script titles: *Scale or resize elements*), remove-unnecessary-nesting
+// - **Selection / detach:** select-by-styles-variables, detach styles & variables
+// - **Design System Foundations:** grid, typography, spacing, corner-radius
+// - **API:** comments-to-annotations (Figma REST API + personal access token)
+//
+// Files or folders whose names start with **`_`** are omitted from the plugin build (development-only).
 //
 // Scripts with a **Config** tab expose options (e.g. dropdowns, text inputs) defined via **// @UI_CONFIG_START** … **// @UI_CONFIG_END** in the script. See any utility script with a Config tab for the pattern.
 //

@@ -2,7 +2,7 @@
 
 This directory contains all scripts for the CodeFig plugin. The build system automatically discovers and loads scripts from subdirectories.
 
-**Location**: This `scripts/` folder is at the root level of the project (not in `src/` or `dist/`). This is the single source of truth for all scripts. Scripts are embedded in `dist/scripts-manifest.json` during the build process.
+**Location**: This `scripts/` folder is at the root level of the project (not in `src/` or `dist/`). This is the single source of truth for all scripts. The build copies `.ts` files into `dist/scripts/` and embeds them as base64 JSON in `dist/ui.html` (see the `scripts-data` block in the built HTML). There is no separate `scripts-manifest.json` file.
 
 ## Folder Structure
 
@@ -60,7 +60,7 @@ Scripts are automatically named using this priority:
 1. **Create a `.ts` file** in the appropriate folder
 2. **Add your script code** 
 3. **Optionally add a title comment** at the top
-4. **Run `npm run build`** to rebuild the plugin
+4. **Run `npm run build:production`** (or `build:dev` while developing) to rebuild the plugin
 
 The script will automatically appear in the plugin interface!
 
@@ -83,7 +83,7 @@ The build system (`build-scripts.js`) automatically:
 - 📁 **Categorizes** scripts based on folder names
 - 🏷️ **Names** scripts using comments or filenames
 - 🔗 **Processes** `@import` statements at build time
-- 📦 **Embeds** processed scripts in `dist/scripts-manifest.json` (no duplication)
+- 📦 **Embeds** processed scripts into `dist/ui.html` (no separate manifest file)
 
 ## @Import System
 
@@ -119,4 +119,4 @@ Run `npm run validate` to check scripts for:
 - Invalid `@import` references
 - Missing metadata warnings
 
-The build process automatically runs validation before building.
+`build:production` and `build:dev` run validation first, but use `validate || true` so validation messages do not fail the build.

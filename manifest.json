@@ -16,6 +16,6 @@
     "allowedDomains": [
       "https://api.figma.com"
     ],
-    "reasoning": "Figma REST API for scripts; localhost for CodeFig console forwarding."
+    "reasoning": "Figma REST API for scripts that need REST access (e.g. file comments). Team Library permission is declared separately for published styles and variables."
   }
 }

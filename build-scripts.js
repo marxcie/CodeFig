@@ -4,8 +4,16 @@ const { inlineVendors } = require('./bundle-ui.js');
 
 const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
 const DEV_LOCALHOST = 'http://localhost:8765';
+/** Required for bundled scripts that call the Figma REST API (e.g. comments-to-annotations). */
+const FIGMA_API = 'https://api.figma.com';
 
-// Write manifest.json: dev mode adds localhost to allowedDomains, build mode removes it
+function hasFigmaApiDomain(domains) {
+  const norm = (d) => String(d).replace(/\/$/, '').toLowerCase();
+  const target = norm(FIGMA_API);
+  return domains.some((d) => norm(d) === target);
+}
+
+// Write manifest.json: dev adds localhost; production strips localhost and keeps https://api.figma.com
 function writeManifest() {
   const manifestPath = path.join(__dirname, 'manifest.json');
   if (!fs.existsSync(manifestPath)) return;
@@ -13,17 +21,27 @@ function writeManifest() {
   if (!manifest.networkAccess || !Array.isArray(manifest.networkAccess.allowedDomains)) return;
   const domains = manifest.networkAccess.allowedDomains;
   if (isDev) {
-    if (!domains.includes(DEV_LOCALHOST)) {
-      manifest.networkAccess.allowedDomains = [...domains, DEV_LOCALHOST];
+    let next = [...domains];
+    if (!hasFigmaApiDomain(next)) {
+      next = [FIGMA_API, ...next];
+    }
+    if (!next.includes(DEV_LOCALHOST)) {
+      next = [...next, DEV_LOCALHOST];
+    }
+    if (JSON.stringify(next) !== JSON.stringify(domains)) {
+      manifest.networkAccess.allowedDomains = next;
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-      console.log('✅ manifest.json: added', DEV_LOCALHOST, '(dev mode)');
+      console.log('✅ manifest.json: dev mode (Figma API +', DEV_LOCALHOST + ')');
     }
   } else {
-    const filtered = domains.filter((d) => !/localhost/i.test(d));
-    if (filtered.length !== domains.length) {
-      manifest.networkAccess.allowedDomains = filtered;
+    let next = domains.filter((d) => !/localhost/i.test(d));
+    if (!hasFigmaApiDomain(next)) {
+      next = [FIGMA_API, ...next];
+    }
+    if (JSON.stringify(next) !== JSON.stringify(domains)) {
+      manifest.networkAccess.allowedDomains = next;
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-      console.log('✅ manifest.json: localhost removed (build mode)');
+      console.log('✅ manifest.json: production (Figma API, no localhost)');
     }
   }
 }
