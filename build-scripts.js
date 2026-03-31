@@ -199,6 +199,11 @@ function updateUIHtml() {
   // Read src only; inline vendors (CodeMirror, marked) into string; write result only to dist
   let uiContent = fs.readFileSync(uiTemplatePath, 'utf8');
   uiContent = inlineVendors(uiContent);
+  
+  // Inject build flags (dev vs production) into the UI bundle.
+  // In dev builds, localhost console forwarding is allowed (manifest.json includes it).
+  // In production builds, localhost is removed from manifest.json and UI must not try to reach it.
+  uiContent = uiContent.replace(/__CODEFIG_BUILD_IS_DEV__/g, isDev ? 'true' : 'false');
 
   // Inline Buy Me a Coffee brand SVG (src/bmc-button.svg) into footer button
   const bmcSvgPath = path.join(__dirname, 'src', 'bmc-button.svg');

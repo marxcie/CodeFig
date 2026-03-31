@@ -1,6 +1,6 @@
 {
   "name": "CodeFig",
-  "id": "codefig",
+  "id": "1620556386343160879",
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",
@@ -14,8 +14,7 @@
   ],
   "networkAccess": {
     "allowedDomains": [
-      "https://api.figma.com",
-      "http://localhost:8765"
+      "https://api.figma.com"
     ],
     "reasoning": "Figma REST API for scripts that need REST access (e.g. file comments). Team Library permission is declared separately for published styles and variables."
   }
