@@ -4,6 +4,10 @@ node_modules/
 # Build outputs
 dist/
 
+# Local / same name as GitHub Releases “latest” asset
+codefig-plugin.zip
+codefig-v*-plugin.zip
+
 # IDE files
 .vscode/
 .idea/
@@ -32,3 +36,4 @@ scripts/EXAMPLE_SCRIPTS/*.temp*
 scripts/EXAMPLE_SCRIPTS/*.tmp*
 scripts/EXAMPLE_SCRIPTS/*.old*
 scripts/EXAMPLE_SCRIPTS/_*.*
+figma-console.log

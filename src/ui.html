@@ -1239,6 +1239,13 @@
       .config-ui-input--select {
         cursor: pointer;
       }
+
+      /* Variable collection dropdown: library / document group headers (native optgroup; limited browser styling) */
+      .config-ui-form select[data-collection-groups="true"] optgroup {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted, rgba(29, 29, 31, 0.55));
+      }
       
       /* Radio group */
       .config-ui-radio-group {
@@ -4584,15 +4591,49 @@
           case 'OPTIONS':
             const optionSource = msg.optionSource;
             const options = msg.options || [];
+            const optionGroups = msg.optionGroups;
+            const useGroupedCollections =
+              optionGroups &&
+              Array.isArray(optionGroups) &&
+              optionGroups.length > 0 &&
+              (optionSource === 'variableCollections' || optionSource === 'localVariableCollections');
             document.querySelectorAll('select[data-option-source="' + optionSource + '"]').forEach(function (sel) {
               const initial = sel.getAttribute('data-initial-value') || '';
               sel.innerHTML = '';
-              options.forEach(function (opt) {
-                const o = document.createElement('option');
-                o.value = opt;
-                o.textContent = (opt === '' && optionSource === 'variableCollections') ? '(all collections)' : opt;
-                sel.appendChild(o);
-              });
+              if (useGroupedCollections) {
+                sel.setAttribute('data-collection-groups', 'true');
+                function appendOption(value, label) {
+                  const o = document.createElement('option');
+                  o.value = value;
+                  o.textContent = label;
+                  sel.appendChild(o);
+                }
+                if (optionSource === 'variableCollections') {
+                  appendOption('', '(all collections)');
+                }
+                optionGroups.forEach(function (grp) {
+                  const label = grp && grp.label ? String(grp.label) : '';
+                  const values = grp && Array.isArray(grp.values) ? grp.values : [];
+                  if (!values.length) return;
+                  const og = document.createElement('optgroup');
+                  og.label = label;
+                  values.forEach(function (val) {
+                    const o = document.createElement('option');
+                    o.value = val;
+                    o.textContent = val;
+                    og.appendChild(o);
+                  });
+                  sel.appendChild(og);
+                });
+              } else {
+                sel.removeAttribute('data-collection-groups');
+                options.forEach(function (opt) {
+                  const o = document.createElement('option');
+                  o.value = opt;
+                  o.textContent = (opt === '' && optionSource === 'variableCollections') ? '(all collections)' : opt;
+                  sel.appendChild(o);
+                });
+              }
               if (options.indexOf(initial) !== -1) sel.value = initial;
               else if (options.length) sel.value = options[0];
             });

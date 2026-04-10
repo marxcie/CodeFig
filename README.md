@@ -60,6 +60,47 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 4. Run a script via the Run button or `Cmd/Ctrl + R`.
 5. Create or extend scripts using **JavaScript** (syntax must be valid JS at run time).
 
+### Install from GitHub (no Node)
+
+**Latest build (stable link):** download [**codefig-plugin.zip**](https://github.com/marxcie/codefig/releases/latest/download/codefig-plugin.zip), unzip, then in Figma use **Plugins → Development → Import plugin from manifest…** and pick the **`manifest.json` at the top of the unzipped folder** (next to the `dist/` folder). That `manifest.json` is the plugin manifest at the repo root; `npm run build:production` **updates** it in place (production network settings) and fills `dist/`—it does not emit a second manifest file or a zip.
+
+Older releases also attach a versioned file: `codefig-vX.Y.Z-plugin.zip`. [All releases](https://github.com/marxcie/codefig/releases).
+
+**Maintainers — ship a new version (build, zip, bump `package.json`, tag):**
+
+`npm run build:release -- patch` (or `minor` / `major`)
+
+Requires a **clean git working tree** — see **Selective commits** below if you have local experiments you are not ready to ship. The script runs production build, writes `codefig-plugin.zip` locally, then **`npm version`** (one commit for the version bump + a `v*` tag). **It does not `git push` by default** — push from GitHub Desktop or the CLI when you are ready. `git push` only uploads **commits**; uncommitted edits never leave your machine.
+
+- **Also push branch + tag from this script** (starts CI on GitHub): `npm run build:release -- patch --push`
+- **Dry run** (build + pack only): `npm run build:release -- --dry-run`
+
+**You do not commit or push the zip.** `codefig-plugin.zip` and `dist/` stay gitignored. When you push the **tag**, **GitHub Actions** builds the same kind of zip from the **committed** tree and attaches it to the release.
+
+#### Selective commits before a release
+
+Git does not let you “push only certain files.” You choose what is **in a commit**, then push commits. `npm version` also refuses to run if anything is still modified (staged or not), except the version bump it will create.
+
+Typical flow when you want to **publish one script change** but keep **unfinished edits** in `src/ui.html` or `src/code.ts` (or anything else):
+
+1. **Stash** what you are not shipping yet (your WIP stays saved; it is not lost):
+
+   `git stash push -m "wip plugin ui" -- src/ui.html src/code.ts`
+
+   Add any other paths you want held back.
+
+2. **Commit** what you do want in this release (for example the script):
+
+   `git add scripts/EXAMPLE_SCRIPTS/my-change.ts && git commit -m "fix: …"`
+
+3. Run **`npm run build:release -- patch`** (or `minor` / `major`). The production build uses the **last committed** contents for stashed paths (your experiments are out of the tree until you pop the stash).
+
+4. **`git stash pop`** when you want your WIP back locally.
+
+5. Push the branch and tag from GitHub Desktop or add **`--push`** to the release command when you are ready. The GitHub zip matches the **tagged commit**, not uncommitted work.
+
+**Local zip only (same contents as CI):** `npm run pack` (or use `--dry-run` above).
+
 ## Development
 
 **Local setup:**  
@@ -82,6 +123,8 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 | `npm run dev` | Runs `build:dev`, then watches `src/` and `scripts/`, rebuilds on change, starts the console log server. |
 | `npm run validate` | Validate script syntax, imports, and metadata. |
 | `npm run clean` | Remove `dist/`. |
+| `npm run pack` | `build:production`, then writes **`codefig-plugin.zip`** (`manifest.json` + `dist/`). Same layout as the GitHub Release asset; needs the `zip` CLI. |
+| `npm run build:release` | See **Install from GitHub → Maintainers**. Build + pack + `npm version`. Optional `--push` to git-push; default is no push. Flag: `--dry-run`. |
 
 **Console logging:**  
 During `dev`, plugin and script logs are written to `figma-console.log`. The file is un-ignored so the agent can read it directly. The `prepare` script adds it to `.git/info/exclude` so it is not committed. If you used `npm run dev` or `build:dev`, run **`npm run build:production`** before committing or publishing so `manifest.json` does not retain localhost.

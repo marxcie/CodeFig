@@ -244,12 +244,18 @@ figma.ui.onmessage = (msg) => {
       ]).then(([localCollections, libraryCollections]) => {
         const localNames = (localCollections || []).map((c) => c && c.name).filter((n) => n != null && String(n).trim() !== '');
         const libraryNames = (libraryCollections || []).map((c) => c && c.name).filter((n) => n != null && String(n).trim() !== '');
-        const names = [...new Set([...localNames, ...libraryNames])];
+        const localSorted = [...new Set(localNames)].sort((a, b) => String(a).localeCompare(String(b)));
+        const librarySorted = [...new Set(libraryNames)].sort((a, b) => String(a).localeCompare(String(b)));
+        const names = [...new Set([...localSorted, ...librarySorted])];
         const options = [''].concat(names);
+        const optionGroups: { label: string; values: string[] }[] = [];
+        if (localSorted.length) optionGroups.push({ label: 'This file', values: localSorted });
+        if (librarySorted.length) optionGroups.push({ label: 'Libraries', values: librarySorted });
         figma.ui.postMessage({
           type: 'OPTIONS',
           optionSource: optionSource || '',
-          options
+          options,
+          ...(optionGroups.length ? { optionGroups } : {})
         });
       }).catch((err) => {
         console.error('Backend: variableCollections fetch failed', err);
@@ -264,10 +270,13 @@ figma.ui.onmessage = (msg) => {
     if (optionSource === 'localVariableCollections') {
       figma.variables.getLocalVariableCollectionsAsync().then((localCollections) => {
         const names = (localCollections || []).map((c) => c && c.name).filter((n) => n != null && String(n).trim() !== '');
+        const sorted = [...new Set(names)].sort((a, b) => String(a).localeCompare(String(b)));
+        const optionGroups = sorted.length ? [{ label: 'This file', values: sorted }] : undefined;
         figma.ui.postMessage({
           type: 'OPTIONS',
           optionSource: optionSource || '',
-          options: names
+          options: sorted,
+          ...(optionGroups ? { optionGroups } : {})
         });
       }).catch((err) => {
         console.error('Backend: localVariableCollections fetch failed', err);
