@@ -1,11 +1,11 @@
 <div align="center">
   <img src="icon-16x16@512px.png" alt="CodeFig Icon" width="64" height="64">
   <h1>CodeFig</h1>
-  <p><em>Run JavaScript inside Figma. Built for interacting with Variables, Styles, Design Systems, and generally with Figma files, nodes programmatically. </em></p></br>
+  <p><em>Run JavaScript inside Figma. Built for interacting with Variables, Styles, Design Systems, and generally with Figma files, nodes programmatically. </em></p></br> 
+  <img width="1920" height="1080" alt="file cover - 11" src="https://github.com/user-attachments/assets/3e03b215-4983-47c3-bdb4-0fa16deaf61f" /></br>
   <a href="https://www.buymeacoffee.com/codefig" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 </div>
 
-<img width="1920" height="1080" alt="file cover - 11" src="https://github.com/user-attachments/assets/3e03b215-4983-47c3-bdb4-0fa16deaf61f" />
 
 ## What is CodeFig?
 
