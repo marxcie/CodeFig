@@ -114,14 +114,14 @@ These are the utility and help scripts included in the build (see **Shipped vs d
 
 #### Utility Scripts ####
 
-**Comments to annotations**
+- **Comments to annotations:**
 Reads Figma comments via the REST API and converts them into annotations.
 Useful when duplicating designs across files, as comments don’t carry over. The script preserves comment positions by creating hidden anchors (since comments are usually attached to the root frame, not individual elements). REQUIRES READ COMMENTS API TOKEN
 
-**Detach styles & variables**
+- **Detach styles & variables:**
 Removes style and/or variable bindings from the current selection. You can choose which types to detach (fill, stroke, effect, typography, etc.) or remove all bindings.
 
-**Duplicate styles group**
+- **Duplicate styles group**
 Duplicate a styles group, with optionally rebinding its variable bindings to another collection.
 
 **Duplicate variable collection**
