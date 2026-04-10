@@ -112,76 +112,60 @@ CodeFig is self-contained:
 
 These are the utility and help scripts included in the build (see **Shipped vs dev-only scripts** under Development). Display names in the plugin follow each file’s title comment.
 
-### Utility Scripts ###
+#### Utility Scripts ####
 
 **Comments to annotations**
-
 Reads Figma comments via the REST API and converts them into annotations.
 Useful when duplicating designs across files, as comments don’t carry over. The script preserves comment positions by creating hidden anchors (since comments are usually attached to the root frame, not individual elements). REQUIRES READ COMMENTS API TOKEN
 
 **Detach styles & variables**
-
 Removes style and/or variable bindings from the current selection. You can choose which types to detach (fill, stroke, effect, typography, etc.) or remove all bindings.
 
 **Duplicate styles group**
-
 Duplicate a styles group, with optionally rebinding its variable bindings to another collection.
 
 **Duplicate variable collection**
-
 Duplicates a variable collection with its metadata and values.
 
 **Frame or auto layout selected**
-
 Wraps (on unwraps) each selected layers in new frames or auto-layout containers individually.
 
 **Remove unnecessary nesting**
-
 Detects and removes redundant wrapper frames (e.g. wrappers with only one child). Optionally normalizes wrappers (e.g. combining padding-x on wrapper 1 and padding-y on wrapper 2 into a single wrapper).
 
 **Rename styles**
-
 Batch-renames styles using find/replace rules, similar to Figma’s batch rename.
 
 **Rename variables**
-
 Batch-renames variables using find/replace rules, similar to Figma’s batch rename.
 
 **Render styles overview**
-
 Generates a visual overview of a defined style group in a frame.
 Primarily used to support Replace Styles, which requires all styles to exist in the file. The easiest approach is to generate the overview in the library file and paste it into the target file.
 
 **Replace style variable bindings**
-
 Batch find and replaces variable bindings inside style definitions.
 
 **Replace styles**
-
 Batch finds and rebinds node style assignments to different styles based on name matching and the local style inventory. Style replacement is less smooth than with variables due to limited Figma styles API support, so it requires a two-step approach.
 
 **Replace variables**
-
 Batch finds and rebinds layer variable references or collections to another.
 
 **Scale or resize elements**
-
 Scales or resizes selected nodes by factor, ratio, or explicit dimensions (e.g. resize all selected to 16:9 with a width of 640px).
 
 **Select by styles or variables**
-
 Selects all nodes that use a specific style or variable.
 
 **Text to styles**
-
 Creates text styles from selected text layers, keeping variable bindings (if there is any).
 
 **Variable inspector (WIP)**
-
 Inspects variable bindings and usage details in the file or selection. The goal is to find broken or outdated bindings and disconnected library artifacts. Still in progress due to the complexity.
 
 
-### Design System Foundations ###
+#### Design System Foundations ####
 These enable you to create a highly configurable design system foundation, with as many breakpoints as needed, and to optimize spacing, grid, typography, and corner radius per breakpoint.
 
 **Corner radius**
@@ -200,7 +184,7 @@ Creates or updates spacing variables across breakpoint modes and sets their resp
 Creates or updates typography variables across breakpoint modes with their respective scopes. and optionally matching text styles. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed.
 
 
-### Importable Libraries ###
+#### Importable Libraries ####
 
 **@Core Library**
 General utility helpers for node traversal, styles, colors, and shared low-level operations.
