@@ -1,9 +1,10 @@
 <div align="center">
   <img src="icon-16x16@512px.png" alt="CodeFig Icon" width="64" height="64">
   <h1>CodeFig</h1>
-  <p><em>Run JavaScript inside Figma. Built for interacting with Variables, Styles, Design Systems, and generally with Figma files, nodes programmatically. </em></p></br>
-  <a href="https://www.buymeacoffee.com/codefig" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+  <p><em>Run JavaScript inside Figma. Built for interacting with Variables, Styles, Design Systems, and generally with Figma files, nodes programmatically. </em></p></br> 
+  <img width="1920" height="1080" alt="file cover - 11" src="https://github.com/user-attachments/assets/3e03b215-4983-47c3-bdb4-0fa16deaf61f" />
 </div>
+
 
 ## What is CodeFig?
 
@@ -111,62 +112,106 @@ CodeFig is self-contained:
 
 These are the utility and help scripts included in the build (see **Shipped vs dev-only scripts** under Development). Display names in the plugin follow each file’s title comment.
 
-**Help**
+#### Utility Scripts ####
 
-| Name | Description |
-|------|-------------|
-| Help & documentation | In-plugin overview: editor, Documentation tab, `@import`, shortcuts |
+- **Comments to annotations:**
+Reads Figma comments via the REST API and converts them into annotations.
+Useful when duplicating designs across files, as comments don’t carry over. The script preserves comment positions by creating hidden anchors (since comments are usually attached to the root frame, not individual elements). REQUIRES READ COMMENTS API TOKEN
 
-**Layout & structure**
+- **Detach styles & variables:**
+Removes style and/or variable bindings from the current selection. You can choose which types to detach (fill, stroke, effect, typography, etc.) or remove all bindings.
 
-| Name | Description |
-|------|-------------|
-| Frame or auto layout selected | Wrap selection in new frames or auto-layout containers |
-| Scale or resize elements | Scale or resize by factor, dimensions, or ratio |
-| Remove unnecessary nesting | Remove redundant wrapper frames |
+- **Duplicate styles group:**
+Duplicate a styles group, with optionally rebinding its variable bindings to another collection.
 
-**Styles**
+- **Duplicate variable collection:**
+Duplicates a variable collection with its metadata and values.
 
-| Name | Description |
-|------|-------------|
-| Rename styles | Rename text, paint, and effect styles by pattern |
-| Replace styles | Rebind nodes to different styles by name pattern (local and Team Library) |
-| Duplicate styles collection | Duplicate a published styles collection |
-| Text to styles | Create text styles from selected text layers |
-| Render styles overview | Generate a “render styles” overview frame for library workflows |
-| Replace style variable bindings | Replace variable bindings on style definitions |
+- **Frame or auto layout selected:**
+Wraps (on unwraps) each selected layers in new frames or auto-layout containers individually.
 
-**Variables**
+- **Remove unnecessary nesting:**
+Detects and removes redundant wrapper frames (e.g. wrappers with only one child). Optionally normalizes wrappers (e.g. combining padding-x on wrapper 1 and padding-y on wrapper 2 into a single wrapper).
 
-| Name | Description |
-|------|-------------|
-| Rename variables | Rename variables in a collection |
-| Replace variables | Replace variable bindings on layers by path pattern |
-| Duplicate variable collection | Copy a variable collection with metadata |
-| Variable inspector (WIP) | Inspect variable bindings and usage |
+- **Rename styles:**
+Batch-renames styles using find/replace rules, similar to Figma’s batch rename.
 
-**Selection & utilities**
+- **Rename variables:**
+Batch-renames variables using find/replace rules, similar to Figma’s batch rename.
 
-| Name | Description |
-|------|-------------|
-| Select by styles or variables | Select nodes that use given styles or variables |
-| Detach styles & variables | Remove style and variable bindings from the selection |
-| Comments to annotations | Create annotations from file comments (Figma REST API + token) |
+- **Render styles overview:**
+Generates a visual overview of a defined style group in a frame.
+Primarily used to support Replace Styles, which requires all styles to exist in the file. The easiest approach is to generate the overview in the library file and paste it into the target file.
 
-**Design System Foundations**
+- **Replace style variable bindings:**
+Batch find and replaces variable bindings inside style definitions.
 
-| Name | Description |
-|------|-------------|
-| Grid | Grid system variables, layout grid style, preview frames |
-| Typography | Responsive typography variables and optional text styles |
-| Spacing | Responsive spacing scale variables (width, height, gap) |
-| Corner radius | Responsive corner-radius scale variables |
+- **Replace styles:**
+Batch finds and rebinds node style assignments to different styles based on name matching and the local style inventory. Style replacement is less smooth than with variables due to limited Figma styles API support, so it requires a two-step approach.
 
-**Libraries**  
-Shared helpers used by scripts: `@core-library`, `@codefig-ui`, `@infopanel`, `@math-helpers`, `@pattern-matching`, `@replacement-engine`, `@styles`, `@variables`.
+- **Replace variables:**
+Batch finds and rebinds layer variable references or collections to another.
 
-**User libraries**  
+- **Scale or resize elements:**
+Scales or resizes selected nodes by factor, ratio, or explicit dimensions (e.g. resize all selected to 16:9 with a width of 640px).
+
+- **Select by styles or variables:**
+Selects all nodes that use a specific style or variable.
+
+- **Text to styles:**
+Creates text styles from selected text layers, keeping variable bindings (if there is any).
+
+- **Variable inspector (WIP):**
+Inspects variable bindings and usage details in the file or selection. The goal is to find broken or outdated bindings and disconnected library artifacts. Still in progress due to the complexity.
+
+
+#### Design System Foundations ####
+These enable you to create a highly configurable design system foundation, with as many breakpoints as needed, and to optimize spacing, grid, typography, and corner radius per breakpoint.
+
+- **Corner radius:**
+Creates or updates corner radius variables across breakpoint modes and sets their respective scopes. Highly configurable: set min–max values and define as many steps, increment types, and naming conventions as needed.
+
+- **Grid:**
+Creates or updates layout grid variables across breakpoint modes, sets their respective scopes, creates a grid styles for the setup, and generates preview frames with the grid setup.
+
+- **Spacing:**
+Creates or updates spacing variables across breakpoint modes and sets their respective scopes. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed.
+
+- **Typography:**
+Creates or updates typography variables across breakpoint modes with their respective scopes. and optionally matching text styles. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed.
+
+
+#### Importable Libraries ####
+
+- **@Core Library:**
+General utility helpers for node traversal, styles, colors, and shared low-level operations.
+
+- **@CodeFigUI:**
+Helpers for building script config UIs inside CodeFig.
+
+- **@InfoPanel:**
+Utilities for showing structured results in the plugin UI.
+
+- **@Math Helpers:**
+Math and scaling helpers for interpolation, easing, ratios, and generated scales.
+
+- **@Pattern Matching:**
+Shared pattern and wildcard matching utilities.
+
+- **@Replacement Engine:**
+Core logic for planning and applying find/replace operations.
+
+- **@Styles:**
+Helpers for discovering, analyzing, and replacing styles.
+
+- **@Variables:**
+Helpers for collections, variables, bindings, and value updates.
+
+#### User libraries: ####
 Create a script and name it with an `@` prefix (e.g. `@My Utils`) to treat it as a library. Libraries are imported by other scripts, not run directly.
+
+#### User scripts: ####
+Create a script and run it. :) 
 
 ## Keyboard Shortcuts
 
