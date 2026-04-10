@@ -46,6 +46,59 @@ function parseArgs(argv) {
   return { dryRun, push, bump };
 }
 
+function readPackageVersion() {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  return String(pkg.version);
+}
+
+/** Next semver for patch | minor | major (x.y.z only). */
+function computeNextVersion(current, bumpType) {
+  const m = String(current).match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) {
+    throw new Error(
+      `package.json version "${current}" must look like x.y.z (no prerelease) for release.js`
+    );
+  }
+  let major = +m[1];
+  let minor = +m[2];
+  let patch = +m[3];
+  if (bumpType === 'patch') patch += 1;
+  else if (bumpType === 'minor') {
+    minor += 1;
+    patch = 0;
+  } else if (bumpType === 'major') {
+    major += 1;
+    minor = 0;
+    patch = 0;
+  }
+  return `${major}.${minor}.${patch}`;
+}
+
+function localGitTagExists(name) {
+  const r = spawnSync('git', ['tag', '-l', name], { cwd: root, encoding: 'utf8' });
+  if (r.error) throw r.error;
+  return Boolean((r.stdout || '').trim());
+}
+
+function assertNextReleaseTagFree(bumpType) {
+  const current = readPackageVersion();
+  const next = computeNextVersion(current, bumpType);
+  const nextTag = `v${next}`;
+  if (!localGitTagExists(nextTag)) return;
+
+  console.error(
+    `Release would create tag ${nextTag}, but that tag already exists locally.\n\n` +
+      `npm version will fail with "tag already exists". Typical fixes:\n` +
+      `  • Failed or partial run left the tag behind — remove it and retry:\n` +
+      `      git tag -d ${nextTag}\n` +
+      `  • That release is already done — bump package.json to match reality, or use minor/major.\n` +
+      `  • Tag exists only on GitHub and you need to retag (careful):\n` +
+      `      git push origin :refs/tags/${nextTag}\n\n` +
+      `Current package.json version: ${current} → next ${bumpType}: ${next}\n`
+  );
+  process.exit(1);
+}
+
 function assertCleanWorkingTree() {
   const porcelain = git(['status', '--porcelain']);
   if (porcelain) {
@@ -79,7 +132,10 @@ Options:
     process.exit(1);
   }
 
-  if (!dryRun) assertCleanWorkingTree();
+  if (!dryRun) {
+    assertCleanWorkingTree();
+    assertNextReleaseTagFree(bump);
+  }
 
   console.log('\n→ Production build…\n');
   run('npm run build:production');

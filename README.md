@@ -99,6 +99,8 @@ Typical flow when you want to **publish one script change** but keep **unfinishe
 
 5. Push the branch and tag from GitHub Desktop or add **`--push`** to the release command when you are ready. The GitHub zip matches the **tagged commit**, not uncommitted work.
 
+If **`npm run build:release`** fails with **tag already exists** (often `v1.0.1`), a previous run may have created the tag without finishing. Remove the local tag and retry: `git tag -d v1.0.1` (use the exact name from the error). The release script checks this *before* the long build when possible.
+
 **Local zip only (same contents as CI):** `npm run pack` (or use `--dry-run` above).
 
 ## Development
