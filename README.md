@@ -32,7 +32,6 @@ Scripter introduced script-based automation in Figma and remains an excellent mi
 - User scripts with autosave (see note below)
 - UI config support (variables, booleans → visual controls)
 - Real-time console logging in dev mode
-- Console error display
 
 > **Notes:**
 > - Only user scripts are auto-saved. Prebuilt scripts are read-only by default — duplicate them to edit and keep your changes.
@@ -183,53 +182,24 @@ These are the utility and help scripts included in the build (see **Shipped vs. 
 
 ### Utility Scripts
 
-**Comments to annotations**
-Reads Figma comments via the REST API and converts them into annotations. Useful when duplicating designs across files, since comments don't carry over. The script preserves comment positions by creating hidden anchors (comments are usually attached to the root frame, not individual elements). **Requires a Read Comments API token.**
-
-**Detach styles & variables**
-Removes style and/or variable bindings from the current selection. You can choose which types to detach (fill, stroke, effect, typography, etc.) or remove all bindings at once.
-
-**Duplicate styles group**
-Duplicates a styles group, with the option to rebind its variable bindings to another collection.
-
-**Duplicate variable collection**
-Duplicates a variable collection with its metadata and values.
-
-**Frame or auto layout selected**
-Wraps (or unwraps) each selected layer in new frames or auto-layout containers individually.
-
-**Remove unnecessary nesting**
-Detects and removes redundant wrapper frames (e.g. wrappers with only one child). Optionally normalizes wrappers — for example, combining `padding-x` on one wrapper and `padding-y` on another into a single wrapper.
-
-**Rename styles**
-Batch-renames styles using find/replace rules, similar to Figma's native batch rename.
-
-**Rename variables**
-Batch-renames variables using find/replace rules, similar to Figma's native batch rename.
-
-**Render styles overview**
-Generates a visual overview of a defined style group in a frame. Primarily used to support the Replace Styles script, which requires all target styles to exist in the file — the easiest approach is to generate the overview in the library file and paste it into the target file.
-
-**Replace style variable bindings**
-Batch finds and replaces variable bindings inside style definitions.
-
-**Replace styles**
-Batch finds and rebinds node style assignments to different styles based on name matching and the local style inventory. Style replacement is less seamless than with variables (due to limited Figma styles API support), so it uses a two-step approach.
-
-**Replace variables**
-Batch finds and rebinds layer variable references or collections to another.
-
-**Scale or resize elements**
-Scales or resizes selected nodes by factor, ratio, or explicit dimensions (e.g. resize all selected to 16:9 at 640px wide).
-
-**Select by styles or variables**
-Selects all nodes that use a specific style or variable.
-
-**Text to styles**
-Creates text styles from selected text layers, preserving any variable bindings.
-
-**Variable inspector *(WIP)***
-Inspects variable bindings and usage in the file or selection. The goal is to surface broken or outdated bindings and disconnected library artifacts. Still in progress due to API complexity.
+| Script | Description |
+|--------|-------------|
+| **Comments to annotations** | Reads Figma comments via the REST API and converts them into annotations. Useful when duplicating designs across files, as comments don't carry over. The script preserves comment positions by creating hidden anchors (since comments are usually attached to the root frame, not individual elements). Requires a Read Comments API token. |
+| **Detach styles & variables** | Removes style and/or variable bindings from the current selection. You can choose which types to detach (fill, stroke, effect, typography, etc.) or remove all bindings. |
+| **Duplicate styles group** | Duplicate a styles group, with optionally rebinding its variable bindings to another collection. |
+| **Duplicate variable collection** | Duplicates a variable collection with its metadata and values. |
+| **Frame or auto layout selected** | Wraps (or unwraps) each selected layer in new frames or auto-layout containers individually. |
+| **Remove unnecessary nesting** | Detects and removes redundant wrapper frames (e.g. wrappers with only one child). Optionally normalizes wrappers (e.g. combining padding-x on wrapper 1 and padding-y on wrapper 2 into a single wrapper). |
+| **Rename styles** | Batch-renames styles using find/replace rules, similar to Figma's batch rename. |
+| **Rename variables** | Batch-renames variables using find/replace rules, similar to Figma's batch rename. |
+| **Render styles overview** | Generates a visual overview of a defined style group in a frame. Primarily used to support Replace Styles, which requires all styles to exist in the file. The easiest approach is to generate the overview in the library file and paste it into the target file. |
+| **Replace style variable bindings** | Batch find and replaces variable bindings inside style definitions. |
+| **Replace styles** | Batch finds and rebinds node style assignments to different styles based on name matching and the local style inventory. Style replacement is less smooth than with variables due to limited Figma styles API support, so it requires a two-step approach. |
+| **Replace variables** | Batch finds and rebinds layer variable references or collections to another. |
+| **Scale or resize elements** | Scales or resizes selected nodes by factor, ratio, or explicit dimensions (e.g. resize all selected to 16:9 with a width of 640px). |
+| **Select by styles or variables** | Selects all nodes that use a specific style or variable. |
+| **Text to styles** | Creates text styles from selected text layers, keeping variable bindings (if there are any). |
+| **Variable inspector *(WIP)*** | Inspects variable bindings and usage details in the file or selection. The goal is to find broken or outdated bindings and disconnected library artifacts. Still in progress due to the complexity. |
 
 ---
 
@@ -237,37 +207,27 @@ Inspects variable bindings and usage in the file or selection. The goal is to su
 
 These scripts let you build a highly configurable design system foundation with as many breakpoints as needed, and tune spacing, grid, typography, and corner radius per breakpoint.
 
-**Corner radius**
-Creates or updates corner radius variables across breakpoint modes and sets their scopes. Highly configurable: set min–max values and define as many steps, increment types, and naming conventions as needed.
-
-**Grid**
-Creates or updates layout grid variables across breakpoint modes, sets their scopes, creates matching grid styles, and generates preview frames showing the grid setup.
-
-**Spacing**
-Creates or updates spacing variables across breakpoint modes and sets their scopes. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed.
-
-**Typography**
-Creates or updates typography variables across breakpoint modes with their scopes, and optionally creates matching text styles. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed.
+| Script | Description |
+|--------|-------------|
+| **Corner radius** | Creates or updates corner radius variables across breakpoint modes and sets their respective scopes. Highly configurable: set min–max values and define as many steps, increment types, and naming conventions as needed. |
+| **Grid** | Creates or updates layout grid variables across breakpoint modes, sets their respective scopes, creates grid styles for the setup, and generates preview frames with the grid setup. |
+| **Spacing** | Creates or updates spacing variables across breakpoint modes and sets their respective scopes. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed. |
+| **Typography** | Creates or updates typography variables across breakpoint modes with their respective scopes, and optionally matching text styles. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed. |
 
 ---
 
 ### Importable Libraries
 
-**@Core Library** — General utility helpers for node traversal, styles, colors, and shared low-level operations.
-
-**@CodeFigUI** — Helpers for building script config UIs inside CodeFig.
-
-**@InfoPanel** — Utilities for showing structured results in the plugin UI.
-
-**@Math Helpers** — Math and scaling helpers for interpolation, easing, ratios, and generated scales.
-
-**@Pattern Matching** — Shared pattern and wildcard matching utilities.
-
-**@Replacement Engine** — Core logic for planning and applying find/replace operations.
-
-**@Styles** — Helpers for discovering, analyzing, and replacing styles.
-
-**@Variables** — Helpers for collections, variables, bindings, and value updates.
+| Library | Description |
+|---------|-------------|
+| **@Core Library** | General utility helpers for node traversal, styles, colors, and shared low-level operations. |
+| **@CodeFigUI** | Helpers for building script config UIs inside CodeFig. |
+| **@InfoPanel** | Utilities for showing structured results in the plugin UI. |
+| **@Math Helpers** | Math and scaling helpers for interpolation, easing, ratios, and generated scales. |
+| **@Pattern Matching** | Shared pattern and wildcard matching utilities. |
+| **@Replacement Engine** | Core logic for planning and applying find/replace operations. |
+| **@Styles** | Helpers for discovering, analyzing, and replacing styles. |
+| **@Variables** | Helpers for collections, variables, bindings, and value updates. |
 
 **User libraries:** Create a script and name it with an `@` prefix (e.g. `@My Utils`) to treat it as a library. Libraries are imported by other scripts rather than run directly.
 
