@@ -54,13 +54,13 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 
 ## Quick Start
 
-1. Install from the Figma Community.
+1. Install from the Figma Community, or download the [**latest build**](https://github.com/marxcie/codefig/releases/latest/download/codefig-plugin.zip) from here.
 2. Open the plugin in any file.
 3. Browse the bundled scripts in the sidebar.
 4. Run a script via the Run button or `Cmd/Ctrl + R`.
 5. Create or extend scripts using **JavaScript** (syntax must be valid JS at run time).
 
-### Install from GitHub (no Node)
+### Install from GitHub and running in Figma
 
 **Latest build (stable link):** download [**codefig-plugin.zip**](https://github.com/marxcie/codefig/releases/latest/download/codefig-plugin.zip), unzip, then in Figma use **Plugins → Development → Import plugin from manifest…** and pick the **`manifest.json` at the top of the unzipped folder** (next to the `dist/` folder). That `manifest.json` is the plugin manifest at the repo root; `npm run build:production` **updates** it in place (production network settings) and fills `dist/`—it does not emit a second manifest file or a zip.
 
