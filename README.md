@@ -210,7 +210,7 @@ Helpers for collections, variables, bindings, and value updates.
 #### User libraries: ####
 Create a script and name it with an `@` prefix (e.g. `@My Utils`) to treat it as a library. Libraries are imported by other scripts, not run directly.
 
-#### User script: ####
+#### User scripts: ####
 Create a script and run it. :) 
 
 ## Keyboard Shortcuts
