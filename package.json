@@ -1,6 +1,6 @@
 {
   "name": "codefig",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CodeFig - A Figma plugin for running TypeScript/JavaScript scripts with advanced variable management",
   "main": "code.js",
   "scripts": {
