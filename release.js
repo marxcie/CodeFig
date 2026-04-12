@@ -1,14 +1,15 @@
 /**
- * Production build → zip → version bump (npm version = commit + tag).
- * Does not push unless you pass --push (so you can review, squash, or push from GitHub Desktop when ready).
+ * Production build → pack → bump package version → one git commit (package.json, lockfile, manifest.json) → tag.
+ * We do not use `npm version` for the commit: `build:production` rewrites manifest.json, so the tree is dirty
+ * until we commit those changes together with the version bump.
  *
  * Usage:
  *   npm run build:release -- patch
  *   npm run build:release -- patch --push
  *
  * Options:
- *   --dry-run   Build and pack only; no version bump.
- *   --push      After npm version, run git push for the branch and the new tag (CI release zips on GitHub).
+ *   --dry-run   Build and pack only; no version bump or git.
+ *   --push      After commit + tag, git-push branch and tag (CI release zips on GitHub).
  */
 
 const { execSync, spawnSync } = require('child_process');
@@ -88,7 +89,7 @@ function assertNextReleaseTagFree(bumpType) {
 
   console.error(
     `Release would create tag ${nextTag}, but that tag already exists locally.\n\n` +
-      `npm version will fail with "tag already exists". Typical fixes:\n` +
+      `Typical fixes:\n` +
       `  • Failed or partial run left the tag behind — remove it and retry:\n` +
       `      git tag -d ${nextTag}\n` +
       `  • That release is already done — bump package.json to match reality, or use minor/major.\n` +
@@ -103,7 +104,7 @@ function assertCleanWorkingTree() {
   const porcelain = git(['status', '--porcelain']);
   if (porcelain) {
     console.error(
-      'Working tree is not clean (npm version requires this).\n\n' +
+      'Working tree is not clean (commit or stash before releasing).\n\n' +
         porcelain +
         '\n' +
         'To ship only some changes: stash what you are not releasing, commit what you are, then run again.\n' +
@@ -148,12 +149,17 @@ Options:
     return;
   }
 
-  console.log(`\n→ npm version ${bump} (commit + tag)…\n`);
-  run(`npm version ${bump} --message "chore: release %s"`);
+  const fromVer = readPackageVersion();
+  const next = computeNextVersion(fromVer, bump);
+  const tag = `v${next}`;
 
-  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const ver = pkg.version;
-  const tag = `v${ver}`;
+  console.log(`\n→ Version ${fromVer} → ${next} (package.json + lockfile + manifest.json)…\n`);
+  run(`npm pkg set version=${next}`);
+  run('npm install --package-lock-only');
+  git(['add', 'package.json', 'package-lock.json', 'manifest.json']);
+  run(`git commit -m "chore: release ${next}"`);
+  run(`git tag -a "${tag}" -m "chore: release ${next}"`);
+
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
 
   if (!push) {

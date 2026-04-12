@@ -76,10 +76,10 @@ npm run build:release -- patch
 ```
 
 Use `minor` or `major` instead of `patch` as appropriate. This command:
-- Requires a **clean git working tree**
-- Runs a production build
+- Requires a **clean git working tree** before it starts
+- Runs a production build (this may rewrite `manifest.json` for production network settings)
 - Writes `codefig-plugin.zip` locally
-- Runs `npm version` (one commit for the version bump + a `v*` tag)
+- Bumps the version in `package.json`, syncs `package-lock.json`, then makes **one commit** that includes those files plus `manifest.json`, and creates the **`v*`** tag (it does not use `npm version`, because that command requires a clean tree *after* the build, which the manifest rewrite breaks)
 - **Does not `git push` by default** — push from GitHub Desktop or the CLI when you're ready
 
 Additional flags:
@@ -90,7 +90,7 @@ Additional flags:
 
 ### Selective commits before a release
 
-`npm version` refuses to run if anything is modified (staged or not), except for the version bump it will create itself. If you have unfinished work you're not ready to ship, use `git stash` to hold it back temporarily.
+The script only checks for a clean tree **before** the build. If you have unfinished work you're not ready to ship, use `git stash` to hold it back temporarily, then commit what you want included before running `build:release`.
 
 **Example: ship one script change while keeping other edits local**
 
@@ -152,7 +152,7 @@ This watches `src/code.ts`, `src/ui.html`, and `scripts/`, starts the local cons
 | `npm run validate` | Validates script syntax, imports, and metadata. |
 | `npm run clean` | Removes `dist/`. |
 | `npm run pack` | Runs `build:production`, then writes `codefig-plugin.zip` (`manifest.json` + `dist/`). Same layout as the GitHub Release asset; requires the `zip` CLI. |
-| `npm run build:release` | See the **Shipping a new release** section above. Build + pack + `npm version`. Optional `--push` flag; default is no push. Also supports `--dry-run`. |
+| `npm run build:release` | See **Shipping a new release** above. Build + pack + version bump + commit (`package.json`, lockfile, `manifest.json`) + tag. Optional `--push`; default is no push. `--dry-run` builds and packs only. |
 
 **Console logging:** During `dev`, plugin and script logs are written to `figma-console.log`. The file is un-ignored so it can be read directly. The `prepare` script adds it to `.git/info/exclude` to prevent it from being committed. If you used `npm run dev` or `build:dev`, run `npm run build:production` before committing or publishing to ensure `manifest.json` doesn't retain the localhost entry.
 
