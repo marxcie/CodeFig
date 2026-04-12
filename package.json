@@ -1,6 +1,6 @@
 {
   "name": "codefig",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "CodeFig - A Figma plugin for running TypeScript/JavaScript scripts with advanced variable management",
   "main": "code.js",
   "scripts": {
@@ -19,9 +19,9 @@
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.88.0",
-    "typescript": "^5.2.2",
+    "chokidar-cli": "^3.0.0",
     "concurrently": "^8.2.2",
-    "chokidar-cli": "^3.0.0"
+    "typescript": "^5.2.2"
   },
   "keywords": [
     "figma",
