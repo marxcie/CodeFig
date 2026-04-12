@@ -7,7 +7,7 @@
 // - **Paint styles:** swatch + **full style name** caption.
 // - **Effect styles:** sample shape with effect + **full style name** caption.
 //
-// Use it as a **style guide** or to **surface styles in a file** so tools like **Replace styles** can resolve targets (paste the frame into another file if needed).
+// Use it as a **style guide** or to **surface styles in a file** so tools like **Replace styles** can resolve targets (paste the frame into another file if needed). **Design System Foundations** scripts can build smaller token overviews via **@Foundation overview** (corner radius, spacing variables; typography text tiles as a flat list).
 //
 // ## Config (UI)
 // | Option | Description |
@@ -548,6 +548,17 @@ async function renderStylesMain() {
 
   await loadRenderUiFonts();
 
+  // Replace existing top-level overview on re-run (avoid duplicates). Nested frames inside
+  // **Design System Foundations** are not direct page children, so they are untouched.
+  var pi;
+  var pageKids = figma.currentPage.children;
+  for (pi = pageKids.length - 1; pi >= 0; pi--) {
+    var existing = pageKids[pi];
+    if (existing.type === "FRAME" && existing.name === "Render styles — overview") {
+      existing.remove();
+    }
+  }
+
   // Name must include "Render styles" so Replace styles priority-scans this subtree.
   var root = figma.createFrame();
   root.name = "Render styles — overview";
@@ -599,7 +610,6 @@ async function renderStylesMain() {
 
   figma.currentPage.appendChild(root);
   figma.currentPage.selection = [root];
-  figma.viewport.scrollAndZoomIntoView([root]);
 
   var nText = filtered.filter(function (s) { return s.type === "TEXT"; }).length;
   var nPaint = filtered.filter(function (s) { return s.type === "PAINT"; }).length;

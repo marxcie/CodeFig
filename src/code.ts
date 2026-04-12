@@ -405,18 +405,20 @@ figma.ui.onmessage = (msg) => {
 
       // Create a function that has access to Figma API
       // Add common Figma API shortcuts for convenience
+      // Use string concatenation (not a template literal around jsCode): user scripts may contain
+      // backticks in comments or code; embedding with ${jsCode} inside `...` breaks parsing.
       const scriptFunction = new Function(
         'figma',
         'console',
         'window',
-        `
-        // Convenience shortcuts - make selection and currentPage available
-        const selection = figma.currentPage.selection;
-        const currentPage = figma.currentPage;
-        
-        // User code
-        ${jsCode}
-        `
+        [
+          '// Convenience shortcuts - make selection and currentPage available',
+          'const selection = figma.currentPage.selection;',
+          'const currentPage = figma.currentPage;',
+          '',
+          '// User code',
+          jsCode,
+        ].join('\n')
       );
       
       

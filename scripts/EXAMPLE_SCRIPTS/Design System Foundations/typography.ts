@@ -4,7 +4,7 @@
 // Responsive typography system with range-first scaling and style generation.
 //
 // ## Overview
-// Creates typography variables and optional text styles. **Range mode:** min → base → max per viewport with easing between steps. **Modular mode** (`fontScaling.type` = minorSecond … perfectFifth, `phi`): font size = base × ratio^(step−base), clamped to min/max. Line height and letter spacing always use the range model. Optionally creates overview frames.
+// Creates typography variables and optional text styles. **Range mode:** min → base → max per viewport with easing between steps. **Modular mode** (`fontScaling.type` = minorSecond … perfectFifth, `phi`): font size = base × ratio^(step−base), clamped to min/max. Line height and letter spacing always use the range model. Does not create canvas preview frames.
 //
 // ## Config options
 // | Option | Description |
@@ -16,18 +16,22 @@
 // | modes | Ordered `{ name, minFont, baseFont, maxFont }` per viewport. Legacy: `fontSizes` object. |
 // | fontScale | Ordered step names; `baseFont.level` must match one entry. |
 // | fontScaling.type | **Range curve** (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise** (font size only): `piecewise`, `piecewise2`, `piecewise4` — snapped ramp from min→max over all steps ([Carbon spacing](https://carbondesignsystem.com/elements/spacing/overview/) rhythm); **Modular scale** (like [typescale.com](https://typescale.com/)): minorSecond, majorSecond, minorThird, majorThird, perfectFourth, augmentedFourth, perfectFifth, phi (1.618). Modular uses `baseFont.size × ratio^(step−base)` clamped to min/max. |
-// | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for modular types (font size); still used for line height / letter spacing with a linear ramp when type is modular. **Piecewise (font size):** use `ease: "none"`; line height / letter spacing still use a linear ramp in `t`. |
-// | fontScaling.roundLowerValuesTo / roundUpperValuesTo | Rounding grid for font size and line height. |
+// | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for modular types (font size); still used for line height and letter spacing with a linear ramp when type is modular. **Piecewise (font size):** use `ease: "none"`; line height and letter spacing still use a linear ramp in `t`. |
+// | fontScaling.roundLowerValuesTo, roundUpperValuesTo | Rounding grid for font size and line height. |
 // | figmaStyles | `createAndUpdateStyles`, `styleNaming` (e.g. `Typography/{$fontScale}/{$fontWeight}`). Legacy: `styles`. |
-// | scaling / round* (legacy) | Old top-level keys; use `fontScaling` instead. |
+// | scaling, round* (legacy) | Old top-level keys; use `fontScaling` instead. |
+// | generateOverview | Optional boolean (default `false`). When `true`, fills **Render styles — overview** inside **`Design System Foundations`** (see `@Foundation overview`). |
+// | overviewStyleFilter | Optional substring for text style names (case-insensitive). When empty, defaults to styles containing `group/` (e.g. `Typography/`). |
+// | overviewPreviewText | Optional multiline sample for overview tiles; newline becomes a soft line break in Figma. |
 // @DOC_END
 
 // Import functions from libraries
 @import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generatePiecewiseSnappedScale, isPiecewiseScaleType } from "@Math Helpers"
+@import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
 
 // ========================================
-// CONFIG HELPERS (collection / modes / fontSizes)
+// CONFIG HELPERS (collection, modes, fontSizes)
 // ========================================
 
 function typographyModesToFontSizes(modes) {
@@ -61,7 +65,7 @@ function materializeFontSizes(config) {
   config.fontSizes = resolveFontSizes(config);
 }
 
-/** Merge `fontScaling` → `scaling` + rounding; `figmaStyles` → `styles` for existing code paths. */
+// Merge fontScaling into scaling (plus rounding); figmaStyles into styles for existing code paths.
 function ensureCompatTypographyConfig(config) {
   if (!config || typeof config !== 'object') return;
   if (config.fontScaling && typeof config.fontScaling === 'object') {
@@ -104,7 +108,7 @@ function getModularScaleRatio(type) {
   return map[type] !== undefined ? map[type] : null;
 }
 
-/** Range / piecewise `scaling.type` values for typography (modular types checked via getModularScaleRatio). */
+/** Range and piecewise scaling.type values for typography (modular types checked via getModularScaleRatio). */
 var KNOWN_TYPOGRAPHY_RANGE_SCALING_TYPES = {
   linear: true,
   sine: true,
@@ -120,7 +124,10 @@ var KNOWN_TYPOGRAPHY_RANGE_SCALING_TYPES = {
 
 function notifyUnknownTypographyScalingType(rawType) {
   var label = typeof rawType === 'string' ? rawType : String(rawType);
-  var msg = 'Typography: scaling.type "' + label + '" is not recognized. Use a modular scale (minorSecond, majorSecond, …, phi) or a range curve: linear, sine, quad, …, exponential, piecewise, piecewise2, piecewise4.';
+  var msg =
+    'Typography: scaling.type "' +
+    label +
+    '" is not recognized. Use a modular scale (minorSecond, majorSecond, ..., phi) or a range curve: linear, sine, quad, ..., exponential, piecewise, piecewise2, piecewise4.';
   console.warn(msg);
   try {
     if (typeof figma !== 'undefined' && figma.notify) {
@@ -147,7 +154,7 @@ function validateTypographyScalingTypeConfig(config) {
   notifyUnknownTypographyScalingType(raw);
 }
 
-/** Resolve collection name from wrapper `{ config, collectionName }` or raw data object. */
+// Resolve collection name from wrapper config or raw data object.
 function resolveCollectionName(config) {
   if (config.collectionName != null && config.collectionName !== '') {
     return config.collectionName;
@@ -203,8 +210,8 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
     "Heading-2",
     "Heading-1"
   ],
-  // Array ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"] or string template "Text-{$fontScale}". If string template is selected, steps is required.
-  // steps: 10
+  // Array ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"] or string template "Text-{$fontScale}"
+  // steps: 10, // If string template is selected, steps is required.
 
   fontScaling: {
     type: "sine",
@@ -220,6 +227,11 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
     createAndUpdateStyles: true,
     styleNaming: "Typography/{$fontScale}/{$fontWeight}"
   },
+
+  // When true: update **Render styles — overview** inside **Design System Foundations** (after variables and styles run)
+  generateOverview: false,
+  // overviewStyleFilter: "", // Optional name substring; when empty, uses styles matching `group/`
+  // overviewPreviewText: "", // Optional multiline preview copy for overview tiles
 
   modes: [
     {
@@ -320,7 +332,7 @@ function resolveTypographyPiecewiseSnapGrid(config) {
   return 0;
 }
 
-/** When font size uses a modular ratio, line/letter spacing use range lerp with linear curve (not modular names). */
+// When font size uses a modular ratio, line and letter spacing use range lerp with linear curve (not modular names).
 function getSpacingScalingType(config) {
   var scaling = config.scaling || {};
   var st = scaling.type || 'linear';
@@ -484,10 +496,12 @@ function calculateFluidLetterSpacing(scaleIndex, totalSteps, viewport, config) {
   return Math.round(letterSpacing * 100) / 100;
 }
 
-// Helper: variable name prefix (no leading slash or empty path — Figma rejects names like "/md/font-size" or "//3xs/font-size")
+// Helper: variable name prefix (no leading slash or empty path — Figma rejects bad path segments)
 function variableNamePrefix(group) {
   if (!group || typeof group !== 'string') return '';
-  var trimmed = group.replace(/^\//, '').replace(/\/$/, '');
+  var trimmed = String(group);
+  if (trimmed.charAt(0) === '/') trimmed = trimmed.slice(1);
+  if (trimmed.charAt(trimmed.length - 1) === '/') trimmed = trimmed.slice(0, -1);
   return trimmed ? trimmed + '/' : '';
 }
 
@@ -617,6 +631,14 @@ var typographyConfig = typeof typographyConfig !== 'undefined' ? typographyConfi
   variables: generateTypographyVariables(typographyConfigData)
 };
 
+function resolveTypographyGenerateOverview(config) {
+  if (!config || typeof config !== 'object') return false;
+  if (config.generateOverview === true) return true;
+  var inner = config.config;
+  if (inner && typeof inner === 'object' && inner.generateOverview === true) return true;
+  return false;
+}
+
 // ========================================
 // CORE FUNCTIONS
 // ========================================
@@ -662,16 +684,10 @@ async function createOrUpdateCollection(config) {
   if (getFigmaStyles(config.config).createAndUpdateStyles) {
     console.log('Creating/updating text styles...');
     return createOrUpdateTextStyles(config, collection).then(function(styleStats) {
-      console.log('Creating typography overview frames...');
-      return createOverviewFrames(config, collection).then(function() {
-        return finishTypographySummary(styleStats);
-      });
+      return finishTypographySummary(styleStats);
     });
   }
-  console.log('Creating typography overview frames...');
-  return createOverviewFrames(config, collection).then(function() {
-    return finishTypographySummary(styleStats);
-  });
+  return Promise.resolve(finishTypographySummary(styleStats));
 }
 
 // Function to create or update text styles using the variables
@@ -764,73 +780,6 @@ function createOrUpdateTextStyles(config, collection) {
   });
 }
 
-// Map numeric font weight to Figma style name for loading font
-function fontWeightToStyleName(weight) {
-  if (typeof weight !== 'number') return 'Regular';
-  if (weight <= 400) return 'Regular';
-  if (weight < 600) return 'Medium';
-  if (weight < 700) return 'Semi Bold';
-  return 'Bold';
-}
-
-// Resolve style name from template (e.g. {$fontScale}/{$fontWeight} -> "md/regular")
-function resolveStyleName(styleNaming, scaleName, weightName) {
-  return styleNaming
-    .replace(/\{\$fontScale\}/g, scaleName)
-    .replace(/\{\$fontWeight\}/g, weightName);
-}
-
-// Format a value as script-style literal (same syntax as between // @CONFIG_START and // @CONFIG_END).
-function formatConfigValue(val, indent) {
-  indent = indent || 0;
-  var pad = '';
-  for (var i = 0; i < indent; i++) pad += ' ';
-  var pad2 = pad + '  ';
-  if (val === null) return 'null';
-  if (typeof val === 'number') return String(val);
-  if (typeof val === 'boolean') return val ? 'true' : 'false';
-  if (typeof val === 'string') return JSON.stringify(val);
-  if (Array.isArray(val)) {
-    var arrParts = val.map(function(item) { return formatConfigValue(item, indent + 2); });
-    return '[' + arrParts.join(', ') + ']';
-  }
-  if (typeof val === 'object') {
-    var keys = Object.keys(val);
-    var lines = keys.map(function(k) {
-      var kStr = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : JSON.stringify(k);
-      return pad2 + kStr + ': ' + formatConfigValue(val[k], indent + 2);
-    });
-    return '{\n' + lines.join(',\n') + '\n' + pad + '}';
-  }
-  return 'undefined';
-}
-
-// Full config as script-style block (content only, no outer braces) for pasting between // @CONFIG_START and // @CONFIG_END.
-function getFullConfigString(config) {
-  try {
-    var lines = [];
-    var keys = Object.keys(config);
-    keys.forEach(function(key) {
-      var keyStr = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
-      lines.push('  ' + keyStr + ': ' + formatConfigValue(config[key], 2));
-    });
-    return lines.join(',\n');
-  } catch (e) {
-    return 'config (serialization failed)';
-  }
-}
-
-// Build scaling/rounding label for overview frame names (e.g. "linear, in | 2/4")
-function getScalingRoundingLabel(config) {
-  var type = (config.scaling && config.scaling.type) ? config.scaling.type : 'linear';
-  var ease = (config.scaling && config.scaling.ease) ? config.scaling.ease : 'none';
-  var lower = config.roundLowerValuesTo;
-  var upper = config.roundUpperValuesTo;
-  var lowerStr = (lower === undefined || lower === null) ? '0' : String(lower);
-  var upperStr = (upper === undefined || upper === null) ? '0' : String(upper);
-  return type + ', ' + ease + ' | ' + lowerStr + '/' + upperStr;
-}
-
 // Full description for style info: scaling (type + ease or exponents) and rounding.
 function getStyleDescription(config) {
   var scaling = config.scaling || {};
@@ -852,126 +801,36 @@ function getStyleDescription(config) {
   return scalingPart + ' | Rounding: ' + lowerStr + '/' + upperStr;
 }
 
-// Create overview frames: one row per scale; each row = vertical stack of weights (same folder), no gap. Scaling/rounding in frame name.
-function createOverviewFrames(config, collection) {
-  var collectionName = resolveCollectionName(config);
-  var prefix = variableNamePrefix(resolveGroup(config));
-  var viewportNames = Object.keys(config.config.fontSizes);
-  var fontFamily = config.config.fontFamily;
-  var styleNaming = getFigmaStyles(config.config).styleNaming || '{$fontScale}/{$fontWeight}';
-  var weightNames = Object.keys(config.config.fontWeights);
-  var scalingRoundingLabel = getScalingRoundingLabel(config.config);
-
-  var fontLoads = weightNames.map(function(weightName) {
-    var weightValue = config.config.fontWeights[weightName];
-    var styleName = typeof weightValue === 'number'
-      ? fontWeightToStyleName(weightValue)
-      : String(weightValue);
-    return figma.loadFontAsync({ family: fontFamily, style: styleName });
-  });
-
-  return Promise.all(fontLoads.concat([figma.getLocalTextStylesAsync()])).then(function(results) {
-    var existingStyles = results[results.length - 1];
-    var parentFrame = figma.createFrame();
-    parentFrame.name = 'Typography Overview - ' + collectionName + ' (' + scalingRoundingLabel + ')';
-    parentFrame.layoutMode = 'HORIZONTAL';
-    parentFrame.primaryAxisSizingMode = 'AUTO';
-    parentFrame.counterAxisSizingMode = 'AUTO';
-    parentFrame.itemSpacing = 100;
-    parentFrame.paddingLeft = 24;
-    parentFrame.paddingRight = 24;
-    parentFrame.paddingTop = 24;
-    parentFrame.paddingBottom = 24;
-
-    viewportNames.forEach(function(viewport) {
-      var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
-      var viewportFrame = figma.createFrame();
-      viewportFrame.name = viewportKey + ' (' + scalingRoundingLabel + ')';
-      viewportFrame.layoutMode = 'VERTICAL';
-      viewportFrame.primaryAxisSizingMode = 'AUTO';
-      viewportFrame.counterAxisSizingMode = 'AUTO';
-      viewportFrame.itemSpacing = 12;
-      viewportFrame.paddingLeft = 16;
-      viewportFrame.paddingRight = 16;
-      viewportFrame.paddingTop = 16;
-      viewportFrame.paddingBottom = 16;
-
-      var titleText = figma.createText();
-      titleText.characters = viewportKey;
-      titleText.fontName = { family: fontFamily, style: 'Regular' };
-      titleText.fontSize = 20;
-      titleText.fills = [{ type: 'SOLID', color: { r: 0.2, g: 0.2, b: 0.2 } }];
-      viewportFrame.appendChild(titleText);
-
-      var configInfoText = figma.createText();
-      configInfoText.characters = getFullConfigString(config.config);
-      configInfoText.fontName = { family: fontFamily, style: 'Regular' };
-      configInfoText.fontSize = 11;
-      configInfoText.fills = [{ type: 'SOLID', color: { r: 0.5, g: 0.5, b: 0.5 } }];
-      viewportFrame.appendChild(configInfoText);
-      configInfoText.textTruncation = 'ENDING';
-      configInfoText.maxLines = 1;
-      configInfoText.maxWidth = 420;
-
-      config.config.fontScale.forEach(function(scaleName) {
-        var fontSizeVar = config.variables[prefix + scaleName + '/font-size'];
-        if (!fontSizeVar || !fontSizeVar.values[viewportKey]) return;
-        var fontSize = fontSizeVar.values[viewportKey];
-        var rowFrame = figma.createFrame();
-        rowFrame.name = scaleName;
-        rowFrame.layoutMode = 'VERTICAL';
-        rowFrame.primaryAxisSizingMode = 'AUTO';
-        rowFrame.counterAxisSizingMode = 'AUTO';
-        rowFrame.itemSpacing = 0;
-
-        weightNames.forEach(function(weightName) {
-          var styleName = resolveStyleName(styleNaming, scaleName, weightName);
-          var style = existingStyles.find(function(s) { return s.name === styleName; });
-          if (!style) return;
-          var cell = figma.createText();
-          cell.characters = scaleName + ' ' + fontSize;
-          cell.textStyleId = style.id;
-          cell.fills = [{ type: 'SOLID', color: { r: 0.1, g: 0.1, b: 0.1 } }];
-          rowFrame.appendChild(cell);
-        });
-
-        if (rowFrame.children.length > 0) {
-          viewportFrame.appendChild(rowFrame);
-        }
-      });
-
-      // Apply this viewport's variable mode to the frame so variables resolve to Desktop/Tablet/Mobile
-      var mode = collection.modes.find(function(m) { return m.name === viewportKey; });
-      if (mode && typeof viewportFrame.setExplicitVariableModeForCollection === 'function') {
-        viewportFrame.setExplicitVariableModeForCollection(collection, mode.modeId);
-      }
-
-      parentFrame.appendChild(viewportFrame);
-    });
-
-    figma.currentPage.appendChild(parentFrame);
-    figma.viewport.scrollAndZoomIntoView([parentFrame]);
-    return parentFrame;
-  }).catch(function(err) {
-    console.warn('Could not create typography overview (font load failed):', err.message);
-    return null;
-  });
-}
-
 // ========================================
 // EXECUTION
 // ========================================
 
-createOrUpdateCollection(typographyConfig).then(function(result) {
-  var message = '✅ Typography: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' updated';
-  if (result.styleStats && (result.styleStats.created > 0 || result.styleStats.updated > 0)) {
-    message += ', ' + result.styleStats.created + ' styles created, ' + result.styleStats.updated + ' styles updated';
-  }
-  figma.notify(message);
-}).catch(function(error) {
-  console.error('Error:', error);
-  figma.notify('❌ Error: ' + error.message);
-});
+createOrUpdateCollection(typographyConfig)
+  .then(async function (result) {
+    var data = typographyConfig.config || typographyConfigData;
+    var showOverview = resolveTypographyGenerateOverview(typographyConfig);
+    if (showOverview) {
+      await foundationCreateTypographyTextStylesOverview({
+        groupPrefix: resolveGroup(typographyConfigData),
+        styleNameNeedle:
+          typeof data.overviewStyleFilter === 'string' ? data.overviewStyleFilter : '',
+        previewText: typeof data.overviewPreviewText === 'string' ? data.overviewPreviewText : ''
+      });
+    }
+    var message =
+      'Typography: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' updated';
+    if (result.styleStats && (result.styleStats.created > 0 || result.styleStats.updated > 0)) {
+      message += ', ' + result.styleStats.created + ' styles created, ' + result.styleStats.updated + ' styles updated';
+    }
+    if (showOverview) {
+      message += '; overview frame';
+    }
+    figma.notify(message);
+  })
+  .catch(function (error) {
+    console.error('Error:', error);
+    figma.notify('Error: ' + error.message);
+  });
 
 // ========================================
 // SIMPLE API FOR CUSTOM CONFIGURATIONS
@@ -1022,11 +881,11 @@ async function createTypographySystem(customConfig) {
     setupModes(collection, modes);
     var result = await processVariables(collection, typographyVariables, null, modes);
     
-    figma.notify('✅ Typography system created: ' + result.created + ' variables created!');
+    figma.notify('Typography system created: ' + result.created + ' variables created!');
     return result;
     
   } catch (error) {
-    figma.notify('❌ Error: ' + error.message);
+    figma.notify('Error: ' + error.message);
     throw error;
   }
 }

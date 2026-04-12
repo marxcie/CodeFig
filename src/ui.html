@@ -2464,6 +2464,62 @@
         }
       }
 
+      let structureSyncTimeout = null;
+
+      function scheduleStructureSync() {
+        if (structureSyncTimeout) clearTimeout(structureSyncTimeout);
+        structureSyncTimeout = setTimeout(function () {
+          structureSyncTimeout = null;
+          syncScriptStructureFromEditor();
+        }, 320);
+      }
+
+      /** Re-parse the main editor and refresh docs/config tabs when @DOC_ / @CONFIG_ / @UI_CONFIG_ markers are added or removed (no script re-select needed). */
+      function syncScriptStructureFromEditor() {
+        if (!code || typeof code.getValue !== 'function') return;
+
+        const hadDocs = scriptHasDocs;
+        const hadConfig = scriptHasConfig;
+        const hadUI = scriptHasUIConfig;
+
+        const fullCode = getFullCode();
+        const next = parseScriptSections(fullCode);
+        const nextHasDocs = next.hasDocs;
+        const nextHasConfig = next.hasConfig;
+        const nextHasUI = !!next.hasUIConfig;
+
+        const structureChanged =
+          hadDocs !== nextHasDocs || hadConfig !== nextHasConfig || hadUI !== nextHasUI;
+
+        parsedSections = next;
+        scriptHasDocs = nextHasDocs;
+        scriptHasConfig = nextHasConfig;
+        scriptHasUIConfig = nextHasUI;
+
+        const tabs = [];
+        if (nextHasDocs) tabs.push('docs');
+        if (nextHasConfig) tabs.push('config');
+        tabs.push('script');
+        updateTabVisibility(tabs);
+
+        if (structureChanged && nextHasDocs && docsRendererEl) {
+          renderSimpleMarkdown(next.docContent || '');
+        }
+
+        if (structureChanged && nextHasConfig && configEditor && !nextHasUI) {
+          configEditor.setValue(next.configContent || '');
+        }
+
+        if (structureChanged && nextHasUI && currentTab === 'config') {
+          initConfigUI(next.configContent || '');
+        }
+
+        if (currentTab === 'docs' && !nextHasDocs) switchTab('script');
+        else if (currentTab === 'config' && !nextHasConfig) switchTab('script');
+
+        updateButtonStates();
+      }
+
       function renderSimpleMarkdown(text) {
         if (!text || !docsRendererEl) return;
         if (typeof window.marked !== 'undefined') {
@@ -3770,12 +3826,12 @@
         if (sourceScript) {
           console.log('🔗 Runtime import: ' + functionNames.join(', ') + ' from ' + sourceScript.name);
           
-          // Unescape the source code (convert \n to actual newlines, etc.)
-          const unescapedCode = sourceScript.code.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-          
+          // Use library source as-is. Do NOT run global .replace(/\\n/g, '\n') here: it corrupts valid
+          // code such as .split("\\r\\n") by turning the \\n inside string literals into real newlines.
+          const sourceForExtract = sourceScript.code;
           
           // Extract and inject the needed functions
-          const extractedFunctions = extractFunctionsFromCode(unescapedCode, functionNames);
+          const extractedFunctions = extractFunctionsFromCode(sourceForExtract, functionNames);
           
           // Replace the @import statement with the extracted functions
           const injectedCode = '// Runtime imported from: ' + sourceScript.name + '\n' + 
@@ -3788,6 +3844,80 @@
           // Remove the failed import statement
           return code.replace(importStatement, '// Import failed: ' + scriptName + ' not found');
         }
+      }
+      
+      // Skip "..." and '...' (handles escapes). Returns index after closing quote.
+      function skipQuotedString(sourceCode, openQuoteIndex) {
+        const quote = sourceCode[openQuoteIndex];
+        let i = openQuoteIndex + 1;
+        while (i < sourceCode.length) {
+          const c = sourceCode[i];
+          if (c === '\\') {
+            i += 2;
+            continue;
+          }
+          if (c === quote) return i + 1;
+          i++;
+        }
+        return sourceCode.length;
+      }
+      // Skip `...` including ${ ... } expressions (uses findMatchingBraceEndIndex for nested braces).
+      function skipTemplateLiteral(sourceCode, backtickIndex) {
+        let i = backtickIndex + 1;
+        while (i < sourceCode.length) {
+          const c = sourceCode[i];
+          if (c === '\\') {
+            i += 2;
+            continue;
+          }
+          if (c === '`') return i + 1;
+          if (c === '$' && sourceCode[i + 1] === '{') {
+            const close = findMatchingBraceEndIndex(sourceCode, i + 1);
+            if (close < 0) return sourceCode.length;
+            i = close + 1;
+            continue;
+          }
+          i++;
+        }
+        return sourceCode.length;
+      }
+      /** Index of `}` matching `{` at openBraceIndex; -1 if unbalanced. Skips strings, line/block comments, template literals. */
+      function findMatchingBraceEndIndex(sourceCode, openBraceIndex) {
+        if (sourceCode[openBraceIndex] !== '{') return -1;
+        let i = openBraceIndex + 1;
+        let depth = 1;
+        while (i < sourceCode.length && depth > 0) {
+          const c = sourceCode[i];
+          if (c === '/' && sourceCode[i + 1] === '/') {
+            i += 2;
+            while (i < sourceCode.length && sourceCode[i] !== '\n' && sourceCode[i] !== '\r') i++;
+            continue;
+          }
+          if (c === '/' && sourceCode[i + 1] === '*') {
+            i += 2;
+            while (i < sourceCode.length - 1) {
+              if (sourceCode[i] === '*' && sourceCode[i + 1] === '/') {
+                i += 2;
+                break;
+              }
+              i++;
+            }
+            continue;
+          }
+          if (c === '"' || c === "'") {
+            i = skipQuotedString(sourceCode, i);
+            continue;
+          }
+          if (c === '`') {
+            i = skipTemplateLiteral(sourceCode, i);
+            continue;
+          }
+          if (c === '{') depth++;
+          else if (c === '}') depth--;
+          i++;
+        }
+        if (depth !== 0) return -1;
+        return i - 1;
       }
       
       // Extract specific functions from code with recursive dependency extraction
@@ -3832,19 +3962,11 @@
             }
             
             if (braceIndex < sourceCode.length && sourceCode[braceIndex] === '{') {
-              // Now find the matching closing brace
-              let braceCount = 1;
-              let endIndex = braceIndex + 1;
-              
-              while (endIndex < sourceCode.length && braceCount > 0) {
-                if (sourceCode[endIndex] === '{') braceCount++;
-                else if (sourceCode[endIndex] === '}') braceCount--;
-                endIndex++;
-              }
-              
-              if (braceCount === 0) {
+              const closingBraceIndex = findMatchingBraceEndIndex(sourceCode, braceIndex);
+              if (closingBraceIndex >= 0) {
+                const endIndex = closingBraceIndex + 1;
                 const functionCode = sourceCode.substring(startIndex, endIndex);
-                const functionBody = sourceCode.substring(braceIndex + 1, endIndex - 1);
+                const functionBody = sourceCode.substring(braceIndex + 1, closingBraceIndex);
                 
                 // Mark as extracted
                 extractedSet.add(functionName);
@@ -4396,6 +4518,7 @@
                 if (allScripts.some(s => s.name === newName && s !== currentScript)) {
                   post('NOTIFY', { message: 'A script with that name already exists' });
                   scriptTitle.textContent = originalText;
+                  syncScriptStructureFromEditor();
                   return;
                 }
                 
@@ -4419,6 +4542,7 @@
             } else {
               scriptTitle.textContent = originalText;
             }
+            syncScriptStructureFromEditor();
           }
           
           scriptTitle.addEventListener('blur', () => finishEditing(true), { once: true });
@@ -4489,6 +4613,7 @@
         debugLog('Code change detected');
         updateButtonStates();
         scheduleAutosave();
+        scheduleStructureSync();
         
         // Check if @InfoPanel is now being used
         const currentCode = code.getValue();
@@ -4497,6 +4622,14 @@
           infoPanelAvailable = newInfoPanelAvailable;
           updateInfoPanelButtonVisibility();
         }
+      });
+
+      code.on('blur', function () {
+        if (structureSyncTimeout) {
+          clearTimeout(structureSyncTimeout);
+          structureSyncTimeout = null;
+        }
+        syncScriptStructureFromEditor();
       });
 
       // Config editor change (when script has config tab)
@@ -4561,18 +4694,24 @@
               const scriptCode = msg.scriptData.code || (currentScript && currentScript.code) || getFullCode() || '';
               
               const derivedType = (msg.scriptData.name && String(msg.scriptData.name).startsWith('@')) ? 'library' : (msg.scriptData.type || 'user');
-              const existingIndex = allScripts.findIndex(s => s.name === msg.scriptData.name && (s.type === 'user' || s.type === 'library'));
+              const confirmedName = msg.scriptData.name;
+              const existingIndex = allScripts.findIndex(s => s.name === confirmedName && (s.type === 'user' || s.type === 'library'));
               if (existingIndex >= 0) {
-                // Update existing script
-                allScripts[existingIndex] = {
-                  name: msg.scriptData.name,
-                  code: scriptCode,
-                  type: derivedType
-                };
+                // Mutate in place so currentScript stays the same reference as allScripts[i] after renames/saves
+                const target = allScripts[existingIndex];
+                target.name = confirmedName;
+                target.code = scriptCode;
+                target.type = derivedType;
               } else {
-                // Add new script
+                // Late SAVE_CONFIRMED for a filename we already renamed away (autosave vs inline title edit race).
+                // Pushing would duplicate the script (e.g. "Untitled" + new name) and break the sidebar.
+                if (currentScript && (currentScript.type === 'user' || currentScript.type === 'library') &&
+                    confirmedName !== currentScript.name) {
+                  debugLog('SAVE_CONFIRMED ignored (stale name vs current script):', confirmedName, 'current:', currentScript.name);
+                  break;
+                }
                 allScripts.push({
-                  name: msg.scriptData.name,
+                  name: confirmedName,
                   code: scriptCode,
                   type: derivedType
                 });

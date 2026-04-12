@@ -24,7 +24,13 @@
  */
 function normalizeVariableName(name) {
   if (typeof name !== 'string') return name;
-  return name.replace(/\/+/g, '/').replace(/^\//, '').replace(/\/$/, '');
+  var s = name;
+  while (s.indexOf("//") !== -1) {
+    s = s.split("//").join("/");
+  }
+  if (s.charAt(0) === "/") s = s.slice(1);
+  if (s.length > 0 && s.charAt(s.length - 1) === "/") s = s.slice(0, -1);
+  return s;
 }
 
 /**
