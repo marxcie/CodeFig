@@ -355,6 +355,59 @@ figma.ui.onmessage = (msg) => {
       });
     }
 
+    if (msg.type === 'SAVE_BATCH') {
+      const rawItems = Array.isArray((msg as { scripts?: unknown }).scripts)
+        ? (msg as { scripts: any[] }).scripts
+        : [];
+      const normalized: { name: string; code: string; type: string }[] = [];
+      for (const item of rawItems) {
+        if (!item || typeof item.name !== 'string' || item.code === undefined || item.code === null) {
+          continue;
+        }
+        const name = String(item.name).trim();
+        if (!name) continue;
+        const code = typeof item.code === 'string' ? item.code : String(item.code);
+        const isAtLib = name.startsWith('@');
+        const type =
+          isAtLib ? 'library' : item.type === 'library' ? 'library' : 'user';
+        normalized.push({ name, code, type });
+      }
+      if (normalized.length === 0) {
+        figma.ui.postMessage({
+          type: 'BATCH_SAVE_FAILED',
+          error: 'No valid scripts'
+        });
+        return;
+      }
+      figma.clientStorage
+        .getAsync('userScripts')
+        .then((scripts) => {
+          const userScripts = (scripts || []).slice();
+          for (const scriptData of normalized) {
+            const existingIndex = userScripts.findIndex((s: any) => s.name === scriptData.name);
+            if (existingIndex >= 0) {
+              userScripts[existingIndex] = scriptData;
+            } else {
+              userScripts.push(scriptData);
+            }
+          }
+          return figma.clientStorage.setAsync('userScripts', userScripts).then(() => {
+            figma.ui.postMessage({
+              type: 'BATCH_SAVE_CONFIRMED',
+              scripts: normalized
+            });
+          });
+        })
+        .catch((error) => {
+          debugError('BATCH_SAVE failed:', error);
+          figma.ui.postMessage({
+            type: 'BATCH_SAVE_FAILED',
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      return;
+    }
+
   if (msg.type === 'DELETE') {
     // Delete a script
     figma.clientStorage.getAsync('userScripts').then((scripts) => {

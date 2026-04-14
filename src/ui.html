@@ -1772,7 +1772,7 @@
         <div class="sidebar" id="sidebar">
           <div class="sidebar-header">
             <div class="search-container">
-              <input type="text" id="searchInput" class="search-input" placeholder="Search..." title="Search Scripts (⌘/)">
+              <input type="text" id="searchInput" class="search-input" placeholder="Search..." title="Search scripts (⌘/)">
             </div>
           </div>
           <div class="script-list" id="scriptList">
@@ -1800,8 +1800,8 @@
                 </button>
               </div>
               <div class="action-buttons">
-                <button class="btn danger" id="deleteBtn" disabled title="Delete Script">Delete</button>
-                <button class="btn primary" id="runBtn" title="Run Script (⌘R)">Run</button>
+                <button class="btn danger" id="deleteBtn" disabled title="Delete script">Delete</button>
+                <button class="btn primary" id="runBtn" title="Run script (⌘R)">Run</button>
               </div>
             </div>
           </div>
@@ -1859,15 +1859,15 @@
       <!-- Footer outside main container for full width -->
       <div class="plugin-footer">
         <div class="footer-left">
-          <button class="btn secondary" id="newScript" title="Create New Script (⌘N)">New Script</button>
+          <button class="btn secondary" id="newScript" title="Create new script (⌘N)">New script</button>
           <button type="button" class="bmc-btn" id="buyMeACoffeeBtn" title="Support CodeFig on Buy Me a Coffee (opens in browser)" aria-label="Buy me a coffee">
             <!-- INLINE_BMC_SVG -->
           </button>
         </div>
         <div class="footer-right">
-          <button class="btn secondary" id="exportBtn" title="Export Current Script (⌘E)">Export Script</button>
-          <button class="btn secondary" id="exportAllBtn" title="Export All User Scripts">Export All User Scripts</button>
-          <button class="btn secondary" id="importBtn" title="Import Script (⌘I)">Import Script</button>
+          <button class="btn secondary" id="exportBtn" title="Export current script (⌘E)">Export script</button>
+          <button class="btn secondary" id="exportAllBtn" title="Export all user scripts">Export all user scripts</button>
+          <button class="btn secondary" id="importBtn" title="Import script (⌘I)">Import script</button>
         </div>
       </div>
     </div>
@@ -2113,6 +2113,7 @@
       let startX, startWidth; // Global scope for resizing
       let autosaveTimeout = null; // For debounced autosave
       let collapsedSections = new Set(); // Track collapsed sections
+      let pendingBatchImportSummary = null; // { skipped, invalid } for import batch notifications
       
       // Window resizing state
       let isWindowResizing = false;
@@ -2945,7 +2946,7 @@
 
         // Run button: enabled if there's content and not a library (libraries are imported, not run)
         runBtn.disabled = !hasContent || isLibrary;
-        runBtn.title = isLibrary ? 'Libraries are imported, not run directly.' : 'Run Script (⌘R)';
+        runBtn.title = isLibrary ? 'Libraries are imported, not run directly.' : 'Run script (⌘R)';
 
         // Delete button: enabled for user scripts and libraries that aren't empty temporary scripts
         deleteBtn.disabled = isEmptyTemporary || !currentScript || (currentScript.type !== 'user' && currentScript.type !== 'library');
@@ -4072,7 +4073,20 @@
         post('NOTIFY', { message: `Exported: ${currentScript.name}` });
       }
 
-      // Import script
+      function normalizeImportedScriptEntry(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        const name = raw.name != null ? String(raw.name).trim() : '';
+        if (!name || raw.code === undefined || raw.code === null) return null;
+        const code = typeof raw.code === 'string' ? raw.code : String(raw.code);
+        const isAtLib = name.startsWith('@');
+        let type = isAtLib ? 'library' : 'user';
+        if (raw.type === 'library' || raw.type === 'user') {
+          type = isAtLib ? 'library' : raw.type;
+        }
+        return { name, code, type };
+      }
+
+      // Import script (single object or array from "export all user scripts")
       function importScript() {
         const input = document.createElement('input');
         input.type = 'file';
@@ -4081,41 +4095,56 @@
           const file = e.target.files[0];
           if (file) {
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = (ev) => {
               try {
-                const scriptData = JSON.parse(e.target.result);
-                
-                // Validate script data
-                if (!scriptData.name || !scriptData.code) {
+                const parsed = JSON.parse(ev.target.result);
+                let items = [];
+                if (Array.isArray(parsed)) {
+                  items = parsed;
+                } else if (parsed && typeof parsed === 'object' && parsed.name && parsed.code !== undefined) {
+                  items = [parsed];
+                } else {
                   post('NOTIFY', { message: 'Invalid script file format' });
                   return;
                 }
-                
-                // Check for duplicates
-                if (allScripts.some(s => s.name === scriptData.name)) {
-                  post('NOTIFY', { message: 'A script with that name already exists' });
+                const normalized = [];
+                const seenNames = new Set();
+                let invalidCount = 0;
+                for (const raw of items) {
+                  const n = normalizeImportedScriptEntry(raw);
+                  if (!n) {
+                    invalidCount++;
+                    continue;
+                  }
+                  if (seenNames.has(n.name)) continue;
+                  seenNames.add(n.name);
+                  normalized.push(n);
+                }
+                const toAdd = [];
+                let skippedDup = 0;
+                for (const n of normalized) {
+                  if (allScripts.some(s => s.name === n.name)) {
+                    skippedDup++;
+                  } else {
+                    toAdd.push(n);
+                  }
+                }
+                if (toAdd.length === 0) {
+                  let msg = 'No scripts were imported';
+                  if (skippedDup > 0 && invalidCount === 0) {
+                    msg = skippedDup === 1
+                      ? 'A script with that name already exists'
+                      : `All ${skippedDup} scripts already exist`;
+                  } else if (invalidCount > 0 && normalized.length === 0) {
+                    msg = 'Invalid script file format';
+                  } else if (invalidCount > 0) {
+                    msg = 'No scripts were imported (invalid entries)';
+                  }
+                  post('NOTIFY', { message: msg });
                   return;
                 }
-                
-                // Add to scripts (derive type from name: @ prefix = library)
-                const isLibrary = scriptData.name && String(scriptData.name).startsWith('@');
-                const newScript = {
-                  name: scriptData.name,
-                  code: scriptData.code,
-                  type: isLibrary ? 'library' : 'user'
-                };
-                
-                allScripts.push(newScript);
-                userScripts.push(newScript);
-                
-                // Save to storage
-                post('SAVE', newScript);
-                
-                // Select the imported script
-                selectScriptDirectly(newScript);
-                updateScriptList(searchInput.value);
-                
-                post('NOTIFY', { message: `Imported: ${scriptData.name}` });
+                pendingBatchImportSummary = { skipped: skippedDup, invalid: invalidCount };
+                post('SAVE_BATCH', { scripts: toAdd });
               } catch (error) {
                 post('NOTIFY', { message: 'Error reading script file' });
               }
@@ -4720,6 +4749,55 @@
               userScripts = allScripts.filter(s => s.type === 'user' || s.type === 'library');
               debugLog('Script added to allScripts for immediate import availability:', msg.scriptData.name);
             }
+            break;
+
+          case 'BATCH_SAVE_CONFIRMED':
+            {
+              const list = msg.scripts || [];
+              for (const scriptData of list) {
+                const derivedType = (scriptData.name && String(scriptData.name).startsWith('@'))
+                  ? 'library'
+                  : (scriptData.type === 'library' ? 'library' : 'user');
+                const existingIndex = allScripts.findIndex(
+                  s => s.name === scriptData.name && (s.type === 'user' || s.type === 'library')
+                );
+                if (existingIndex >= 0) {
+                  const target = allScripts[existingIndex];
+                  target.name = scriptData.name;
+                  target.code = scriptData.code;
+                  target.type = derivedType;
+                } else {
+                  allScripts.push({
+                    name: scriptData.name,
+                    code: scriptData.code,
+                    type: derivedType
+                  });
+                }
+              }
+              userScripts = allScripts.filter(s => s.type === 'user' || s.type === 'library');
+              updateScriptList(searchInput.value);
+              if (list.length) {
+                const last = list[list.length - 1];
+                const sel = allScripts.find(
+                  s => s.name === last.name && (s.type === 'user' || s.type === 'library')
+                );
+                if (sel) selectScriptDirectly(sel);
+              }
+              const summary = pendingBatchImportSummary;
+              pendingBatchImportSummary = null;
+              const n = list.length;
+              let message = n === 1 ? `Imported: ${list[0].name}` : `Imported ${n} scripts`;
+              const parts = [];
+              if (summary && summary.skipped) parts.push(`${summary.skipped} already existed`);
+              if (summary && summary.invalid) parts.push(`${summary.invalid} invalid`);
+              if (parts.length) message += ' · ' + parts.join(', ');
+              post('NOTIFY', { message });
+            }
+            break;
+
+          case 'BATCH_SAVE_FAILED':
+            pendingBatchImportSummary = null;
+            post('NOTIFY', { message: msg.error ? `Import failed: ${msg.error}` : 'Import failed' });
             break;
             
           case 'SAVE_FAILED':
