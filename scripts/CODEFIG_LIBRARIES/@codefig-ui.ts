@@ -19,7 +19,11 @@
 // - **Select** (dropdown) – choice from a list of options. **Builder API:** section().select(name, value, options, opts?). In the **@UI_CONFIG block**, add `// @options:` on the var line (see **Dropdown** and **Dropdown options** below).
 // - **Radio** – single choice from options shown as radio buttons (use when all options should be visible). **Builder API:** section().radio(name, value, options, opts?). In the **@UI_CONFIG block**, add `// @options: a|b|c @radio` on the var line.
 //
-// **Conditional visibility (`@showWhen`):** Add `@showWhen: fieldName=value1|value2` so a field is only shown when the controlling field has one of the listed values. Use for parameters that depend on a previous choice (e.g. show `scaledFactor` only when `scaleMode=uniform`).
+// **Conditional visibility (`@showWhen`):** Add `@showWhen: fieldName=value1|value2` so a field is only shown when the controlling field has one of the listed values. Use for parameters that depend on a previous choice (e.g. show `scaledFactor` only when `scaleMode=uniform`). **Multiple `@showWhen` on the same line are combined with AND** (all must match).
+//
+// **Section headings:** On the same line as `// ## Title`, append `@showWhen: fieldName=value1|value2` to hide that heading (and use the same pattern in the Config tab as for fields).
+//
+// **Combine with `@options`:** On one line, list `@options: a|b|c` first, then `@radio` if needed, then `@showWhen: …`. The parser stops the option list at the next `@` so `@radio` / `@showWhen` are not swallowed into the dropdown options.
 //
 // **In the @UI_CONFIG block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string → text. For a **dropdown**, use `// @options: <value>` (static list or dynamic source). For **radio buttons**, use `// @options: a|b|c @radio`. For **conditional visibility** use `// @showWhen: fieldName=val1|val2`. The variable value is always a string; in script/code mode it is edited as text.
 //
