@@ -52,7 +52,7 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 
 ## Quick Start
 
-1. Install from the Figma Community, or download the [**latest build**](https://github.com/marxcie/codefig/releases/latest/download/codefig-plugin.zip) directly from GitHub.
+1. Install from the Figma Community, or open the [**latest GitHub release**](https://github.com/marxcie/codefig/releases/latest) and download **`codefig-vX.Y.Z-plugin.zip`** (the version in the filename matches the release tag, e.g. `codefig-v1.0.5-plugin.zip`).
 2. Open the plugin in any Figma file.
 3. Browse the bundled scripts in the sidebar.
 4. Run a script with the Run button or `Cmd/Ctrl + R`.
@@ -61,11 +61,9 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 
 ## Installing from GitHub
 
-**Stable link:** Download [**codefig-plugin.zip**](https://github.com/marxcie/codefig/releases/latest/download/codefig-plugin.zip), unzip it, then in Figma go to **Plugins → Development → Import plugin from manifest…** and select the **`manifest.json`** at the top of the unzipped folder (next to the `dist/` folder).
+On each [release](https://github.com/marxcie/codefig/releases), download **`codefig-vX.Y.Z-plugin.zip`** (same version as the tag, e.g. v1.0.5 → `codefig-v1.0.5-plugin.zip`). Unzip it, then in Figma go to **Plugins → Development → Import plugin from manifest…** and select the **`manifest.json`** at the top of the unzipped folder (next to the `dist/` folder).
 
-That `manifest.json` is the plugin manifest at the repo root. Running `npm run build:production` updates it in place with production network settings and fills `dist/` — it does not emit a second manifest or a zip.
-
-Older releases also include a versioned file: `codefig-vX.Y.Z-plugin.zip`. See [all releases](https://github.com/marxcie/codefig/releases).
+That `manifest.json` is the plugin manifest at the repo root. Running `npm run build:production` updates it in place with production network settings and fills `dist/` — it does not emit a second manifest or a zip. There is no separate “latest.zip” filename; pick the versioned asset on the release you want.
 
 ### Shipping a new release (for maintainers)
 
@@ -86,7 +84,7 @@ Additional flags:
 - `--push` — also pushes the branch and tag, which starts CI on GitHub
 - `--dry-run` — build and pack only, no version bump or tag
 
-**You do not commit or push the zip.** `codefig-plugin.zip` and `dist/` are gitignored. When you push the tag, GitHub Actions builds the same zip from the committed tree and attaches it to the release.
+**You do not commit or push the zip.** Local `npm run pack` writes `codefig-plugin.zip` at the repo root (gitignored), only for convenience. `dist/` is gitignored. When you push the tag, GitHub Actions builds **`codefig-vX.Y.Z-plugin.zip`** from the committed tree and attaches it to the release.
 
 ### Selective commits before a release
 

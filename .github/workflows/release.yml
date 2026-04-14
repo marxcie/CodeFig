@@ -29,17 +29,11 @@ jobs:
       - name: Production build
         run: npm run build:production
 
-      # Versioned name for archives; fixed name so this URL always points at the latest build:
-      # https://github.com/marxcie/codefig/releases/latest/download/codefig-plugin.zip
-      - name: Create plugin zips
-        run: |
-          zip -r "codefig-${{ github.ref_name }}-plugin.zip" manifest.json dist/
-          cp "codefig-${{ github.ref_name }}-plugin.zip" codefig-plugin.zip
+      - name: Create plugin zip
+        run: zip -r "codefig-${{ github.ref_name }}-plugin.zip" manifest.json dist/
 
-      - name: Upload release assets
+      - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            codefig-${{ github.ref_name }}-plugin.zip
-            codefig-plugin.zip
+          files: codefig-${{ github.ref_name }}-plugin.zip
           generate_release_notes: true

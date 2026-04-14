@@ -184,7 +184,7 @@ Options:
   }
 
   console.log(
-    `\n✅ Release ${tag} pushed. GitHub Actions will attach codefig-plugin.zip to the release.\n` +
+    `\n✅ Release ${tag} pushed. GitHub Actions will attach codefig-${tag}-plugin.zip to the release.\n` +
       `   https://github.com/marxcie/codefig/releases/tag/${tag}\n`
   );
 }
