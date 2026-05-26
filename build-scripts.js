@@ -46,8 +46,16 @@ function writeManifest() {
   }
 }
 
-// No-op: CodeFigUI lib (@codefig-ui.ts) is copied with other scripts by copyScripts()
-function copyConfigUILib() {}
+function bundleConfigUI() {
+  const buildConfigUiPath = path.join(__dirname, "build-config-ui.js");
+  if (!fs.existsSync(buildConfigUiPath)) return;
+  require(buildConfigUiPath);
+}
+
+// CodeFigUI config block parser/renderer is bundled into src/ui.html via build-config-ui.js
+function copyConfigUILib() {
+  bundleConfigUI();
+}
 
 // Check if a file/folder should be excluded
 function shouldExclude(name) {
@@ -237,9 +245,10 @@ function updateUIHtml() {
   console.log(`✅ dist/ui.html (${scripts.length} scripts, vendors inlined)`);
 }
 
-// Run the build (vendors inlined only into dist, src/ui.html never modified)
+// Run the build (vendors inlined into dist/ui.html from src/ui.html)
 console.log('🔨 Building...' + (isDev ? ' (dev: localhost allowed)' : ' (build: localhost not allowed)'));
 writeManifest();
+bundleConfigUI();
 copyScripts();
 updateUIHtml();
 console.log('✅ Build completed successfully!');

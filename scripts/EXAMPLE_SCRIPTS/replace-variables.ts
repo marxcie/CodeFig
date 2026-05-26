@@ -15,7 +15,8 @@
 // | targetCollection | Look up replacement variable in this collection; empty = same as source, then any. |
 // | searchFor / replaceWith | Find/replace applied to variable path (collection + variable). |
 // | batchReplacement | Multiple "search, replace" lines; overrides searchFor/replaceWith. |
-// | **Replace-all mode** | When source + target are set and search/replace empty: replace all variables from source with same-named vars from target. |
+// | **Replace-all (path)** | When **both** source + target are set and search/replace empty: replace the **source collection name** substring with the **target** in the full path (rename in path, not “same token → lookup by name”). |
+// | **Remap by name (automatic)** | When **target** is set, **source** can be empty (all collections), and search/replace/batch are **empty**—and you are **not** in path replace-all above—bindings are rebound to the variable with the **same name** in the target collection (typical: paste from another file → point at local tokens). Unresolved / missing variable IDs are counted; Figma does not expose names for those, so they cannot be remapped automatically. |
 // @DOC_END
 
 @import { matchPattern } from "@Pattern Matching"
@@ -100,6 +101,25 @@ function parseBatchReplacementString(str) {
     if (search || replace) out.push([search, replace]);
   }
   return out;
+}
+
+function findVariableInTargetByName(variableCache, targetCollectionName, variableName, resolvedType) {
+  var wantName = normalizeVariablePath(variableName);
+  var wantScope = normalizeVariablePath(getScope(targetCollectionName, variableName));
+  var match = null;
+  variableCache.forEach(function(info) {
+    if (info.collectionName !== targetCollectionName) return;
+    if (normalizeVariablePath(info.name) !== wantName) return;
+    if (resolvedType && info.variable && info.variable.resolvedType !== resolvedType) return;
+    match = info;
+  });
+  if (match) return match;
+  variableCache.forEach(function(info) {
+    if (normalizeVariablePath(getScope(info.collectionName, info.name)) !== wantScope) return;
+    if (resolvedType && info.variable && info.variable.resolvedType !== resolvedType) return;
+    match = info;
+  });
+  return match;
 }
 
 function buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal) {
@@ -398,17 +418,24 @@ async function findAndReplaceVariables() {
   var targetCollectionVal = (typeof targetCollection !== 'undefined' && targetCollection != null) ? String(targetCollection).trim() : '';
   
   var replacements = buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal);
-  if (replacements.length === 0) {
-    figma.notify('Configure searchFor/replaceWith, batchReplacement, or source+target collection');
+  /** True when: target set + no path/batch operations (buildReplacements empty). Mutually exclusive with source+target path swap (that always yields a non-empty replacements list). */
+  var remapBySameName = targetCollectionVal.length > 0 && replacements.length === 0;
+  
+  if (!remapBySameName && replacements.length === 0) {
+    figma.notify('Configure search/replace or batch, or set Target collection (all sources → remap by same name), or Source+Target for path rename');
     return;
   }
   
   console.log('=== Replace Variables ===');
   console.log('Source collection:', sourceCollectionVal || '(all)');
   console.log('Target collection:', targetCollectionVal || '(same as source, then any)');
-  console.log('Operations:', replacements.length);
-  for (var i = 0; i < replacements.length; i++) {
-    console.log('  [' + (i + 1) + '] "' + replacements[i].find + '" → "' + replacements[i].replace + '"');
+  if (remapBySameName) {
+    console.log('Mode: remap same variable name → collection:', targetCollectionVal);
+  } else {
+    console.log('Operations:', replacements.length);
+    for (var i = 0; i < replacements.length; i++) {
+      console.log('  [' + (i + 1) + '] "' + replacements[i].find + '" → "' + replacements[i].replace + '"');
+    }
   }
   
   var allNodes = collectAllNodes(selection);
@@ -416,9 +443,23 @@ async function findAndReplaceVariables() {
   
   console.log('Building variable cache (keyed by scope)...');
   var variableCache = new Map();
+  /** Local collection id for target name — two collections can share the same display name (e.g. library "Colors" vs local "Colors"); only same id means already using this file's collection. */
+  var targetLocalCollectionId = null;
   
   try {
     var localCollections = await figma.variables.getLocalVariableCollectionsAsync();
+    if (remapBySameName && targetCollectionVal) {
+      for (var tc = 0; tc < localCollections.length; tc++) {
+        if (localCollections[tc].name === targetCollectionVal) {
+          targetLocalCollectionId = localCollections[tc].id;
+          console.log('Target maps to local collection id:', targetLocalCollectionId);
+          break;
+        }
+      }
+      if (!targetLocalCollectionId) {
+        console.log('⚠️ No local collection named "' + targetCollectionVal + '" — will not skip as "already local"; remap may still match by name in cache');
+      }
+    }
     for (var i = 0; i < localCollections.length; i++) {
       var collection = localCollections[i];
       for (var j = 0; j < collection.variableIds.length; j++) {
@@ -463,6 +504,7 @@ async function findAndReplaceVariables() {
   
   var replacementCount = 0;
   var skippedCount = 0;
+  var orphanUnresolvedCount = 0;
   
   for (var nodeIndex = 0; nodeIndex < allNodes.length; nodeIndex++) {
     var node = allNodes[nodeIndex];
@@ -501,7 +543,9 @@ async function findAndReplaceVariables() {
           }
           
           if (!currentVariable) {
-            console.log('Could not resolve variable:', variableAlias.id || variableAlias.key);
+            console.log('Could not resolve variable (orphan binding—no ID in this file and no usable library key):', variableAlias.id || variableAlias.key || '(none)');
+            orphanUnresolvedCount++;
+            skippedCount++;
             continue;
           }
           
@@ -520,35 +564,49 @@ async function findAndReplaceVariables() {
           
           console.log('Found bound variable:', currentVariable.name, 'from collection:', currentCollectionName);
           
-          // Apply find/replace to full path "collection / variable" so collection names (e.g. v5→v4) work
           var fullPath = getScope(currentCollectionName, currentVariable.name);
           var normalizedFullPath = normalizeVariablePath(fullPath);
           var matchedOperation = null;
           var newFullPath = null;
           
-          for (var opIndex = 0; opIndex < replacements.length; opIndex++) {
-            var operation = replacements[opIndex];
-            var normalizedFind = normalizeVariablePath(operation.find);
-            var normalizedReplace = normalizeVariablePath(operation.replace);
-            if (!normalizedFind && !normalizedReplace) continue;
-            if (normalizedFullPath.indexOf(normalizedFind) === -1) continue;
-            newFullPath = replaceAllInName(normalizedFullPath, normalizedFind, normalizedReplace);
-            if (newFullPath === normalizedFullPath) continue;
-            matchedOperation = operation;
-            break;
-          }
-          
-          if (!matchedOperation || newFullPath == null) {
-            console.log('  No matching operation');
-            continue;
+          if (remapBySameName && targetCollectionVal) {
+            if (targetLocalCollectionId && currentVariable.variableCollectionId === targetLocalCollectionId) {
+              console.log('  Already bound to local target collection (same id), skip');
+              continue;
+            }
+            newFullPath = normalizeVariablePath(getScope(targetCollectionVal, currentVariable.name));
+            matchedOperation = { remapByName: true };
+            console.log('  Remap by name →', newFullPath);
+          } else {
+            for (var opIndex = 0; opIndex < replacements.length; opIndex++) {
+              var operation = replacements[opIndex];
+              var normalizedFind = normalizeVariablePath(operation.find);
+              var normalizedReplace = normalizeVariablePath(operation.replace);
+              if (!normalizedFind && !normalizedReplace) continue;
+              if (normalizedFullPath.indexOf(normalizedFind) === -1) continue;
+              newFullPath = replaceAllInName(normalizedFullPath, normalizedFind, normalizedReplace);
+              if (newFullPath === normalizedFullPath) continue;
+              matchedOperation = operation;
+              break;
+            }
+            
+            if (!matchedOperation || newFullPath == null) {
+              console.log('  No matching operation');
+              continue;
+            }
           }
           
           var parsed = parseFullPath(newFullPath);
           var newCollectionName = parsed.collectionName || currentCollectionName;
           var newVariableName = parsed.variableName || newFullPath;
-          console.log('  Match! Looking for replacement:', newFullPath);
+          if (!remapBySameName) {
+            console.log('  Match! Looking for replacement:', newFullPath);
+          }
           
           var replacementInfo = findReplacementInCache(variableCache, newFullPath, currentCollectionName, targetCollectionVal);
+          if (!replacementInfo && remapBySameName) {
+            replacementInfo = findVariableInTargetByName(variableCache, targetCollectionVal, currentVariable.name, currentVariable.resolvedType);
+          }
           
           if (!replacementInfo) {
             var libVar = await findLibraryVariableByNameAsync(newCollectionName, newVariableName, variableCache, currentVariable.resolvedType);
@@ -696,9 +754,18 @@ async function findAndReplaceVariables() {
   console.log('=== SUMMARY ===');
   console.log('Properties replaced:', replacementCount);
   console.log('Skipped:', skippedCount);
+  if (orphanUnresolvedCount > 0) {
+    console.log('Unresolved / missing variable IDs (cannot remap—no name in API):', orphanUnresolvedCount);
+  }
   
   if (replacementCount > 0) {
-    figma.notify('✅ Replaced ' + replacementCount + ' variable bindings');
+    var sumMsg = '✅ Replaced ' + replacementCount + ' variable bindings';
+    if (orphanUnresolvedCount > 0) {
+      sumMsg += '. ' + orphanUnresolvedCount + ' binding(s) still unresolved (missing ID in this file—names not available to remap)';
+    }
+    figma.notify(sumMsg);
+  } else if (orphanUnresolvedCount > 0) {
+    figma.notify('⚠️ No bindings replaced. ' + orphanUnresolvedCount + ' unresolved (missing variable in this file). Others may be styles, wrong collection, or no matching name in target.');
   } else {
     figma.notify('⚠️ No variables were replaced. Check console for details.');
   }
