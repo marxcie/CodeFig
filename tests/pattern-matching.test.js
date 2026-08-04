@@ -168,6 +168,18 @@ test('a blank find replaces the entire name, like Figma', () => {
   assert.equal(renameByPattern('keep', '', '$&-suffix', 0, 1), 'keep-suffix', '$& is the whole name');
 });
 
+test('a blank find with a blank replacement empties the name — scripts must refuse it', () => {
+  // Not a bug in renameByPattern: blank find means "replace the whole name", and the whole
+  // name replaced by nothing is nothing. It IS a hazard, because an unconfigured form looks
+  // exactly like this, so rename-styles and rename-variables gate on hasRenameOperation()
+  // and additionally skip any rename that would produce an empty name. Pinned here so the
+  // library's behaviour stays predictable and the reason the guard exists stays written down.
+  assert.equal(rename('Text/5xl/Regular', '', ''), '');
+  assert.equal(rename('Text/5xl/Regular', '', 'Icon'), 'Icon', 'a real replacement is fine');
+  assert.equal(rename('Text/5xl/Regular', 'Regular', ''), 'Text/5xl/', 'deleting a substring is fine');
+  assert.equal(rename('Text/5xl/Regular', '*', ''), '', 'a wildcard-everything find can empty it too');
+});
+
 test('a blank pattern is not a filter, but a blank find is not the same as a blank filter', () => {
   assert.equal(nameMatches('anything', ''), true);
   assert.equal(nameMatches('anything', '   '), true, 'whitespace in a filter box means nothing');
@@ -243,6 +255,36 @@ test('wildcards give back the precision that anchoring would have provided', () 
   assert.equal(nameMatches('Color/typography/Accent', 'Typography/*'), true, 'contains, so a nested group hits');
   assert.equal(nameMatches('Color/typography/Accent', 'Color/*/Accent'), true);
   assert.equal(nameMatches('Color/typography/Accent', 'Color/*', { matchCase: true }), true);
+});
+
+// ---------------------------------------------------------------------------
+// 9b. The scripts' own guard against an unconfigured rename
+// ---------------------------------------------------------------------------
+
+test('hasRenameOperation refuses an unconfigured form but allows both real one-sided cases', () => {
+  // Same source text in rename-styles.js and rename-variables.js; extract from one and
+  // assert the other is byte-identical, so they cannot drift apart.
+  const styles = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'rename-styles.js'), 'utf8'
+  );
+  const variables = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'rename-variables.js'), 'utf8'
+  );
+  const fromStyles = resolver.extractFunctionMap(styles).get('hasRenameOperation');
+  const fromVariables = resolver.extractFunctionMap(variables).get('hasRenameOperation');
+  assert.ok(fromStyles, 'rename-styles lost its unconfigured-rename guard');
+  assert.equal(fromVariables, fromStyles, 'the two copies of the guard have drifted');
+
+  const ctx = { String };
+  vm.createContext(ctx);
+  vm.runInContext(fromStyles, ctx);
+  const has = ctx.hasRenameOperation;
+
+  assert.equal(has('', ''), false, 'nothing configured — would wipe every name');
+  assert.equal(has('   ', ''), false, 'whitespace is not configuration');
+  assert.equal(has('', 'Icon'), true, 'set every name to Icon');
+  assert.equal(has('Regular', ''), true, 'delete a substring');
+  assert.equal(has('a', 'b'), true);
 });
 
 // ---------------------------------------------------------------------------

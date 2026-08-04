@@ -107,6 +107,21 @@ function parseBatchReplacementString(str) {
   return out;
 }
 
+/**
+ * Is there an actual rename to do?
+ *
+ * A blank find replaces the **whole** name (Figma's behaviour, added in plan 10), so a blank
+ * find plus a blank replacement would wipe every name in scope. That combination is what an
+ * unconfigured form looks like — nobody asks for it — so refuse it. A blank find with a real
+ * replacement ("set every name to Icon") and a real find with a blank replacement ("delete
+ * this substring") are both legitimate and still run.
+ */
+function hasRenameOperation(find, replace) {
+  var f = find == null ? '' : String(find);
+  var r = replace == null ? '' : String(replace);
+  return f.trim() !== '' || r !== '';
+}
+
 // One matcher for every CodeFig find/replace script: see @Pattern Matching.
 function getMatchOpts() {
   return {
@@ -133,6 +148,11 @@ function renameStylesSingle(styles, searchForVal, replaceWithVal) {
     var style = styles[i];
     var newName = renameByPattern(style.name, searchForVal, replaceWithVal, i, styles.length, opts);
     if (newName !== style.name) {
+      // Never rename something to nothing: a name is how it is found again.
+      if (newName.trim() === '') {
+        console.warn('Skipped "' + style.name + '": the replacement would leave an empty name.');
+        continue;
+      }
       console.log('Renamed: "' + style.name + '" → "' + newName + '"');
       style.name = newName;
       count++;
@@ -180,7 +200,8 @@ getAllStyles().then(function(allStyles) {
     console.log('Search in: "' + (searchInVal || '(all)') + '", ' + batchList.length + ' operations, ' + filtered.length + ' styles to process');
     totalCount = renameStylesBatch(filtered, batchList);
     figma.notify('Batch complete: Renamed ' + totalCount + ' styles across ' + batchList.length + ' operations');
-  } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined') {
+  } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined' &&
+             hasRenameOperation(searchFor, replaceWith)) {
     console.log('=== RENAME STYLES ===');
     console.log('Search in: "' + (searchInVal || '(all)') + '", for: "' + searchFor + '", with: "' + replaceWith + '", ' + filtered.length + ' styles to process');
     totalCount = renameStylesSingle(filtered, searchFor, replaceWith);

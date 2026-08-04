@@ -120,6 +120,21 @@ function parseBatchReplacementString(str) {
   return out;
 }
 
+/**
+ * Is there an actual rename to do?
+ *
+ * A blank find replaces the **whole** name (Figma's behaviour, added in plan 10), so a blank
+ * find plus a blank replacement would wipe every name in scope. That combination is what an
+ * unconfigured form looks like — nobody asks for it — so refuse it. A blank find with a real
+ * replacement ("set every name to Icon") and a real find with a blank replacement ("delete
+ * this substring") are both legitimate and still run.
+ */
+function hasRenameOperation(find, replace) {
+  var f = find == null ? '' : String(find);
+  var r = replace == null ? '' : String(replace);
+  return f.trim() !== '' || r !== '';
+}
+
 // One matcher for every CodeFig find/replace script: see @Pattern Matching.
 function getMatchOpts() {
   return {
@@ -201,6 +216,10 @@ async function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeI
       var coll = uniqueCollections[cIdx];
       var newCollName = renameByPattern(coll.name, searchForVal, replaceWithVal, cIdx, uniqueCollections.length, opts);
       if (newCollName !== coll.name) {
+        if (newCollName.trim() === '') {
+          console.warn('Skipped collection "' + coll.name + '": the replacement would leave an empty name.');
+          continue;
+        }
         try {
           var oldCollName = coll.name;
           coll.name = newCollName;
@@ -219,6 +238,11 @@ async function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeI
     var collection = item.collection;
     var newName = renameByPattern(variable.name, searchForVal, replaceWithVal, i, items.length, opts);
     if (newName === variable.name) continue;
+    // Never rename something to nothing: a name is how it is found again.
+    if (newName.trim() === '') {
+      errors.push(getScope(collection, variable) + ': the replacement would leave an empty name');
+      continue;
+    }
     try {
       var existing = await getVariable(collection, newName);
       if (existing && existing.id !== variable.id) {
@@ -293,7 +317,8 @@ async function renameVariablesBatch(items, batchReplacementList, scopeIsAll) {
       var batchResult = await renameVariablesBatch(sorted, batchList, scopeIsAll);
       totalRenamed = batchResult.renamedCount;
       errors = batchResult.errors;
-    } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined') {
+    } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined' &&
+               hasRenameOperation(searchFor, replaceWith)) {
       console.log('[Batch rename variables] Mode: single, searchFor="' + searchFor + '", replaceWith="' + replaceWith + '"');
       var singleResult = await renameVariablesSingle(sorted, searchFor, replaceWith, scopeIsAll);
       totalRenamed = singleResult.renamedCount;
