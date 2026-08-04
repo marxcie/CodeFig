@@ -22,6 +22,10 @@
 //
 // **Conditional visibility (`@showWhen`):** Add `@showWhen: fieldName=value1|value2` so a field is only shown when the controlling field has one of the listed values. Use for parameters that depend on a previous choice (e.g. show `scaledFactor` only when `scaleMode=uniform`). **Multiple `@showWhen` on the same line are combined with AND** (all must match).
 //
+// **Field labels (`@label:`):** Override the auto-generated label: `var minFontSize = 8; // @label: Font size`. Combine with `@options`, `@radio`, `@textarea`, `@showWhen` on the same line.
+//
+// **Section dividers:** A comment line `// ---` (or `// ***` / `// ___`) renders a horizontal rule between form sections.
+//
 // **Section headings:** On the same line as `// ## Title`, append `@showWhen: fieldName=value1|value2` to hide that heading (and use the same pattern in the Config tab as for fields).
 //
 // **Combine with `@options`:** On one line, list `@options: a|b|c` first, then `@radio` or `@multi` if needed, then `@showWhen: …`. The parser stops the option list at the next `@` so `@radio` / `@multi` / `@showWhen` are not swallowed into the dropdown options.

@@ -14,7 +14,7 @@
 // | Interpolation | interpolate, linear, exponential, sine, cubic, quint, goldenRatio |
 // | Easing | easeIn, easeOut, easeInOut, easeOutIn |
 // | Scale curve | applyEase(type, ease, t); applyEaseWithExponents(easeInExponent, easeOutExponent, ease, t) |
-// | Piecewise scale | isPiecewiseScaleType(type); generatePiecewiseSnappedScale({ steps, min, max, roundTo, type }) — Carbon-like snapped ramps (see spacing/typography docs) |
+// | Piecewise scale | isPiecewiseScaleType(type); generatePiecewiseSnappedScale({ steps, min, max, roundTo, type }); generateScale({ steps, min, max, type, ease, rangeMode, baseIndex, baseValue, roundTo }) — unified scale engine |
 // @DOC_END
 
 // Simple math utilities that other scripts can import
@@ -373,50 +373,86 @@ function isPiecewiseScaleType(type) {
   return t === 'piecewise' || t === 'piecewise2' || t === 'piecewise4';
 }
 
+function snapScaleGrid(value, gridSize) {
+  if (!gridSize || gridSize <= 0) return value;
+  return Math.round(value / gridSize) * gridSize;
+}
+
+function piecewiseSnapGridForType(roundTo, scaleType) {
+  var t = String(scaleType || 'piecewise').toLowerCase();
+  var mult = 1;
+  if (t === 'piecewise4') {
+    mult = 4;
+  } else if (t === 'piecewise2') {
+    mult = 2;
+  }
+  var r = typeof roundTo === 'number' && roundTo > 0 ? roundTo : 0;
+  if (r <= 0) {
+    return mult > 1 ? mult : 0;
+  }
+  return r * mult;
+}
+
+function resampleSpineArray(spine, targetLen) {
+  if (targetLen <= 0) return [];
+  if (targetLen === 1) return [spine[0]];
+  var L = spine.length;
+  if (L === 0) return [];
+  var out = [];
+  var j;
+  for (j = 0; j < targetLen; j++) {
+    var pos = (j * (L - 1)) / (targetLen - 1);
+    var lo = Math.floor(pos);
+    var hi = Math.min(lo + 1, L - 1);
+    var f = pos - lo;
+    out.push(spine[lo] * (1 - f) + spine[hi] * f);
+  }
+  return out;
+}
+
+function mapSpineValueToRange(spineValue, min, max) {
+  return min + (max - min) * (spineValue / 160);
+}
+
+/**
+ * Ensures strictly non-decreasing scale values between min and max.
+ * minStep is the minimum increment between adjacent steps (typically roundTo).
+ */
+function enforceMonotonicScale(values, min, max, minStep) {
+  if (!values || values.length === 0) return [];
+  var step = typeof minStep === 'number' && minStep > 0 ? minStep : 1;
+  var out = values.slice();
+  out[0] = min;
+  out[out.length - 1] = max;
+  var i;
+  for (i = 1; i < out.length; i++) {
+    var floorVal = out[i - 1] + step;
+    if (out[i] < floorVal) {
+      out[i] = Math.min(max, floorVal);
+    }
+    out[i] = Math.max(min, Math.min(max, out[i]));
+  }
+  for (i = out.length - 2; i >= 0; i--) {
+    if (out[i] > out[i + 1]) {
+      out[i] = out[i + 1];
+    }
+  }
+  out[0] = min;
+  out[out.length - 1] = max;
+  return out;
+}
+
+function usesPiecewiseRegressionPath(steps, min, max) {
+  return (steps === 8 || steps === 10 || steps === 12) && min === 0 && max === 160;
+}
+
 /**
  * Returns a min→max spacing/font ramp: piecewise curve + snap to grid.
- * For steps 8 / 10 / 12, uses regression anchors (normalized from min=0, max=160, roundTo=2).
- * Other step counts resample the 12-point normalized spine.
- * Self-contained (no sibling calls) so tooling can evaluate it in isolation.
+ * Regression fixtures: steps 8/10/12 with min=0, max=160 (roundTo=2, type=piecewise).
+ * Other cases: proportional Carbon spine mapping min + (max−min) × (spine/160).
  */
 function generatePiecewiseSnappedScale(opts) {
-  function snapGrid(value, gridSize) {
-    if (!gridSize || gridSize <= 0) return value;
-    return Math.round(value / gridSize) * gridSize;
-  }
-
-  function resampleNormArray(norm, targetLen) {
-    if (targetLen <= 0) return [];
-    if (targetLen === 1) return [norm[0]];
-    var L = norm.length;
-    if (L === 0) return [];
-    var out = [];
-    var j;
-    for (j = 0; j < targetLen; j++) {
-      var pos = (j * (L - 1)) / (targetLen - 1);
-      var lo = Math.floor(pos);
-      var hi = Math.min(lo + 1, L - 1);
-      var f = pos - lo;
-      out.push(norm[lo] * (1 - f) + norm[hi] * f);
-    }
-    return out;
-  }
-
-  function snapGridForType(roundTo, scaleType) {
-    var t = String(scaleType || 'piecewise').toLowerCase();
-    var mult = 1;
-    if (t === 'piecewise4') {
-      mult = 4;
-    } else if (t === 'piecewise2') {
-      mult = 2;
-    }
-    var r = typeof roundTo === 'number' && roundTo > 0 ? roundTo : 0;
-    if (r <= 0) {
-      return mult > 1 ? mult : 0;
-    }
-    return r * mult;
-  }
-
+  var CANONICAL_SPINE = [0, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 160];
   var CANONICAL_12_NORM = [0, 2 / 160, 4 / 160, 8 / 160, 12 / 160, 16 / 160, 24 / 160, 32 / 160, 48 / 160, 64 / 160, 96 / 160, 1];
   var EXACT_NORM = {
     8: [0, 2 / 160, 8 / 160, 16 / 160, 32 / 160, 48 / 160, 80 / 160, 1],
@@ -436,31 +472,174 @@ function generatePiecewiseSnappedScale(opts) {
     max = swap;
   }
   var span = max - min;
-  var refNorm = EXACT_NORM[steps] ? EXACT_NORM[steps] : resampleNormArray(CANONICAL_12_NORM, steps);
-  var grid = snapGridForType(roundTo, type);
+  var grid = piecewiseSnapGridForType(roundTo, type);
+  var useRegression = usesPiecewiseRegressionPath(steps, min, max);
+  var refSpine;
+  if (useRegression && EXACT_NORM[steps]) {
+    refSpine = EXACT_NORM[steps].map(function (u) { return u * 160; });
+  } else {
+    refSpine = resampleSpineArray(CANONICAL_SPINE, steps);
+  }
   var out = [];
   var i;
   for (i = 0; i < steps; i++) {
-    var u = refNorm[i];
-    var raw = min + span * u;
-    raw = snapGrid(raw, grid);
+    var raw;
+    if (useRegression) {
+      raw = min + span * (refSpine[i] / 160);
+    } else {
+      raw = mapSpineValueToRange(refSpine[i], min, max);
+    }
+    raw = snapScaleGrid(raw, grid);
     raw = Math.max(min, Math.min(max, raw));
     raw = Math.round(raw * 100) / 100;
     out.push(raw);
   }
   out[0] = min;
   out[steps - 1] = max;
-  for (i = 1; i < out.length; i++) {
-    if (out[i] < out[i - 1]) {
-      out[i] = out[i - 1];
+  return enforceMonotonicScale(out, min, max, grid > 0 ? grid : 1);
+}
+
+function mapScaleTypeToLibrary(type) {
+  if (!type) return 'linear';
+  if (type === 'expo') return 'exponential';
+  if (type === 'goldenratio') return 'goldenRatio';
+  return type;
+}
+
+function parseScaleRangeMode(rangeMode) {
+  var rm = String(rangeMode || '').toLowerCase();
+  if (rm === 'full') return 'full';
+  if (rm === 'twosegment' || rm === 'two_segment' || rm === 'segment' || rm === 'anchor') {
+    return 'twoSegment';
+  }
+  return '';
+}
+
+function resolveScaleRangeMode(opts) {
+  var explicit = parseScaleRangeMode(opts.rangeMode);
+  if (explicit) return explicit;
+  if (isPiecewiseScaleType(opts.type)) return 'full';
+  if (getModularScaleRatio(opts.type) != null) return 'twoSegment';
+  return opts.defaultRangeMode || 'full';
+}
+
+function getModularScaleRatio(type) {
+  if (!type || typeof type !== 'string') return null;
+  var map = {
+    minorSecond: 1.067,
+    majorSecond: 1.125,
+    minorThird: 1.2,
+    majorThird: 1.25,
+    perfectFourth: 1.333,
+    augmentedFourth: 1.414,
+    perfectFifth: 1.5,
+    phi: 1.618
+  };
+  return map[type] !== undefined ? map[type] : null;
+}
+
+function getEasedScaleFactor(opts, t) {
+  var easeName = opts.ease || 'none';
+  var useExponents = typeof opts.easeInExponent === 'number' && opts.easeInExponent > 0;
+  if (useExponents) {
+    var outExp = (typeof opts.easeOutExponent === 'number' && opts.easeOutExponent > 0)
+      ? opts.easeOutExponent : opts.easeInExponent;
+    return applyEaseWithExponents(opts.easeInExponent, outExp, easeName, t);
+  }
+  var curveType = mapScaleTypeToLibrary(opts.type || 'linear');
+  return applyEase(curveType, easeName, t);
+}
+
+/**
+ * Unified scale engine: returns an array of `steps` values from min→max.
+ * type: range curves, piecewise*, or modular ratio names (minorSecond … phi).
+ * rangeMode: full | twoSegment (default full for piecewise, twoSegment for modular).
+ */
+function generateScale(opts) {
+  opts = opts || {};
+  var steps = typeof opts.steps === 'number' ? opts.steps : 0;
+  var min = typeof opts.min === 'number' ? opts.min : 0;
+  var max = typeof opts.max === 'number' ? opts.max : min;
+  var roundTo = typeof opts.roundTo === 'number' ? opts.roundTo : 0;
+  var type = opts.type || 'linear';
+  if (steps <= 0) return [];
+  if (max < min) {
+    var swap = min;
+    min = max;
+    max = swap;
+  }
+  if (steps === 1) {
+    var single = snapScaleGrid(min, roundTo);
+    return [Math.max(min, Math.min(max, single))];
+  }
+
+  if (isPiecewiseScaleType(type)) {
+    return generatePiecewiseSnappedScale({
+      steps: steps,
+      min: min,
+      max: max,
+      roundTo: roundTo,
+      type: type
+    });
+  }
+
+  var modularRatio = getModularScaleRatio(type);
+  var baseIndex = typeof opts.baseIndex === 'number' ? opts.baseIndex : Math.floor((steps - 1) / 2);
+  if (baseIndex < 0) baseIndex = 0;
+  if (baseIndex >= steps) baseIndex = steps - 1;
+  var baseValue = typeof opts.baseValue === 'number' ? opts.baseValue : min + (max - min) / 2;
+  var rangeMode = resolveScaleRangeMode(opts);
+  var out = [];
+  var i;
+
+  if (modularRatio != null) {
+    for (i = 0; i < steps; i++) {
+      var exp = i - baseIndex;
+      var rawMod = baseValue * Math.pow(modularRatio, exp);
+      rawMod = Math.max(min, Math.min(max, rawMod));
+      rawMod = snapScaleGrid(Math.round(rawMod * 100) / 100, roundTo);
+      out.push(Math.max(min, Math.min(max, rawMod)));
+    }
+    return enforceMonotonicScale(out, min, max, roundTo > 0 ? roundTo : 1);
+  }
+
+  for (i = 0; i < steps; i++) {
+    if (rangeMode === 'full') {
+      var tFull = i / (steps - 1);
+      var uFull = getEasedScaleFactor(opts, tFull);
+      var rawFull = lerp(min, max, uFull);
+      rawFull = Math.max(min, Math.min(max, rawFull));
+      rawFull = Math.round(rawFull * 100) / 100;
+      rawFull = snapScaleGrid(rawFull, roundTo);
+      out.push(Math.max(min, Math.min(max, rawFull)));
+    } else {
+      if (i === baseIndex) {
+        var baseRounded = snapScaleGrid(baseValue, roundTo);
+        out.push(Math.max(min, Math.min(max, baseRounded)));
+      } else {
+        var t;
+        var startVal;
+        var endVal;
+        if (i < baseIndex) {
+          t = baseIndex > 0 ? i / baseIndex : 0;
+          startVal = min;
+          endVal = baseValue;
+        } else {
+          var stepsAboveBase = (steps - 1) - baseIndex;
+          t = stepsAboveBase > 0 ? (i - baseIndex) / stepsAboveBase : 0;
+          startVal = baseValue;
+          endVal = max;
+        }
+        var u = getEasedScaleFactor(opts, t);
+        var rawSize = lerp(startVal, endVal, u);
+        rawSize = Math.max(min, Math.min(max, rawSize));
+        rawSize = Math.round(rawSize * 100) / 100;
+        rawSize = snapScaleGrid(rawSize, roundTo);
+        out.push(Math.max(min, Math.min(max, rawSize)));
+      }
     }
   }
-  for (i = out.length - 2; i >= 0; i--) {
-    if (out[i] > out[i + 1]) {
-      out[i] = out[i + 1];
-    }
-  }
-  out[0] = min;
-  out[steps - 1] = max;
-  return out;
+  out[0] = Math.max(min, Math.min(max, snapScaleGrid(min, roundTo)));
+  out[steps - 1] = Math.max(min, Math.min(max, snapScaleGrid(max, roundTo)));
+  return enforceMonotonicScale(out, min, max, roundTo > 0 ? roundTo : 1);
 }

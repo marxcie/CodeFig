@@ -11,7 +11,7 @@
 // |----------|-----------|
 // | Node | traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone, setupAutoLayout, applyNamingConvention, createComponentFromSelection |
 // | Styles | getAllStyles, buildStyleCache, replaceStylesByPattern, getStyleByName, replaceByPattern |
-// | Memory | processWithOptimization, estimateNodeCount, showProgress, cleanupMemory |
+// | Memory | processWithOptimization, estimateNodeCount, showProgress, cleanupMemory, yieldToUI, collectNodesAsync |
 // | Colors | hexToRgb, rgbToHex |
 // | Utilities | log, timeOperation, unique, analyzeSelection |
 // @DOC_END
@@ -429,6 +429,133 @@ function estimateNodeCount(selection) {
 }
 
 /**
+ * Yield to the UI event loop so progress messages can be delivered.
+ * @returns {Promise<void>}
+ */
+function yieldToUI() {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, 0);
+  });
+}
+
+/**
+ * Collect nodes from a subtree with periodic yields and progress updates.
+ * @param {Array|SceneNode} roots - Root node(s) to walk
+ * @param {Object} options - { maxNodes, nodeFilter, operation, yieldEvery, showProgress }
+ * @returns {Promise<Array>} Collected nodes
+ */
+function collectNodesAsync(roots, options) {
+  options = options || {};
+  var maxNodes = options.maxNodes != null ? options.maxNodes : 15000;
+  var yieldEvery = options.yieldEvery != null ? options.yieldEvery : 400;
+  var operationName = options.operation || 'Collecting nodes';
+  var showProgressUpdates = options.showProgress !== false;
+  var nodeFilter = options.nodeFilter || null;
+  var maxDepth = options.maxDepth != null ? options.maxDepth : 15;
+
+  return new Promise(function (resolve) {
+    var allNodes = [];
+    var seen = new Set();
+    var stack = [];
+    var rootsArr = Array.isArray(roots) ? roots : [roots];
+
+    for (var ri = rootsArr.length - 1; ri >= 0; ri--) {
+      if (rootsArr[ri]) stack.push({ node: rootsArr[ri], depth: 0 });
+    }
+
+    function pushChildren(node, depth) {
+      if (!('children' in node) || depth >= maxDepth) return;
+      var children = node.children;
+      for (var ci = children.length - 1; ci >= 0; ci--) {
+        stack.push({ node: children[ci], depth: depth + 1 });
+      }
+    }
+
+    function step() {
+      var visitedThisTick = 0;
+      while (stack.length > 0 && visitedThisTick < yieldEvery) {
+        if (allNodes.length >= maxNodes) {
+          stack = [];
+          break;
+        }
+        var item = stack.pop();
+        var node = item.node;
+        var depth = item.depth;
+        if (!node || seen.has(node.id) || depth > maxDepth) continue;
+        seen.add(node.id);
+        visitedThisTick++;
+
+        if (!nodeFilter || nodeFilter(node)) {
+          allNodes.push(node);
+        }
+        if (allNodes.length < maxNodes) {
+          pushChildren(node, depth);
+        }
+      }
+
+      if (showProgressUpdates) {
+        var displayTotal = maxNodes;
+        showProgress(operationName, allNodes.length, displayTotal);
+      }
+
+      if (stack.length > 0 && allNodes.length < maxNodes) {
+        setTimeout(step, 0);
+      } else {
+        if (showProgressUpdates && allNodes.length > 0) {
+          showProgress(operationName, allNodes.length, allNodes.length);
+        }
+        resolve(allNodes);
+      }
+    }
+
+    if (showProgressUpdates) {
+      showProgress(operationName, 0, maxNodes);
+    }
+    setTimeout(step, 0);
+  });
+}
+
+/**
+ * Track async work so the UI does not auto-complete while ops are in flight.
+ */
+function codefigRunOpBegin() {
+  if (typeof window !== 'undefined' && window._infoPanelHandler) {
+    window._infoPanelHandler({ type: 'CODEFIG_RUN_OP_BEGIN' });
+  }
+}
+
+function codefigRunOpEnd() {
+  if (typeof window !== 'undefined' && window._infoPanelHandler) {
+    window._infoPanelHandler({ type: 'CODEFIG_RUN_OP_END' });
+  }
+}
+
+/**
+ * Clear determinate progress bar and end the plugin run session.
+ */
+function finishCodefigRunProgress() {
+  codefigRunOpEnd();
+  try {
+    if (typeof window !== 'undefined' && window._infoPanelHandler) {
+      window._infoPanelHandler({ type: 'PROGRESS_COMPLETE' });
+    }
+  } catch (e) {
+    console.log('finishCodefigRunProgress:', e && e.message);
+  }
+  codefigRunComplete();
+}
+
+/**
+ * Signal that an async script workflow has finished (clears UI run progress).
+ */
+function codefigRunComplete(opts) {
+  opts = opts || {};
+  if (typeof window !== 'undefined' && typeof window.codefigRunComplete === 'function') {
+    window.codefigRunComplete(opts);
+  }
+}
+
+/**
  * Show progress indicator in UI
  * @param {string} operation - Current operation description
  * @param {number} processed - Number of items processed
@@ -436,6 +563,10 @@ function estimateNodeCount(selection) {
  */
 function showProgress(operation, processed, total) {
   var percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
+
+  if (typeof window !== 'undefined') {
+    window._codefigDeterminateProgress = true;
+  }
   
   // Initialize progress tracking if not exists
   if (!window._progressStartTime) {
@@ -516,6 +647,22 @@ function processWithOptimization(nodes, processor, options) {
   var nodeFilter = options.nodeFilter || null;
   var maxNodes = options.maxNodes; // Caller sets limit when needed
 
+  codefigRunOpBegin();
+
+  function endProcessRunProgress() {
+    codefigRunOpEnd();
+    if (showProgressUpdates) {
+      try {
+        if (typeof window !== 'undefined' && window._infoPanelHandler) {
+          window._infoPanelHandler({ type: 'PROGRESS_COMPLETE' });
+        }
+      } catch (e) {
+        console.log('Progress complete:', e && e.message);
+      }
+    }
+    codefigRunComplete();
+  }
+
   return new Promise(function(resolve, reject) {
     // Initialize progress state locally
     var localProgressState = {
@@ -537,6 +684,10 @@ function processWithOptimization(nodes, processor, options) {
     if (estimation.warning && showProgressUpdates) {
       showProgress('Warning: ' + estimation.warning, 0, nodes.length);
     }
+
+    if (showProgressUpdates && nodes.length > 0) {
+      showProgress(operationName, 0, nodes.length);
+    }
     
     function processChunk() {
       try {
@@ -552,6 +703,7 @@ function processWithOptimization(nodes, processor, options) {
         if (Date.now() - localProgressState.startTime > timeoutMs) {
           localProgressState.isProcessing = false;
           console.warn('Processing timeout exceeded: ' + Math.round(timeoutMs / 1000) + 's');
+          endProcessRunProgress();
           resolve({
             results: results,
             partial: true,
@@ -565,6 +717,7 @@ function processWithOptimization(nodes, processor, options) {
         // Check if we've exceeded node limit
         if (maxNodes && localProgressState.processed >= maxNodes) {
           localProgressState.isProcessing = false;
+          endProcessRunProgress();
           resolve({
             results: results,
             partial: true,
@@ -579,6 +732,7 @@ function processWithOptimization(nodes, processor, options) {
         if (errorCount >= maxErrors) {
           localProgressState.isProcessing = false;
           console.warn('Too many errors occurred: ' + errorCount);
+          endProcessRunProgress();
           resolve({
             results: results,
             partial: true,
@@ -648,7 +802,7 @@ function processWithOptimization(nodes, processor, options) {
             }
           }
           
-          index += chunkSize;
+          index += chunk.length;
           
           if (index < nodes.length) {
             setTimeout(processChunk, 1);
@@ -659,26 +813,8 @@ function processWithOptimization(nodes, processor, options) {
             
             if (showProgressUpdates) {
               showProgress(operationName, nodes.length, nodes.length);
-              setTimeout(function() {
-                try {
-                  if (typeof window !== 'undefined' && window._infoPanelHandler) {
-                    window._infoPanelHandler({
-                      type: 'PROGRESS_COMPLETE',
-                      operation: operationName,
-                      processed: nodes.length,
-                      total: nodes.length,
-                      message: options.partial ? 
-                        'Processed ' + nodes.length + ' nodes (limit reached)' : 
-                        'Processed ' + nodes.length + ' nodes successfully'
-                    });
-                  } else {
-                    figma.notify('Processing complete: ' + nodes.length + ' nodes processed');
-                  }
-                } catch (e) {
-                  console.log('Progress complete: ' + nodes.length + ' nodes processed');
-                }
-              }, 100);
             }
+            endProcessRunProgress();
             
             resolve({
               results: results,
@@ -691,17 +827,25 @@ function processWithOptimization(nodes, processor, options) {
             });
           }
         }).catch(function(e) {
+          codefigRunOpEnd();
+          endProcessRunProgress();
           reject(e);
         });
       } catch (e) {
         localProgressState.isProcessing = false;
         console.error('Critical error in processChunk:', e.message);
+        codefigRunOpEnd();
+        endProcessRunProgress();
         reject(e);
       }
     }
     
     // Start processing
     processChunk();
+  }).catch(function (e) {
+    codefigRunOpEnd();
+    endProcessRunProgress();
+    throw e;
   });
 }
 
@@ -714,80 +858,24 @@ function processWithOptimization(nodes, processor, options) {
  */
 function traverseNodesOptimized(nodes, processor, options) {
   options = options || {};
-  
-  // Get maxNodes limit early to prevent memory issues
-  var maxNodes = options.maxNodes || 15000; // Increased limit for larger selections
-  
-  // Collect nodes with early termination if limit reached
-  var allNodes = [];
-  var processed = new Set();
-  var nodeCount = 0;
-  var startTime = Date.now();
-  var maxCollectionTime = 30000; // 30 seconds max for node collection
-  
-  function collectNodes(node, depth) {
-    depth = depth || 0;
-    
-    // Check for timeout during collection
-    if (Date.now() - startTime > maxCollectionTime) {
-      console.warn('Node collection timeout reached, stopping at ' + nodeCount + ' nodes');
-      return;
+  var maxNodes = options.maxNodes || 15000;
+  var showProgressUpdates = options.showProgress !== false;
+
+  return collectNodesAsync(nodes, {
+    maxNodes: maxNodes,
+    nodeFilter: options.nodeFilter,
+    operation: options.collectOperation || 'Collecting nodes',
+    showProgress: showProgressUpdates,
+    yieldEvery: options.yieldEvery || 400,
+    maxDepth: 15
+  }).then(function (allNodes) {
+    console.log('Node collection completed: ' + allNodes.length + ' nodes collected');
+    if (allNodes.length >= maxNodes) {
+      options.partial = true;
     }
-    
-    // Skip if already processed or depth limit reached
-    if (processed.has(node.id) || depth > 15) return; // Reduced depth limit
-    processed.add(node.id);
-    
-    // Apply node filter if provided
-    if (!options.nodeFilter || options.nodeFilter(node)) {
-      allNodes.push(node);
-      nodeCount++;
-      
-      // Early termination if we've reached the limit
-      if (nodeCount >= maxNodes) {
-        console.log('Node limit reached: ' + nodeCount + '/' + maxNodes);
-        return;
-      }
-    }
-    
-    // Recurse into children only if we haven't hit the limit
-    if (nodeCount < maxNodes && 'children' in node && depth < 15) {
-      for (var i = 0; i < node.children.length; i++) {
-        collectNodes(node.children[i], depth + 1);
-        // Check limit again after each child
-        if (nodeCount >= maxNodes) {
-          return;
-        }
-      }
-    }
-  }
-  
-  try {
-    if (Array.isArray(nodes)) {
-      for (var i = 0; i < nodes.length; i++) {
-        collectNodes(nodes[i]);
-        if (nodeCount >= maxNodes) break;
-      }
-    } else {
-      collectNodes(nodes);
-    }
-  } catch (e) {
-    console.warn('Error during node collection:', e.message);
-    // Continue with what we have collected so far
-  }
-  
-  console.log('Node collection completed: ' + nodeCount + ' nodes collected');
-  
-  // Mark as partial if we hit the limit
-  if (nodeCount >= maxNodes) {
-    options.partial = true;
-  }
-  
-  // Clean up memory after collection
-  cleanupMemory();
-  
-  // Process with optimization
-  return processWithOptimization(allNodes, processor, options);
+    cleanupMemory();
+    return processWithOptimization(allNodes, processor, options);
+  });
 }
 
 // ============================================================================
@@ -1041,6 +1129,6 @@ function createStylePreview(style, type) {
 console.log('📚 @Core Library loaded - ' + 
   'getAllStyles, traverseNodes, findByName, replaceByPattern, ' +
   'hexToRgb, generateScale, setupAutoLayout, analyzeSelection, ' +
-  'processWithOptimization, estimateNodeCount, showProgress, ' +
+  'processWithOptimization, estimateNodeCount, showProgress, yieldToUI, collectNodesAsync, ' +
   'collectNodeStyles, categorizeStyle, createStyleResult, createStylePreview ' +
   'and more available for import');

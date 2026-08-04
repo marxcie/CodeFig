@@ -38,6 +38,9 @@ function displayResults(data) {
       grouping: data.grouping || null,
       showFilters: data.showFilters !== false // Default to true
     });
+    if (typeof window.codefigRunComplete === 'function') {
+      window.codefigRunComplete();
+    }
   } else {
     // Fallback: try direct postMessage (might not work in sandboxed context)
     try {

@@ -34,6 +34,28 @@ function normalizeVariableName(name) {
 }
 
 /**
+ * Compare variable scope arrays (order-independent).
+ */
+function variableScopesMatch(currentScopes, desiredScopes) {
+  if (!desiredScopes || desiredScopes.length === 0) return true;
+  var current = currentScopes || [];
+  if (current.length !== desiredScopes.length) return false;
+  return desiredScopes.every(function(scope) {
+    return current.indexOf(scope) !== -1;
+  });
+}
+
+function variableValueEquals(existing, modeId, newValue) {
+  if (!existing || !existing.valuesByMode) return false;
+  var current = existing.valuesByMode[modeId];
+  if (current === undefined) return false;
+  if (typeof newValue === 'number' && typeof current === 'number') return current === newValue;
+  if (typeof newValue === 'string' && typeof current === 'string') return current === newValue;
+  if (typeof newValue === 'boolean' && typeof current === 'boolean') return current === newValue;
+  return false;
+}
+
+/**
  * Get all variable collections (async for documentAccess: dynamic-page)
  */
 async function getAllCollections() {
@@ -517,15 +539,41 @@ async function createOrUpdateVariable(collection, name, config, modes) {
   
   name = normalizeVariableName(name);
   var existing = await getVariable(collection, name);
+
+  if (existing && existing.remote) {
+    console.warn('Skipping remote/library variable (cannot update locally): ' + name);
+    return 'skipped';
+  }
+
+  if (existing && existing.resolvedType !== actualConfig.type) {
+    console.warn(
+      'Type mismatch for ' + name + ': existing ' + existing.resolvedType +
+      ' vs expected ' + actualConfig.type + '. Skipping (delete the variable manually in Figma to recreate).'
+    );
+    return 'skipped';
+  }
+
+  var desiredScopes = (actualConfig.scopes && Array.isArray(actualConfig.scopes)) ? actualConfig.scopes : [];
+
+  // Never remove or re-assign scopes on existing variables — both can trigger Figma's
+  // editScope path and Aborted()-crash WASM when the variable is bound.
+  if (existing && desiredScopes.length > 0 && !variableScopesMatch(existing.scopes, desiredScopes)) {
+    console.warn(
+      'Scope mismatch for ' + name + ': existing [' + (existing.scopes || []).join(', ') +
+      '] vs expected [' + desiredScopes.join(', ') + ']. Updating values only.'
+    );
+  }
+
   var action = existing ? 'updated' : 'created';
-  
+  var isNew = !existing;
+
   if (!existing) {
     existing = figma.variables.createVariable(name, collection, actualConfig.type);
   }
 
-  // Set scopes so the variable appears only in the relevant property picker (e.g. FONT_SIZE, LINE_HEIGHT, LETTER_SPACING)
-  if (actualConfig.scopes && Array.isArray(actualConfig.scopes) && actualConfig.scopes.length > 0) {
-    existing.scopes = actualConfig.scopes;
+  // Scopes must be set before values on new typography variables (FONT_WEIGHT etc.)
+  if (isNew && desiredScopes.length > 0) {
+    existing.scopes = desiredScopes;
   }
 
   // Set values for each mode
@@ -560,6 +608,10 @@ async function createOrUpdateVariable(collection, name, config, modes) {
           console.error('Invalid FLOAT value for mode ' + modeName + ': ' + value + ' (type: ' + typeof value + ')');
           return;
         }
+
+        if (!isNew && variableValueEquals(existing, mode.modeId, value)) {
+          return;
+        }
         
         existing.setValueForMode(mode.modeId, value);
         console.log('  ' + modeName + ': ' + (actualConfig.type === 'COLOR' ? rgbToHex(value.r, value.g, value.b) : value));
@@ -574,7 +626,6 @@ async function createOrUpdateVariable(collection, name, config, modes) {
         value: actualConfig.values ? actualConfig.values[modeName] : 'undefined',
         type: actualConfig.type
       });
-      throw e;
     }
   });
   
@@ -632,7 +683,11 @@ async function processVariables(collection, variables, configValues, modes) {
       });
       
       var result = await createOrUpdateVariable(collection, varName, calculatedConfig, modes);
-      stats[result]++;
+      if (result === 'skipped') {
+        stats.skipped++;
+      } else {
+        stats[result]++;
+      }
     } catch (e) {
       console.error('Error processing variable ' + varName + ':', e);
       console.error('Error details:', {
