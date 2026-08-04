@@ -179,6 +179,10 @@
     if (r.type === "paragraph") {
       var wrap2 = document.createElement("div");
       wrap2.className = "config-ui-row config-ui-row--paragraph";
+      var prules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+      if (prules && prules.length) {
+        wrap2.setAttribute("data-show-when-rules", JSON.stringify(prules));
+      }
       var mdWrap = document.createElement("div");
       mdWrap.className = "docs-rendered";
       var md = r.text.replace(/\n/g, "  \n");
@@ -307,13 +311,16 @@
 
     function applyVisibility() {
       var vals = getValues();
+      function showWhenValueStr(v) {
+        return v === undefined || v === null ? "" : String(v);
+      }
       function visRules(row) {
         var rs = row.getAttribute("data-show-when-rules");
         if (rs) {
           try {
             var rules = JSON.parse(rs);
             for (var i = 0; i < rules.length; i++) {
-              var cur = String(vals[rules[i].field] || "");
+              var cur = showWhenValueStr(vals[rules[i].field]);
               if (rules[i].values.indexOf(cur) === -1) return false;
             }
             return true;
@@ -332,7 +339,7 @@
         var field = row.getAttribute("data-show-when-field");
         var valsStr = row.getAttribute("data-show-when-values");
         var valsList = valsStr ? valsStr.split("|") : [];
-        var cur = String(vals[field] || "");
+        var cur = showWhenValueStr(vals[field]);
         row.style.display = valsList.indexOf(cur) !== -1 ? "" : "none";
       });
     }

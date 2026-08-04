@@ -81,14 +81,17 @@ function extractScriptMetadata(code: string, filePath: string): { name: string; 
     const trimmed = line.trim();
     if (trimmed && trimmed.startsWith('//')) {
       const commentContent = trimmed.replace(/^\/\/\s*/, '').trim();
-      // Skip section headers and common patterns
-      if (!commentContent.includes('===') && 
+      const isDocOrConfigMarker =
+        commentContent.startsWith('@DOC_') || commentContent.startsWith('@UI_CONFIG');
+      // Skip doc/config markers and other non-title comments (@Variables / @Core Library titles are OK)
+      if (commentContent.length > 0 &&
+          !isDocOrConfigMarker &&
+          !commentContent.startsWith('#') &&
+          !commentContent.includes('===') &&
           !commentContent.includes('==') &&
-          !commentContent.toLowerCase().includes('execute') && 
-          !commentContent.toLowerCase().includes('import') && 
+          !commentContent.toLowerCase().includes('execute') &&
           !commentContent.toLowerCase().includes('function') &&
-          !commentContent.toLowerCase().includes('collection of') &&
-          commentContent.length > 0) {
+          !commentContent.toLowerCase().includes('collection of')) {
         name = commentContent;
         break;
       }
@@ -288,6 +291,32 @@ figma.ui.onmessage = (msg) => {
       });
       return;
     }
+    if (optionSource === 'localVariableCollectionsTarget') {
+      figma.variables.getLocalVariableCollectionsAsync().then((localCollections) => {
+        const names = (localCollections || []).map((c) => c && c.name).filter((n) => n != null && String(n).trim() !== '');
+        const sorted = [...new Set(names)].sort((a, b) => String(a).localeCompare(String(b)));
+        const options = ['__NEW__'].concat(sorted);
+        const optionGroups: { label: string; values: string[] }[] = [
+          { label: 'Target', values: ['__NEW__'] }
+        ];
+        if (sorted.length) optionGroups.push({ label: 'This file', values: sorted });
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource || '',
+          options,
+          optionGroups
+        });
+      }).catch((err) => {
+        console.error('Backend: localVariableCollectionsTarget fetch failed', err);
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource || '',
+          options: ['__NEW__'],
+          optionGroups: [{ label: 'Target', values: ['__NEW__'] }]
+        });
+      });
+      return;
+    }
     figma.ui.postMessage({
       type: 'OPTIONS',
       optionSource: optionSource || '',
@@ -479,19 +508,83 @@ figma.ui.onmessage = (msg) => {
       const pendingMessages: any[] = [];
       
       // Create a mock window object for the script context
-      const mockWindow = {
+      const mockWindow: {
+        _infoPanelHandler: (message: any) => void;
+        _codefigDeterminateProgress: boolean;
+        _codefigPendingOps: number;
+        _codefigRunCompleteSent: boolean;
+        _codefigLastProgressAt: number;
+        codefigRunComplete: (opts?: { message?: string }) => void;
+        _codefigRunOpEnd: () => void;
+      } = {
+        _codefigDeterminateProgress: false,
+        _codefigPendingOps: 0,
+        _codefigRunCompleteSent: false,
+        _codefigLastProgressAt: 0,
         _infoPanelHandler: (message: any) => {
-          debugLog('Backend: Script sent InfoPanel message:', message);
-          // Directly forward the message to the UI from backend context
+          if (message && message.type === 'PROGRESS_UPDATE') {
+            mockWindow._codefigDeterminateProgress = true;
+            mockWindow._codefigLastProgressAt = Date.now();
+          }
+          if (message && message.type === 'CODEFIG_RUN_OP_BEGIN') {
+            mockWindow._codefigPendingOps += 1;
+          }
+          if (message && message.type === 'CODEFIG_RUN_OP_END') {
+            mockWindow._codefigPendingOps = Math.max(0, mockWindow._codefigPendingOps - 1);
+          }
+          if (message && message.type === 'PROGRESS_COMPLETE' || message?.type === 'CODEFIG_RUN_COMPLETE') {
+            mockWindow._codefigRunCompleteSent = true;
+          }
+          debugLog('Backend: Script sent message:', message?.type);
           figma.ui.postMessage(message);
+        },
+        codefigRunComplete: (opts?: { message?: string }) => {
+          if (mockWindow._codefigRunCompleteSent) return;
+          mockWindow._codefigRunCompleteSent = true;
+          figma.ui.postMessage({
+            type: 'CODEFIG_RUN_COMPLETE',
+            message: opts && opts.message ? opts.message : undefined
+          });
+        },
+        _codefigRunOpEnd: () => {
+          mockWindow._codefigPendingOps = Math.max(0, mockWindow._codefigPendingOps - 1);
         }
+      };
+
+      const RUN_IDLE_MS = 800;
+      const RUN_POLL_MS = 250;
+      let runPollTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const tryFinishRunWhenIdle = () => {
+        if (mockWindow._codefigRunCompleteSent) {
+          if (runPollTimer) clearTimeout(runPollTimer);
+          runPollTimer = null;
+          return;
+        }
+        if (mockWindow._codefigPendingOps > 0) {
+          runPollTimer = setTimeout(tryFinishRunWhenIdle, RUN_POLL_MS);
+          return;
+        }
+        const idleFor = Date.now() - mockWindow._codefigLastProgressAt;
+        if (mockWindow._codefigLastProgressAt > 0 && idleFor < RUN_IDLE_MS) {
+          runPollTimer = setTimeout(tryFinishRunWhenIdle, RUN_POLL_MS);
+          return;
+        }
+        mockWindow.codefigRunComplete();
+      };
+
+      const startRunIdlePolling = () => {
+        if (runPollTimer) clearTimeout(runPollTimer);
+        runPollTimer = setTimeout(tryFinishRunWhenIdle, RUN_POLL_MS);
       };
       
       // Pass the real figma object, custom console, and mock window
       scriptFunction(figma, scriptConsole, mockWindow);
+      startRunIdlePolling();
       
       // figma.notify('Done! 😁');
     } catch (error) {
+      figma.ui.postMessage({ type: 'CODEFIG_RUN_COMPLETE' });
       const errorMessage = error instanceof Error ? error.message : String(error);
       figma.notify(`Script error: ${errorMessage} 😳`, { error: true });
       debugError('Backend: Script execution error:', error);
@@ -585,39 +678,45 @@ figma.ui.onmessage = (msg) => {
   }
   
   if (msg.type === 'SELECT_NODE') {
-    // Select a node by ID
-    try {
-      const node = figma.getNodeById(msg.nodeId);
-      if (node) {
-        figma.currentPage.selection = [node as SceneNode];
-        figma.viewport.scrollAndZoomIntoView([node as SceneNode]);
-        debugLog('Backend: Selected node:', node.name);
-      } else {
-        debugLog('Backend: Node not found:', msg.nodeId);
+    (async () => {
+      try {
+        const node = await figma.getNodeByIdAsync(msg.nodeId);
+        if (node && 'type' in node) {
+          figma.currentPage.selection = [node as SceneNode];
+          figma.viewport.scrollAndZoomIntoView([node as SceneNode]);
+          debugLog('Backend: Selected node:', node.name);
+        } else {
+          debugLog('Backend: Node not found:', msg.nodeId);
+        }
+      } catch (error) {
+        debugError('Backend: Failed to select node:', error);
       }
-    } catch (error) {
-      debugError('Backend: Failed to select node:', error);
-    }
+    })();
   }
-  
+
   if (msg.type === 'SELECT_NODES') {
-    // Select multiple nodes by IDs (bulk selection)
-    try {
-      const nodes = msg.nodeIds
-        .map((id: string) => figma.getNodeById(id))
-        .filter((node: any) => node !== null) as SceneNode[];
-      
-      if (nodes.length > 0) {
-        figma.currentPage.selection = nodes;
-        figma.viewport.scrollAndZoomIntoView(nodes);
-        figma.notify(`Selected ${nodes.length} nodes with similar issues`);
-        debugLog('Backend: Selected nodes:', nodes.map(n => n.name));
-      } else {
-        debugLog('Backend: No valid nodes found for bulk selection');
+    (async () => {
+      try {
+        const ids = Array.isArray(msg.nodeIds) ? msg.nodeIds : [];
+        const resolved = await Promise.all(
+          ids.map((id: string) => figma.getNodeByIdAsync(id))
+        );
+        const nodes = resolved.filter(
+          (node): node is SceneNode => node !== null && 'type' in node
+        );
+
+        if (nodes.length > 0) {
+          figma.currentPage.selection = nodes;
+          figma.viewport.scrollAndZoomIntoView(nodes);
+          figma.notify(`Selected ${nodes.length} node${nodes.length === 1 ? '' : 's'}`);
+          debugLog('Backend: Selected nodes:', nodes.map((n) => n.name));
+        } else {
+          debugLog('Backend: No valid nodes found for bulk selection');
+        }
+      } catch (error) {
+        debugError('Backend: Failed to select nodes:', error);
       }
-    } catch (error) {
-      debugError('Backend: Failed to select nodes:', error);
-    }
+    })();
   }
 };
 

@@ -155,10 +155,30 @@
           i++;
           continue;
         }
-        if (lastWasBlank || !rows.length || rows[rows.length - 1].type !== "paragraph") {
-          rows.push({ type: "paragraph", text: c });
+        var pSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|]+)/g;
+        var pSwAll = [];
+        var psm;
+        while ((psm = pSwRe.exec(c)) !== null) {
+          pSwAll.push({
+            field: psm[1],
+            values: psm[2]
+              .split("|")
+              .map(function (s) {
+                return s.trim();
+              })
+              .filter(Boolean),
+          });
+        }
+        var ptext = c.replace(/\s+@showWhen:\s*\w+\s*=\s*[\w|]+/g, "").trim();
+        var hasShowWhen = pSwAll.length > 0;
+        if (hasShowWhen || lastWasBlank || !rows.length || rows[rows.length - 1].type !== "paragraph") {
+          rows.push({
+            type: "paragraph",
+            text: ptext,
+            showWhenRules: pSwAll.length ? pSwAll : undefined,
+          });
         } else {
-          rows[rows.length - 1].text += "\n" + c;
+          rows[rows.length - 1].text += "\n" + ptext;
         }
         lastWasBlank = false;
         i++;
@@ -183,11 +203,17 @@
         if (tip.match(/@multi\b/)) {
           inputType = "multiselect";
         }
+        var labelMatch = tip.match(/@label:\s*(.+?)(?=\s+@|$)/);
+        var fieldLabel = labelFromName(m[1]);
+        if (labelMatch) {
+          fieldLabel = labelMatch[1].trim();
+          tip = tip.replace(/@label:\s*.+?(?=\s+@|$)/, "").trim();
+        }
         var f = {
           type: "field",
           name: m[1],
           value: val,
-          label: labelFromName(m[1]),
+          label: fieldLabel,
           tooltip: tip,
           inputType: inputType,
         };
@@ -265,8 +291,18 @@
         return;
       }
       if (r.type === "paragraph") {
-        r.text.split("\n").forEach(function (l) {
-          out.push("// " + l);
+        var plines = r.text.split("\n");
+        plines.forEach(function (l, idx) {
+          var pl = "// " + l;
+          if (idx === plines.length - 1) {
+            var pr = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+            if (pr && pr.length) {
+              pr.forEach(function (rule) {
+                pl += " @showWhen: " + rule.field + "=" + rule.values.join("|");
+              });
+            }
+          }
+          out.push(pl);
         });
         return;
       }
@@ -281,6 +317,8 @@
         else if (r.optionSource) parts.push("@options: " + r.optionSource);
         if (r.inputType === "radio") parts.push("@radio");
         if (r.inputType === "multiselect") parts.push("@multi");
+        if (r.inputType === "textarea") parts.push("@textarea");
+        if (r.label && r.label !== labelFromName(r.name)) parts.push("@label: " + r.label);
         var sr = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
         if (sr && sr.length)
           sr.forEach(function (rule) {
@@ -482,6 +520,10 @@
     if (r.type === "paragraph") {
       var wrap2 = document.createElement("div");
       wrap2.className = "config-ui-row config-ui-row--paragraph";
+      var prules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+      if (prules && prules.length) {
+        wrap2.setAttribute("data-show-when-rules", JSON.stringify(prules));
+      }
       var mdWrap = document.createElement("div");
       mdWrap.className = "docs-rendered";
       var md = r.text.replace(/\n/g, "  \n");
@@ -610,13 +652,16 @@
 
     function applyVisibility() {
       var vals = getValues();
+      function showWhenValueStr(v) {
+        return v === undefined || v === null ? "" : String(v);
+      }
       function visRules(row) {
         var rs = row.getAttribute("data-show-when-rules");
         if (rs) {
           try {
             var rules = JSON.parse(rs);
             for (var i = 0; i < rules.length; i++) {
-              var cur = String(vals[rules[i].field] || "");
+              var cur = showWhenValueStr(vals[rules[i].field]);
               if (rules[i].values.indexOf(cur) === -1) return false;
             }
             return true;
@@ -635,7 +680,7 @@
         var field = row.getAttribute("data-show-when-field");
         var valsStr = row.getAttribute("data-show-when-values");
         var valsList = valsStr ? valsStr.split("|") : [];
-        var cur = String(vals[field] || "");
+        var cur = showWhenValueStr(vals[field]);
         row.style.display = valsList.indexOf(cur) !== -1 ? "" : "none";
       });
     }
@@ -1671,6 +1716,17 @@
         transition: width 0.3s ease;
         width: 0%;
       }
+
+      .progress-fill.indeterminate {
+        width: 40% !important;
+        animation: codefig-progress-indeterminate 1.2s ease-in-out infinite;
+      }
+
+      @keyframes codefig-progress-indeterminate {
+        0% { margin-left: 0; }
+        50% { margin-left: 60%; }
+        100% { margin-left: 0; }
+      }
       
       .progress-text {
         font: 10px system-ui;
@@ -1841,6 +1897,10 @@
         color: var(--text-primary);
       }
       
+      .config-ui-form--rows .config-ui-row--field .config-ui-field {
+        width: 100%;
+      }
+      
       .config-ui-field {
         display: flex;
         flex-direction: column;
@@ -1850,15 +1910,14 @@
       }
       
       .config-ui-field__row {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
+        display: grid;
+        grid-template-columns: 3fr 7fr;
         gap: var(--space-md);
+        align-items: center;
         min-height: 28px;
       }
       
       .config-ui-field__label {
-        flex: 0 0 40%;
         min-width: 0;
         font-weight: bold;
         margin: 0;
@@ -1867,7 +1926,6 @@
       }
       
       .config-ui-field__control {
-        flex: 1;
         min-width: 0;
         display: flex;
         align-items: center;
@@ -1941,20 +1999,31 @@
         opacity: 0.6;
       }
       
-      .config-ui-input--number {
-        width: 50%;
+      .config-ui-input--text,
+      .config-ui-input--select,
+      .config-ui-textarea {
+        width: 70%;
         min-width: 0;
+        max-width: 100%;
+      }
+
+      .config-ui-input--number {
+        width: auto;
+        min-width: 4.5em;
+        max-width: 8em;
+        flex: 0 0 auto;
+      }
+
+      .config-ui-field--number .config-ui-field__control {
+        flex: 0 0 auto;
       }
       
-      .config-ui-input--text,
-      .config-ui-input--select {
-        width: 100%;
-        min-width: 0;
+      .config-ui-field__control > .config-ui-multiselect {
+        width: 70%;
+        max-width: 100%;
       }
       
       .config-ui-textarea {
-        width: 100%;
-        min-width: 0;
         resize: vertical;
         min-height: 2.5em;
         max-height: 12em;
@@ -2025,7 +2094,7 @@
       .config-ui-radio-group {
         display: flex;
         flex-wrap: nowrap;
-        gap: var(--space-sm) var(--space-md);
+        gap: var(--space-xl) var(--space-xl);
         align-items: center;
       }
       
@@ -2036,21 +2105,17 @@
         cursor: pointer;
         font-weight: normal;
         font-size: var(--font-size-body);
+        line-height: var(--line-height-normal);
+        white-space: nowrap;
       }
       
       .config-ui-radio {
         width: 16px;
         height: 16px;
+        margin: 0;
+        flex-shrink: 0;
         color: var(--active-bg, #0a84ff);
         cursor: pointer;
-      }
-      
-      .config-ui-field--radio .config-ui-field__row {
-        align-items: flex-start;
-      }
-      
-      .config-ui-field--radio .config-ui-field__label {
-        padding-top: 6px;
       }
       
       /* Dark mode adjustments */
@@ -2761,21 +2826,19 @@
         }).join('\n');
       }
 
-      function _codefigCopyConsoleToClipboard() {
-        const text = _codefigGetConsoleText();
+      function _codefigCopyTextToClipboard(text, notifyMessage) {
         if (!text) return;
-        // Modern clipboard API
+        var notify = notifyMessage || 'Copied to clipboard';
         if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(text)
             .then(function () {
-              try { post('NOTIFY', { message: 'Copied to clipboard' }); } catch (_) {}
+              try { post('NOTIFY', { message: notify }); } catch (_) {}
             })
             .catch(function () {});
           return;
         }
-        // Fallback
         try {
-          const ta = document.createElement('textarea');
+          var ta = document.createElement('textarea');
           ta.value = text;
           ta.setAttribute('readonly', 'true');
           ta.style.position = 'fixed';
@@ -2785,8 +2848,12 @@
           ta.select();
           document.execCommand('copy');
           document.body.removeChild(ta);
-          try { post('NOTIFY', { message: 'Copied to clipboard' }); } catch (_) {}
+          try { post('NOTIFY', { message: notify }); } catch (_) {}
         } catch (_) {}
+      }
+
+      function _codefigCopyConsoleToClipboard() {
+        _codefigCopyTextToClipboard(_codefigGetConsoleText());
       }
 
       function _codefigEnsureConsoleContainer() {
@@ -2835,9 +2902,16 @@
         if (warnCount) titleBits.push(warnCount + ' warning' + (warnCount === 1 ? '' : 's'));
         if (!titleBits.length) titleBits.push(total + ' message' + (total === 1 ? '' : 's'));
 
+        var consoleTitle = 'Script log';
+        if (errorCount) {
+          consoleTitle = 'Script error' + (errorCount === 1 ? '' : 's');
+        } else if (warnCount) {
+          consoleTitle = 'Script warning' + (warnCount === 1 ? '' : 's');
+        }
+
         const header = [
           '<div class="codefig-console-header">',
-            '<div class="codefig-console-title">Script error(s):</div>',
+            '<div class="codefig-console-title">' + consoleTitle + '</div>',
             '<div class="codefig-console-meta">' + titleBits.join(' · ') + '</div>',
             '<div class="codefig-console-actions">',
               '<button type="button" class="btn secondary codefig-console-btn" id="codefigConsoleCopyBtn" title="Copy to console">Copy to console</button>',
@@ -3932,6 +4006,27 @@
             item.appendChild(details);
           }
           }
+
+          if (result.copyText) {
+            const copyRow = document.createElement('div');
+            copyRow.className = 'info-copy-row';
+            copyRow.style.cssText = 'margin-top: 8px; display: flex; gap: 8px; align-items: center;';
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'btn secondary';
+            copyBtn.textContent = 'Copy to clipboard';
+            copyBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              _codefigCopyTextToClipboard(result.copyText);
+            });
+            copyRow.appendChild(copyBtn);
+            item.appendChild(copyRow);
+            const pre = document.createElement('pre');
+            pre.className = 'info-copy-payload';
+            pre.style.cssText = 'margin-top: 8px; max-height: 280px; overflow: auto; padding: 8px; background: var(--bg-secondary, #f5f5f5); border-radius: 4px; font-size: 10px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; user-select: all;';
+            pre.textContent = result.copyText;
+            item.appendChild(pre);
+          }
           
           // Add click handler for node selection (single or multiple)
           if (result.nodeId || result.nodeIds) {
@@ -4615,7 +4710,7 @@
           return code.replace(importStatement, injectedCode);
         } else {
           console.warn('⚠️ Script not found for import: ' + scriptName);
-          figma.notify('Import failed: Script "' + scriptName + '" not found');
+          post('NOTIFY', { message: 'Import failed: Script "' + scriptName + '" not found' });
           // Remove the failed import statement
           return code.replace(importStatement, '// Import failed: ' + scriptName + ' not found');
         }
@@ -4820,6 +4915,7 @@
         if (scriptCode.trim()) {
           // Process runtime imports before execution
           scriptCode = processRuntimeImports(scriptCode);
+          beginRunSession();
           post('RUN', { code: scriptCode });
         }
       }
@@ -5583,11 +5679,18 @@
             const optionSource = msg.optionSource;
             const options = msg.options || [];
             const optionGroups = msg.optionGroups;
+            function collectionOptionLabel(opt, source) {
+              if (source === 'variableCollections' && opt === '') return '(all collections)';
+              if (source === 'localVariableCollectionsTarget' && opt === '__NEW__') return 'New collection';
+              return opt;
+            }
             const useGroupedCollections =
               optionGroups &&
               Array.isArray(optionGroups) &&
               optionGroups.length > 0 &&
-              (optionSource === 'variableCollections' || optionSource === 'localVariableCollections');
+              (optionSource === 'variableCollections' ||
+                optionSource === 'localVariableCollections' ||
+                optionSource === 'localVariableCollectionsTarget');
             document.querySelectorAll('select[data-option-source="' + optionSource + '"]').forEach(function (sel) {
               const initial = sel.getAttribute('data-initial-value') || '';
               sel.innerHTML = '';
@@ -5611,7 +5714,7 @@
                   values.forEach(function (val) {
                     const o = document.createElement('option');
                     o.value = val;
-                    o.textContent = val;
+                    o.textContent = collectionOptionLabel(val, optionSource);
                     og.appendChild(o);
                   });
                   sel.appendChild(og);
@@ -5621,7 +5724,7 @@
                 options.forEach(function (opt) {
                   const o = document.createElement('option');
                   o.value = opt;
-                  o.textContent = (opt === '' && optionSource === 'variableCollections') ? '(all collections)' : opt;
+                  o.textContent = collectionOptionLabel(opt, optionSource);
                   sel.appendChild(o);
                 });
               }
@@ -5732,18 +5835,23 @@
             break;
             
           case 'PROGRESS_RESET':
-            console.log('UI: Received progress reset');
             hideProgress();
             break;
             
           case 'PROGRESS_UPDATE':
-            console.log('UI: Received progress update:', msg);
             updateProgress(msg.operation, msg.processed, msg.total, msg.percentage);
             break;
             
           case 'PROGRESS_COMPLETE':
-            console.log('UI: Progress complete:', msg);
             hideProgress();
+            break;
+
+          case 'CODEFIG_RUN_COMPLETE':
+            hideProgress();
+            break;
+
+          case 'COPY_TO_CLIPBOARD':
+            _codefigCopyTextToClipboard(msg.text, msg.notifyMessage);
             break;
 
           case 'CONSOLE_FORWARD':
@@ -5797,74 +5905,130 @@
         }
       };
 
-      // === PROGRESS INDICATOR FUNCTIONS ===
-      
-        function updateProgress(operation, processed, total, percentage) {
-          const progressIndicator = document.getElementById('progressIndicator');
-          const progressFill = document.getElementById('progressFill');
-          const progressText = document.getElementById('progressText');
-          
-          // Add timestamp logging
-          var timestamp = new Date().toISOString().substr(11, 12); // HH:MM:SS.mmm
-          console.log('[' + timestamp + '] UI Progress update: ' + operation + ' - ' + processed + '/' + total + ' (' + percentage + '%)');
-          
-          if (progressIndicator && progressFill && progressText) {
-            // Show progress indicator
-            progressIndicator.style.display = 'flex';
-            
-            // Update progress bar - use pixel width instead of percentage
-            var progressBarContainer = progressIndicator.querySelector('.progress-bar');
-            var containerWidth = progressBarContainer.clientWidth;
-            
-            // Fallback if containerWidth is 0 (element not yet rendered)
-            if (containerWidth === 0) {
-              // Force a reflow and try again
-              progressBarContainer.offsetHeight;
-              containerWidth = progressBarContainer.clientWidth;
-            }
-            
-            // If still 0, use percentage as fallback
-            if (containerWidth === 0) {
-              progressFill.style.width = percentage + '%';
-            } else {
-              var fillWidth = Math.round((containerWidth * percentage) / 100);
-              progressFill.style.width = fillWidth + 'px';
-            }
-            
-            // Update text
-            const elapsed = Date.now() - (window.progressStartTime || Date.now());
-            const estimated = processed > 0 ? Math.round((elapsed / processed) * (total - processed)) : 0;
-            
-            let message = operation + ': ' + processed + '/' + total + ' (' + percentage + '%)';
-            if (estimated > 0) {
-              const formatTime = function(ms) {
-                if (ms < 1000) return ms + 'ms';
-                if (ms < 60000) return Math.round(ms / 1000) + 's';
-                return Math.round(ms / 60000) + 'm ' + Math.round((ms % 60000) / 1000) + 's';
-              };
-              message += ' - ETA: ' + formatTime(estimated);
-            }
-            
-            progressText.textContent = message;
-          }
+      // === PROGRESS INDICATOR & RUN SESSION ===
+
+      var CODEFIG_RUN_INDETERMINATE_DELAY_MS = 2000;
+      var codefigRunSession = {
+        active: false,
+        id: 0,
+        mode: 'hidden',
+        indeterminateTimer: null
+      };
+
+      function beginRunSession() {
+        if (codefigRunSession.indeterminateTimer) {
+          clearTimeout(codefigRunSession.indeterminateTimer);
+          codefigRunSession.indeterminateTimer = null;
         }
-      
-      function hideProgress() {
-        const progressIndicator = document.getElementById('progressIndicator');
-        if (progressIndicator) {
-          progressIndicator.style.display = 'none';
+        codefigRunSession.id += 1;
+        var sessionId = codefigRunSession.id;
+        codefigRunSession.active = true;
+        codefigRunSession.mode = 'hidden';
+        hideProgressBarOnly();
+        codefigRunSession.indeterminateTimer = setTimeout(function () {
+          if (!codefigRunSession.active || codefigRunSession.id !== sessionId) return;
+          if (codefigRunSession.mode === 'determinate') return;
+          showIndeterminateProgress('Running script…');
+        }, CODEFIG_RUN_INDETERMINATE_DELAY_MS);
+      }
+
+      function endRunSession() {
+        codefigRunSession.active = false;
+        codefigRunSession.mode = 'hidden';
+        if (codefigRunSession.indeterminateTimer) {
+          clearTimeout(codefigRunSession.indeterminateTimer);
+          codefigRunSession.indeterminateTimer = null;
         }
-        // Reset progress state
+      }
+
+      function hideProgressBarOnly() {
+        var progressIndicator = document.getElementById('progressIndicator');
+        var progressFill = document.getElementById('progressFill');
+        if (progressIndicator) progressIndicator.style.display = 'none';
+        if (progressFill) progressFill.classList.remove('indeterminate');
         window.progressStartTime = null;
       }
-      
-      function showProgress(operation, processed, total) {
-        if (!window.progressStartTime) {
-          window.progressStartTime = Date.now();
+
+      function showIndeterminateProgress(label) {
+        var progressIndicator = document.getElementById('progressIndicator');
+        var progressFill = document.getElementById('progressFill');
+        var progressText = document.getElementById('progressText');
+        if (!progressIndicator || !progressFill || !progressText) return;
+        if (!codefigRunSession.active) return;
+        codefigRunSession.mode = 'indeterminate';
+        if (!window.progressStartTime) window.progressStartTime = Date.now();
+        progressIndicator.style.display = 'flex';
+        progressFill.classList.add('indeterminate');
+        progressFill.style.width = '';
+        progressText.textContent = label || 'Running script…';
+      }
+
+      function updateProgress(operation, processed, total, percentage) {
+        var progressIndicator = document.getElementById('progressIndicator');
+        var progressFill = document.getElementById('progressFill');
+        var progressText = document.getElementById('progressText');
+
+        if (!progressIndicator || !progressFill || !progressText) return;
+
+        if (codefigRunSession.active) {
+          codefigRunSession.mode = 'determinate';
         }
-        const percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
+        if (!window.progressStartTime) window.progressStartTime = Date.now();
+
+        progressIndicator.style.display = 'flex';
+        progressFill.classList.remove('indeterminate');
+
+        var pct = percentage != null ? percentage : (total > 0 ? Math.round((processed / total) * 100) : 0);
+        var progressBarContainer = progressIndicator.querySelector('.progress-bar');
+        var containerWidth = progressBarContainer.clientWidth;
+
+        if (containerWidth === 0) {
+          progressBarContainer.offsetHeight;
+          containerWidth = progressBarContainer.clientWidth;
+        }
+
+        if (containerWidth === 0) {
+          progressFill.style.width = pct + '%';
+        } else {
+          var fillWidth = Math.round((containerWidth * pct) / 100);
+          progressFill.style.width = fillWidth + 'px';
+        }
+
+        var elapsed = Date.now() - (window.progressStartTime || Date.now());
+        var estimated = processed > 0 && total > processed ? Math.round((elapsed / processed) * (total - processed)) : 0;
+        var message = operation + ': ' + processed + '/' + total + ' (' + pct + '%)';
+        if (estimated > 0) {
+          var formatTime = function (ms) {
+            if (ms < 1000) return ms + 'ms';
+            if (ms < 60000) return Math.round(ms / 1000) + 's';
+            return Math.round(ms / 60000) + 'm ' + Math.round((ms % 60000) / 1000) + 's';
+          };
+          message += ' - ETA: ' + formatTime(estimated);
+        }
+        progressText.textContent = message;
+      }
+
+      function hideProgress() {
+        endRunSession();
+        hideProgressBarOnly();
+        var progressFill = document.getElementById('progressFill');
+        if (progressFill) {
+          progressFill.classList.remove('indeterminate');
+          progressFill.style.width = '0';
+          progressFill.style.marginLeft = '';
+        }
+      }
+
+      function showProgress(operation, processed, total) {
+        if (!window.progressStartTime) window.progressStartTime = Date.now();
+        var percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
         updateProgress(operation, processed, total, percentage);
       }
+
+      /** Exposed for optional completion from UI-side helpers */
+      window.codefigRunSessionIsIndeterminate = function () {
+        return codefigRunSession.active && codefigRunSession.mode === 'indeterminate';
+      };
 
       // Initialize everything
       function init() {

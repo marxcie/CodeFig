@@ -117,10 +117,30 @@
           i++;
           continue;
         }
-        if (lastWasBlank || !rows.length || rows[rows.length - 1].type !== "paragraph") {
-          rows.push({ type: "paragraph", text: c });
+        var pSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|]+)/g;
+        var pSwAll = [];
+        var psm;
+        while ((psm = pSwRe.exec(c)) !== null) {
+          pSwAll.push({
+            field: psm[1],
+            values: psm[2]
+              .split("|")
+              .map(function (s) {
+                return s.trim();
+              })
+              .filter(Boolean),
+          });
+        }
+        var ptext = c.replace(/\s+@showWhen:\s*\w+\s*=\s*[\w|]+/g, "").trim();
+        var hasShowWhen = pSwAll.length > 0;
+        if (hasShowWhen || lastWasBlank || !rows.length || rows[rows.length - 1].type !== "paragraph") {
+          rows.push({
+            type: "paragraph",
+            text: ptext,
+            showWhenRules: pSwAll.length ? pSwAll : undefined,
+          });
         } else {
-          rows[rows.length - 1].text += "\n" + c;
+          rows[rows.length - 1].text += "\n" + ptext;
         }
         lastWasBlank = false;
         i++;
@@ -145,11 +165,17 @@
         if (tip.match(/@multi\b/)) {
           inputType = "multiselect";
         }
+        var labelMatch = tip.match(/@label:\s*(.+?)(?=\s+@|$)/);
+        var fieldLabel = labelFromName(m[1]);
+        if (labelMatch) {
+          fieldLabel = labelMatch[1].trim();
+          tip = tip.replace(/@label:\s*.+?(?=\s+@|$)/, "").trim();
+        }
         var f = {
           type: "field",
           name: m[1],
           value: val,
-          label: labelFromName(m[1]),
+          label: fieldLabel,
           tooltip: tip,
           inputType: inputType,
         };
@@ -227,8 +253,18 @@
         return;
       }
       if (r.type === "paragraph") {
-        r.text.split("\n").forEach(function (l) {
-          out.push("// " + l);
+        var plines = r.text.split("\n");
+        plines.forEach(function (l, idx) {
+          var pl = "// " + l;
+          if (idx === plines.length - 1) {
+            var pr = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+            if (pr && pr.length) {
+              pr.forEach(function (rule) {
+                pl += " @showWhen: " + rule.field + "=" + rule.values.join("|");
+              });
+            }
+          }
+          out.push(pl);
         });
         return;
       }
@@ -243,6 +279,8 @@
         else if (r.optionSource) parts.push("@options: " + r.optionSource);
         if (r.inputType === "radio") parts.push("@radio");
         if (r.inputType === "multiselect") parts.push("@multi");
+        if (r.inputType === "textarea") parts.push("@textarea");
+        if (r.label && r.label !== labelFromName(r.name)) parts.push("@label: " + r.label);
         var sr = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
         if (sr && sr.length)
           sr.forEach(function (rule) {
