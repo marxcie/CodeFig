@@ -156,14 +156,70 @@
     return sourceCode.length;
   }
 
+  /** Punctuation after which a `/` opens a regex literal rather than dividing. */
+  var REGEX_PRECEDERS = '(,=:[!&|?{};+-*%~^<>';
+
+  /** Keywords after which a `/` opens a regex literal, e.g. `return /re/.test(s)`. */
+  var REGEX_KEYWORDS = [
+    'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
+    'case', 'do', 'else', 'yield', 'await'
+  ];
+
+  /**
+   * Could the `/` at slashIndex start a regex literal, given the last significant
+   * code character before it? Ambiguous in JS without a full parser; this is the
+   * standard heuristic — punctuation that cannot end an expression, or a keyword.
+   */
+  function slashStartsRegex(sourceCode, slashIndex, prevSignificant, prevSignificantIndex) {
+    if (!prevSignificant) return true; // start of the scanned region
+    if (REGEX_PRECEDERS.indexOf(prevSignificant) !== -1) return true;
+    if (!/[A-Za-z0-9_$]/.test(prevSignificant)) return false;
+    // Identifier-ish: a regex only follows if it is one of the keywords above.
+    var end = prevSignificantIndex + 1;
+    var start = end;
+    while (start > 0 && /[A-Za-z0-9_$]/.test(sourceCode[start - 1])) start--;
+    return REGEX_KEYWORDS.indexOf(sourceCode.slice(start, end)) !== -1;
+  }
+
+  /** Skip /.../flags including char classes. Returns index after the literal. */
+  function skipRegexLiteral(sourceCode, slashIndex) {
+    var i = slashIndex + 1;
+    var inClass = false;
+    while (i < sourceCode.length) {
+      var c = sourceCode[i];
+      if (c === '\\') {
+        i += 2;
+        continue;
+      }
+      if (c === '\n' || c === '\r') return slashIndex + 1; // unterminated: treat as division
+      if (inClass) {
+        if (c === ']') inClass = false;
+      } else if (c === '[') {
+        inClass = true;
+      } else if (c === '/') {
+        i++;
+        while (i < sourceCode.length && /[dgimsuvy]/.test(sourceCode[i])) i++;
+        return i;
+      }
+      i++;
+    }
+    return slashIndex + 1;
+  }
+
   /**
    * Index of the `}` matching the `{` at openBraceIndex; -1 if unbalanced.
-   * Skips strings, line/block comments and template literals.
+   * Skips strings, line/block comments, template literals and regex literals.
+   *
+   * Regex literals matter: `/\\\{([^}]+)\\\}/g` in @pattern-matching.ts holds one `{`
+   * and two `}`, which without this closes the enclosing function an entire brace
+   * early and yields a truncated, unparseable extraction.
    */
   function findMatchingBraceEndIndex(sourceCode, openBraceIndex) {
     if (sourceCode[openBraceIndex] !== '{') return -1;
     var i = openBraceIndex + 1;
     var depth = 1;
+    var prevSignificant = '{';
+    var prevSignificantIndex = openBraceIndex;
     while (i < sourceCode.length && depth > 0) {
       var c = sourceCode[i];
       if (c === '/' && sourceCode[i + 1] === '/') {
@@ -182,16 +238,33 @@
         }
         continue;
       }
+      if (c === '/' && slashStartsRegex(sourceCode, i, prevSignificant, prevSignificantIndex)) {
+        var afterRegex = skipRegexLiteral(sourceCode, i);
+        if (afterRegex > i + 1) {
+          prevSignificant = '/';
+          prevSignificantIndex = afterRegex - 1;
+          i = afterRegex;
+          continue;
+        }
+      }
       if (c === '"' || c === "'") {
         i = skipQuotedString(sourceCode, i);
+        prevSignificant = c;
+        prevSignificantIndex = i - 1;
         continue;
       }
       if (c === '`') {
         i = skipTemplateLiteral(sourceCode, i);
+        prevSignificant = '`';
+        prevSignificantIndex = i - 1;
         continue;
       }
       if (c === '{') depth++;
       else if (c === '}') depth--;
+      if (!/\s/.test(c)) {
+        prevSignificant = c;
+        prevSignificantIndex = i;
+      }
       i++;
     }
     if (depth !== 0) return -1;
@@ -415,6 +488,21 @@
   // Resolution
   // ---------------------------------------------------------------------------
 
+  /**
+   * Replace the first occurrence of `statement` with `text`, literally.
+   *
+   * Must use a replacer function: with a string replacement, String.replace treats
+   * `$&`, `` $` ``, `$'` and `$1` in the *replacement* as patterns. Library sources
+   * are full of them — `` `^${pattern}$` `` in @pattern-matching.ts ends in `` $` ``,
+   * which as a pattern means "everything before the match" and silently pastes the
+   * consuming script's own header into the middle of a template literal.
+   */
+  function spliceAt(code, statement, text) {
+    return code.replace(statement, function () {
+      return text;
+    });
+  }
+
   /** Splice one import statement, or replace it with a failure comment. */
   function spliceImport(code, statement, functionNames, scriptName, scripts, handlers) {
     var sourceScript = findScript(scripts, scriptName);
@@ -422,7 +510,7 @@
     if (!sourceScript) {
       handlers.warn('⚠️ Script not found for import: ' + scriptName);
       handlers.notify('Import failed: Script "' + scriptName + '" not found');
-      return code.replace(statement, '// Import failed: ' + scriptName + ' not found');
+      return spliceAt(code, statement, '// Import failed: ' + scriptName + ' not found');
     }
 
     handlers.log('🔗 Runtime import: ' + functionNames.join(', ') + ' from ' + sourceScript.name);
@@ -433,7 +521,7 @@
     var extractedFunctions = extractFunctions(sourceScript.code, functionNames);
     var injectedCode = '// Runtime imported from: ' + sourceScript.name + '\n' + extractedFunctions + '\n';
 
-    return code.replace(statement, injectedCode);
+    return spliceAt(code, statement, injectedCode);
   }
 
   /**
@@ -478,10 +566,10 @@
       if (!sourceScript) {
         if (imp.kind === 'wildcardFrom') {
           handlers.warn('Wildcard import: Script not found: ' + imp.scriptName);
-          processedCode = processedCode.replace(imp.statement, '// Import failed: Script not found');
+          processedCode = spliceAt(processedCode, imp.statement, '// Import failed: Script not found');
         } else {
           handlers.warn('Wildcard import: Core library not found');
-          processedCode = processedCode.replace(imp.statement, '// Import failed: Core library not found');
+          processedCode = spliceAt(processedCode, imp.statement, '// Import failed: Core library not found');
         }
         return;
       }

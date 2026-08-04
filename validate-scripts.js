@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 // Single implementation of @import parsing and function extraction, shared with the
 // UI at run time (inlined into dist/ui.html). Do not re-implement either here.
-const { findImports, extractFunctionMap } = require('./src/import-resolver.js');
+const { findImports, extractFunctionMap, resolveImports } = require('./src/import-resolver.js');
 
 // Colors for console output
 const colors = {
@@ -175,6 +175,65 @@ function findAllScripts(scriptsDir) {
   
   scanDirectory(scriptsDir);
   return scripts;
+}
+
+/**
+ * Does this script parse the way the sandbox will parse it?
+ *
+ * src/code.ts runs user scripts through `new Function('figma', 'console', 'window', code)`,
+ * so the source text reaches the JS parser verbatim: TypeScript annotations, `interface`
+ * blocks and `as` casts are syntax errors, not types. Asking the engine is a positive
+ * check and strictly better than grepping for TypeScript-shaped syntax.
+ *
+ * `@import` markers are not JS either, so they are removed first — via findImports from
+ * the shared resolver, so this can never disagree with what the UI strips at run time.
+ */
+function validateParse(script) {
+  let code = script.code;
+  findImports(code).forEach(imp => {
+    code = code.replace(imp.statement, '');
+  });
+
+  try {
+    new Function('figma', 'console', 'window', code);
+    return null;
+  } catch (error) {
+    return {
+      type: 'parse',
+      file: script.name,
+      message: `Does not parse as plain JS: ${error.message}. Scripts run through new Function - no type annotations, interfaces or casts.`
+    };
+  }
+}
+
+/**
+ * Does the script still parse once its imports are spliced in?
+ *
+ * Stronger than validateParse and the reason it exists: extraction is textual, so a
+ * brace-counting slip truncates a library function and the corruption only appears in
+ * the *resolved* text — which is what the sandbox runs. Both resolver bugs found while
+ * de-annotating the libraries (a regex literal counted as braces, and `$`-patterns in
+ * library source being read as replacement patterns) were invisible until this ran.
+ */
+function validateResolvedParse(script, scripts) {
+  if (findImports(script.code).length === 0) return null;
+
+  let resolved = resolveImports(script.code, scripts, {});
+  // A soft-failed import leaves a comment; any surviving marker is prose, not code.
+  findImports(resolved).forEach(imp => {
+    resolved = resolved.replace(imp.statement, '');
+  });
+
+  try {
+    new Function('figma', 'console', 'window', resolved);
+    return null;
+  } catch (error) {
+    return {
+      type: 'parse',
+      file: script.name,
+      message: `Does not parse after @import resolution: ${error.message}. A library function was probably truncated during extraction.`
+    };
+  }
 }
 
 // Validate JavaScript syntax (lenient for TypeScript)
@@ -545,6 +604,20 @@ function validateScripts() {
     });
   });
   
+  // Parse every script the way the sandbox will, before and after @import resolution
+  console.log(`${colors.cyan}🧩 Checking scripts parse as plain JS...${colors.reset}`);
+  scripts.forEach(script => {
+    const parseError = validateParse(script);
+    if (parseError) {
+      allErrors.push({ ...parseError, path: script.path });
+      return; // a resolved-parse error would just repeat this one
+    }
+    const resolvedError = validateResolvedParse(script, scripts);
+    if (resolvedError) {
+      allErrors.push({ ...resolvedError, path: script.path });
+    }
+  });
+
   // Validate imports
   console.log(`${colors.cyan}🔗 Checking @import statements...${colors.reset}`);
   const importValidation = validateImports(scripts);

@@ -34,14 +34,6 @@
 @import { processWithOptimization, cleanupMemory, traverseNodes, getAllStyles, collectNodesAsync, showProgress, codefigRunOpBegin, codefigRunOpEnd, finishCodefigRunProgress } from "@Core Library"
 @import { escapeWildcards } from "@Pattern Matching"
 
-// Fallback for escapeWildcards if import fails
-if (typeof escapeWildcards === 'undefined') {
-  var escapeWildcards = function(pattern) {
-    // Escape regex special characters; * is handled separately in style-name matching
-    return pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-  };
-}
-
 // ========================================
 // CONFIGURATION
 // ========================================

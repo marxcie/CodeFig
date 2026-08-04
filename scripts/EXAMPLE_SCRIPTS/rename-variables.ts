@@ -29,53 +29,6 @@
 @import { getAllCollections, getCollectionVariables, getVariable } from "@Variables"
 @import { matchPattern, replaceWithPattern } from "@Pattern Matching"
 
-// Fallback when import fails
-if (typeof matchPattern !== 'function') {
-  var matchPattern = function(text, pattern, options) {
-    options = options || {};
-    var t = (options.caseSensitive ? text : text.toLowerCase());
-    var p = (options.caseSensitive ? pattern : pattern.toLowerCase());
-    if (options.exact) return { match: t === p, confidence: t === p ? 1 : 0 };
-    return { match: t.indexOf(p) !== -1, confidence: t.indexOf(p) !== -1 ? 1 : 0 };
-  };
-}
-if (typeof replaceWithPattern !== 'function') {
-  var escapeWildcards = function(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
-  var applyFigmaPlaceholders = function(replacePattern, context) {
-    var r = replacePattern.replace(/\$&/g, context.fullMatch);
-    for (var g = 0; g < (context.groups || []).length; g++) {
-      r = r.replace(new RegExp('\\$' + (g + 1) + '(?![0-9])', 'g'), context.groups[g] || '');
-    }
-    var i = context.index, tot = context.total;
-    r = r.replace(/\$nnn/g, String(i + 1).padStart(3, '0')).replace(/\$nn/g, String(i + 1).padStart(2, '0')).replace(/\$n(?![nN0-9])/g, String(i + 1));
-    r = r.replace(/\$NNN/g, String(tot - i).padStart(3, '0')).replace(/\$NN(?![0-9])/g, String(tot - i).padStart(2, '0')).replace(/\$N(?![nN0-9])/g, String(tot - i));
-    return r;
-  };
-  var looksLikeRegex = function(p) { return /[()[\]{}*+?^$|\\]/.test(p.replace(/\\./g, '')); };
-  var replaceWithPattern = function(text, searchPattern, replacePattern, index, total) {
-    index = index != null ? index : 0; total = total != null ? total : 1;
-    var fullMatch = '', groups = [];
-    if (looksLikeRegex(searchPattern)) {
-      try {
-        var regex = new RegExp(searchPattern, 'g');
-        var match = regex.exec(text);
-        if (match) {
-          fullMatch = match[0]; groups = match.slice(1);
-          var replacement = applyFigmaPlaceholders(replacePattern, { fullMatch: fullMatch, groups: groups, index: index, total: total });
-          return text.replace(regex, replacement);
-        }
-      } catch (e) {}
-    }
-    var escaped = escapeWildcards(searchPattern).replace(/\\\*/g, '.*');
-    var literalRegex = new RegExp(escaped, 'gi');
-    var match = literalRegex.exec(text);
-    if (!match) return text;
-    fullMatch = match[0]; groups = match.slice(1);
-    var replacement = applyFigmaPlaceholders(replacePattern, { fullMatch: fullMatch, groups: groups, index: index, total: total });
-    return text.replace(literalRegex, replacement);
-  };
-}
-
 // ============================================================================
 // CONFIGURATION
 // ============================================================================

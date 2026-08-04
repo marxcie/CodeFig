@@ -241,8 +241,8 @@ test('arrow and function-expression forms are NAMED but not extractable', () => 
 test('a TypeScript return annotation makes a function un-extractable at run time', () => {
   // Extracted text is spliced into `new Function(...)`, where `: MatchResult` is a
   // SyntaxError — so the resolver refuses these rather than injecting code that
-  // cannot parse. Shipped scripts that import from @Pattern Matching and @Styles
-  // carry hand-written fallbacks for exactly this case.
+  // cannot parse. No shipped library is annotated any more (`npm run validate`
+  // enforces that), but user scripts in clientStorage may still be.
   const lib = script(
     'CodeFig Libraries / @Typed',
     'function typedFn(a: string): number {\n  return 1;\n}\nfunction plainFn() {\n  return 2;\n}',
@@ -283,17 +283,82 @@ test('braces inside strings, comments and template literals do not truncate a fu
   assert.doesNotMatch(code, /function afterTricky/, 'must not over-run into the next function');
 });
 
-test('a regex literal containing an unbalanced brace DOES truncate extraction', () => {
-  // Known bug: the brace scanner has no regex-literal state, so /}/ reads as a real
-  // closing brace. No shipped library hits this. Asserted so a fix is a visible
-  // test change rather than a silent behaviour shift.
+test('a regex literal with unbalanced braces does not truncate extraction', () => {
+  // @pattern-matching.ts has /\\\{([^}]+)\\\}/g — one `{`, two `}`. Without regex
+  // state in the brace scanner that closes the function a brace early and the
+  // extraction is unparseable.
   const lib = script(
     'CodeFig Libraries / @Regex',
-    'function regexFn() {\n  const re = /}/;\n  return re.test("}");\n}',
+    [
+      'function regexFn(pattern) {',
+      '  let out = pattern.replace(/\\\\\\{([^}]+)\\\\\\}/g, "($1)");',
+      '  const re = /}/;',
+      '  return re.test(out);',
+      '}',
+      'function afterRegexFn() { return 1; }'
+    ].join('\n'),
     '@regex.ts'
   );
   const { code } = resolve('@import { regexFn } from "@Regex"' + PAD, [lib]);
-  assert.doesNotMatch(code, /return re\.test/, 'body is cut short at the brace inside the regex');
+  assert.match(code, /return re\.test\(out\);/, 'whole body must survive');
+  assert.doesNotMatch(code, /function afterRegexFn/, 'must not over-run into the next function');
+});
+
+test('division is not mistaken for a regex literal', () => {
+  const lib = script(
+    'CodeFig Libraries / @Div',
+    [
+      'function divFn(a, b) {',
+      '  const half = (a + b) / 2;',
+      '  const ratio = a / b / 2;',
+      '  return half + ratio;',
+      '}',
+      'function afterDivFn() { return 1; }'
+    ].join('\n'),
+    '@div.ts'
+  );
+  const { code } = resolve('@import { divFn } from "@Div"' + PAD, [lib]);
+  assert.match(code, /return half \+ ratio;/);
+  assert.doesNotMatch(code, /function afterDivFn/);
+});
+
+test('a regex literal after the return keyword is recognised', () => {
+  // @variables.ts has `return v.description && /(\w+)\s*\([^)]*\)/.test(...)`.
+  const lib = script(
+    'CodeFig Libraries / @Ret',
+    'function retFn(s) {\n  return s && /[{](\\w+)[}]/.test(s);\n}\nfunction afterRetFn() { return 1; }',
+    '@ret.ts'
+  );
+  const { code } = resolve('@import { retFn } from "@Ret"' + PAD, [lib]);
+  assert.match(code, /return s && /);
+  assert.doesNotMatch(code, /function afterRetFn/);
+});
+
+test('$-patterns in library source are spliced literally, not as replacement patterns', () => {
+  // String.replace treats $&, $`, $' and $1 in a *string* replacement as patterns.
+  // @pattern-matching.ts's `` `^${p}$` `` ends in $` — "everything before the match" —
+  // which would paste the consuming script's header into a template literal.
+  const lib = script(
+    'CodeFig Libraries / @Dollars',
+    [
+      'function dollarFn(p, s) {',
+      '  const re = new RegExp(`^${p}$`, "g");',
+      '  const escaped = s.replace(/[.*+?]/g, "\\\\$&");',
+      '  return re.test(escaped) ? "$1" : "none";',
+      '}'
+    ].join('\n'),
+    '@dollars.ts'
+  );
+  const header = '// UNIQUE-HEADER-MARKER\n';
+  const { code } = resolve(header + '@import { dollarFn } from "@Dollars"' + PAD, [lib]);
+
+  assert.match(code, /new RegExp\(`\^\$\{p\}\$`, "g"\)/, 'the $` sequence must survive verbatim');
+  assert.match(code, /"\\\\\$&"/, '$& must survive verbatim');
+  assert.strictEqual(
+    (code.match(/UNIQUE-HEADER-MARKER/g) || []).length, 1,
+    'the header must not be pasted into the injected code by a $-pattern'
+  );
+  assert.doesNotThrow(() => new Function(code.replace(/^.*@import.*$/gm, '')), 'result must parse');
 });
 
 // ---------------------------------------------------------------------------
@@ -336,21 +401,17 @@ test('every @import in the shipped script tree resolves to a real script', () =>
 });
 
 /**
- * Named imports in shipped scripts that do NOT resolve to injected source today,
- * because the library declares them with TypeScript annotations. Each consuming
- * script carries a hand-written `if (typeof fn !== 'function')` fallback.
+ * Named imports in shipped scripts that do NOT resolve to injected source.
  *
- * Shrinking this list is a fix; growing it is a regression. It is keyed by
- * "script name :: function" so a new gap names itself in the failure output.
+ * Empty, and it should stay that way. It held six entries until the three libraries
+ * written in real TypeScript were de-annotated — a TypeScript-annotated declaration
+ * is not extractable, so those imports silently injected nothing and the consuming
+ * scripts ran hand-written fallbacks instead. `npm run validate` now rejects a script
+ * that does not parse as plain JS, so this list is the second line of defence.
+ *
+ * Keyed by "script name :: function" so a new gap names itself in the failure output.
  */
-const KNOWN_UNINJECTED = [
-  'Utility Scripts / Rename styles :: matchPattern',
-  'Utility Scripts / Rename styles :: replaceWithPattern',
-  'Utility Scripts / Rename variables :: matchPattern',
-  'Utility Scripts / Rename variables :: replaceWithPattern',
-  'Utility Scripts / Replace styles :: escapeWildcards',
-  'Utility Scripts / Replace variables :: matchPattern'
-];
+const KNOWN_UNINJECTED = [];
 
 test('every shipped script resolves its imports into real injected source', () => {
   // The anti-silent-no-op check: an @import that resolves to nothing leaves a script

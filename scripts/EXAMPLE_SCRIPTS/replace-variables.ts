@@ -24,16 +24,6 @@
 
 @import { matchPattern } from "@Pattern Matching"
 
-if (typeof matchPattern !== 'function') {
-  var matchPattern = function(text, pattern, options) {
-    options = options || {};
-    var t = (options.caseSensitive ? text : text.toLowerCase());
-    var p = (options.caseSensitive ? pattern : pattern.toLowerCase());
-    if (options.exact) return { match: t === p, confidence: t === p ? 1 : 0 };
-    return { match: t.indexOf(p) !== -1, confidence: t.indexOf(p) !== -1 ? 1 : 0 };
-  };
-}
-
 // ========================================
 // CONFIGURATION
 // ========================================

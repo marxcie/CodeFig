@@ -19,49 +19,53 @@
 // TYPE DEFINITIONS
 // ============================================================================
 
-interface ReplacementOptions {
-  findPattern: string;        // Pattern to find
-  replacePattern: string;     // Pattern to replace with
-  collection?: string;        // Collection filter
-  type?: string;             // Type filter (for styles)
-  property?: string;         // Property filter (for variables)
-  exact?: boolean;           // Exact match
-  caseSensitive?: boolean;   // Case sensitivity
-  dryRun?: boolean;          // Preview only
-  batchSize?: number;        // Batch processing size
-  maxReplacements?: number;  // Maximum replacements
-}
+/**
+ * Shape of ReplacementOptions (documentation only — CodeFig scripts are plain JS).
+ * findPattern: string;        // Pattern to find
+ * replacePattern: string;     // Pattern to replace with
+ * collection?: string;        // Collection filter
+ * type?: string;             // Type filter (for styles)
+ * property?: string;         // Property filter (for variables)
+ * exact?: boolean;           // Exact match
+ * caseSensitive?: boolean;   // Case sensitivity
+ * dryRun?: boolean;          // Preview only
+ * batchSize?: number;        // Batch processing size
+ * maxReplacements?: number;  // Maximum replacements
+ */
 
-interface ReplacementMatch {
-  node: any;                 // Target node
-  property: string;          // Property being replaced
-  oldValue: any;             // Current value
-  newValue: any;             // New value
-  confidence: number;        // Match confidence
-  reason: string;            // Reason for replacement
-  metadata?: any;            // Additional metadata
-}
+/**
+ * Shape of ReplacementMatch (documentation only — CodeFig scripts are plain JS).
+ * node: any;                 // Target node
+ * property: string;          // Property being replaced
+ * oldValue: any;             // Current value
+ * newValue: any;             // New value
+ * confidence: number;        // Match confidence
+ * reason: string;            // Reason for replacement
+ * metadata?: any;            // Additional metadata
+ */
 
-interface ReplacementPlan {
-  matches: ReplacementMatch[];
-  totalMatches: number;
-  estimatedTime: number;     // Estimated execution time (ms)
-  riskLevel: 'low' | 'medium' | 'high';
-  warnings: string[];
-  rollbackData: any[];       // Data for rollback
-}
+/**
+ * Shape of ReplacementPlan (documentation only — CodeFig scripts are plain JS).
+ * matches: ReplacementMatch[]
+ * totalMatches: number
+ * estimatedTime: number;     // Estimated execution time (ms)
+ * riskLevel: 'low' | 'medium' | 'high'
+ * warnings: string[]
+ * rollbackData: any[];       // Data for rollback
+ */
 
-interface ReplacementResult {
-  successful: number;
-  failed: number;
-  skipped: number;
-  total: number;
-  errors: string[];
-  warnings: string[];
-  details: ReplacementMatch[];
-  executionTime: number;
-  rollbackData: any[];
-}
+/**
+ * Shape of ReplacementResult (documentation only — CodeFig scripts are plain JS).
+ * successful: number
+ * failed: number
+ * skipped: number
+ * total: number
+ * errors: string[]
+ * warnings: string[]
+ * details: ReplacementMatch[]
+ * executionTime: number
+ * rollbackData: any[]
+ */
 
 // ============================================================================
 // MAIN REPLACEMENT FUNCTIONS
@@ -71,9 +75,9 @@ interface ReplacementResult {
  * Find and replace with advanced options
  */
 async function findAndReplace(
-  selection: ReadonlyArray<any>,
-  options: ReplacementOptions
-): Promise<ReplacementResult> {
+  selection,
+  options
+) {
   const startTime = Date.now();
   
   try {
@@ -120,10 +124,10 @@ async function findAndReplace(
  * Batch replace with progress tracking
  */
 async function batchReplace(
-  selection: ReadonlyArray<any>,
-  options: ReplacementOptions,
-  onProgress?: (progress: { current: number; total: number; percentage: number }) => void
-): Promise<ReplacementResult> {
+  selection,
+  options,
+  onProgress
+) {
   const startTime = Date.now();
   const batchSize = options.batchSize || 50;
   
@@ -146,7 +150,7 @@ async function batchReplace(
     }
     
     // Process in batches
-    const result: ReplacementResult = {
+    const result = {
       successful: 0,
       failed: 0,
       skipped: 0,
@@ -217,12 +221,12 @@ async function batchReplace(
  * Create replacement plan
  */
 async function createReplacementPlan(
-  selection: ReadonlyArray<any>,
-  options: ReplacementOptions
-): Promise<ReplacementPlan> {
-  const matches: ReplacementMatch[] = [];
-  const warnings: string[] = [];
-  const rollbackData: any[] = [];
+  selection,
+  options
+) {
+  const matches = [];
+  const warnings = [];
+  const rollbackData = [];
   
   const allNodes = collectAllNodes(selection);
   
@@ -268,8 +272,8 @@ async function createReplacementPlan(
 /**
  * Find matches in a single node (async for getStyleByIdAsync)
  */
-async function findMatchesInNode(node: any, options: ReplacementOptions): Promise<ReplacementMatch[]> {
-  const matches: ReplacementMatch[] = [];
+async function findMatchesInNode(node, options) {
+  const matches = [];
   
   // Check bound variables
   if (node.boundVariables) {
@@ -312,11 +316,11 @@ async function findMatchesInNode(node: any, options: ReplacementOptions): Promis
  * Create variable match
  */
 function createVariableMatch(
-  node: any,
-  property: string,
-  variable: any,
-  options: ReplacementOptions
-): ReplacementMatch | null {
+  node,
+  property,
+  variable,
+  options
+) {
   const variableName = variable.name;
   
   // Check if variable matches find pattern
@@ -349,11 +353,11 @@ function createVariableMatch(
  * Create style match
  */
 function createStyleMatch(
-  node: any,
-  property: string,
-  style: any,
-  options: ReplacementOptions
-): ReplacementMatch | null {
+  node,
+  property,
+  style,
+  options
+) {
   const styleName = style.name;
   
   // Check if style matches find pattern
@@ -390,8 +394,8 @@ function createStyleMatch(
 /**
  * Execute replacement plan
  */
-async function executeReplacement(plan: ReplacementPlan, options: ReplacementOptions): Promise<ReplacementResult> {
-  const result: ReplacementResult = {
+async function executeReplacement(plan, options) {
+  const result = {
     successful: 0,
     failed: 0,
     skipped: 0,
@@ -449,7 +453,7 @@ async function executeReplacement(plan: ReplacementPlan, options: ReplacementOpt
 /**
  * Execute a single match
  */
-async function executeMatch(match: ReplacementMatch): Promise<boolean> {
+async function executeMatch(match) {
   try {
     if (match.metadata?.type === 'variable') {
       return executeVariableReplacement(match);
@@ -467,7 +471,7 @@ async function executeMatch(match: ReplacementMatch): Promise<boolean> {
 /**
  * Execute variable replacement
  */
-function executeVariableReplacement(match: ReplacementMatch): boolean {
+function executeVariableReplacement(match) {
   // This would involve replacing variable bindings
   // Implementation depends on specific requirements
   console.log('Variable replacement not implemented yet');
@@ -477,7 +481,7 @@ function executeVariableReplacement(match: ReplacementMatch): boolean {
 /**
  * Execute style replacement (async for documentAccess: dynamic-page)
  */
-async function executeStyleReplacement(match: ReplacementMatch): Promise<boolean> {
+async function executeStyleReplacement(match) {
   try {
     const { node, property, newValue } = match;
     
@@ -505,8 +509,8 @@ async function executeStyleReplacement(match: ReplacementMatch): Promise<boolean
 /**
  * Execute batch of matches
  */
-async function executeBatch(matches: ReplacementMatch[], options: ReplacementOptions): Promise<ReplacementResult> {
-  const result: ReplacementResult = {
+async function executeBatch(matches, options) {
+  const result = {
     successful: 0,
     failed: 0,
     skipped: 0,
@@ -555,7 +559,7 @@ async function executeBatch(matches: ReplacementMatch[], options: ReplacementOpt
 /**
  * Generate replacement value from pattern
  */
-function generateReplacementValue(originalValue: string, replacePattern: string): any {
+function generateReplacementValue(originalValue, replacePattern) {
   // Simple wildcard replacement
   const newName = replacePattern.replace(/\*/g, originalValue);
   
@@ -567,7 +571,7 @@ function generateReplacementValue(originalValue: string, replacePattern: string)
 /**
  * Calculate risk level
  */
-function calculateRiskLevel(matches: ReplacementMatch[], options: ReplacementOptions): 'low' | 'medium' | 'high' {
+function calculateRiskLevel(matches, options) {
   if (matches.length === 0) return 'low';
   if (matches.length > 1000) return 'high';
   if (matches.length > 100) return 'medium';
@@ -577,7 +581,7 @@ function calculateRiskLevel(matches: ReplacementMatch[], options: ReplacementOpt
 /**
  * Estimate execution time
  */
-function estimateExecutionTime(matchCount: number): number {
+function estimateExecutionTime(matchCount) {
   // Rough estimate: 1ms per match
   return matchCount * 1;
 }
@@ -585,7 +589,7 @@ function estimateExecutionTime(matchCount: number): number {
 /**
  * Capture node state for rollback
  */
-function captureNodeState(node: any): any {
+function captureNodeState(node) {
   return {
     boundVariables: node.boundVariables ? { ...node.boundVariables } : undefined,
     textStyleId: node.textStyleId,
@@ -598,8 +602,8 @@ function captureNodeState(node: any): any {
 /**
  * Get node style properties
  */
-function getNodeStyleProperties(node: any): { [key: string]: any } {
-  const properties: { [key: string]: any } = {};
+function getNodeStyleProperties(node) {
+  const properties = {};
   
   if ('textStyleId' in node) properties.textStyleId = node.textStyleId;
   if ('fillStyleId' in node) properties.fillStyleId = node.fillStyleId;
@@ -612,10 +616,10 @@ function getNodeStyleProperties(node: any): { [key: string]: any } {
 /**
  * Collect all nodes recursively
  */
-function collectAllNodes(selection: ReadonlyArray<any>): any[] {
-  const nodes: any[] = [];
+function collectAllNodes(selection) {
+  const nodes = [];
   
-  function traverse(node: any) {
+  function traverse(node) {
     nodes.push(node);
     
     if ('children' in node) {
@@ -635,8 +639,8 @@ function collectAllNodes(selection: ReadonlyArray<any>): any[] {
 /**
  * Chunk array into batches
  */
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunks: T[][] = [];
+function chunkArray(array, size) {
+  const chunks = [];
   for (let i = 0; i < array.length; i += size) {
     chunks.push(array.slice(i, i + size));
   }
@@ -646,7 +650,7 @@ function chunkArray<T>(array: T[], size: number): T[][] {
 /**
  * Cleanup memory
  */
-function cleanupMemory(): void {
+function cleanupMemory() {
   // Force garbage collection if available
   if (typeof gc === 'function') {
     gc();
@@ -656,7 +660,7 @@ function cleanupMemory(): void {
 /**
  * Match pattern (imported from @Pattern Matching)
  */
-function matchPattern(text: string, pattern: string, options: { exact?: boolean; caseSensitive?: boolean } = {}): { match: boolean; confidence: number } {
+function matchPattern(text, pattern, options = {}) {
   const { exact = false, caseSensitive = false } = options;
   
   let searchText = text;

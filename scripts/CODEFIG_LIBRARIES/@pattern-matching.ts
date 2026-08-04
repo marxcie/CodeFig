@@ -19,27 +19,30 @@
 // TYPE DEFINITIONS
 // ============================================================================
 
-interface PatternOptions {
-  exact?: boolean;           // Exact match vs partial match
-  caseSensitive?: boolean;   // Case sensitivity
-  fuzzy?: boolean;          // Enable fuzzy matching
-  regex?: boolean;          // Treat pattern as regex
-  glob?: boolean;           // Treat pattern as glob
-}
+/**
+ * Shape of PatternOptions (documentation only — CodeFig scripts are plain JS).
+ * exact?: boolean;           // Exact match vs partial match
+ * caseSensitive?: boolean;   // Case sensitivity
+ * fuzzy?: boolean;          // Enable fuzzy matching
+ * regex?: boolean;          // Treat pattern as regex
+ * glob?: boolean;           // Treat pattern as glob
+ */
 
-interface MatchResult {
-  match: boolean;           // Whether it matches
-  confidence: number;       // Match confidence (0-1)
-  groups?: string[];        // Captured groups
-  score?: number;          // Fuzzy match score
-}
+/**
+ * Shape of MatchResult (documentation only — CodeFig scripts are plain JS).
+ * match: boolean;           // Whether it matches
+ * confidence: number;       // Match confidence (0-1)
+ * groups?: string[];        // Captured groups
+ * score?: number;          // Fuzzy match score
+ */
 
-interface CollectionFilter {
-  name?: string;            // Collection name pattern
-  id?: string;             // Collection ID
-  mode?: string;           // Collection mode
-  exact?: boolean;         // Exact match
-}
+/**
+ * Shape of CollectionFilter (documentation only — CodeFig scripts are plain JS).
+ * name?: string;            // Collection name pattern
+ * id?: string;             // Collection ID
+ * mode?: string;           // Collection mode
+ * exact?: boolean;         // Exact match
+ */
 
 // ============================================================================
 // PATTERN MATCHING FUNCTIONS
@@ -48,7 +51,7 @@ interface CollectionFilter {
 /**
  * Match text against pattern with various matching strategies
  */
-function matchPattern(text: string, pattern: string, options: PatternOptions = {}): MatchResult {
+function matchPattern(text, pattern, options = {}) {
   const {
     exact = false,
     caseSensitive = false,
@@ -96,7 +99,7 @@ function matchPattern(text: string, pattern: string, options: PatternOptions = {
 /**
  * Compile pattern for efficient matching
  */
-function compilePattern(pattern: string, options: PatternOptions = {}): RegExp {
+function compilePattern(pattern, options = {}) {
   const { caseSensitive = false, regex = false, glob = false } = options;
 
   if (regex) {
@@ -116,7 +119,7 @@ function compilePattern(pattern: string, options: PatternOptions = {}): RegExp {
 /**
  * Expand wildcards in pattern
  */
-function expandWildcards(pattern: string, candidates: string[]): string[] {
+function expandWildcards(pattern, candidates) {
   const regex = compilePattern(pattern);
   return candidates.filter(candidate => regex.test(candidate));
 }
@@ -128,10 +131,10 @@ function expandWildcards(pattern: string, candidates: string[]): string[] {
 /**
  * Filter items by collection
  */
-function filterByCollection<T extends { name: string }>(
-  items: T[],
-  filter: CollectionFilter
-): T[] {
+function filterByCollection(
+  items,
+  filter
+) {
   const { name, exact = false } = filter;
 
   if (!name) return items;
@@ -152,8 +155,8 @@ function filterByCollection<T extends { name: string }>(
 /**
  * Get all collections from items
  */
-function getCollections<T extends { name: string }>(items: T[]): string[] {
-  const collections = new Set<string>();
+function getCollections(items) {
+  const collections = new Set();
 
   for (const item of items) {
     const collection = extractCollection(item.name);
@@ -166,7 +169,7 @@ function getCollections<T extends { name: string }>(items: T[]): string[] {
 /**
  * Validate collection exists
  */
-function validateCollection(collectionName: string, availableCollections: string[]): boolean {
+function validateCollection(collectionName, availableCollections) {
   return availableCollections.some(collection => 
     collection.toLowerCase().includes(collectionName.toLowerCase())
   );
@@ -179,7 +182,7 @@ function validateCollection(collectionName: string, availableCollections: string
 /**
  * Process wildcards in pattern
  */
-function processWildcards(pattern: string, options: { escape?: boolean; normalize?: boolean } = {}): string {
+function processWildcards(pattern, options = {}) {
   let processed = pattern;
 
   if (options.escape) {
@@ -196,14 +199,14 @@ function processWildcards(pattern: string, options: { escape?: boolean; normaliz
 /**
  * Escape special characters in pattern
  */
-function escapeWildcards(pattern: string): string {
+function escapeWildcards(pattern) {
   return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
  * Normalize pattern for consistent matching
  */
-function normalizePattern(pattern: string): string {
+function normalizePattern(pattern) {
   return pattern
     .trim()
     .replace(/\s+/g, ' ')  // Normalize whitespace
@@ -218,7 +221,7 @@ function normalizePattern(pattern: string): string {
 /**
  * Fuzzy match with scoring
  */
-function fuzzyMatch(text: string, pattern: string): MatchResult {
+function fuzzyMatch(text, pattern) {
   const score = calculateFuzzyScore(text, pattern);
   const threshold = 0.6; // Minimum score for match
 
@@ -232,7 +235,7 @@ function fuzzyMatch(text: string, pattern: string): MatchResult {
 /**
  * Regex match with groups
  */
-function regexMatch(text: string, pattern: string): MatchResult {
+function regexMatch(text, pattern) {
   try {
     const regex = new RegExp(pattern, 'g');
     const match = regex.exec(text);
@@ -261,7 +264,7 @@ function regexMatch(text: string, pattern: string): MatchResult {
 /**
  * Glob match with pattern expansion
  */
-function globMatch(text: string, pattern: string): MatchResult {
+function globMatch(text, pattern) {
   const regex = globToRegex(pattern);
   const match = regex.test(text);
 
@@ -274,7 +277,7 @@ function globMatch(text: string, pattern: string): MatchResult {
 /**
  * Wildcard match with confidence scoring
  */
-function wildcardMatch(text: string, pattern: string): MatchResult {
+function wildcardMatch(text, pattern) {
   const regex = compilePattern(pattern);
   const match = regex.test(text);
 
@@ -311,7 +314,7 @@ function wildcardMatch(text: string, pattern: string): MatchResult {
 /**
  * Calculate fuzzy match score
  */
-function calculateFuzzyScore(text: string, pattern: string): number {
+function calculateFuzzyScore(text, pattern) {
   if (pattern.length === 0) return 1.0;
   if (text.length === 0) return 0.0;
 
@@ -328,7 +331,7 @@ function calculateFuzzyScore(text: string, pattern: string): number {
 /**
  * Calculate Levenshtein distance
  */
-function levenshteinDistance(str1: string, str2: string): number {
+function levenshteinDistance(str1, str2) {
   const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
 
   for (let i = 0; i <= str1.length; i++) {
@@ -356,7 +359,7 @@ function levenshteinDistance(str1: string, str2: string): number {
 /**
  * Convert glob pattern to regex
  */
-function globToRegex(pattern: string, caseSensitive: boolean = false): RegExp {
+function globToRegex(pattern, caseSensitive = false) {
   // Escape special regex characters
   let regex = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   
@@ -372,7 +375,7 @@ function globToRegex(pattern: string, caseSensitive: boolean = false): RegExp {
 /**
  * Extract collection name from item name
  */
-function extractCollection(itemName: string): string {
+function extractCollection(itemName) {
   const parts = itemName.split('/');
   return parts[0] || 'Default';
 }
@@ -380,21 +383,21 @@ function extractCollection(itemName: string): string {
 /**
  * Create pattern from multiple parts
  */
-function createPattern(parts: string[], separator: string = '/'): string {
+function createPattern(parts, separator = '/') {
   return parts.filter(part => part && part.trim()).join(separator);
 }
 
 /**
  * Split pattern into parts
  */
-function splitPattern(pattern: string, separator: string = '/'): string[] {
+function splitPattern(pattern, separator = '/') {
   return pattern.split(separator).map(part => part.trim()).filter(part => part);
 }
 
 /**
  * Validate pattern syntax
  */
-function validatePattern(pattern: string, type: 'wildcard' | 'regex' | 'glob' = 'wildcard'): boolean {
+function validatePattern(pattern, type = 'wildcard') {
   try {
     switch (type) {
       case 'regex':
@@ -416,12 +419,7 @@ function validatePattern(pattern: string, type: 'wildcard' | 'regex' | 'glob' = 
 /**
  * Get pattern statistics
  */
-function getPatternStats(pattern: string): {
-  wildcards: number;
-  exactParts: number;
-  complexity: number;
-  length: number;
-} {
+function getPatternStats(pattern) {
   const wildcards = (pattern.match(/\*/g) || []).length;
   const exactParts = pattern.split('*').filter(part => part.length > 0).length;
   const complexity = wildcards + exactParts;
@@ -439,17 +437,18 @@ function getPatternStats(pattern: string): {
 // FIGMA PLACEHOLDER SUPPORT (for batch rename)
 // ============================================================================
 
-interface FigmaPlaceholderContext {
-  fullMatch: string;   // $&
-  groups: string[];   // $1, $2, ...
-  index: number;      // 0-based position
-  total: number;      // total items
-}
+/**
+ * Shape of FigmaPlaceholderContext (documentation only — CodeFig scripts are plain JS).
+ * fullMatch: string;   // $&
+ * groups: string[];   // $1, $2, ...
+ * index: number;      // 0-based position
+ * total: number;      // total items
+ */
 
 /**
  * Detect if pattern looks like regex (contains unescaped regex metacharacters)
  */
-function looksLikeRegex(pattern: string): boolean {
+function looksLikeRegex(pattern) {
   const regexMeta = /[()[\]{}*+?^$|\\.]/;
   let escaped = false;
   for (let i = 0; i < pattern.length; i++) {
@@ -473,9 +472,9 @@ function looksLikeRegex(pattern: string): boolean {
  * Placeholders: $& (full match), $1 $2 (groups), $n $nn $nnn (ascending), $N $NN $NNN (descending)
  */
 function applyFigmaPlaceholders(
-  replacePattern: string,
-  context: FigmaPlaceholderContext
-): string {
+  replacePattern,
+  context
+) {
   let result = replacePattern;
   const { fullMatch, groups, index, total } = context;
 
@@ -509,15 +508,15 @@ function applyFigmaPlaceholders(
  * index and total are 0-based / count; used for $n, $nn, $nnn, $N, $NN, $NNN.
  */
 function replaceWithPattern(
-  text: string,
-  searchPattern: string,
-  replacePattern: string,
-  index: number = 0,
-  total: number = 1
-): string {
+  text,
+  searchPattern,
+  replacePattern,
+  index = 0,
+  total = 1
+) {
   const useRegex = looksLikeRegex(searchPattern);
   let fullMatch = '';
-  let groups: string[] = [];
+  let groups = [];
 
   if (useRegex) {
     try {
@@ -526,7 +525,7 @@ function replaceWithPattern(
       if (match) {
         fullMatch = match[0];
         groups = match.slice(1);
-        const context: FigmaPlaceholderContext = { fullMatch, groups, index, total };
+        const context = { fullMatch, groups, index, total };
         const replacement = applyFigmaPlaceholders(replacePattern, context);
         return text.replace(regex, replacement);
       }
@@ -544,7 +543,7 @@ function replaceWithPattern(
   }
   fullMatch = match[0];
   groups = match.slice(1);
-  const context: FigmaPlaceholderContext = { fullMatch, groups, index, total };
+  const context = { fullMatch, groups, index, total };
   const replacement = applyFigmaPlaceholders(replacePattern, context);
   return text.replace(literalRegex, replacement);
 }

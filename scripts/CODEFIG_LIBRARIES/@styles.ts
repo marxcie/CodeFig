@@ -20,39 +20,43 @@
 // TYPE DEFINITIONS
 // ============================================================================
 
-interface StyleSearchOptions {
-  pattern?: string;           // Wildcard pattern (e.g., "V4/*", "Brand/typography/*")
-  collection?: string;        // Collection name filter
-  type?: 'TEXT' | 'PAINT' | 'EFFECT' | 'GRID'; // Style type filter
-  exact?: boolean;           // Exact match vs partial match
-  caseSensitive?: boolean;   // Case sensitivity
-}
+/**
+ * Shape of StyleSearchOptions (documentation only — CodeFig scripts are plain JS).
+ * pattern?: string;           // Wildcard pattern (e.g., "V4/*", "Brand/typography/*")
+ * collection?: string;        // Collection name filter
+ * type?: 'TEXT' | 'PAINT' | 'EFFECT' | 'GRID'; // Style type filter
+ * exact?: boolean;           // Exact match vs partial match
+ * caseSensitive?: boolean;   // Case sensitivity
+ */
 
-interface StyleMatch {
-  style: any;                // Figma style object
-  name: string;              // Style name
-  type: string;              // Style type
-  collection: string;         // Collection name
-  confidence: number;        // Match confidence (0-1)
-  properties: any;           // Style properties
-}
+/**
+ * Shape of StyleMatch (documentation only — CodeFig scripts are plain JS).
+ * style: any;                // Figma style object
+ * name: string;              // Style name
+ * type: string;              // Style type
+ * collection: string;         // Collection name
+ * confidence: number;        // Match confidence (0-1)
+ * properties: any;           // Style properties
+ */
 
-interface StyleReplacement {
-  node: any;                 // Target node
-  property: string;          // Property to replace (e.g., 'textStyleId')
-  oldStyle: any;             // Current style
-  newStyle: any;             // Replacement style
-  success: boolean;          // Replacement success
-  error?: string;            // Error message if failed
-}
+/**
+ * Shape of StyleReplacement (documentation only — CodeFig scripts are plain JS).
+ * node: any;                 // Target node
+ * property: string;          // Property to replace (e.g., 'textStyleId')
+ * oldStyle: any;             // Current style
+ * newStyle: any;             // Replacement style
+ * success: boolean;          // Replacement success
+ * error?: string;            // Error message if failed
+ */
 
-interface StyleAnalysisResult {
-  matches: StyleMatch[];
-  totalMatches: number;
-  collections: Set<string>;
-  types: Set<string>;
-  nodesAffected: Set<string>;
-}
+/**
+ * Shape of StyleAnalysisResult (documentation only — CodeFig scripts are plain JS).
+ * matches: StyleMatch[]
+ * totalMatches: number
+ * collections: Set<string>
+ * types: Set<string>
+ * nodesAffected: Set<string>
+ */
 
 // ============================================================================
 // STYLE FINDING FUNCTIONS
@@ -61,7 +65,7 @@ interface StyleAnalysisResult {
 /**
  * Find styles by pattern with advanced filtering (async for documentAccess: dynamic-page)
  */
-function findStyles(options: StyleSearchOptions = {}): Promise<StyleMatch[]> {
+function findStyles(options = {}) {
   const {
     pattern = '*',
     collection,
@@ -77,7 +81,7 @@ function findStyles(options: StyleSearchOptions = {}): Promise<StyleMatch[]> {
     figma.getLocalGridStylesAsync()
   ]).then(([text, paint, effect, grid]) => {
     const allStyles = [...text, ...paint, ...effect, ...grid];
-    const matches: StyleMatch[] = [];
+    const matches = [];
 
     for (const style of allStyles) {
       if (!style.name) continue;
@@ -105,21 +109,21 @@ function findStyles(options: StyleSearchOptions = {}): Promise<StyleMatch[]> {
 /**
  * Find styles by wildcard pattern
  */
-function findStylesByPattern(pattern: string, options: Omit<StyleSearchOptions, 'pattern'> = {}): Promise<StyleMatch[]> {
+function findStylesByPattern(pattern, options = {}) {
   return findStyles({ ...options, pattern });
 }
 
 /**
  * Find styles in specific collection
  */
-function findStylesInCollection(collection: string, options: Omit<StyleSearchOptions, 'collection'> = {}): Promise<StyleMatch[]> {
+function findStylesInCollection(collection, options = {}) {
   return findStyles({ ...options, collection });
 }
 
 /**
  * Get style by ID with error handling (async for documentAccess: dynamic-page)
  */
-async function getStyleById(styleId: string): Promise<any | null> {
+async function getStyleById(styleId) {
   try {
     return await figma.getStyleByIdAsync(styleId);
   } catch (error) {
@@ -135,11 +139,11 @@ async function getStyleById(styleId: string): Promise<any | null> {
 /**
  * Analyze styles in selection (async for documentAccess: dynamic-page)
  */
-async function analyzeStyles(selection: ReadonlyArray<any>): Promise<StyleAnalysisResult> {
-  const matches: StyleMatch[] = [];
-  const collections = new Set<string>();
-  const types = new Set<string>();
-  const nodesAffected = new Set<string>();
+async function analyzeStyles(selection) {
+  const matches = [];
+  const collections = new Set();
+  const types = new Set();
+  const nodesAffected = new Set();
 
   const allNodes = collectAllNodes(selection);
 
@@ -194,7 +198,7 @@ async function analyzeStyles(selection: ReadonlyArray<any>): Promise<StyleAnalys
 /**
  * Categorize style by name and properties
  */
-function categorizeStyle(style: any): string {
+function categorizeStyle(style) {
   const name = style.name.toLowerCase();
   
   if (name.includes('typography') || name.includes('text') || name.includes('font')) {
@@ -215,8 +219,8 @@ function categorizeStyle(style: any): string {
 /**
  * Get style properties for analysis
  */
-function getStyleProperties(style: any): any {
-  const properties: any = {
+function getStyleProperties(style) {
+  const properties = {
     type: style.type,
     name: style.name,
     id: style.id
@@ -246,16 +250,11 @@ function getStyleProperties(style: any): any {
  * Replace styles in selection (async for documentAccess: dynamic-page)
  */
 async function replaceStyles(
-  selection: ReadonlyArray<any>,
-  findPattern: string,
-  replacePattern: string,
-  options: {
-    property?: string;
-    collection?: string;
-    type?: string;
-    dryRun?: boolean;
-  } = {}
-): Promise<StyleReplacement[]> {
+  selection,
+  findPattern,
+  replacePattern,
+  options = {}
+) {
   const {
     property,
     collection,
@@ -263,7 +262,7 @@ async function replaceStyles(
     dryRun = false
   } = options;
 
-  const replacements: StyleReplacement[] = [];
+  const replacements = [];
   const allNodes = collectAllNodes(selection);
 
   const styleMatches = await findStylesByPattern(findPattern, { collection, type });
@@ -280,13 +279,13 @@ async function replaceStyles(
  * Replace styles in a single node (async for findStyleByName)
  */
 async function replaceStylesInNode(
-  node: any,
-  styleMatches: StyleMatch[],
-  replacePattern: string,
-  options: { property?: string; dryRun?: boolean } = {}
-): Promise<StyleReplacement[]> {
+  node,
+  styleMatches,
+  replacePattern,
+  options = {}
+) {
   const { property, dryRun = false } = options;
-  const replacements: StyleReplacement[] = [];
+  const replacements = [];
 
   if (node.boundVariables) {
     for (const [prop, binding] of Object.entries(node.boundVariables)) {
@@ -301,7 +300,7 @@ async function replaceStylesInNode(
         const newStyleName = generateReplacementName(matchingStyle.name, replacePattern);
         const newStyle = await findStyleByName(newStyleName);
         if (newStyle) {
-          const replacement: StyleReplacement = {
+          const replacement = {
             node,
             property: prop,
             oldStyle: matchingStyle.style,
@@ -332,7 +331,7 @@ async function replaceStylesInNode(
       const newStyleName = generateReplacementName(currentStyle.name, replacePattern);
       const newStyle = await findStyleByName(newStyleName);
       if (newStyle) {
-        const replacement: StyleReplacement = {
+        const replacement = {
           node,
           property: prop,
           oldStyle: currentStyle,
@@ -357,7 +356,7 @@ async function replaceStylesInNode(
 /**
  * Apply style to node (async for documentAccess: dynamic-page)
  */
-async function applyStyleToNode(node: any, property: string, style: any): Promise<boolean> {
+async function applyStyleToNode(node, property, style) {
   try {
     if (property === 'textStyleId' && style.type === 'TEXT') {
       await node.setTextStyleIdAsync(style.id);
@@ -390,15 +389,15 @@ async function applyStyleToNode(node: any, property: string, style: any): Promis
 /**
  * Check if node has style properties
  */
-function hasStyleProperties(node: any): boolean {
+function hasStyleProperties(node) {
   return 'textStyleId' in node || 'fillStyleId' in node || 'strokeStyleId' in node || 'effectStyleId' in node;
 }
 
 /**
  * Get node style properties
  */
-function getNodeStyleProperties(node: any): { [key: string]: any } {
-  const properties: { [key: string]: any } = {};
+function getNodeStyleProperties(node) {
+  const properties = {};
   
   if ('textStyleId' in node) properties.textStyleId = node.textStyleId;
   if ('fillStyleId' in node) properties.fillStyleId = node.fillStyleId;
@@ -412,7 +411,7 @@ function getNodeStyleProperties(node: any): { [key: string]: any } {
 /**
  * Find matching styles for variable (async for documentAccess: dynamic-page)
  */
-function findMatchingStylesForVariable(variable: any, property: string): Promise<StyleMatch[]> {
+function findMatchingStylesForVariable(variable, property) {
   return Promise.all([
     figma.getLocalTextStylesAsync(),
     figma.getLocalPaintStylesAsync(),
@@ -420,7 +419,7 @@ function findMatchingStylesForVariable(variable: any, property: string): Promise
     figma.getLocalGridStylesAsync()
   ]).then(([text, paint, effect, grid]) => {
     const allStyles = [...text, ...paint, ...effect, ...grid];
-    const matches: StyleMatch[] = [];
+    const matches = [];
     const variableName = variable.name.toLowerCase();
 
     for (const style of allStyles) {
@@ -444,7 +443,7 @@ function findMatchingStylesForVariable(variable: any, property: string): Promise
 /**
  * Find matching style for variable
  */
-function findMatchingStyleForVariable(variable: any, styleMatches: StyleMatch[]): StyleMatch | null {
+function findMatchingStyleForVariable(variable, styleMatches) {
   const variableName = variable.name.toLowerCase();
   
   for (const match of styleMatches) {
@@ -460,7 +459,7 @@ function findMatchingStyleForVariable(variable: any, styleMatches: StyleMatch[])
 /**
  * Generate replacement name from pattern
  */
-function generateReplacementName(originalName: string, replacePattern: string): string {
+function generateReplacementName(originalName, replacePattern) {
   // Simple wildcard replacement
   // In practice, you'd want more sophisticated pattern matching
   return replacePattern.replace('*', originalName);
@@ -469,7 +468,7 @@ function generateReplacementName(originalName: string, replacePattern: string): 
 /**
  * Find style by name (async for documentAccess: dynamic-page)
  */
-function findStyleByName(name: string): Promise<any | null> {
+function findStyleByName(name) {
   return Promise.all([
     figma.getLocalTextStylesAsync(),
     figma.getLocalPaintStylesAsync(),
@@ -489,7 +488,7 @@ function findStyleByName(name: string): Promise<any | null> {
 /**
  * Extract collection name from style name
  */
-function extractCollection(styleName: string): string {
+function extractCollection(styleName) {
   const parts = styleName.split('/');
   return parts[0] || 'Default';
 }
@@ -497,7 +496,7 @@ function extractCollection(styleName: string): string {
 /**
  * Match pattern with wildcards
  */
-function matchPattern(text: string, pattern: string, options: { exact?: boolean; caseSensitive?: boolean } = {}): { confidence: number } | null {
+function matchPattern(text, pattern, options = {}) {
   const { exact = false, caseSensitive = false } = options;
   
   let searchText = text;
@@ -538,10 +537,10 @@ function matchPattern(text: string, pattern: string, options: { exact?: boolean;
 /**
  * Collect all nodes recursively
  */
-function collectAllNodes(selection: ReadonlyArray<any>): any[] {
-  const nodes: any[] = [];
+function collectAllNodes(selection) {
+  const nodes = [];
   
-  function traverse(node: any) {
+  function traverse(node) {
     nodes.push(node);
     
     if ('children' in node) {
@@ -561,7 +560,7 @@ function collectAllNodes(selection: ReadonlyArray<any>): any[] {
 /**
  * Remove duplicates by property
  */
-function uniqueBy<T>(array: T[], property: keyof T): T[] {
+function uniqueBy(array, property) {
   const seen = new Set();
   return array.filter(item => {
     const value = item[property];
