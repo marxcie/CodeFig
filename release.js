@@ -109,7 +109,7 @@ function assertCleanWorkingTree() {
         '\n' +
         'To ship only some changes: stash what you are not releasing, commit what you are, then run again.\n' +
         'Example:\n' +
-        '  git stash push -m "wip" -- src/ui.html src/code.ts\n' +
+        '  git stash push -m "wip" -- src/ui.html src/ui.css src/code.ts\n' +
         '  git add scripts/your-script.js && git commit -m "..."\n' +
         '  npm run build:release -- patch\n' +
         '  git stash pop\n\n' +

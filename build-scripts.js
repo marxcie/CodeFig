@@ -3,6 +3,7 @@ const path = require('path');
 const { inlineVendors } = require('./bundle-ui.js');
 const { inlineConfigUI } = require('./build-config-ui.js');
 const { inlineImportResolver } = require('./build-import-resolver.js');
+const { inlineAppCSS } = require('./build-app-css.js');
 
 const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
 const DEV_LOCALHOST = 'http://localhost:8765';
@@ -134,13 +135,15 @@ function updateUIHtml() {
   
   readScripts(scriptsDir);
 
-  // Read src only; inline the config-ui bundle, the @import resolver and vendors
-  // (CodeMirror, marked) into the string; write result only to dist. Vendors go last:
-  // inlineVendors injects CodeMirror, which carries </script>-like strings, so the
-  // other two regexes stay on a small document.
+  // Read src only; inline the config-ui bundle, the @import resolver, the app
+  // stylesheet and vendors (CodeMirror, marked) into the string; write result only
+  // to dist. Vendors go last: inlineVendors injects CodeMirror, which carries
+  // </script>-like strings and turns the head <link> tags into <style> elements, so
+  // the other regexes stay on a small document with exactly one match each.
   let uiContent = fs.readFileSync(uiTemplatePath, 'utf8');
   uiContent = inlineConfigUI(uiContent);
   uiContent = inlineImportResolver(uiContent);
+  uiContent = inlineAppCSS(uiContent);
   uiContent = inlineVendors(uiContent);
   
   // Inject build flags (dev vs production) into the UI bundle.

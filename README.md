@@ -95,7 +95,7 @@ The script only checks for a clean tree **before** the build. If you have unfini
 1. **Stash** the files you're not shipping yet (nothing is lost — they're saved locally):
 
    ```
-   git stash push -m "wip plugin ui" -- src/ui.html src/code.ts
+   git stash push -m "wip plugin ui" -- src/ui.html src/ui.css src/code.ts
    ```
 
 2. **Commit** what you do want in this release:
@@ -134,7 +134,7 @@ npm install
 npm run dev
 ```
 
-This watches `src/code.ts`, `src/ui.html`, and `scripts/`, starts the local console log server (writing to `figma-console.log`), and rebuilds on change. Reload the plugin in Figma to test.
+This watches `src/code.ts`, `src/ui.html`, `src/ui.css`, and `scripts/`, starts the local console log server (writing to `figma-console.log`), and rebuilds on change. Reload the plugin in Figma to test.
 
 **Production build:** `npm run build:production` — runs `tsc` on `src/code.ts`, embeds script sources into `dist/ui.html`, and keeps `manifest.json` free of `localhost` (safe for enterprise submission and publishing).
 
