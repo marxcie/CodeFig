@@ -25,37 +25,36 @@ function hasFigmaApiDomain(domains) {
   return domains.some((d) => norm(d) === target);
 }
 
-// Write manifest.json: dev adds localhost; production strips localhost and keeps https://api.figma.com
+// dist/manifest.json from the src/manifest.json template: dev adds localhost, production strips
+// it, and https://api.figma.com is guaranteed either way. src/manifest.json is never written to —
+// that is the whole point, so builds leave the git tree clean.
 function writeManifest() {
-  const manifestPath = path.join(__dirname, 'manifest.json');
-  if (!fs.existsSync(manifestPath)) return;
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  if (!manifest.networkAccess || !Array.isArray(manifest.networkAccess.allowedDomains)) return;
-  const domains = manifest.networkAccess.allowedDomains;
-  if (isDev) {
-    let next = [...domains];
-    if (!hasFigmaApiDomain(next)) {
-      next = [FIGMA_API, ...next];
-    }
-    if (!next.includes(DEV_LOCALHOST)) {
-      next = [...next, DEV_LOCALHOST];
-    }
-    if (JSON.stringify(next) !== JSON.stringify(domains)) {
-      manifest.networkAccess.allowedDomains = next;
-      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-      console.log('✅ manifest.json: dev mode (Figma API +', DEV_LOCALHOST + ')');
-    }
-  } else {
-    let next = domains.filter((d) => !/localhost/i.test(d));
-    if (!hasFigmaApiDomain(next)) {
-      next = [FIGMA_API, ...next];
-    }
-    if (JSON.stringify(next) !== JSON.stringify(domains)) {
-      manifest.networkAccess.allowedDomains = next;
-      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-      console.log('✅ manifest.json: production (Figma API, no localhost)');
-    }
+  const srcPath = path.join(__dirname, 'src', 'manifest.json');
+  const distPath = path.join(__dirname, 'dist', 'manifest.json');
+  if (!fs.existsSync(srcPath)) {
+    // Without it there is no dist/manifest.json and the plugin cannot be imported at all,
+    // so fail loudly rather than shipping a dist/ that Figma refuses to load.
+    console.error('❌ src/manifest.json not found — cannot generate dist/manifest.json');
+    process.exit(1);
   }
+  const manifest = JSON.parse(fs.readFileSync(srcPath, 'utf8'));
+  if (manifest.networkAccess && Array.isArray(manifest.networkAccess.allowedDomains)) {
+    let domains = manifest.networkAccess.allowedDomains.filter((d) => !/localhost/i.test(d));
+    if (!hasFigmaApiDomain(domains)) {
+      domains = [FIGMA_API, ...domains];
+    }
+    if (isDev) {
+      domains = [...domains, DEV_LOCALHOST];
+    }
+    manifest.networkAccess.allowedDomains = domains;
+  }
+  fs.mkdirSync(path.dirname(distPath), { recursive: true });
+  fs.writeFileSync(distPath, JSON.stringify(manifest, null, 2) + '\n');
+  console.log(
+    isDev
+      ? `✅ dist/manifest.json: dev mode (Figma API + ${DEV_LOCALHOST})`
+      : '✅ dist/manifest.json: production (Figma API, no localhost)'
+  );
 }
 
 // Check if a file/folder should be excluded
@@ -147,8 +146,8 @@ function updateUIHtml() {
   uiContent = inlineVendors(uiContent);
   
   // Inject build flags (dev vs production) into the UI bundle.
-  // In dev builds, localhost console forwarding is allowed (manifest.json includes it).
-  // In production builds, localhost is removed from manifest.json and UI must not try to reach it.
+  // In dev builds, localhost console forwarding is allowed (dist/manifest.json includes it).
+  // In production builds, localhost is absent from dist/manifest.json and the UI must not reach for it.
   uiContent = uiContent.replace(/__CODEFIG_BUILD_IS_DEV__/g, isDev ? 'true' : 'false');
 
   // Inline Buy Me a Coffee brand SVG (src/bmc-button.svg) into footer button

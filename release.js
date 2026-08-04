@@ -1,7 +1,9 @@
 /**
- * Production build → pack → bump package version → one git commit (package.json, lockfile, manifest.json) → tag.
- * We do not use `npm version` for the commit: `build:production` rewrites manifest.json, so the tree is dirty
- * until we commit those changes together with the version bump.
+ * Production build → pack → bump package version → one git commit (package.json, lockfile) → tag.
+ *
+ * TODO: builds no longer rewrite a tracked manifest, so the build-then-bump-then-commit-together
+ * dance below could collapse into a plain `npm version` flow. Left as-is deliberately; simplify
+ * separately.
  *
  * Usage:
  *   npm run build:release -- patch
@@ -170,10 +172,10 @@ Options:
   const next = computeNextVersion(fromVer, bump);
   const tag = `v${next}`;
 
-  console.log(`\n→ Version ${fromVer} → ${next} (package.json + lockfile + manifest.json)…\n`);
+  console.log(`\n→ Version ${fromVer} → ${next} (package.json + lockfile + src/manifest.json)…\n`);
   run(`npm pkg set version=${next}`);
   run('npm install --package-lock-only');
-  git(['add', 'package.json', 'package-lock.json', 'manifest.json']);
+  git(['add', 'package.json', 'package-lock.json', 'src/manifest.json']);
   run(`git commit -m "chore: release ${next}"`);
   run(`git tag -a "${tag}" -m "chore: release ${next}"`);
 

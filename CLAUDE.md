@@ -11,13 +11,13 @@ CodeFig is a Figma plugin that runs user-authored JavaScript inside the Figma pl
 | Command | Purpose |
 |---|---|
 | `npm run dev` | `build:dev`, then watches `src/` + `scripts/` and starts the console bridge server on :8765. Reload the plugin in Figma to pick up changes. |
-| `npm run build:dev` | `validate:soft` (**warns, never blocks** — you need to be able to build a half-written script) → `tsc` → `build-scripts.js --dev` (which inlines the config-ui bundle, the `@import` resolver, `src/ui.css` and vendors into `dist/ui.html`). Adds `http://localhost:8765` to `manifest.json`. |
-| `npm run build:production` | Same without `--dev`, and `validate` **blocks**: a validation error fails the build. Strips `localhost` from `manifest.json`. Required before committing/publishing. |
+| `npm run build:dev` | `validate:soft` (**warns, never blocks** — you need to be able to build a half-written script) → `tsc` → `build-scripts.js --dev` (which inlines the config-ui bundle, the `@import` resolver, `src/ui.css` and vendors into `dist/ui.html`). Adds `http://localhost:8765` to `dist/manifest.json`. |
+| `npm run build:production` | Same without `--dev`, and `validate` **blocks**: a validation error fails the build. Leaves `localhost` out of `dist/manifest.json`. |
 | `npm run validate` | `validate-scripts.js` — parses every script through `new Function` exactly as the sandbox does, both before and after `@import` resolution, then checks imports resolve and the piecewise-scale fixtures still hold. Prints `N error(s), M warning(s)`; **the exit code tracks errors only**. |
 | `npm run validate:soft` | Same, but always exits 0. Exists so `build:dev` can warn without dying; nothing else should use it. |
 | `npm test` | `node --test tests/` — fixture tests for `src/import-resolver.js`. No dependencies, no watch mode. |
-| `npm run pack` | production build + `codefig-plugin.zip` (needs the `zip` CLI). |
-| `npm run build:release -- patch\|minor\|major` | `release.js`: requires clean tree, builds, packs, bumps version, single commit (package.json + lockfile + manifest.json), creates `v*` tag. No push unless `--push`; `--dry-run` skips bump/tag. Pushing the tag triggers `.github/workflows/release.yml`, which builds the release zip from the committed tree. |
+| `npm run pack` | production build + `codefig-plugin.zip` — the *contents* of `dist/` (`manifest.json`, `code.js`, `ui.html`) at the archive root, matching the zip step in `release.yml`. Needs the `zip` CLI. |
+| `npm run build:release -- patch\|minor\|major` | `release.js`: requires clean tree, builds, packs, bumps version, single commit (package.json + lockfile), creates `v*` tag. No push unless `--push`; `--dry-run` skips bump/tag. Pushing the tag triggers `.github/workflows/release.yml`, which builds the release zip from the committed tree. |
 
 The only tests are `tests/import-resolver.test.js` (`npm test`), because the `@import` resolver is the one piece with no runtime error surface. Everything else is checked by `npm run validate`; there is no way to run a single script outside Figma — scripts must be exercised in the plugin.
 
@@ -35,6 +35,8 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 **`src/code.ts` → `dist/code.js`** (sandbox / "backend", the only real TypeScript in the repo). Handles a message switch on `msg.type` (`RUN`, `SAVE`, `SAVE_BATCH`, `LIST`, `DELETE`, `GET_OPTIONS`, window/state persistence). User scripts are persisted in `figma.clientStorage` under `userScripts`; prebuilt scripts are baked into the bundle and read-only.
 
 **`src/ui.html` → `dist/ui.html`** (iframe UI, ~3.2k lines: a short head of stubs, ~110 lines of markup, and one monolithic app `<script>`). Contains the CodeMirror editor, script list/search, import/export, and — importantly — the `@import` resolver. All script *sources* are embedded here at build time as base64 JSON in `<script id="scripts-data">`.
+
+**`src/manifest.json` → `dist/manifest.json`** is a *template*, not the manifest Figma loads. `writeManifest()` in `build-scripts.js` reads it, guarantees `https://api.figma.com` in `allowedDomains` (scripts like `comments-to-annotations` need it), appends `http://localhost:8765` only when `--dev`, and writes the result into `dist/`. It never writes back to `src/`. `main`/`ui` are therefore bare filenames (`code.js`, `ui.html`) — relative to `dist/`, where the manifest ends up. **Import `dist/manifest.json` in Figma**, not anything in the repo root.
 
 **`src/ui.css`** is the app stylesheet (~1.8k lines), split out of `src/ui.html` so the UI's JS is navigable on its own. `build-app-css.js` exports `inlineAppCSS(html)`, which drops it into the `<style id="app-css">` block — a one-line stub in `src/ui.html`, never written back to source, same pattern as config-ui. Source order matters: the transform runs *before* `inlineVendors`, so the CodeMirror `<style>` elements (which replace the head `<link>` tags) still precede the app CSS that overrides them. Section order inside the file matters too — it is specificity- and order-dependent, so append rather than reorder.
 
@@ -68,6 +70,7 @@ Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `pr
 
 ## Gotchas
 
-- **Builds mutate one tracked file.** `build-scripts.js` rewrites `manifest.json` (`networkAccess.allowedDomains`). After any `dev`/`build:dev`, run `npm run build:production` before committing or publishing so `localhost:8765` doesn't ship.
+- **Builds write only to `dist/`.** No tracked file changes as a result of any build, so `git status` stays clean after `dev`/`build:dev` and you never need a production build before committing. If a build ever dirties the tree again, that is a bug — fix the build, don't add a warning here.
+- **The two zip paths must change together.** `pack-plugin.js` and the zip step in `.github/workflows/release.yml` produce what is supposed to be the same archive by separate code, and CI's is the one users download.
 - **`figma-console.log`** (repo root) is where plugin and script logs land during `npm run dev`, via the bridge server in `figma-console-server.js`. It is deliberately un-gitignored (`!figma-console.log`) so agents can read it; the `prepare` script adds it to `.git/info/exclude`. Per `.cursor/rules/figma-console-log.mdc`: **read this log when working on anything under `scripts/`**, and when debugging plugin errors.
 - `dist/` and the zips are gitignored; the GitHub release asset is built by CI from the tag.

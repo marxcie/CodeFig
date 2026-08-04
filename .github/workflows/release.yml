@@ -38,8 +38,10 @@ jobs:
       - name: Production build
         run: npm run build:production
 
+      # Must match pack-plugin.js: the manifest is generated into dist/ and its main/ui paths are
+      # bare filenames, so we zip the contents of dist/, not the directory itself.
       - name: Create plugin zip
-        run: zip -r "codefig-${{ github.ref_name }}-plugin.zip" manifest.json dist/
+        run: cd dist && zip -r "../codefig-${{ github.ref_name }}-plugin.zip" .
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
