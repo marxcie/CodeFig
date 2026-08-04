@@ -26,6 +26,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # build:production validates too, but running it as its own step means a bad tag
+      # fails here by name instead of somewhere inside the build log — and it fails
+      # before any zip is produced, so a broken asset never reaches the release.
+      - name: Validate scripts
+        run: npm run validate
+
+      - name: Tests
+        run: npm test
+
       - name: Production build
         run: npm run build:production
 

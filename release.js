@@ -142,10 +142,24 @@ Options:
   // Clean first: pack-plugin.js zips whatever is in dist/, stale files included.
   // This mirrors `npm run pack`, which we can't reuse here (it re-runs the build).
   run('npm run clean');
-  run('npm run build:production');
 
-  console.log('\n→ Pack plugin zip…\n');
-  run('node pack-plugin.js');
+  // build:production runs `npm run validate` as a blocking step, so a script that does
+  // not parse or has an unresolvable @import stops the release here — before the version
+  // bump and tag. That ordering is the point: pushing a tag triggers release.yml, which
+  // builds the downloadable asset from the tagged tree, so a tagged broken build ships.
+  try {
+    run('npm run build:production');
+
+    console.log('\n→ Pack plugin zip…\n');
+    run('node pack-plugin.js');
+  } catch (e) {
+    console.error(
+      '\n❌ Build failed — nothing was committed, bumped or tagged.\n\n' +
+        '   If validation is what failed, fix the reported scripts and run again.\n' +
+        '   Run `npm run validate` on its own to see the errors without a full build.\n'
+    );
+    process.exit(e.status || 1);
+  }
 
   if (dryRun) {
     console.log('\n✅ Dry run done (no version bump, no push). codefig-plugin.zip is ready to test.\n');

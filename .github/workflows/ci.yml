@@ -1,0 +1,40 @@
+# Run the correctness gates on every push and pull request.
+#
+# Scripts cannot run outside Figma and there is no runtime test suite, so `npm run
+# validate` (which parses every script exactly as the sandbox does, before and after
+# @import resolution) plus the import-resolver fixtures are the whole automated signal.
+# Without this workflow the first sign of breakage was a release.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate scripts
+        run: npm run validate
+
+      - name: Tests
+        run: npm test
+
+      # Catches build-time breakage the validator cannot see: a tsc error in
+      # src/code.ts, or an inliner that fails to assemble dist/ui.html.
+      - name: Production build
+        run: npm run build:production

@@ -144,10 +144,11 @@ This watches `src/code.ts`, `src/ui.html`, and `scripts/`, starts the local cons
 
 | Command | Description |
 |---------|-------------|
-| `npm run build:production` | Validation (non-blocking), `tsc`, then `build-scripts.js` without `--dev` — removes localhost from the manifest. Use before publishing. |
-| `npm run build:dev` | Same as above, with `--dev` — adds localhost for local console forwarding to `figma-console.log`. |
+| `npm run build:production` | Validation (**blocking** — a validation error fails the build), `tsc`, then `build-scripts.js` without `--dev` — removes localhost from the manifest. Use before publishing. |
+| `npm run build:dev` | Same as above, with `--dev` — adds localhost for local console forwarding to `figma-console.log`. Validation only **warns** here, so a half-written script does not stop the build. |
 | `npm run dev` | Runs `build:dev`, then watches `src/` and `scripts/`, rebuilds on change, and starts the console log server. |
-| `npm run validate` | Validates script syntax, imports, and metadata. |
+| `npm run validate` | Validates that scripts parse the way the sandbox parses them, that `@import`s resolve, and that the scale fixtures hold. Prints `N error(s), M warning(s)`; the exit code tracks errors only. See `scripts/README.md` → Validation. |
+| `npm run validate:soft` | Same report, always exits 0. Used by `build:dev`. |
 | `npm run clean` | Removes `dist/`. |
 | `npm run pack` | Runs `clean` and `build:production`, then writes `codefig-plugin.zip` (`manifest.json` + `dist/`). Cleaning first keeps stale files from earlier builds out of the zip. Same layout as the GitHub Release asset; requires the `zip` CLI. |
 | `npm run build:release` | See **Shipping a new release** above. Build + pack + version bump + commit (`package.json`, lockfile, `manifest.json`) + tag. Optional `--push`; default is no push. `--dry-run` builds and packs only. |

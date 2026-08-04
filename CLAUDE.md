@@ -11,14 +11,22 @@ CodeFig is a Figma plugin that runs user-authored JavaScript inside the Figma pl
 | Command | Purpose |
 |---|---|
 | `npm run dev` | `build:dev`, then watches `src/` + `scripts/` and starts the console bridge server on :8765. Reload the plugin in Figma to pick up changes. |
-| `npm run build:dev` | validate (non-blocking) → `tsc` → `build-scripts.js --dev` (which inlines the config-ui bundle, the `@import` resolver and vendors into `dist/ui.html`). Adds `http://localhost:8765` to `manifest.json`. |
-| `npm run build:production` | Same without `--dev`; strips `localhost` from `manifest.json`. Required before committing/publishing. |
-| `npm run validate` | `validate-scripts.js` — parses every script through `new Function` exactly as the sandbox does, plus `@import` resolution and metadata warnings. Exits 1 on failure, but builds run it as `validate \|\| true` so it never blocks. |
+| `npm run build:dev` | `validate:soft` (**warns, never blocks** — you need to be able to build a half-written script) → `tsc` → `build-scripts.js --dev` (which inlines the config-ui bundle, the `@import` resolver and vendors into `dist/ui.html`). Adds `http://localhost:8765` to `manifest.json`. |
+| `npm run build:production` | Same without `--dev`, and `validate` **blocks**: a validation error fails the build. Strips `localhost` from `manifest.json`. Required before committing/publishing. |
+| `npm run validate` | `validate-scripts.js` — parses every script through `new Function` exactly as the sandbox does, both before and after `@import` resolution, then checks imports resolve and the piecewise-scale fixtures still hold. Prints `N error(s), M warning(s)`; **the exit code tracks errors only**. |
+| `npm run validate:soft` | Same, but always exits 0. Exists so `build:dev` can warn without dying; nothing else should use it. |
 | `npm test` | `node --test tests/` — fixture tests for `src/import-resolver.js`. No dependencies, no watch mode. |
 | `npm run pack` | production build + `codefig-plugin.zip` (needs the `zip` CLI). |
 | `npm run build:release -- patch\|minor\|major` | `release.js`: requires clean tree, builds, packs, bumps version, single commit (package.json + lockfile + manifest.json), creates `v*` tag. No push unless `--push`; `--dry-run` skips bump/tag. Pushing the tag triggers `.github/workflows/release.yml`, which builds the release zip from the committed tree. |
 
 The only tests are `tests/import-resolver.test.js` (`npm test`), because the `@import` resolver is the one piece with no runtime error surface. Everything else is checked by `npm run validate`; there is no way to run a single script outside Figma — scripts must be exercised in the plugin.
+
+**What fails a build.** Since scripts cannot run outside Figma, the validator is the only automated correctness gate, so it is deliberately split:
+
+- **Errors → exit 1, `build:production` (and therefore `pack` and `build:release`) fails:** a script does not parse as plain JS, before *or* after `@import` resolution; an `@import` names a script or function that does not exist; a piecewise-scale fixture regresses.
+- **Warnings → exit 0:** display name falls back to the prettified filename.
+
+Keep it that way. If you find yourself wanting to reach for `|| true` on `build:production`, the check that provoked it is either a real error worth fixing or miscategorised — recategorise it rather than disabling the gate. `.github/workflows/ci.yml` runs `validate`, `test` and a production build on every push and PR; `release.yml` runs the same before building the release zip.
 
 ## Architecture
 

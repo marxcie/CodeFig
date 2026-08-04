@@ -33,9 +33,13 @@ function filenameToDisplayName(filename) {
 function getScriptMetadata(filePath, filename) {
   const metadata = {
     name: filenameToDisplayName(filename),
-    shared: false
+    shared: false,
+    // False until a SCRIPT_NAME or title comment supplies the name, i.e. the name above
+    // is the prettified-filename fallback. validateMetadata warns on exactly that case,
+    // so the warning tracks the real resolution instead of a second, stricter regex.
+    nameFromSource: false
   };
-  
+
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     const lines = content.split('\n').slice(0, 20); // Check more lines for metadata
@@ -45,6 +49,7 @@ function getScriptMetadata(filePath, filename) {
       const nameMatch = line.match(/\/\/\s*SCRIPT_NAME:\s*(.+)/i);
       if (nameMatch) {
         metadata.name = nameMatch[1].trim();
+        metadata.nameFromSource = true;
         continue;
       }
       
@@ -71,6 +76,7 @@ function getScriptMetadata(filePath, filename) {
             !commentContent.toLowerCase().includes('collection of')) {
           metadata.name = commentContent;
           metadata.nameFromComment = true;
+          metadata.nameFromSource = true;
         }
       }
     }
@@ -167,7 +173,8 @@ function findAllScripts(scriptsDir) {
           filename: item,
           path: itemPath,
           folder: folderName,
-          code: scriptCode
+          code: scriptCode,
+          nameFromSource: metadata.nameFromSource
         });
       }
     }
@@ -236,41 +243,10 @@ function validateResolvedParse(script, scripts) {
   }
 }
 
-// Validate JavaScript syntax (lenient for TypeScript)
-function validateSyntax(code, filePath) {
-  const warnings = [];
-  
-  // Skip syntax validation for TypeScript files - too many false positives
-  // TypeScript-specific syntax will fail JS parsing but is valid TS
-  // We'll only check for obvious syntax errors that would break execution
-  
-  // Check for common issues that would break execution
-  const issues = [];
-  
-  // Check for unmatched braces (basic check)
-  const openBraces = (code.match(/\{/g) || []).length;
-  const closeBraces = (code.match(/\}/g) || []).length;
-  if (openBraces !== closeBraces) {
-    issues.push('Unmatched braces');
-  }
-  
-  // Check for unmatched parentheses
-  const openParens = (code.match(/\(/g) || []).length;
-  const closeParens = (code.match(/\)/g) || []).length;
-  if (openParens !== closeParens) {
-    issues.push('Unmatched parentheses');
-  }
-  
-  if (issues.length > 0) {
-    warnings.push({
-      type: 'syntax',
-      message: issues.join(', '),
-      line: 'unknown'
-    });
-  }
-  
-  return warnings;
-}
+// There is deliberately no brace/parenthesis counting pass. Counting characters cannot
+// tell code from string and regex literals, so it reported "Unmatched braces" against
+// library files that the JS parser accepts — and validateParse above asks that parser
+// directly, which is both stricter and free of false positives.
 
 // Validate @import statements
 function validateImports(scripts) {
@@ -547,27 +523,41 @@ function validatePiecewiseScaleFixtures() {
   return errors;
 }
 
-// Check for SCRIPT_NAME metadata
+/**
+ * Warn when a script's display name is only the prettified filename.
+ *
+ * This reads getScriptMetadata's own verdict rather than re-testing the source. An
+ * earlier version matched /^\/\/\s+[A-Z]/, which rejected every `// @Core Library`
+ * title because of the leading `@` — so it warned about ten library files whose names
+ * plainly came from those very comments.
+ */
 function validateMetadata(scripts) {
   const warnings = [];
-  
+
   scripts.forEach(script => {
-    const hasScriptName = /\/\/\s*SCRIPT_NAME:/i.test(script.code);
-    const hasTitleComment = /^\/\/\s+[A-Z]/.test(script.code.trim());
-    
-    if (!hasScriptName && !hasTitleComment) {
+    if (!script.nameFromSource) {
       warnings.push({
         type: 'metadata',
         file: script.name,
-        message: 'No SCRIPT_NAME or title comment found'
+        message: 'No SCRIPT_NAME or title comment found; display name falls back to the filename'
       });
     }
   });
-  
+
   return warnings;
 }
 
-// Main validation function
+/**
+ * Main validation function.
+ *
+ * The exit code tracks *errors* only, and the split is deliberate — build:production
+ * gates on this, so anything cosmetic in here would get the gate switched back off:
+ *
+ *   Errors (exit 1):  a script does not parse as plain JS, before or after @import
+ *                     resolution; an @import names a script or function that does not
+ *                     exist; a piecewise-scale fixture regresses.
+ *   Warnings (exit 0): display name falls back to the filename.
+ */
 function validateScripts() {
   console.log(`${colors.cyan}🔍 Validating scripts...${colors.reset}\n`);
   
@@ -590,19 +580,6 @@ function validateScripts() {
   
   const allErrors = [];
   const allWarnings = [];
-  
-  // Validate syntax (returns warnings, not errors)
-  console.log(`${colors.cyan}🔎 Checking syntax...${colors.reset}`);
-  scripts.forEach(script => {
-    const syntaxWarnings = validateSyntax(script.code, script.path);
-    syntaxWarnings.forEach(warning => {
-      allWarnings.push({
-        ...warning,
-        file: script.name,
-        path: script.path
-      });
-    });
-  });
   
   // Parse every script the way the sandbox will, before and after @import resolution
   console.log(`${colors.cyan}🧩 Checking scripts parse as plain JS...${colors.reset}`);
@@ -634,39 +611,38 @@ function validateScripts() {
   const metadataWarnings = validateMetadata(scripts);
   allWarnings.push(...metadataWarnings);
   
-  // Report results
-  console.log('\n');
-  
-  if (allErrors.length === 0) {
-    if (allWarnings.length === 0) {
-      console.log(`${colors.green}✅ All scripts validated successfully!${colors.reset}\n`);
-    } else {
-      console.log(`${colors.green}✅ Scripts validated with ${allWarnings.length} warning(s)${colors.reset}\n`);
-    }
-    return { valid: true, errors: [], warnings: allWarnings };
-  }
-  
+  // Report results. Both lists are always printed — warnings used to be counted but
+  // never shown on a clean run, which made them impossible to act on.
+  console.log('');
+
   if (allErrors.length > 0) {
-    console.log(`${colors.red}❌ Found ${allErrors.length} error(s):${colors.reset}\n`);
+    console.log(`${colors.red}❌ Errors (these fail the build):${colors.reset}\n`);
     allErrors.forEach(error => {
       console.log(`${colors.red}  ✗ ${error.file}${colors.reset}`);
       console.log(`    ${error.message}`);
-      if (error.line !== 'unknown') {
+      if (error.line && error.line !== 'unknown') {
         console.log(`    Line: ${error.line}`);
       }
     });
     console.log('');
   }
-  
+
   if (allWarnings.length > 0) {
-    console.log(`${colors.yellow}⚠️  Found ${allWarnings.length} warning(s):${colors.reset}\n`);
+    console.log(`${colors.yellow}⚠️  Warnings (these do not fail the build):${colors.reset}\n`);
     allWarnings.forEach(warning => {
       console.log(`${colors.yellow}  ⚠ ${warning.file}${colors.reset}`);
       console.log(`    ${warning.message}`);
     });
     console.log('');
   }
-  
+
+  const summary = `${allErrors.length} error(s), ${allWarnings.length} warning(s)`;
+  if (allErrors.length === 0) {
+    console.log(`${colors.green}✅ ${summary} — scripts validated.${colors.reset}\n`);
+  } else {
+    console.log(`${colors.red}❌ ${summary} — validation failed.${colors.reset}\n`);
+  }
+
   return {
     valid: allErrors.length === 0,
     errors: allErrors,
@@ -674,7 +650,8 @@ function validateScripts() {
   };
 }
 
-// Run validation if called directly
+// Run validation if called directly. The exit code tracks errors only; see the
+// error/warning split documented on validateScripts.
 if (require.main === module) {
   const result = validateScripts();
   process.exit(result.valid ? 0 : 1);

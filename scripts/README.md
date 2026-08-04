@@ -157,9 +157,17 @@ Avoid long **fully synchronous** loops without `setTimeout` / `await`—the main
 
 ## Validation
 
-Run `npm run validate` to check scripts for:
-- Syntax errors
-- Invalid `@import` references
-- Missing metadata warnings
+Run `npm run validate` to check scripts. It reports two kinds of finding, and only the first kind fails a build:
 
-`build:production` and `build:dev` run validation first, but use `validate || true` so validation messages do not fail the build.
+**Errors** — every script is parsed exactly as the sandbox parses it (`new Function`), both as written and again with its `@import`s spliced in:
+- does not parse as plain JS (a stray type annotation, `interface`, or `as` cast)
+- does not parse *after* `@import` resolution, which means a library function was truncated during extraction
+- an `@import` names a script or a function that does not exist
+- a piecewise-scale fixture in `@math-helpers.ts` regressed
+
+**Warnings** — cosmetic, exit code unaffected:
+- no `SCRIPT_NAME` or title comment, so the display name falls back to the filename
+
+`npm run build:production` runs validation as a **blocking** step: an error fails the build, and therefore fails `npm run pack` and `npm run build:release` too. `npm run build:dev` runs `validate:soft`, which prints the same report but always succeeds — so a half-written script does not kill the dev watcher.
+
+Since scripts cannot run outside Figma, this is the only automated check they get. If a validation error is blocking you, fix the script rather than routing around the gate.
