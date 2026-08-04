@@ -149,7 +149,7 @@ This watches `src/code.ts`, `src/ui.html`, and `scripts/`, starts the local cons
 | `npm run dev` | Runs `build:dev`, then watches `src/` and `scripts/`, rebuilds on change, and starts the console log server. |
 | `npm run validate` | Validates script syntax, imports, and metadata. |
 | `npm run clean` | Removes `dist/`. |
-| `npm run pack` | Runs `build:production`, then writes `codefig-plugin.zip` (`manifest.json` + `dist/`). Same layout as the GitHub Release asset; requires the `zip` CLI. |
+| `npm run pack` | Runs `clean` and `build:production`, then writes `codefig-plugin.zip` (`manifest.json` + `dist/`). Cleaning first keeps stale files from earlier builds out of the zip. Same layout as the GitHub Release asset; requires the `zip` CLI. |
 | `npm run build:release` | See **Shipping a new release** above. Build + pack + version bump + commit (`package.json`, lockfile, `manifest.json`) + tag. Optional `--push`; default is no push. `--dry-run` builds and packs only. |
 
 **Console logging:** During `dev`, plugin and script logs are written to `figma-console.log`. The file is un-ignored so it can be read directly. The `prepare` script adds it to `.git/info/exclude` to prevent it from being committed. If you used `npm run dev` or `build:dev`, run `npm run build:production` before committing or publishing to ensure `manifest.json` doesn't retain the localhost entry.
