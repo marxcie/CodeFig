@@ -110,7 +110,7 @@ function assertCleanWorkingTree() {
         'To ship only some changes: stash what you are not releasing, commit what you are, then run again.\n' +
         'Example:\n' +
         '  git stash push -m "wip" -- src/ui.html src/code.ts\n' +
-        '  git add scripts/your-script.ts && git commit -m "..."\n' +
+        '  git add scripts/your-script.js && git commit -m "..."\n' +
         '  npm run build:release -- patch\n' +
         '  git stash pop\n\n' +
         'See README → “Selective commits before a release”. The zip is not committed; CI builds it from the tag.\n'

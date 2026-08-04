@@ -17,7 +17,7 @@ Variables are supported as a first-class use case, but CodeFig is intentionally 
 Scripter introduced script-based automation in Figma and remains an excellent minimal tool. CodeFig builds on that idea with a focus on scale, structure, and reuse:
 
 - **A broader example set** — layout, styles, variables, and design-system scripts
-- **JavaScript scripts** — `.ts` filenames for IDE convenience; the runtime is ES2017-style JS that the Figma sandbox accepts
+- **JavaScript scripts** — plain `.js` files; the runtime is ES2017-style JS that the Figma sandbox accepts
 - **Script organization** — categories, search, import/export
 - **No external dependencies** — no CDNs or third-party services; the Figma API is only used where scripts specifically need it (e.g. comments-to-annotations)
 
@@ -101,7 +101,7 @@ The script only checks for a clean tree **before** the build. If you have unfini
 2. **Commit** what you do want in this release:
 
    ```
-   git add scripts/EXAMPLE_SCRIPTS/my-change.ts && git commit -m "fix: …"
+   git add scripts/EXAMPLE_SCRIPTS/my-change.js && git commit -m "fix: …"
    ```
 
 3. Run `npm run build:release -- patch`. The production build uses the last committed versions of any stashed files.
@@ -161,7 +161,7 @@ This watches `src/code.ts`, `src/ui.html`, and `scripts/`, starts the local cons
 - `scripts/` — utility scripts and shared libraries
 - `dist/` — build output (`code.js`, `ui.html` with embedded script bundle)
 
-**Shipped vs. dev-only scripts:** The build skips any script file or folder whose name starts with `_` (e.g. `_auto-layout-all-selected.ts` or `_DEBUG_SCRIPTS/`). Those files stay in the repo for experiments and local debugging but are never included in the published plugin.
+**Shipped vs. dev-only scripts:** The build skips any script file or folder whose name starts with `_` (e.g. `_auto-layout-all-selected.js` or `_DEBUG_SCRIPTS/`). Those files stay in the repo for experiments and local debugging but are never included in the published plugin.
 
 
 ## Network & Privacy

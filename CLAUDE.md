@@ -37,7 +37,7 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 **`src/ui.html` → `dist/ui.html`** (iframe UI, ~6k lines, monolithic on purpose). Contains the CodeMirror editor, script list/search, import/export, and — importantly — the `@import` resolver. All script *sources* are embedded here at build time as base64 JSON in `<script id="scripts-data">`.
 
 **Script execution.** `RUN` builds a `new Function('figma', 'console', 'window', code)` and calls it with the real `figma`, a console that mirrors to `figma.notify` + the console bridge, and a **mock `window`** carrying InfoPanel/progress plumbing (`_infoPanelHandler`, `codefigRunComplete`, op counters). `selection` and `currentPage` are injected as consts. Consequences:
-- Scripts are **plain ES2017 JavaScript**, despite the `.ts` extension (the extension is only for IDE convenience). No `interface`, `type`, `as`, or annotations — they reach `new Function` verbatim and throw. `npm run validate` enforces this by parsing each script the same way; it is not a convention you have to remember.
+- Scripts are **plain ES2017 JavaScript** — `.js` files, never compiled. No `interface`, `type`, `as`, or annotations: they reach `new Function` verbatim and throw. `npm run validate` enforces this by parsing each script the same way, so it is not a convention you have to remember. (Everything under `scripts/` carried a `.ts` extension until Aug 2026, which is why editors and agents kept suggesting syntax that failed only in Figma.)
 - `tsconfig.json` only includes `src/code.ts`; `scripts/**` is never type-checked or compiled.
 - Completion is inferred: the backend polls for idle (`RUN_IDLE_MS`) unless the script sends `PROGRESS_COMPLETE` / calls `window.codefigRunComplete()`. `displayResults()` from `@InfoPanel` does this for you.
 
@@ -51,9 +51,9 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 
 ## Script authoring conventions (`scripts/`)
 
-Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `prebuilt`, `HELP/` → type `help`. Library files are `@`-prefixed (`@core-library.ts`, `@variables.ts`, `@styles.ts`, `@pattern-matching.ts`, `@replacement-engine.ts`, `@math-helpers.ts`, `@infopanel.ts`, `@codefig-ui.ts`, `@foundation-overview.ts`). New folders become new categories.
+Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `prebuilt`, `HELP/` → type `help`. Library files are `@`-prefixed (`@core-library.js`, `@variables.js`, `@styles.js`, `@pattern-matching.js`, `@replacement-engine.js`, `@math-helpers.js`, `@infopanel.js`, `@codefig-ui.js`, `@foundation-overview.js`). New folders become new categories.
 
-**Excluded from the build:** anything whose file or folder name starts with `_` or `.`, and `.bak*`/`.backup`/`.old`/`.tmp` files (`shouldExclude()`, duplicated in `build-scripts.js` and `validate-scripts.js`). The `_` prefix marks work in progress, and `scripts/` is **kept empty of it by convention** — every `.ts` under `scripts/` today ships. A `_`-prefixed script is a staging area, not a parking lot: graduate it or archive it. Superseded and abandoned scripts were evicted in Aug 2026 and live outside the repo at `~/codefig-archive/` (local only, never committed).
+**Excluded from the build:** anything whose file or folder name starts with `_` or `.`, and `.bak*`/`.backup`/`.old`/`.tmp` files (`shouldExclude()`, duplicated in `build-scripts.js` and `validate-scripts.js`). The `_` prefix marks work in progress, and `scripts/` is **kept empty of it by convention** — every `.js` under `scripts/` today ships. A `_`-prefixed script is a staging area, not a parking lot: graduate it or archive it. Superseded and abandoned scripts were evicted in Aug 2026 and live outside the repo at `~/codefig-archive/` (local only, never committed).
 
 **Display name** resolves in order: `// SCRIPT_NAME: Foo` → first title comment line → prettified filename.
 

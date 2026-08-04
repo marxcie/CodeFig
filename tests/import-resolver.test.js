@@ -18,7 +18,7 @@ const { findAllScripts } = require('../validate-scripts.js');
 
 /** Minimal stand-in for the UI's allScripts entries. */
 function script(name, code, filename) {
-  return { name: name, filename: filename || name.toLowerCase().replace(/\s+/g, '-') + '.ts', code: code };
+  return { name: name, filename: filename || name.toLowerCase().replace(/\s+/g, '-') + '.js', code: code };
 }
 
 const CORE = script(
@@ -34,7 +34,7 @@ const CORE = script(
     '  await Promise.resolve();',
     '}'
   ].join('\n'),
-  '@core-library.ts'
+  '@core-library.js'
 );
 
 const LIBRARY_SCRIPTS = [CORE];
@@ -144,7 +144,7 @@ test('mutually recursive functions terminate without stack overflow', () => {
       '  return n <= 0 ? 0 : ping(n);',
       '}'
     ].join('\n'),
-    '@cycle.ts'
+    '@cycle.js'
   );
   const { code } = resolve('@import { ping } from "@Cycle"' + PAD, [cyclic]);
   assert.strictEqual((code.match(/function ping\(/g) || []).length, 1);
@@ -188,7 +188,7 @@ test('unknown wildcard target soft-fails to a comment', () => {
 });
 
 test('bare @import * with no core library present soft-fails to a comment', () => {
-  const other = script('Utility Scripts / Something', 'function unrelated() {}', 'something.ts');
+  const other = script('Utility Scripts / Something', 'function unrelated() {}', 'something.js');
   const { code } = resolve('@import *' + PAD, [other]);
   assert.match(code, /\/\/ Import failed: Core library not found/);
 });
@@ -208,7 +208,7 @@ test('a top-level const object is NOT importable', () => {
   const lib = script(
     'CodeFig Libraries / @Consts',
     'const SETTINGS = {\n  a: 1\n};\nfunction readSetting() {\n  return SETTINGS.a;\n}',
-    '@consts.ts'
+    '@consts.js'
   );
   const { code } = resolve('@import { SETTINGS } from "@Consts"' + PAD, [lib]);
   assert.doesNotMatch(code, /SETTINGS = \{/);
@@ -225,7 +225,7 @@ test('arrow and function-expression forms are NAMED but not extractable', () => 
       'const arrowFn = (a) => { return a; };',
       'function plainFn(a) { return a; }'
     ].join('\n'),
-    '@arrows.ts'
+    '@arrows.js'
   );
   assert.deepStrictEqual(
     resolver.listFunctionNames(lib.code).sort(),
@@ -246,7 +246,7 @@ test('a TypeScript return annotation makes a function un-extractable at run time
   const lib = script(
     'CodeFig Libraries / @Typed',
     'function typedFn(a: string): number {\n  return 1;\n}\nfunction plainFn() {\n  return 2;\n}',
-    '@typed.ts'
+    '@typed.js'
   );
   const { code } = resolve('@import { typedFn, plainFn } from "@Typed"' + PAD, [lib]);
   assert.doesNotMatch(code, /function typedFn/);
@@ -276,7 +276,7 @@ test('braces inside strings, comments and template literals do not truncate a fu
       '}',
       'function afterTricky() { return 1; }'
     ].join('\n'),
-    '@braces.ts'
+    '@braces.js'
   );
   const { code } = resolve('@import { trickyFn } from "@Braces"' + PAD, [lib]);
   assert.match(code, /return brace \+ other \+ tpl;/, 'whole body must survive');
@@ -284,7 +284,7 @@ test('braces inside strings, comments and template literals do not truncate a fu
 });
 
 test('a regex literal with unbalanced braces does not truncate extraction', () => {
-  // @pattern-matching.ts has /\\\{([^}]+)\\\}/g — one `{`, two `}`. Without regex
+  // @pattern-matching.js has /\\\{([^}]+)\\\}/g — one `{`, two `}`. Without regex
   // state in the brace scanner that closes the function a brace early and the
   // extraction is unparseable.
   const lib = script(
@@ -297,7 +297,7 @@ test('a regex literal with unbalanced braces does not truncate extraction', () =
       '}',
       'function afterRegexFn() { return 1; }'
     ].join('\n'),
-    '@regex.ts'
+    '@regex.js'
   );
   const { code } = resolve('@import { regexFn } from "@Regex"' + PAD, [lib]);
   assert.match(code, /return re\.test\(out\);/, 'whole body must survive');
@@ -315,7 +315,7 @@ test('division is not mistaken for a regex literal', () => {
       '}',
       'function afterDivFn() { return 1; }'
     ].join('\n'),
-    '@div.ts'
+    '@div.js'
   );
   const { code } = resolve('@import { divFn } from "@Div"' + PAD, [lib]);
   assert.match(code, /return half \+ ratio;/);
@@ -323,11 +323,11 @@ test('division is not mistaken for a regex literal', () => {
 });
 
 test('a regex literal after the return keyword is recognised', () => {
-  // @variables.ts has `return v.description && /(\w+)\s*\([^)]*\)/.test(...)`.
+  // @variables.js has `return v.description && /(\w+)\s*\([^)]*\)/.test(...)`.
   const lib = script(
     'CodeFig Libraries / @Ret',
     'function retFn(s) {\n  return s && /[{](\\w+)[}]/.test(s);\n}\nfunction afterRetFn() { return 1; }',
-    '@ret.ts'
+    '@ret.js'
   );
   const { code } = resolve('@import { retFn } from "@Ret"' + PAD, [lib]);
   assert.match(code, /return s && /);
@@ -336,7 +336,7 @@ test('a regex literal after the return keyword is recognised', () => {
 
 test('$-patterns in library source are spliced literally, not as replacement patterns', () => {
   // String.replace treats $&, $`, $' and $1 in a *string* replacement as patterns.
-  // @pattern-matching.ts's `` `^${p}$` `` ends in $` — "everything before the match" —
+  // @pattern-matching.js's `` `^${p}$` `` ends in $` — "everything before the match" —
   // which would paste the consuming script's header into a template literal.
   const lib = script(
     'CodeFig Libraries / @Dollars',
@@ -347,7 +347,7 @@ test('$-patterns in library source are spliced literally, not as replacement pat
       '  return re.test(escaped) ? "$1" : "none";',
       '}'
     ].join('\n'),
-    '@dollars.ts'
+    '@dollars.js'
   );
   const header = '// UNIQUE-HEADER-MARKER\n';
   const { code } = resolve(header + '@import { dollarFn } from "@Dollars"' + PAD, [lib]);
@@ -367,14 +367,22 @@ test('$-patterns in library source are spliced literally, not as replacement pat
 
 test('findScript matches display name, " / " suffix, filename and @-prefix', () => {
   const scripts = [
-    script('Utility Scripts / Replace Styles', 'function a() {}', 'replace-styles.ts'),
+    script('Utility Scripts / Replace Styles', 'function a() {}', 'replace-styles.js'),
     CORE
   ];
-  assert.strictEqual(resolver.findScript(scripts, 'Replace Styles').filename, 'replace-styles.ts');
-  assert.strictEqual(resolver.findScript(scripts, 'replace styles').filename, 'replace-styles.ts');
-  assert.strictEqual(resolver.findScript(scripts, 'replace-styles').filename, 'replace-styles.ts');
-  assert.strictEqual(resolver.findScript(scripts, '@Core Library').filename, '@core-library.ts');
+  assert.strictEqual(resolver.findScript(scripts, 'Replace Styles').filename, 'replace-styles.js');
+  assert.strictEqual(resolver.findScript(scripts, 'replace styles').filename, 'replace-styles.js');
+  assert.strictEqual(resolver.findScript(scripts, 'replace-styles').filename, 'replace-styles.js');
+  assert.strictEqual(resolver.findScript(scripts, '@Core Library').filename, '@core-library.js');
   assert.strictEqual(resolver.findScript(scripts, 'Nothing Like This'), null);
+});
+
+test('filename matching ignores the extension, so pre-rename .ts entries still resolve', () => {
+  // Shipped scripts became .js in Aug 2026. Matching on the basename keeps scripts a
+  // user exported from an older build — and any future extension — resolvable.
+  const legacy = [script('Utility Scripts / Replace Styles', 'function a() {}', 'replace-styles.ts')];
+  assert.strictEqual(resolver.findScript(legacy, 'replace-styles').filename, 'replace-styles.ts');
+  assert.ok(resolver.findScript(legacy, 'Replace Styles'), 'display-name match is unaffected');
 });
 
 // ---------------------------------------------------------------------------
@@ -445,14 +453,14 @@ test('every shipped script resolves its imports into real injected source', () =
 test('shipped @import targets resolve to the expected library file', () => {
   const scripts = findAllScripts(path.join(__dirname, '..', 'scripts'));
   const expected = {
-    '@Core Library': '@core-library.ts',
-    '@Variables': '@variables.ts',
-    '@InfoPanel': '@infopanel.ts',
-    '@Math Helpers': '@math-helpers.ts',
-    '@Pattern Matching': '@pattern-matching.ts',
-    '@Styles': '@styles.ts',
-    '@Foundation overview': '@foundation-overview.ts',
-    'Replace Styles': 'replace-styles.ts'
+    '@Core Library': '@core-library.js',
+    '@Variables': '@variables.js',
+    '@InfoPanel': '@infopanel.js',
+    '@Math Helpers': '@math-helpers.js',
+    '@Pattern Matching': '@pattern-matching.js',
+    '@Styles': '@styles.js',
+    '@Foundation overview': '@foundation-overview.js',
+    'Replace Styles': 'replace-styles.js'
   };
   Object.keys(expected).forEach((target) => {
     const found = resolver.findScript(scripts, target);

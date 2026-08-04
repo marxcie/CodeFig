@@ -64,7 +64,7 @@ function shouldExclude(name) {
     return true;
   }
   // Exclude backup files
-  if (name.match(/\.(bak\d*|backup|old|tmp)\.ts$/i)) {
+  if (name.match(/\.(bak\d*|backup|old|tmp)\.js$/i)) {
     return true;
   }
   return false;
@@ -88,7 +88,7 @@ function updateUIHtml() {
   }
   
   // Read all scripts straight from the source tree. The plugin never reads loose
-  // .ts files (no filesystem in the sandbox) — this base64 blob is their only
+  // .js files (no filesystem in the sandbox) — this base64 blob is their only
   // consumer, so nothing is copied into dist/.
   const scripts = [];
   
@@ -110,7 +110,7 @@ function updateUIHtml() {
       if (stat.isDirectory()) {
         const newRelativePath = relativePath ? `${relativePath}/${item}` : item;
         readScripts(itemPath, newRelativePath);
-      } else if (item.endsWith('.ts') && !shouldExclude(item)) {
+      } else if (item.endsWith('.js') && !shouldExclude(item)) {
         const filePath = relativePath ? `${relativePath}/${item}` : item;
         const code = fs.readFileSync(itemPath, 'utf8');
         

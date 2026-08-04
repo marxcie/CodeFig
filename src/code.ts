@@ -39,7 +39,7 @@ figma.showUI(__html__, {
 // Extract script metadata from code (name, type)
 function extractScriptMetadata(code: string, filePath: string): { name: string; type: string } {
   const filename = filePath.split('/').pop() || '';
-  const filenameWithoutExt = filename.replace(/\.ts$/, '');
+  const filenameWithoutExt = filename.replace(/\.js$/, '');
   
   // Default name from filename
   let name = filenameWithoutExt.replace(/[-_]/g, ' ');
@@ -113,7 +113,7 @@ function shouldExcludeScript(filename: string): boolean {
     return true;
   }
   // Exclude backup files
-  if (filename.match(/\.(bak\d*|backup|old|tmp)\.ts$/i)) {
+  if (filename.match(/\.(bak\d*|backup|old|tmp)\.js$/i)) {
     return true;
   }
   return false;
@@ -134,8 +134,8 @@ async function loadExampleScripts() {
     } else {
       // Fallback: try to discover from __uiFiles__ (for backwards compatibility)
       for (const filePath in __uiFiles__) {
-        // Match scripts/**/*.ts pattern
-        if (filePath.match(/^scripts\/.*\.ts$/)) {
+        // Match scripts/**/*.js pattern
+        if (filePath.match(/^scripts\/.*\.js$/)) {
           // Get filename to check exclusion
           const filename = filePath.split('/').pop() || '';
           

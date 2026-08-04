@@ -210,7 +210,7 @@
    * Index of the `}` matching the `{` at openBraceIndex; -1 if unbalanced.
    * Skips strings, line/block comments, template literals and regex literals.
    *
-   * Regex literals matter: `/\\\{([^}]+)\\\}/g` in @pattern-matching.ts holds one `{`
+   * Regex literals matter: `/\\\{([^}]+)\\\}/g` in @pattern-matching.js holds one `{`
    * and two `}`, which without this closes the enclosing function an entire brace
    * early and yields a truncated, unparseable extraction.
    */
@@ -432,6 +432,17 @@
   // ---------------------------------------------------------------------------
 
   /**
+   * Filename minus its extension, for comparing an import target against a filename.
+   *
+   * Extension-agnostic on purpose: repo scripts are `.js`, but scripts the user saved
+   * in clientStorage under an older build — and the fixtures in
+   * tests/import-resolver.test.js — still carry `.ts`, and both must keep resolving.
+   */
+  function basenameWithoutExtension(filename) {
+    return String(filename).replace(/\.[^.]+$/, '');
+  }
+
+  /**
    * Fuzzy-match an import target against the script list, best match first:
    * exact display name, filename, @-prefixed variants, " / "-suffix (case sensitive
    * then insensitive), and finally a bare substring match.
@@ -442,13 +453,13 @@
       if (script.name === scriptName) return true;
 
       // Filename match (high priority)
-      if (script.filename && script.filename === scriptName + '.ts') return true;
+      if (script.filename && basenameWithoutExtension(script.filename) === scriptName) return true;
 
       // @-prefixed names (e.g. "@Variables" matches "Utility Scripts / @Variables")
       if (scriptName.charAt(0) === '@') {
         if (script.name.endsWith(' / ' + scriptName)) return true;
         if (script.name.indexOf(scriptName) !== -1) return true;
-        if (script.filename && script.filename === scriptName.replace('@', '') + '.ts') return true;
+        if (script.filename && basenameWithoutExtension(script.filename) === scriptName.replace('@', '')) return true;
       }
 
       // End-of-name match (e.g. "Replace Styles" matches "Utility Scripts / Replace Styles")
@@ -470,7 +481,7 @@
     var found = scripts.find(function (script) {
       if (script.name === scriptName) return true;
       if (script.name.indexOf(scriptName) !== -1) return true;
-      if (script.filename === scriptName + '.ts') return true;
+      if (script.filename && basenameWithoutExtension(script.filename) === scriptName) return true;
       return false;
     });
     return found || null;
@@ -493,7 +504,7 @@
    *
    * Must use a replacer function: with a string replacement, String.replace treats
    * `$&`, `` $` ``, `$'` and `$1` in the *replacement* as patterns. Library sources
-   * are full of them — `` `^${pattern}$` `` in @pattern-matching.ts ends in `` $` ``,
+   * are full of them — `` `^${pattern}$` `` in @pattern-matching.js ends in `` $` ``,
    * which as a pattern means "everything before the match" and silently pastes the
    * consuming script's own header into the middle of a template literal.
    */

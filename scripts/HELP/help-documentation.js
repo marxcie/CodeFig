@@ -2,7 +2,7 @@
 // @DOC_START
 // # CodeFig – Help & documentation
 //
-// Your JavaScript Figma scripting environment (scripts run as JS; .ts is for filenames/editor only).
+// Your JavaScript Figma scripting environment (scripts are plain JS files).
 //
 // ## Documentation tab
 //

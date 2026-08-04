@@ -2,9 +2,9 @@
 
 This directory contains all scripts for the CodeFig plugin. The build system automatically discovers and loads scripts from subdirectories.
 
-**Location**: This `scripts/` folder is at the root level of the project (not in `src/` or `dist/`). This is the single source of truth for all scripts. The build reads `.ts` files from here and embeds them as base64 JSON in `dist/ui.html` (see the `scripts-data` block in the built HTML) — nothing is copied into `dist/`, since the plugin sandbox has no filesystem and that blob is the only consumer. There is no separate `scripts-manifest.json` file.
+**Location**: This `scripts/` folder is at the root level of the project (not in `src/` or `dist/`). This is the single source of truth for all scripts. The build reads `.js` files from here and embeds them as base64 JSON in `dist/ui.html` (see the `scripts-data` block in the built HTML) — nothing is copied into `dist/`, since the plugin sandbox has no filesystem and that blob is the only consumer. There is no separate `scripts-manifest.json` file.
 
-**Language:** Files use a `.ts` extension, but the plugin runs script code as **plain JavaScript** (no TypeScript compile step). Avoid TypeScript-only syntax (`interface`, `type` aliases, `as` casts, etc.) so scripts run without errors.
+**Language:** Plain JavaScript, in `.js` files, with no compile step — the source text reaches `new Function` verbatim, so TypeScript-only syntax (`interface`, `type` aliases, `as` casts, parameter and return annotations) is a runtime SyntaxError, not a type. `npm run validate` rejects it. Files carried a `.ts` extension until Aug 2026, which only misled editors into suggesting the syntax that breaks.
 
 ## Folder Structure
 
@@ -22,7 +22,7 @@ Contains utility scripts that demonstrate various Figma automation capabilities.
 Contains importable library scripts (prefixed with `@`) that provide reusable functions and utilities.
 - **Type**: `prebuilt`
 - **Purpose**: Core libraries and utilities that can be imported by other scripts
-- **Files**: `@core-library.ts`, `@codefig-ui.ts`, `@infopanel.ts`, `@math-helpers.ts`, `@pattern-matching.ts`, `@replacement-engine.ts`, `@styles.ts`, `@variables.ts`
+- **Files**: `@core-library.js`, `@codefig-ui.js`, `@infopanel.js`, `@math-helpers.js`, `@pattern-matching.js`, `@replacement-engine.js`, `@styles.js`, `@variables.js`
 
 ### Excluded Folders
 Folders and files starting with `_` or `.` are automatically excluded from the build:
@@ -38,14 +38,14 @@ You can create additional folders for custom categories:
 ## Script Exclusion
 
 Scripts are automatically excluded from the build if they:
-- Start with `_` or `.` (e.g., `_debug-script.ts`, `.hidden.ts`)
+- Start with `_` or `.` (e.g., `_debug-script.js`, `.hidden.js`)
 - Have backup extensions: `.bak`, `.bak2`, `.bak3`, `.backup`, `.old`, `.tmp`
 - Are in folders starting with `_` or `.`
 
 Examples:
 - `_DEBUG_SCRIPTS/` - Entire folder excluded
-- `script.ts.bak` - Backup file excluded
-- `_experimental.ts` - Hidden script excluded
+- `script.bak.js` - Backup file excluded
+- `_experimental.js` - Hidden script excluded
 
 ## Script Naming
 
@@ -54,12 +54,12 @@ Scripts are automatically named using this priority:
 1. **Custom name comment**: Add `// SCRIPT_NAME: Your Custom Name` at the top of the file
 2. **Title comment**: Use the first comment line as the title (e.g., `// REPLACE TEXT STYLES`)
 3. **Filename**: Automatically convert filename to display name
-   - `find-broken-variables.ts` → "Find Broken Variables"
-   - `auto-layout-all.ts` → "Auto Layout All"
+   - `find-broken-variables.js` → "Find Broken Variables"
+   - `auto-layout-all.js` → "Auto Layout All"
 
 ## Adding New Scripts
 
-1. **Create a `.ts` file** in the appropriate folder
+1. **Create a `.js` file** in the appropriate folder
 2. **Add your script code** 
 3. **Optionally add a title comment** at the top
 4. **Run `npm run build:production`** (or `build:dev` while developing) to rebuild the plugin
@@ -81,7 +81,7 @@ figma.notify('Script executed successfully!');
 ## Build Process
 
 The build system (`build-scripts.js`) automatically:
-- 🔍 **Discovers** all `.ts` files in subdirectories (excluding `_`/`.` prefixed files)
+- 🔍 **Discovers** all `.js` files in subdirectories (excluding `_`/`.` prefixed files)
 - 📁 **Categorizes** scripts based on folder names
 - 🏷️ **Names** scripts using comments or filenames
 - 🔗 **Processes** `@import` statements at build time
@@ -103,14 +103,14 @@ Scripts can import functions from library scripts using `@import` statements:
 ```
 
 Available library scripts:
-- `@core-library.ts` - Core utility functions (nodes, styles, memory, colors)
-- `@codefig-ui.ts` - CodeFigUI config forms (section, toggle, number, string, select, sendToUI)
-- `@infopanel.ts` - InfoPanel display (displayResults, createResult, etc.)
-- `@math-helpers.ts` - Math, geometry, interpolation, easing
-- `@pattern-matching.ts` - Pattern matching and wildcards
-- `@replacement-engine.ts` - Find/replace with planning and reporting
-- `@styles.ts` - Style finding, analysis, replacement
-- `@variables.ts` - Variable and collection management
+- `@core-library.js` - Core utility functions (nodes, styles, memory, colors)
+- `@codefig-ui.js` - CodeFigUI config forms (section, toggle, number, string, select, sendToUI)
+- `@infopanel.js` - InfoPanel display (displayResults, createResult, etc.)
+- `@math-helpers.js` - Math, geometry, interpolation, easing
+- `@pattern-matching.js` - Pattern matching and wildcards
+- `@replacement-engine.js` - Find/replace with planning and reporting
+- `@styles.js` - Style finding, analysis, replacement
+- `@variables.js` - Variable and collection management
 
 Imports are resolved at runtime when you run a script; user scripts can also import from other user scripts or user libraries (name with `@` prefix).
 
@@ -163,7 +163,7 @@ Run `npm run validate` to check scripts. It reports two kinds of finding, and on
 - does not parse as plain JS (a stray type annotation, `interface`, or `as` cast)
 - does not parse *after* `@import` resolution, which means a library function was truncated during extraction
 - an `@import` names a script or a function that does not exist
-- a piecewise-scale fixture in `@math-helpers.ts` regressed
+- a piecewise-scale fixture in `@math-helpers.js` regressed
 
 **Warnings** — cosmetic, exit code unaffected:
 - no `SCRIPT_NAME` or title comment, so the display name falls back to the filename

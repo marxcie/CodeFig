@@ -17,8 +17,8 @@ const colors = {
 
 // Convert filename to display name
 function filenameToDisplayName(filename) {
-  // Remove .ts extension
-  const nameWithoutExt = filename.replace(/\.ts$/, '');
+  // Remove .js extension
+  const nameWithoutExt = filename.replace(/\.js$/, '');
   
   // Replace hyphens and underscores with spaces
   const withSpaces = nameWithoutExt.replace(/[-_]/g, ' ');
@@ -106,7 +106,7 @@ function shouldExclude(name) {
     return true;
   }
   // Exclude backup files
-  if (name.match(/\.(bak\d*|backup|old|tmp)\.ts$/i)) {
+  if (name.match(/\.(bak\d*|backup|old|tmp)\.js$/i)) {
     return true;
   }
   return false;
@@ -134,7 +134,7 @@ function getPrebuiltDisplayName(relativePath, scriptType, metadataName) {
   return `Utility Scripts / ${metadataName}`;
 }
 
-// Recursively find all .ts files in the scripts directory
+// Recursively find all .js files in the scripts directory
 function findAllScripts(scriptsDir) {
   const scripts = [];
   
@@ -158,8 +158,8 @@ function findAllScripts(scriptsDir) {
         // Recursively scan subdirectories
         const newRelativePath = relativePath ? `${relativePath}/${item}` : item;
         scanDirectory(itemPath, newRelativePath);
-      } else if (item.endsWith('.ts') && !shouldExclude(item)) {
-        // Found a TypeScript file
+      } else if (item.endsWith('.js') && !shouldExclude(item)) {
+        // Found a script
         const folderName = relativePath.split('/')[0] || 'EXAMPLE_SCRIPTS';
         const scriptCode = fs.readFileSync(itemPath, 'utf8');
         
@@ -257,15 +257,15 @@ function validateImports(scripts) {
   const functionLibrary = new Map();
   const scriptLibrary = new Map();
   
-  const libraryScripts = scripts.filter(script => 
-    script.filename === '@core-library.ts' ||
-    script.filename === '@codefig-ui.ts' ||
-    script.filename === '@math-helpers.ts' ||
-    script.filename === '@variables.ts' ||
-    script.filename === '@infopanel.ts' ||
-    script.filename === '@pattern-matching.ts' ||
-    script.filename === '@replacement-engine.ts' ||
-    script.filename === '@styles.ts'
+  const libraryScripts = scripts.filter(script =>
+    script.filename === '@core-library.js' ||
+    script.filename === '@codefig-ui.js' ||
+    script.filename === '@math-helpers.js' ||
+    script.filename === '@variables.js' ||
+    script.filename === '@infopanel.js' ||
+    script.filename === '@pattern-matching.js' ||
+    script.filename === '@replacement-engine.js' ||
+    script.filename === '@styles.js'
   );
   
   libraryScripts.forEach(script => {
@@ -281,31 +281,30 @@ function validateImports(scripts) {
     
     // Store script-specific library for wildcard imports
     scriptLibrary.set(script.name, functions);
-    scriptLibrary.set(script.name.replace('.ts', ''), functions);
-    
+
     // Map common name variations (check by filename, not display name)
-    if (script.filename === '@core-library.ts') {
+    if (script.filename === '@core-library.js') {
       scriptLibrary.set('@Core Library', functions);
       scriptLibrary.set('@core-library', functions);
-    } else if (script.filename === '@variables.ts') {
+    } else if (script.filename === '@variables.js') {
       scriptLibrary.set('@Variables', functions);
       scriptLibrary.set('@variables', functions);
-    } else if (script.filename === '@math-helpers.ts') {
+    } else if (script.filename === '@math-helpers.js') {
       scriptLibrary.set('@Math Helpers', functions);
       scriptLibrary.set('@math-helpers', functions);
-    } else if (script.filename === '@infopanel.ts') {
+    } else if (script.filename === '@infopanel.js') {
       scriptLibrary.set('@InfoPanel', functions);
       scriptLibrary.set('@infopanel', functions);
-    } else if (script.filename === '@pattern-matching.ts') {
+    } else if (script.filename === '@pattern-matching.js') {
       scriptLibrary.set('@Pattern Matching', functions);
       scriptLibrary.set('@pattern-matching', functions);
-    } else if (script.filename === '@replacement-engine.ts') {
+    } else if (script.filename === '@replacement-engine.js') {
       scriptLibrary.set('@Replacement Engine', functions);
       scriptLibrary.set('@replacement-engine', functions);
-    } else if (script.filename === '@styles.ts') {
+    } else if (script.filename === '@styles.js') {
       scriptLibrary.set('@Styles', functions);
       scriptLibrary.set('@styles', functions);
-    } else if (script.filename === '@codefig-ui.ts') {
+    } else if (script.filename === '@codefig-ui.js') {
       scriptLibrary.set('CodeFigUI', functions);
       scriptLibrary.set('@codefig-ui', functions);
     }
@@ -316,9 +315,9 @@ function validateImports(scripts) {
   // resolve *something* at run time, this only has to decide whether to report.
   function findScriptByName(scripts, scriptName) {
     let foundScript = scripts.find(s =>
-      s.name === scriptName + '.ts' ||
+      s.name === scriptName + '.js' ||
       s.name === scriptName ||
-      s.filename === scriptName + '.ts' ||
+      s.filename === scriptName + '.js' ||
       s.filename === scriptName
     );
 
@@ -337,8 +336,8 @@ function validateImports(scripts) {
   // Validate imports in each script. Parsing comes from the shared resolver, so the
   // validator can never fall behind on a syntax the UI accepts.
   scripts.forEach(script => {
-    // Skip validation for help-documentation.ts (contains example imports)
-    if (script.filename === 'help-documentation.ts' || script.name.includes('help & documentation')) {
+    // Skip validation for help-documentation.js (contains example imports)
+    if (script.filename === 'help-documentation.js' || script.name.includes('help & documentation')) {
       return;
     }
 
@@ -415,8 +414,15 @@ function validateImports(scripts) {
 /** Regression anchors for piecewise scale (min=0, max=160, roundTo=2, type=piecewise). */
 function validatePiecewiseScaleFixtures() {
   const errors = [];
-  const mathPath = path.join(__dirname, 'scripts', 'CODEFIG_LIBRARIES', '@math-helpers.ts');
+  const mathPath = path.join(__dirname, 'scripts', 'CODEFIG_LIBRARIES', '@math-helpers.js');
+  // Report a missing file instead of returning clean: this path is hardcoded, so a
+  // rename or move would otherwise switch the whole fixture check off in silence.
   if (!fs.existsSync(mathPath)) {
+    errors.push({
+      type: 'piecewise',
+      file: 'CodeFig Libraries / Math helpers',
+      message: `Fixture source not found: ${path.relative(__dirname, mathPath)}`
+    });
     return errors;
   }
   const code = fs.readFileSync(mathPath, 'utf8');
@@ -447,7 +453,7 @@ function validatePiecewiseScaleFixtures() {
     errors.push({
       type: 'piecewise',
       file: 'CodeFig Libraries / Math helpers',
-      message: 'generatePiecewiseSnappedScale not found in @math-helpers.ts'
+      message: 'generatePiecewiseSnappedScale not found in @math-helpers.js'
     });
     return errors;
   }

@@ -2,7 +2,7 @@
 // @DOC_START
 // # Relink local styles
 //
-// **Problem:** After copy-paste between files, layers can stay bound to *different* local style definitions that share the same name (e.g. `xxlBold`). `replace-styles.ts` cannot help when search/replace leaves the name unchanged.
+// **Problem:** After copy-paste between files, layers can stay bound to *different* local style definitions that share the same name (e.g. `xxlBold`). `replace-styles.js` cannot help when search/replace leaves the name unchanged.
 //
 // **Approach:** Group **local** text / paint / effect / grid styles by `name` + type. When several definitions share one name, pick a **canonical** style (the id with the **highest usage count** in the chosen scope). Walk layers in that same scope and rebind any binding whose style id is not the canonical one for that name. When each name appears only once locally, still rebind stray ids to that local style, including remote → same-named local.
 //
