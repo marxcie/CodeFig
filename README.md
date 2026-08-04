@@ -153,9 +153,12 @@ Both read the tracked template at `src/manifest.json` and never write to it, so 
 | `npm run dev` | Runs `build:dev`, then watches `src/` and `scripts/`, rebuilds on change, and starts the console log server. |
 | `npm run validate` | Validates that scripts parse the way the sandbox parses them, that `@import`s resolve, and that the scale fixtures hold. Prints `N error(s), M warning(s)`; the exit code tracks errors only. See `scripts/README.md` → Validation. |
 | `npm run validate:soft` | Same report, always exits 0. Used by `build:dev`. |
+| `npm run figma:run -- <script>` | Runs a bundled script **inside the open plugin** from the terminal and exits non-zero if the run logs an error. Requires `npm run dev` and the plugin open on a dev build — it cannot launch Figma. Use `--code "<js>"` or `--file <path>` to run something that is not a bundled script. |
 | `npm run clean` | Removes `dist/`. |
 | `npm run pack` | Runs `clean` and `build:production`, then writes `codefig-plugin.zip` — the contents of `dist/` (`manifest.json`, `code.js`, `ui.html`) at the archive root. Cleaning first keeps stale files from earlier builds out of the zip. Same layout as the GitHub Release asset; requires the `zip` CLI. |
 | `npm run build:release` | See **Shipping a new release** above. Build + pack + version bump + commit (`package.json`, lockfile) + tag. Optional `--push`; default is no push. `--dry-run` builds and packs only. |
+
+**Driving a real run from the terminal.** Figma has no headless mode, so nothing can run a script without a Figma client open. What the dev bridge adds is the other direction: with `npm run dev` going and the plugin open, `npm run figma:run -- rename-styles` hands the job to the plugin, waits for it, prints the run's console output and exits 0 or 1. Handy for checking a change without clicking through the UI each time. The queue is in-memory, unauthenticated, and reachable **only** from a dev build — a production build has no localhost entry in its manifest, and the UI's single localhost call site is gated on the build flag (enforced by `tests/ui-dev-guard.test.js`).
 
 **Console logging:** During `dev`, plugin and script logs are written to `figma-console.log`. The file is un-ignored so it can be read directly. The `prepare` script adds it to `.git/info/exclude` to prevent it from being committed. Because the localhost entry only ever lands in the generated `dist/manifest.json`, a dev build cannot leak it into a commit or a release.
 

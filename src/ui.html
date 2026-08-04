@@ -153,6 +153,22 @@
       // In source it stays a string placeholder; build replaces it with "true"/"false".
       var CODEFIG_BUILD_IS_DEV = "__CODEFIG_BUILD_IS_DEV__" === "true";
 
+      // === Dev bridge (figma-console-server.js) ===
+      // The ONE place this UI reaches localhost. Everything dev-only — console forwarding
+      // and the job queue — goes through here, so the guard is in a single auditable spot
+      // and tests/ui-dev-guard.test.js can assert no ungated path exists. A production
+      // build also has no localhost entry in its manifest, so Figma blocks it regardless.
+      var CODEFIG_BRIDGE_ORIGIN = 'http://localhost:8765';
+
+      function _codefigBridgeFetch(pathname, options) {
+        if (!CODEFIG_BUILD_IS_DEV) return Promise.resolve(null);
+        try {
+          return fetch(CODEFIG_BRIDGE_ORIGIN + (pathname || ''), options).catch(function () { return null; });
+        } catch (e) {
+          return Promise.resolve(null);
+        }
+      }
+
       // === UI debug: send to backend (shows in figma-console.log when npm run dev) ===
       var DEBUG_UI = false; // Set true for verbose logging; errors always forwarded
       function uiDebugLog() {
@@ -167,15 +183,11 @@
             window.parent.postMessage({ pluginMessage: { type: 'UI_DEBUG', message: message } }, '*');
           }
         } catch (e) {}
-        try {
-          if (CODEFIG_BUILD_IS_DEV) {
-            fetch('http://localhost:8765', {
-              method: 'POST',
-              body: '[UI] ' + message + '\n',
-              headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-            }).catch(function() {});
-          }
-        } catch (e) {}
+        _codefigBridgeFetch('', {
+          method: 'POST',
+          body: '[UI] ' + message + '\n',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
       }
       window.onerror = function(msg, url, line, col, err) {
         uiDebugLog('window.onerror:', msg, 'at', line + ':' + col, err ? err.stack : '');
@@ -2942,6 +2954,7 @@
 
           case 'CODEFIG_RUN_COMPLETE':
             hideProgress();
+            _codefigQueueFinishIfActive();
             break;
 
           case 'COPY_TO_CLIPBOARD':
@@ -2957,6 +2970,9 @@
               const localTs = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + '.' + pad(d.getMilliseconds(), 3);
               const line = '[' + localTs + '] [' + level.toUpperCase() + '] ' + payload + '\n';
               
+              // Dev-only: a queued job reports this run's output back to the bridge.
+              try { _codefigQueueCaptureLine(level, payload); } catch (_) {}
+
               // Capture CodeFig-related console output for the internal "last run" console.
               try {
                 if (_codefigShouldCapture(payload)) {
@@ -2975,16 +2991,11 @@
               } catch (_) {}
 
               // Dev-only: forward to local console server (writes figma-console.log)
-              if (CODEFIG_BUILD_IS_DEV) {
-                console.log('📤 UI: Forwarding to console server:', line.substring(0, 100));
-                fetch('http://localhost:8765', {
-                  method: 'POST',
-                  body: line,
-                  headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-                })
-                .then(() => console.log('✅ Console forward successful'))
-                .catch((err) => console.error('❌ Console forward failed:', err));
-              }
+              _codefigBridgeFetch('', {
+                method: 'POST',
+                body: line,
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+              });
             })();
             break;
             
@@ -3033,6 +3044,135 @@
           clearTimeout(codefigRunSession.indeterminateTimer);
           codefigRunSession.indeterminateTimer = null;
         }
+      }
+
+      // ======================================================================
+      // Dev-only: run jobs posted to the console bridge (`npm run test:figma`)
+      // ======================================================================
+      // Figma has no headless mode, so a real in-Figma run cannot be started from
+      // outside Figma. This closes the loop the other way: the plugin polls a
+      // localhost queue, runs what it is given, and posts the result back, so a
+      // terminal command can drive a real run and get an exit code.
+      //
+      // This lives in the UI rather than the backend because the UI is already the
+      // side that reaches localhost (console forwarding) and already the side that
+      // dispatches RUN — no new plumbing, no extra network permission.
+      //
+      // Everything here is behind CODEFIG_BUILD_IS_DEV. The queue has no auth, so a
+      // production build must never reach it; `build:production` also leaves
+      // localhost out of the manifest, which stops the fetch at the platform level.
+      var CODEFIG_JOB_POLL_MS = 1000;
+      var CODEFIG_JOB_TIMEOUT_MS = 120000;
+      /** Trailing console lines can arrive just after the completion message. */
+      var CODEFIG_JOB_SETTLE_MS = 150;
+
+      var codefigJob = { active: null, lines: [], firstError: null, timeoutTimer: null };
+
+      /** Collect a run's console output while a queued job owns the plugin. */
+      function _codefigQueueCaptureLine(level, payload) {
+        if (!codefigJob.active) return;
+        codefigJob.lines.push('[' + String(level).toUpperCase() + '] ' + payload);
+        if (level === 'error' && !codefigJob.firstError) codefigJob.firstError = payload;
+      }
+
+      /** Resolve a job's `script` against this build: display name, or filename. */
+      function _codefigFindScriptByName(name) {
+        var wanted = String(name == null ? '' : name).trim().toLowerCase();
+        if (!wanted) return null;
+        var bare = wanted.replace(/\.js$/, '');
+        var i;
+        for (i = 0; i < allScripts.length; i++) {
+          var exact = allScripts[i];
+          var byName = String(exact.name || '').toLowerCase();
+          var byFile = String(exact.filename || '').toLowerCase().replace(/\.js$/, '');
+          if (byName === wanted || byFile === bare) return exact;
+        }
+        // Loose match so "rename-styles" finds the script displayed as "Rename styles".
+        for (i = 0; i < allScripts.length; i++) {
+          var loose = allScripts[i];
+          if (String(loose.name || '').toLowerCase().replace(/\s+/g, '-') === bare) return loose;
+        }
+        return null;
+      }
+
+      function _codefigQueueReport(ok, error) {
+        var job = codefigJob.active;
+        if (!job) return;
+        codefigJob.active = null;
+        if (codefigJob.timeoutTimer) {
+          clearTimeout(codefigJob.timeoutTimer);
+          codefigJob.timeoutTimer = null;
+        }
+        var body = JSON.stringify({
+          ok: ok === true,
+          output: codefigJob.lines.join('\n'),
+          error: error != null ? String(error) : null
+        });
+        codefigJob.lines = [];
+        codefigJob.firstError = null;
+        _codefigBridgeFetch('/jobs/' + job.id + '/result', {
+          method: 'POST',
+          body: body,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      /** Called on CODEFIG_RUN_COMPLETE. A run that logged an error counts as a failure. */
+      function _codefigQueueFinishIfActive() {
+        if (!codefigJob.active) return;
+        setTimeout(function () {
+          if (!codefigJob.active) return;
+          _codefigQueueReport(!codefigJob.firstError, codefigJob.firstError);
+        }, CODEFIG_JOB_SETTLE_MS);
+      }
+
+      function _codefigQueueStart(job) {
+        codefigJob.active = job;
+        codefigJob.lines = [];
+        codefigJob.firstError = null;
+
+        var code = job.code;
+        if (!code) {
+          var found = _codefigFindScriptByName(job.script);
+          if (!found) {
+            _codefigQueueReport(false, 'No script named "' + job.script + '" in this build.');
+            return;
+          }
+          code = found.code;
+        }
+
+        try {
+          var resolved = processRuntimeImports(code);
+          _codefigResetConsole();
+          beginRunSession();
+          post('RUN', { code: resolved });
+        } catch (e) {
+          _codefigQueueReport(false, 'Could not prepare the script: ' + (e && e.message ? e.message : String(e)));
+          return;
+        }
+
+        codefigJob.timeoutTimer = setTimeout(function () {
+          _codefigQueueReport(
+            false,
+            'No completion within ' + CODEFIG_JOB_TIMEOUT_MS + 'ms. A queued script must signal it is ' +
+              'done — call window.codefigRunComplete(), or displayResults() from @InfoPanel, which does it for you.'
+          );
+        }, CODEFIG_JOB_TIMEOUT_MS);
+      }
+
+      function _codefigQueuePoll() {
+        if (!CODEFIG_BUILD_IS_DEV) return;
+        // Never interleave with a run the user started, or with another job.
+        if (codefigJob.active || codefigRunSession.active) return;
+        // No bridge listening is the normal case outside `npm run dev`, hence the null checks.
+        _codefigBridgeFetch('/jobs/next')
+          .then(function (res) { return res && res.status === 200 ? res.json() : null; })
+          .then(function (job) { if (job) _codefigQueueStart(job); })
+          .catch(function () {});
+      }
+
+      if (CODEFIG_BUILD_IS_DEV) {
+        setInterval(_codefigQueuePoll, CODEFIG_JOB_POLL_MS);
       }
 
       function hideProgressBarOnly() {
