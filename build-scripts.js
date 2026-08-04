@@ -113,14 +113,14 @@ function updateUIHtml() {
         const filePath = relativePath ? `${relativePath}/${item}` : item;
         const code = fs.readFileSync(itemPath, 'utf8');
         
-        // Determine type from folder path
-        let type = 'prebuilt';
-        if (filePath.includes('/HELP/')) {
-          type = 'help';
-        } else if (filePath.includes('/EXAMPLE_SCRIPTS/') || filePath.includes('/CODEFIG_LIBRARIES/')) {
-          type = 'prebuilt';
-        }
-        
+        // Determine type from the top-level folder under scripts/. filePath is
+        // relative to scripts/, so it has no leading slash to match on; matching
+        // the folder name is also what validate-scripts.js getCategoryType() does.
+        // Everything that is not HELP/ is prebuilt, so new folders become
+        // prebuilt categories.
+        const topFolder = filePath.split('/')[0].toLowerCase();
+        const type = topFolder === 'help' ? 'help' : 'prebuilt';
+
         scripts.push({
           filePath: `scripts/${filePath}`,
           code: code,
