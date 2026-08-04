@@ -56,13 +56,16 @@ function getScriptMetadata(filePath, filename) {
       const trimmed = line.trim();
       if (trimmed && trimmed.startsWith('//') && !metadata.nameFromComment) {
         const commentContent = trimmed.replace(/^\/\/\s*/, '').trim();
-        // Skip section headers and common patterns
-        if (!commentContent.includes('===') && !commentContent.includes('==') &&
-            !commentContent.toLowerCase().includes('execute') && 
-            !commentContent.toLowerCase().includes('import') && 
+        const isDocOrConfigMarker =
+          commentContent.startsWith('@DOC_') || commentContent.startsWith('@UI_CONFIG');
+        // Skip doc/config markers (@Variables / @Core Library titles are OK)
+        if (commentContent.length > 0 &&
+            !isDocOrConfigMarker &&
+            !commentContent.startsWith('#') &&
+            !commentContent.includes('===') && !commentContent.includes('==') &&
+            !commentContent.toLowerCase().includes('execute') &&
             !commentContent.toLowerCase().includes('function') &&
-            !commentContent.toLowerCase().includes('collection of') &&
-            commentContent.length > 0) {
+            !commentContent.toLowerCase().includes('collection of')) {
           metadata.name = commentContent;
           metadata.nameFromComment = true;
         }
@@ -513,6 +516,27 @@ function validatePiecewiseScaleFixtures() {
   }
   const code = fs.readFileSync(mathPath, 'utf8');
   const functions = extractFunctions(code);
+  const deps = [
+    'clamp01',
+    'applyEaseBaseIn',
+    'applyEase',
+    'applyEaseWithExponents',
+    'lerp',
+    'isPiecewiseScaleType',
+    'snapScaleGrid',
+    'piecewiseSnapGridForType',
+    'resampleSpineArray',
+    'mapSpineValueToRange',
+    'enforceMonotonicScale',
+    'usesPiecewiseRegressionPath',
+    'generatePiecewiseSnappedScale',
+    'mapScaleTypeToLibrary',
+    'parseScaleRangeMode',
+    'resolveScaleRangeMode',
+    'getModularScaleRatio',
+    'getEasedScaleFactor',
+    'generateScale'
+  ];
   const genCode = functions.get('generatePiecewiseSnappedScale');
   if (!genCode) {
     errors.push({
@@ -522,11 +546,15 @@ function validatePiecewiseScaleFixtures() {
     });
     return errors;
   }
-  const ctx = { console };
+  const ctx = { console, Math };
   vm.createContext(ctx);
   try {
-    vm.runInContext(genCode, ctx);
+    deps.forEach((name) => {
+      const fnCode = functions.get(name);
+      if (fnCode) vm.runInContext(fnCode, ctx);
+    });
     const fn = ctx.generatePiecewiseSnappedScale;
+    const genScale = ctx.generateScale;
     if (typeof fn !== 'function') {
       errors.push({
         type: 'piecewise',
@@ -542,6 +570,12 @@ function validatePiecewiseScaleFixtures() {
       }
       return true;
     }
+    function isMonotonic(arr) {
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i] < arr[i - 1]) return false;
+      }
+      return true;
+    }
     const cases = [
       { steps: 8, expected: [0, 2, 8, 16, 32, 48, 80, 160] },
       { steps: 10, expected: [0, 2, 4, 8, 16, 24, 40, 64, 96, 160] },
@@ -554,6 +588,23 @@ function validatePiecewiseScaleFixtures() {
           type: 'piecewise',
           file: 'CodeFig Libraries / Math helpers',
           message: `piecewise fixture steps=${c.steps}: expected [${c.expected.join(', ')}], got [${got.join(', ')}]`
+        });
+      }
+    }
+    if (typeof genScale === 'function') {
+      const proportional = genScale({ steps: 6, min: 24, max: 128, roundTo: 4, type: 'piecewise' });
+      if (proportional.length !== 6 || proportional[0] !== 24 || proportional[5] !== 128) {
+        errors.push({
+          type: 'piecewise',
+          file: 'CodeFig Libraries / Math helpers',
+          message: `proportional piecewise 6×24–128: expected endpoints 24/128, got [${proportional.join(', ')}]`
+        });
+      }
+      if (!isMonotonic(proportional)) {
+        errors.push({
+          type: 'piecewise',
+          file: 'CodeFig Libraries / Math helpers',
+          message: `proportional piecewise 6×24–128 not monotonic: [${proportional.join(', ')}]`
         });
       }
     }

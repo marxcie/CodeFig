@@ -4,6 +4,15 @@ const { inlineVendors } = require('./bundle-ui.js');
 
 const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
 const DEV_LOCALHOST = 'http://localhost:8765';
+const FIGMA_CONSOLE_LOG = path.join(__dirname, 'figma-console.log');
+
+function clearFigmaConsoleLog() {
+  try {
+    fs.writeFileSync(FIGMA_CONSOLE_LOG, '', 'utf8');
+  } catch {
+    // ignore if log file can't be cleared
+  }
+}
 /** Required for bundled scripts that call the Figma REST API (e.g. comments-to-annotations). */
 const FIGMA_API = 'https://api.figma.com';
 
@@ -247,6 +256,7 @@ function updateUIHtml() {
 
 // Run the build (vendors inlined into dist/ui.html from src/ui.html)
 console.log('🔨 Building...' + (isDev ? ' (dev: localhost allowed)' : ' (build: localhost not allowed)'));
+clearFigmaConsoleLog();
 writeManifest();
 bundleConfigUI();
 copyScripts();

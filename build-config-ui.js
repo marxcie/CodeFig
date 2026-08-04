@@ -20,6 +20,9 @@ if (!re.test(html)) {
   console.error("config-ui-js block not found in src/ui.html");
   process.exit(1);
 }
-html = html.replace(re, replacement);
-fs.writeFileSync(uiPath, html, "utf8");
+const nextHtml = html.replace(re, replacement);
+if (nextHtml === html) {
+  return;
+}
+fs.writeFileSync(uiPath, nextHtml, "utf8");
 console.log("✅ Inlined config-ui bundle into src/ui.html");

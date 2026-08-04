@@ -8,6 +8,9 @@ dist/
 codefig-plugin.zip
 codefig-v*-plugin.zip
 
+# Local working notes (streamlining plans, scratch)
+.plans/
+
 # IDE files
 .vscode/
 .idea/
