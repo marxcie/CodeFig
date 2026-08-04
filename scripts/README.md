@@ -2,7 +2,7 @@
 
 This directory contains all scripts for the CodeFig plugin. The build system automatically discovers and loads scripts from subdirectories.
 
-**Location**: This `scripts/` folder is at the root level of the project (not in `src/` or `dist/`). This is the single source of truth for all scripts. The build copies `.ts` files into `dist/scripts/` and embeds them as base64 JSON in `dist/ui.html` (see the `scripts-data` block in the built HTML). There is no separate `scripts-manifest.json` file.
+**Location**: This `scripts/` folder is at the root level of the project (not in `src/` or `dist/`). This is the single source of truth for all scripts. The build reads `.ts` files from here and embeds them as base64 JSON in `dist/ui.html` (see the `scripts-data` block in the built HTML) — nothing is copied into `dist/`, since the plugin sandbox has no filesystem and that blob is the only consumer. There is no separate `scripts-manifest.json` file.
 
 **Language:** Files use a `.ts` extension, but the plugin runs script code as **plain JavaScript** (no TypeScript compile step). Avoid TypeScript-only syntax (`interface`, `type` aliases, `as` casts, etc.) so scripts run without errors.
 

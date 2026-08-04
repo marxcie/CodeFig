@@ -139,6 +139,9 @@ Options:
   }
 
   console.log('\n→ Production build…\n');
+  // Clean first: pack-plugin.js zips whatever is in dist/, stale files included.
+  // This mirrors `npm run pack`, which we can't reuse here (it re-runs the build).
+  run('npm run clean');
   run('npm run build:production');
 
   console.log('\n→ Pack plugin zip…\n');

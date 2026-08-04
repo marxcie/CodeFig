@@ -10,7 +10,7 @@
     "dev": "npm run build:dev && concurrently \"tsc --watch\" \"chokidar 'src/ui.html' 'src/config-ui/**/*.js' 'scripts/**/*.ts' -d 300 -c 'node build-scripts.js --dev'\" \"node figma-console-server.js\"",
     "prepare": "node -e \"const fs=require('fs');const p=require('path');const g=p.join(process.cwd(),'.git','info','exclude');if(!fs.existsSync(p.join(process.cwd(),'.git'))) process.exit(0);let c=fs.existsSync(g)?fs.readFileSync(g,'utf8'):'';if(!c.includes('figma-console.log')) fs.appendFileSync(g,'\\nfigma-console.log\\n');\"",
     "clean": "rm -rf dist",
-    "pack": "npm run build:production && node pack-plugin.js",
+    "pack": "npm run clean && npm run build:production && node pack-plugin.js",
     "build:release": "node release.js"
   },
   "dependencies": {

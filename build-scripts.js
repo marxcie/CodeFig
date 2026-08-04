@@ -69,84 +69,12 @@ function shouldExclude(name) {
   return false;
 }
 
-// Recursively copy all .ts files from scripts/ to dist/scripts/
-function copyScripts() {
-  const scriptsDir = path.join(__dirname, 'scripts');
-  const distScriptsDir = path.join(__dirname, 'dist', 'scripts');
-  
-  if (!fs.existsSync(scriptsDir)) {
-    console.log('⚠️ Scripts directory not found:', scriptsDir);
-    return;
-  }
-  
-  // Ensure dist/scripts directory exists
-  if (!fs.existsSync(distScriptsDir)) {
-    fs.mkdirSync(distScriptsDir, { recursive: true });
-  }
-  
-  let copiedCount = 0;
-  
-  function copyDirectory(srcDir, destDir) {
-    if (!fs.existsSync(srcDir)) {
-      return;
-    }
-    
-    const items = fs.readdirSync(srcDir);
-    
-    for (const item of items) {
-      // Skip excluded items
-      if (shouldExclude(item)) {
-        continue;
-      }
-      
-      const srcPath = path.join(srcDir, item);
-      const stat = fs.statSync(srcPath);
-      
-      if (stat.isDirectory()) {
-        // Recursively copy subdirectories, preserving structure
-        const destSubDir = path.join(destDir, item);
-        
-        if (!fs.existsSync(destSubDir)) {
-          fs.mkdirSync(destSubDir, { recursive: true });
-        }
-        
-        copyDirectory(srcPath, destSubDir);
-      } else if (item.endsWith('.ts') && !shouldExclude(item)) {
-        // Copy TypeScript file to same relative location
-        const destPath = path.join(destDir, item);
-        
-        fs.copyFileSync(srcPath, destPath);
-        copiedCount++;
-      }
-    }
-  }
-  
-  // Clean dist/scripts directory first
-  if (fs.existsSync(distScriptsDir)) {
-    const existingItems = fs.readdirSync(distScriptsDir);
-    for (const item of existingItems) {
-      const itemPath = path.join(distScriptsDir, item);
-      const stat = fs.statSync(itemPath);
-      if (stat.isDirectory()) {
-        fs.rmSync(itemPath, { recursive: true, force: true });
-      } else {
-        fs.unlinkSync(itemPath);
-      }
-    }
-  }
-  
-  // Copy all scripts
-  copyDirectory(scriptsDir, distScriptsDir);
-  
-  console.log(`✅ Copied ${copiedCount} scripts to dist/scripts/`);
-}
-
 // Update ui.html (embed scripts as base64-encoded JSON)
 function updateUIHtml() {
   const uiTemplatePath = path.join(__dirname, 'src', 'ui.html');
   const uiDistPath = path.join(__dirname, 'dist', 'ui.html');
-  const distScriptsDir = path.join(__dirname, 'dist', 'scripts');
-  
+  const scriptsDir = path.join(__dirname, 'scripts');
+
   if (!fs.existsSync(uiTemplatePath)) {
     console.error('❌ ui.html template not found');
     return;
@@ -158,7 +86,9 @@ function updateUIHtml() {
     fs.mkdirSync(distDir, { recursive: true });
   }
   
-  // Read all scripts from dist/scripts
+  // Read all scripts straight from the source tree. The plugin never reads loose
+  // .ts files (no filesystem in the sandbox) — this base64 blob is their only
+  // consumer, so nothing is copied into dist/.
   const scripts = [];
   
   function readScripts(dir, relativePath = '') {
@@ -201,7 +131,7 @@ function updateUIHtml() {
     }
   }
   
-  readScripts(distScriptsDir);
+  readScripts(scriptsDir);
 
   // Read src only; inline the config-ui bundle and vendors (CodeMirror, marked) into the
   // string; write result only to dist. config-ui goes first: inlineVendors injects CodeMirror,
@@ -251,6 +181,5 @@ function updateUIHtml() {
 console.log('🔨 Building...' + (isDev ? ' (dev: localhost allowed)' : ' (build: localhost not allowed)'));
 clearFigmaConsoleLog();
 writeManifest();
-copyScripts();
 updateUIHtml();
 console.log('✅ Build completed successfully!');
