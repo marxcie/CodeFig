@@ -11,13 +11,14 @@ CodeFig is a Figma plugin that runs user-authored JavaScript inside the Figma pl
 | Command | Purpose |
 |---|---|
 | `npm run dev` | `build:dev`, then watches `src/` + `scripts/` and starts the console bridge server on :8765. Reload the plugin in Figma to pick up changes. |
-| `npm run build:dev` | validate (non-blocking) → `tsc` → `build-scripts.js --dev` (which inlines the config-ui bundle and vendors into `dist/ui.html`). Adds `http://localhost:8765` to `manifest.json`. |
+| `npm run build:dev` | validate (non-blocking) → `tsc` → `build-scripts.js --dev` (which inlines the config-ui bundle, the `@import` resolver and vendors into `dist/ui.html`). Adds `http://localhost:8765` to `manifest.json`. |
 | `npm run build:production` | Same without `--dev`; strips `localhost` from `manifest.json`. Required before committing/publishing. |
 | `npm run validate` | `validate-scripts.js` — syntax, `@import` resolution, metadata warnings. Exits 1 on failure, but builds run it as `validate \|\| true` so it never blocks. |
+| `npm test` | `node --test tests/` — fixture tests for `src/import-resolver.js`. No dependencies, no watch mode. |
 | `npm run pack` | production build + `codefig-plugin.zip` (needs the `zip` CLI). |
 | `npm run build:release -- patch\|minor\|major` | `release.js`: requires clean tree, builds, packs, bumps version, single commit (package.json + lockfile + manifest.json), creates `v*` tag. No push unless `--push`; `--dry-run` skips bump/tag. Pushing the tag triggers `.github/workflows/release.yml`, which builds the release zip from the committed tree. |
 
-There is no test suite. Validation of scripts is `npm run validate`; there is no way to run a single script outside Figma — scripts must be exercised in the plugin.
+The only tests are `tests/import-resolver.test.js` (`npm test`), because the `@import` resolver is the one piece with no runtime error surface. Everything else is checked by `npm run validate`; there is no way to run a single script outside Figma — scripts must be exercised in the plugin.
 
 ## Architecture
 
@@ -32,7 +33,9 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 - `tsconfig.json` only includes `src/code.ts`; `scripts/**` is never type-checked or compiled.
 - Completion is inferred: the backend polls for idle (`RUN_IDLE_MS`) unless the script sends `PROGRESS_COMPLETE` / calls `window.codefigRunComplete()`. `displayResults()` from `@InfoPanel` does this for you.
 
-**`@import` is textual, resolved in the UI at run time — not a module system.** `processImport` finds the source script by fuzzy name match, extracts the named functions' source text by brace-counting, and splices it in place of the `@import` line. So: only top-level `function f() {}` (and `var/const/let f = function|arrow`) forms are importable; top-level constants, objects, and classes in a library are *not*. Import failures degrade to a comment plus a notification, not an error. `validate-scripts.js` duplicates this extraction logic to catch broken imports at build time — keep the two in sync if you change either.
+**`@import` is textual, resolved in the UI at run time — not a module system.** The resolver finds the source script by fuzzy name match, extracts the named functions' source text by brace-counting, and splices it in place of the `@import` line. So: only top-level `function f() {}` and `async function f() {}` declarations are actually extractable; top-level constants, objects, and classes in a library are *not*. (`var/const/let f = function|arrow` forms are recognised as *names* — a wildcard import lists them — but extraction then skips them silently.) A function declared with a TypeScript return annotation (`function f(): T {`) is also skipped, because the extracted text is spliced straight into `new Function` where an annotation is a SyntaxError; several shipped scripts carry hand-written fallbacks for exactly that case. Import failures degrade to a comment plus a notification, not an error.
+
+**`src/import-resolver.js` is the single implementation**, consumed by the UI at run time and by `validate-scripts.js` at build time — there is no second copy to keep in sync. `build-import-resolver.js` inlines it into the `<script id="import-resolver-js">` block of `dist/ui.html` (a one-line stub in `src/ui.html`, never written back to source, same pattern as config-ui) and it must stay ahead of the main app script; `processRuntimeImports` throws if the `CodeFigImports` global is missing rather than letting every import silently degrade. Behaviour is pinned by `tests/import-resolver.test.js`, including the extraction limits above and a per-script check that shipped imports resolve to real injected source.
 
 **`src/config-ui/`** (`parser.js`, `renderer.js`, `controller.js`, `bridge.js`) turns a script's config comment block into a rendered form. `build-config-ui.js` exports `inlineConfigUI(html)`, a pure string transform that concatenates these four files into the `<script id="config-ui-js">` block on the way to `dist/ui.html`. In `src/ui.html` that block is a one-line stub and stays that way — the bundle is never written back to source.
 

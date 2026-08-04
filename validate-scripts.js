@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+// Single implementation of @import parsing and function extraction, shared with the
+// UI at run time (inlined into dist/ui.html). Do not re-implement either here.
+const { findImports, extractFunctionMap } = require('./src/import-resolver.js');
 
 // Colors for console output
 const colors = {
@@ -174,101 +177,6 @@ function findAllScripts(scriptsDir) {
   return scripts;
 }
 
-// Extract functions from code (same logic as build-scripts.js)
-function extractFunctions(code) {
-  const functions = new Map();
-  
-  // Match function declarations: function name() { ... }
-  // Also handles TypeScript return type annotations: function name(): Type { ... }
-  const functionRegex = /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\([^)]*\)\s*(?::[^{]*)?\s*\{/g;
-  let match;
-  
-  while ((match = functionRegex.exec(code)) !== null) {
-    const functionName = match[1];
-    const startIndex = match.index;
-    
-    // The regex already matches up to and including the opening brace
-    // The opening brace is at the end of the match
-    const braceStart = startIndex + match[0].length - 1;
-    
-    if (braceStart >= code.length || code[braceStart] !== '{') {
-      continue; // No opening brace found, skip this function
-    }
-    
-    // Find the complete function by counting braces
-    // Start at 1 because we're already at the opening brace
-    let braceCount = 1;
-    let i = braceStart + 1;
-    let inString = false;
-    let stringChar = '';
-    let inLineComment = false;
-    let inBlockComment = false;
-    
-    while (i < code.length) {
-      const char = code[i];
-      const nextChar = i + 1 < code.length ? code[i + 1] : '';
-      
-      if (inBlockComment) {
-        // Inside block comment /* ... */
-        if (char === '*' && nextChar === '/') {
-          inBlockComment = false;
-          i += 2; // Skip */
-          continue;
-        }
-        i++;
-        continue;
-      }
-      
-      if (inLineComment) {
-        // Inside line comment // ...
-        if (char === '\n' || char === '\r') {
-          inLineComment = false;
-        }
-        i++;
-        continue;
-      }
-      
-      if (!inString) {
-        // Check for comments before checking for strings
-        if (char === '/' && nextChar === '/') {
-          inLineComment = true;
-          i += 2; // Skip //
-          continue;
-        }
-        if (char === '/' && nextChar === '*') {
-          inBlockComment = true;
-          i += 2; // Skip /*
-          continue;
-        }
-        
-        if (char === '"' || char === "'" || char === '`') {
-          inString = true;
-          stringChar = char;
-        } else if (char === '{') {
-          braceCount++;
-        } else if (char === '}') {
-          braceCount--;
-          if (braceCount === 0) {
-            break;
-          }
-        }
-      } else {
-        if (char === stringChar && (i === 0 || code[i-1] !== '\\')) {
-          inString = false;
-        }
-      }
-      i++;
-    }
-    
-    if (braceCount === 0) {
-      const functionCode = code.substring(startIndex, i + 1);
-      functions.set(functionName, functionCode);
-    }
-  }
-  
-  return functions;
-}
-
 // Validate JavaScript syntax (lenient for TypeScript)
 function validateSyntax(code, filePath) {
   const warnings = [];
@@ -326,7 +234,7 @@ function validateImports(scripts) {
   );
   
   libraryScripts.forEach(script => {
-    const functions = extractFunctions(script.code);
+    const functions = extractFunctionMap(script.code);
     
     // Store in global library
     functions.forEach((code, name) => {
@@ -368,142 +276,104 @@ function validateImports(scripts) {
     }
   });
   
-  // Validate imports in each script
+  // Fallback lookup for import targets that aren't one of the known libraries.
+  // Deliberately stricter than the resolver's fuzzy matcher: the resolver has to
+  // resolve *something* at run time, this only has to decide whether to report.
+  function findScriptByName(scripts, scriptName) {
+    let foundScript = scripts.find(s =>
+      s.name === scriptName + '.ts' ||
+      s.name === scriptName ||
+      s.filename === scriptName + '.ts' ||
+      s.filename === scriptName
+    );
+
+    // If not found, try with "Utility Scripts / " or legacy "Example Scripts / " prefix
+    if (!foundScript) {
+      foundScript = scripts.find(s =>
+        s.name === `Utility Scripts / ${scriptName}` ||
+        s.name === `Example Scripts / ${scriptName}` ||
+        s.name.endsWith(` / ${scriptName}`)
+      );
+    }
+
+    return foundScript;
+  }
+
+  // Validate imports in each script. Parsing comes from the shared resolver, so the
+  // validator can never fall behind on a syntax the UI accepts.
   scripts.forEach(script => {
     // Skip validation for help-documentation.ts (contains example imports)
     if (script.filename === 'help-documentation.ts' || script.name.includes('help & documentation')) {
       return;
     }
-    
+
     // Skip validation for library files themselves (they are the source, not consumers)
     if (libraryScripts.some(lib => lib.filename === script.filename)) {
       return;
     }
-    
-    // Pattern 1: @import { func1, func2 } from "Script Name"
-    const importWithFromRegex = /@import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
-    let match;
-    
-    while ((match = importWithFromRegex.exec(script.code)) !== null) {
-      const importList = match[1];
-      const scriptName = match[2];
-      const functionNames = importList.split(',').map(name => name.trim());
-      
-      const sourceFunctions = scriptLibrary.get(scriptName);
-      if (sourceFunctions) {
-        functionNames.forEach(functionName => {
-          if (!sourceFunctions.has(functionName)) {
+
+    findImports(script.code).forEach(imp => {
+      const scriptName = imp.scriptName;
+
+      // Wildcard forms (`@import * from "X"` and bare `@import *`) import whatever the
+      // target declares, so only the target's existence can be checked here.
+      if (!imp.functionNames) {
+        if (scriptLibrary.has(scriptName) || findScriptByName(scripts, scriptName)) {
+          return;
+        }
+        errors.push({
+          type: 'import',
+          file: script.name,
+          message: `Script '${scriptName}' not found for wildcard import`,
+          script: scriptName
+        });
+        return;
+      }
+
+      // `@import { a, b }` with no `from` resolves against the whole embedded library.
+      if (imp.kind === 'simple') {
+        imp.functionNames.forEach(functionName => {
+          if (!functionLibrary.has(functionName)) {
             errors.push({
               type: 'import',
               file: script.name,
-              message: `Function '${functionName}' not found in ${scriptName}`,
+              message: `Function '${functionName}' not found in library`,
               function: functionName
             });
           }
         });
-      } else {
-          // Try to find script by other names
-          let foundScript = scripts.find(s => 
-            s.name === scriptName + '.ts' || 
-            s.name === scriptName ||
-            s.filename === scriptName + '.ts' ||
-            s.filename === scriptName
-          );
-          
-          // If not found, try with "Utility Scripts / " or legacy "Example Scripts / " prefix
-          if (!foundScript) {
-            foundScript = scripts.find(s => 
-              s.name === `Utility Scripts / ${scriptName}` ||
-              s.name === `Example Scripts / ${scriptName}` ||
-              s.name.endsWith(` / ${scriptName}`)
-            );
-          }
-          
-          if (foundScript) {
-            // Extract functions from the found script
-            const foundFunctions = extractFunctions(foundScript.code);
-            functionNames.forEach(functionName => {
-              if (!foundFunctions.has(functionName)) {
-                errors.push({
-                  type: 'import',
-                  file: script.name,
-                  message: `Function '${functionName}' not found in ${scriptName}`,
-                  function: functionName
-                });
-              }
-            });
-          } else {
-            errors.push({
-              type: 'import',
-              file: script.name,
-              message: `Script '${scriptName}' not found for import`,
-              script: scriptName
-            });
-          }
+        return;
       }
-    }
-    
-    // Pattern 2: @import * from "Script Name" (wildcard import)
-    const wildcardRegex = /@import\s+\*\s+from\s+['"]([^'"]+)['"]/g;
-    
-    while ((match = wildcardRegex.exec(script.code)) !== null) {
-      const scriptName = match[1];
-      const sourceFunctions = scriptLibrary.get(scriptName);
-      
+
+      // `@import { a, b } from "X"`: X must exist and must declare every name.
+      let sourceFunctions = scriptLibrary.get(scriptName);
       if (!sourceFunctions) {
-        // Try to find script by other names
-        let foundScript = scripts.find(s => 
-          s.name === scriptName + '.ts' || 
-          s.name === scriptName ||
-          s.filename === scriptName + '.ts' ||
-          s.filename === scriptName
-        );
-        
-        // If not found, try with "Utility Scripts / " or legacy "Example Scripts / " prefix
+        const foundScript = findScriptByName(scripts, scriptName);
         if (!foundScript) {
-          foundScript = scripts.find(s => 
-            s.name === `Utility Scripts / ${scriptName}` ||
-            s.name === `Example Scripts / ${scriptName}` ||
-            s.name.endsWith(` / ${scriptName}`)
-          );
-        }
-        
-        if (foundScript) {
-          // Extract functions from the found script for wildcard import
-          const foundFunctions = extractFunctions(foundScript.code);
-          // Wildcard import is valid if script is found
-          // No need to check individual functions for wildcard imports
-        } else {
           errors.push({
             type: 'import',
             file: script.name,
-            message: `Script '${scriptName}' not found for wildcard import`,
+            message: `Script '${scriptName}' not found for import`,
             script: scriptName
           });
+          return;
         }
+        sourceFunctions = extractFunctionMap(foundScript.code);
       }
-    }
-    
-    // Pattern 3: @import { func1, func2 } (defaults to @Core Library)
-    const importSimpleRegex = /@import\s+\{([^}]+)\}(?!\s+from)/g;
-    
-    while ((match = importSimpleRegex.exec(script.code)) !== null) {
-      const importList = match[1];
-      const functionNames = importList.split(',').map(name => name.trim());
-      
-      functionNames.forEach(functionName => {
-        if (!functionLibrary.has(functionName)) {
+
+      imp.functionNames.forEach(functionName => {
+        if (!sourceFunctions.has(functionName)) {
           errors.push({
             type: 'import',
             file: script.name,
-            message: `Function '${functionName}' not found in library`,
+            message: `Function '${functionName}' not found in ${scriptName}`,
             function: functionName
           });
         }
       });
-    }
+    });
   });
-  
+
   return { errors, warnings };
 }
 
@@ -515,7 +385,7 @@ function validatePiecewiseScaleFixtures() {
     return errors;
   }
   const code = fs.readFileSync(mathPath, 'utf8');
-  const functions = extractFunctions(code);
+  const functions = extractFunctionMap(code);
   const deps = [
     'clamp01',
     'applyEaseBaseIn',
