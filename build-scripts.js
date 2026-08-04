@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { inlineVendors } = require('./bundle-ui.js');
+const { inlineConfigUI } = require('./build-config-ui.js');
 
 const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
 const DEV_LOCALHOST = 'http://localhost:8765';
@@ -53,17 +54,6 @@ function writeManifest() {
       console.log('✅ manifest.json: production (Figma API, no localhost)');
     }
   }
-}
-
-function bundleConfigUI() {
-  const buildConfigUiPath = path.join(__dirname, "build-config-ui.js");
-  if (!fs.existsSync(buildConfigUiPath)) return;
-  require(buildConfigUiPath);
-}
-
-// CodeFigUI config block parser/renderer is bundled into src/ui.html via build-config-ui.js
-function copyConfigUILib() {
-  bundleConfigUI();
 }
 
 // Check if a file/folder should be excluded
@@ -213,8 +203,11 @@ function updateUIHtml() {
   
   readScripts(distScriptsDir);
 
-  // Read src only; inline vendors (CodeMirror, marked) into string; write result only to dist
+  // Read src only; inline the config-ui bundle and vendors (CodeMirror, marked) into the
+  // string; write result only to dist. config-ui goes first: inlineVendors injects CodeMirror,
+  // which carries </script>-like strings, so the config-ui regex stays on a small document.
   let uiContent = fs.readFileSync(uiTemplatePath, 'utf8');
+  uiContent = inlineConfigUI(uiContent);
   uiContent = inlineVendors(uiContent);
   
   // Inject build flags (dev vs production) into the UI bundle.
@@ -258,7 +251,6 @@ function updateUIHtml() {
 console.log('🔨 Building...' + (isDev ? ' (dev: localhost allowed)' : ' (build: localhost not allowed)'));
 clearFigmaConsoleLog();
 writeManifest();
-bundleConfigUI();
 copyScripts();
 updateUIHtml();
 console.log('✅ Build completed successfully!');

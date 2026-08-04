@@ -1,13 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-
-/**
- * Escape script content for safe embedding inside <script> in HTML.
- * </script> -> <\/script> so the HTML parser doesn't close the tag.
- */
-function escapeScriptContent(js) {
-  return js.replace(/<\/script>/gi, '<\\/script>');
-}
+const { escapeScriptContent } = require('./build-utils.js');
 
 /**
  * Inline CodeMirror and marked into HTML content (string).
@@ -58,31 +51,6 @@ function inlineVendors(htmlContent) {
   }
 
   return out;
-}
-
-if (require.main === module) {
-  const srcPath = path.join(__dirname, 'src', 'ui.html');
-  const distPath = path.join(__dirname, 'dist', 'ui.html');
-  if (!fs.existsSync(srcPath)) {
-    console.error('src/ui.html not found');
-    process.exit(1);
-  }
-  const distDir = path.dirname(distPath);
-  if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
-  let html = fs.readFileSync(srcPath, 'utf8');
-  html = inlineVendors(html);
-  const bmcSvgPath = path.join(__dirname, 'src', 'bmc-button.svg');
-  if (fs.existsSync(bmcSvgPath) && html.includes('<!-- INLINE_BMC_SVG -->')) {
-    let bmcSvg = fs.readFileSync(bmcSvgPath, 'utf8').trim();
-    bmcSvg = bmcSvg.replace(
-      /<svg(\s)/,
-      '<svg class="bmc-btn__svg" focusable="false" aria-hidden="true"$1'
-    );
-    bmcSvg = bmcSvg.replace(/\s*width="[^"]*"/, '').replace(/\s*height="[^"]*"/, '');
-    html = html.replace('<!-- INLINE_BMC_SVG -->', bmcSvg);
-  }
-  fs.writeFileSync(distPath, html, 'utf8');
-  console.log('Wrote dist/ui.html with inlined vendors');
 }
 
 module.exports = { inlineVendors };

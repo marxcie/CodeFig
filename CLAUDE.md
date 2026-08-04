@@ -11,7 +11,7 @@ CodeFig is a Figma plugin that runs user-authored JavaScript inside the Figma pl
 | Command | Purpose |
 |---|---|
 | `npm run dev` | `build:dev`, then watches `src/` + `scripts/` and starts the console bridge server on :8765. Reload the plugin in Figma to pick up changes. |
-| `npm run build:dev` | validate (non-blocking) → `tsc` → config-ui bundle → `build-scripts.js --dev`. Adds `http://localhost:8765` to `manifest.json`. |
+| `npm run build:dev` | validate (non-blocking) → `tsc` → `build-scripts.js --dev` (which inlines the config-ui bundle and vendors into `dist/ui.html`). Adds `http://localhost:8765` to `manifest.json`. |
 | `npm run build:production` | Same without `--dev`; strips `localhost` from `manifest.json`. Required before committing/publishing. |
 | `npm run validate` | `validate-scripts.js` — syntax, `@import` resolution, metadata warnings. Exits 1 on failure, but builds run it as `validate \|\| true` so it never blocks. |
 | `npm run pack` | production build + `codefig-plugin.zip` (needs the `zip` CLI). |
@@ -34,7 +34,7 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 
 **`@import` is textual, resolved in the UI at run time — not a module system.** `processImport` finds the source script by fuzzy name match, extracts the named functions' source text by brace-counting, and splices it in place of the `@import` line. So: only top-level `function f() {}` (and `var/const/let f = function|arrow`) forms are importable; top-level constants, objects, and classes in a library are *not*. Import failures degrade to a comment plus a notification, not an error. `validate-scripts.js` duplicates this extraction logic to catch broken imports at build time — keep the two in sync if you change either.
 
-**`src/config-ui/`** (`parser.js`, `renderer.js`, `controller.js`, `bridge.js`) turns a script's config comment block into a rendered form. `build-config-ui.js` concatenates these four files and writes them **back into `src/ui.html`** inside `<script id="config-ui-js">`. Edit the files in `src/config-ui/` — never the inlined block — and expect `src/ui.html` to show up as modified after any build.
+**`src/config-ui/`** (`parser.js`, `renderer.js`, `controller.js`, `bridge.js`) turns a script's config comment block into a rendered form. `build-config-ui.js` exports `inlineConfigUI(html)`, a pure string transform that concatenates these four files into the `<script id="config-ui-js">` block on the way to `dist/ui.html`. In `src/ui.html` that block is a one-line stub and stays that way — the bundle is never written back to source.
 
 **`bundle-ui.js`** inlines vendors (CodeMirror, marked) into `dist/ui.html`, and `__CODEFIG_BUILD_IS_DEV__` is substituted with `true`/`false` so the production UI never reaches for localhost.
 
@@ -55,6 +55,6 @@ Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `pr
 
 ## Gotchas
 
-- **Builds mutate tracked files.** `build-scripts.js` rewrites `manifest.json` (`networkAccess.allowedDomains`), and `build-config-ui.js` rewrites `src/ui.html`. After any `dev`/`build:dev`, run `npm run build:production` before committing or publishing so `localhost:8765` doesn't ship.
+- **Builds mutate one tracked file.** `build-scripts.js` rewrites `manifest.json` (`networkAccess.allowedDomains`). After any `dev`/`build:dev`, run `npm run build:production` before committing or publishing so `localhost:8765` doesn't ship.
 - **`figma-console.log`** (repo root) is where plugin and script logs land during `npm run dev`, via the bridge server in `figma-console-server.js`. It is deliberately un-gitignored (`!figma-console.log`) so agents can read it; the `prepare` script adds it to `.git/info/exclude`. Per `.cursor/rules/figma-console-log.mdc`: **read this log when working on anything under `scripts/`**, and when debugging plugin errors.
 - `dist/` and the zips are gitignored; the GitHub release asset is built by CI from the tag.
