@@ -31,7 +31,7 @@
 // @DOC_END
 
 // Import memory management utilities and library functions
-@import { processWithOptimization, cleanupMemory, traverseNodes, getAllStyles } from "@Core Library"
+@import { processWithOptimization, cleanupMemory, traverseNodes, getAllStyles, collectNodesAsync, showProgress, codefigRunOpBegin, codefigRunOpEnd, finishCodefigRunProgress } from "@Core Library"
 @import { escapeWildcards } from "@Pattern Matching"
 
 // Fallback for escapeWildcards if import fails
@@ -510,26 +510,25 @@ function buildReplacementsFromConfig() {
   return [];
 }
 
-// Helper function to collect all nodes using library function
-// Uses iterative traverseNodes with maxNodes to prevent memory overload
+// Collect nodes with yields so the progress UI can update during inventory.
 function collectAllNodes(nodes) {
-  var allNodes = [];
-  var MAX_NODES = 8000; // Conservative limit to prevent memory overload with external libs
-  
-  traverseNodes(nodes, function(node) {
-    allNodes.push(node);
-    return 0;
-  }, { maxNodes: MAX_NODES });
-  
-  if (allNodes.length >= MAX_NODES) {
-    console.log('⚠️ Node limit reached (' + MAX_NODES + '). Processing first ' + MAX_NODES + ' nodes.');
-  }
-  
-  return allNodes;
+  var MAX_NODES = 8000;
+  return collectNodesAsync(nodes, {
+    maxNodes: MAX_NODES,
+    operation: 'Collecting nodes',
+    showProgress: true,
+    yieldEvery: 350
+  }).then(function (allNodes) {
+    if (allNodes.length >= MAX_NODES) {
+      console.log('⚠️ Node limit reached (' + MAX_NODES + '). Processing first ' + MAX_NODES + ' nodes.');
+    }
+    return allNodes;
+  });
 }
 
 // Main function - can be called directly or imported
 function replaceAllStyles(customReplacements, customSelectionOnly) {
+  codefigRunOpBegin();
   try {
     var replacements = customReplacements || buildReplacementsFromConfig();
     var selectionOnlyVal = customSelectionOnly !== undefined ? customSelectionOnly : selectionOnly;
@@ -541,6 +540,7 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
     if (replacements.length === 0) {
       console.log('❌ No replacements configured');
       figma.notify('Configure searchFor/replaceWith or batchReplacement first');
+      finishCodefigRunProgress();
       return Promise.resolve({ success: false, replacements: 0, error: 'No replacements configured' });
     }
 
@@ -562,6 +562,7 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
     if (selectionOnlyVal && nodes.length === 0) {
       console.log('❌ No elements selected');
       figma.notify('Please select elements to process');
+      finishCodefigRunProgress();
       return Promise.resolve({ success: false, replacements: 0, error: 'No elements selected' });
     }
     
@@ -581,8 +582,7 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
       // Cleanup memory after building cache
       cleanupMemory();
       
-      // Collect all nodes into a flat array
-      var allNodes = collectAllNodes(nodes);
+      return collectAllNodes(nodes).then(function (allNodes) {
       console.log('📋 Collected ' + allNodes.length + ' nodes to process');
       
       if (allNodes.length === 0) {
@@ -642,11 +642,15 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         
         return { success: true, replacements: totalReplacements, error: null };
       });
+      });
+    }).finally(function () {
+      codefigRunOpEnd();
     });
     
   } catch (error) {
     console.log('❌ Script error: ' + error.message);
     figma.notify('Script error - check console');
+    finishCodefigRunProgress();
     return Promise.resolve({ success: false, replacements: 0, error: error.message });
   }
 }
@@ -944,6 +948,9 @@ function scanDocumentForLibraryStyles(cache, traverseRoots) {
     var YIELD_DELAY = 10;
     
     console.log('📄 Scanning ' + nodesToProcess.length + ' nodes for styles...');
+    if (typeof showProgress === 'function' && nodesToProcess.length > 0) {
+      showProgress('Scanning styles', 0, nodesToProcess.length);
+    }
     
     /** Add or upgrade cache entry from a resolved BaseStyle on a node (hydrates Team Library placeholders). */
     function mergeScannedStyleIntoCache(key, scanType, style) {
@@ -1030,6 +1037,10 @@ function scanDocumentForLibraryStyles(cache, traverseRoots) {
           totalNodesScanned++;
         }
         chunkStartIndex = chunkEnd;
+
+        if (typeof showProgress === 'function') {
+          showProgress('Scanning styles', totalNodesScanned, nodesToProcess.length);
+        }
         
         if (chunkStartIndex >= nodesToProcess.length) {
           if (_rsStats) _rsStats.scanNodesDone = totalNodesScanned;

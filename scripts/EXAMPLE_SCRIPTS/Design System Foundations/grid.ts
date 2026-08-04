@@ -12,9 +12,10 @@
 // | collectionName | Figma variable collection name. |
 // | group | Optional folder prefix for variable names (e.g. `layout` → `layout/columns`). When empty, variables are at the collection root (`columns`, `gap`, …). |
 // | modes | Ordered array of `{ name, containerWidth, columns, gap, padding }`. **Figma mode order matches array order.** Mode display names use `name` with only the first letter uppercased (`desktop-large` → `Desktop-large`). Column count (col-1..col-N) follows the mode with the most columns. |
-// | distributeToMaxColumns | Optional boolean (default `false`). When `true`, slot `col-s` on a viewport with `N` columns uses the width for span `round(s × N ÷ maxCols)` (clamped to 1…`N`), so the **grid fraction** `s/maxCols` matches `span/N` (e.g. 6/12 → 4/8 on tablet). |
+// | extensionColumns | Optional number (default `0`). Adds virtual `col-*` variables beyond the grid max (e.g. max 12 + `4` → `col-13`…`col-16`). Widths use the same column unit as the grid and grow past the content area (e.g. col-13 > col-12). Does not change `columns`, layout-guide count, or grid style. |
+// | distributeToMaxColumns | Optional boolean (default `false`). When `true`, slot `col-s` on a viewport with `N` columns uses the width for span `round(s × N ÷ maxCols)` (clamped to 1…`N`), so the **grid fraction** `s/maxCols` matches `span/N` (e.g. 6/12 → 4/8 on tablet). Extension columns (`col-(maxCols+1)`…) always use direct span widths and ignore this option. |
 // | config (legacy) | Optional keyed object of viewports; ignored when `modes` is non-empty. |
-// | variables | Function(innerConfig) or map of variable names. Creates columns, gap, padding, viewport-width, and col-1..col-max (optionally under `group/`). |
+// | variables | Function(innerConfig) or map of variable names. Creates columns, gap, padding, viewport-width, and col-1..col-(max+extensionColumns) (optionally under `group/`). |
 // | Grid style | One grid style "Grid" (COLUMNS, left/MIN): count, sectionSize (col-1), gutter, and offset (padding) bound to variables; one style for all modes. |
 // | Preview | **Grid — overview** section: one preview frame per viewport (width bound to viewport-width variable, explicit mode, grid style). **Only when `generateOverview` is true** (default `false`). |
 // | generateOverview | Optional boolean (default `false`). When `true`, fills the **Grid — overview** section inside **`Design System Foundations`** (see `@Foundation overview`). |
@@ -84,6 +85,13 @@ function resolveGroup(config) {
   return '';
 }
 
+function resolveExtensionColumns(config) {
+  if (!config || typeof config.extensionColumns !== 'number' || config.extensionColumns <= 0) {
+    return 0;
+  }
+  return Math.floor(config.extensionColumns);
+}
+
 // Viewport keys on inner config object; only objects with layout fields count as viewports
 function getViewportConfigKeys(innerConfig) {
   if (!innerConfig || typeof innerConfig !== 'object') return [];
@@ -103,6 +111,12 @@ function calculateColumnVariable(colNum, viewportConfig) {
   if (colNum > viewportConfig.columns) {
     return viewportConfig.containerWidth - (viewportConfig.padding * 2);
   }
+  var colWidth = calculateColumnWidth(viewportConfig);
+  return (colWidth * colNum) + (viewportConfig.gap * (colNum - 1));
+}
+
+// Virtual extension slots (col-(maxCols+1)…): same column unit as the grid, but span may exceed the viewport column count
+function calculateExtensionColumnVariable(colNum, viewportConfig) {
   var colWidth = calculateColumnWidth(viewportConfig);
   return (colWidth * colNum) + (viewportConfig.gap * (colNum - 1));
 }
@@ -173,14 +187,18 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // When true: col-s uses span round(s×N÷maxCols) per viewport so grid fractions align (see @DOC)
   distributeToMaxColumns: false,
 
+  // Extra virtual col-* slots beyond max viewport columns (0 = none; 4 on a 12-col grid → col-13..col-16)
+  extensionColumns: 0,
+
   // When true: create the "Grid System Preview" overview frame (one column per viewport)
   generateOverview: false,
 
   // @CONFIG_END
   // Variables to be created in Figma (function of config; max columns = viewport with most columns)
-  // Second arg is the full grid config (optional); used for distributeToMaxColumns
+  // Second arg is the full grid config (optional); used for distributeToMaxColumns and extensionColumns
   variables: function(innerConfig, gridConfig) {
     var distribute = !!(gridConfig && gridConfig.distributeToMaxColumns);
+    var extensionCols = resolveExtensionColumns(gridConfig);
     var viewportKeys = getViewportConfigKeys(innerConfig);
     if (viewportKeys.length === 0) {
       return {};
@@ -190,6 +208,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
       var cols = innerConfig[viewportKeys[mi]].columns;
       if (cols > maxCols) maxCols = cols;
     }
+    var totalColVars = maxCols + extensionCols;
 
     function valuesPerViewport(valueFn) {
       var values = {};
@@ -227,13 +246,17 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
       }
     };
 
-    for (var colNum = 1; colNum <= maxCols; colNum++) {
+    for (var colNum = 1; colNum <= totalColVars; colNum++) {
       (function(c) {
+        var isExtensionCol = c > maxCols;
         var colValues = {};
         for (var vi = 0; vi < viewportKeys.length; vi++) {
           (function(vk) {
             var modeName = modeLabelFromViewportKey(vk);
             colValues[modeName] = function(configCtx) {
+              if (isExtensionCol) {
+                return calculateExtensionColumnVariable(c, configCtx[vk]);
+              }
               return resolveColVariableValue(c, configCtx[vk], maxCols, distribute);
             };
           })(viewportKeys[vi]);

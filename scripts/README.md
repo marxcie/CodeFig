@@ -114,6 +114,47 @@ Available library scripts:
 
 Imports are resolved at runtime when you run a script; user scripts can also import from other user scripts or user libraries (name with `@` prefix).
 
+## Long-running scripts and progress
+
+The plugin UI shows a footer progress bar automatically:
+
+- **Runs longer than ~2 seconds** show an indeterminate “Running script…” bar even if the script never calls `showProgress`.
+- **Determinate progress** appears when the script (or `@Core Library`) sends updates via `showProgress(operation, processed, total)`.
+
+For work that walks large trees or scans many nodes, **yield to the UI** so Figma stays responsive and the bar can update:
+
+```javascript
+@import { collectNodesAsync, showProgress, processWithOptimization, yieldToUI } from "@Core Library"
+
+// Collect selection subtree with periodic yields + progress
+var nodes = await collectNodesAsync(figma.currentPage.selection, {
+  operation: 'Collecting nodes',
+  maxNodes: 15000,
+  yieldEvery: 400,
+});
+
+// Process in chunks with progress (uses setTimeout between chunks)
+await processWithOptimization(nodes, function (node) { /* ... */ }, {
+  operation: 'Processing',
+  showProgress: true,
+});
+
+// Optional: one-off yield between heavy synchronous steps
+await yieldToUI();
+```
+
+**Async scripts** that finish without `processWithOptimization` (which sends `PROGRESS_COMPLETE`) should clear the bar when done:
+
+```javascript
+if (typeof window !== 'undefined' && typeof window.codefigRunComplete === 'function') {
+  window.codefigRunComplete();
+}
+```
+
+`displayResults()` from `@InfoPanel` calls `codefigRunComplete()` automatically when the script did not report determinate progress.
+
+Avoid long **fully synchronous** loops without `setTimeout` / `await`—the main thread cannot deliver progress messages until it yields.
+
 ## Validation
 
 Run `npm run validate` to check scripts for:

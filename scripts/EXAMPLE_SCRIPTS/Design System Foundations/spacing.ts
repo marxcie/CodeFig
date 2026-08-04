@@ -25,7 +25,7 @@
 
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getVariable } from "@Variables"
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
-@import { applyEase, applyEaseWithExponents, lerp, generatePiecewiseSnappedScale, isPiecewiseScaleType } from "@Math Helpers"
+@import { generateScale, isPiecewiseScaleType } from "@Math Helpers"
 
 // ========================================
 // CONFIG HELPERS
@@ -298,34 +298,9 @@ materializeSpacingsFromSteps(spacingConfigData);
 materializeSpacingSizes(spacingConfigData);
 validateSpacingScalingTypeConfig(spacingConfigData);
 
-function mapTypeToLibrary(type) {
-  if (!type) return "linear";
-  if (type === "expo") return "exponential";
-  if (type === "goldenratio") return "goldenRatio";
-  return type;
-}
-
 /** One grid for all spacing steps (see `roundTo` / `resolveRoundTo`). */
 function getSpacingRoundGrid(config) {
   return resolveRoundTo(config);
-}
-
-function roundToGrid(value, gridSize) {
-  if (!gridSize || gridSize <= 0) return value;
-  return Math.round(value / gridSize) * gridSize;
-}
-
-function getEasedFactor(config, t) {
-  var scaling = config.scaling || {};
-  var easeName = scaling.ease || "none";
-  var useExponents = typeof scaling.easeInExponent === 'number' && scaling.easeInExponent > 0;
-  if (useExponents) {
-    var outExp = (typeof scaling.easeOutExponent === 'number' && scaling.easeOutExponent > 0)
-      ? scaling.easeOutExponent : scaling.easeInExponent;
-    return applyEaseWithExponents(scaling.easeInExponent, outExp, easeName, t);
-  }
-  var curveType = mapTypeToLibrary(scaling.type || 'linear');
-  return applyEase(curveType, easeName, t);
 }
 
 /**
@@ -341,76 +316,41 @@ function useFullRangeRamp(config) {
   return true;
 }
 
-/** Range curve: either one segment min→max (linear default) or min→base→max; snap with `roundTo`. */
-function calculateFluidSpacing(scaleIndex, totalSteps, viewport, config) {
+function buildSpacingScaleOpts(totalSteps, viewport, config) {
   var sizes = config.spacingSizes[viewport];
   if (!sizes || !sizes.base) {
-    return 0;
+    return null;
   }
-  var minSize = sizes.min;
-  var maxSize = sizes.max;
-  var baseSize = sizes.base.size;
   var baseIndex = config.spacings.indexOf(sizes.base.level);
   if (baseIndex < 0) {
     console.warn('base.level not found in spacings, using middle step');
     baseIndex = Math.max(0, Math.floor((totalSteps - 1) / 2));
   }
-  var gridSize = getSpacingRoundGrid(config);
   var scaling = config.scaling || {};
+  return {
+    steps: totalSteps,
+    min: sizes.min,
+    max: sizes.max,
+    type: scaling.type || 'linear',
+    ease: scaling.ease,
+    rangeMode: useFullRangeRamp(config) ? 'full' : 'twoSegment',
+    baseIndex: baseIndex,
+    baseValue: sizes.base.size,
+    roundTo: getSpacingRoundGrid(config),
+    easeInExponent: scaling.easeInExponent,
+    easeOutExponent: scaling.easeOutExponent,
+    defaultRangeMode: 'full'
+  };
+}
 
-  if (isPiecewiseScaleType(scaling.type)) {
-    var piecewiseVals = generatePiecewiseSnappedScale({
-      steps: totalSteps,
-      min: minSize,
-      max: maxSize,
-      roundTo: gridSize,
-      type: scaling.type
-    });
-    var pv = piecewiseVals[scaleIndex];
-    if (typeof pv !== 'number' || isNaN(pv)) return minSize;
-    return Math.max(minSize, Math.min(maxSize, pv));
-  }
-
-  if (useFullRangeRamp(config)) {
-    if (totalSteps <= 1) {
-      var flat = roundToGrid(minSize, gridSize);
-      return Math.max(minSize, Math.min(maxSize, flat));
-    }
-    var tFull = scaleIndex / (totalSteps - 1);
-    var uFull = getEasedFactor(config, tFull);
-    var rawFull = lerp(minSize, maxSize, uFull);
-    rawFull = Math.max(minSize, Math.min(maxSize, rawFull));
-    rawFull = Math.round(rawFull * 100) / 100;
-    var snappedFull = roundToGrid(rawFull, gridSize);
-    return Math.max(minSize, Math.min(maxSize, snappedFull));
-  }
-
-  if (scaleIndex === baseIndex) {
-    var baseRounded = roundToGrid(baseSize, gridSize);
-    return Math.max(minSize, Math.min(maxSize, baseRounded));
-  }
-
-  var t;
-  var startVal;
-  var endVal;
-
-  if (scaleIndex < baseIndex) {
-    t = baseIndex > 0 ? scaleIndex / baseIndex : 0;
-    startVal = minSize;
-    endVal = baseSize;
-  } else {
-    var stepsAboveBase = (totalSteps - 1) - baseIndex;
-    t = stepsAboveBase > 0 ? (scaleIndex - baseIndex) / stepsAboveBase : 0;
-    startVal = baseSize;
-    endVal = maxSize;
-  }
-
-  var u = getEasedFactor(config, t);
-  var rawSize = lerp(startVal, endVal, u);
-  rawSize = Math.max(minSize, Math.min(maxSize, rawSize));
-  rawSize = Math.round(rawSize * 100) / 100;
-  var snapped = roundToGrid(rawSize, gridSize);
-  return Math.max(minSize, Math.min(maxSize, snapped));
+/** Range curve or piecewise ramp via shared `generateScale`. */
+function calculateFluidSpacing(scaleIndex, totalSteps, viewport, config) {
+  var opts = buildSpacingScaleOpts(totalSteps, viewport, config);
+  if (!opts) return 0;
+  var scale = generateScale(opts);
+  var v = scale[scaleIndex];
+  if (typeof v !== 'number' || isNaN(v)) return opts.min;
+  return Math.max(opts.min, Math.min(opts.max, v));
 }
 
 function variableNamePrefix(group) {
