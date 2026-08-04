@@ -27,7 +27,7 @@
 // @DOC_END
 
 @import { getAllCollections, getCollectionVariables, getVariable } from "@Variables"
-@import { matchPattern, replaceWithPattern } from "@Pattern Matching"
+@import { replaceWithPattern } from "@Pattern Matching"
 
 // ============================================================================
 // CONFIGURATION

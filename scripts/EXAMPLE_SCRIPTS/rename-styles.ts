@@ -84,8 +84,12 @@ function filterBySearchIn(styles, searchInValue) {
     return styles;
   }
   var pattern = String(searchInValue).trim();
+  // searchIn is documented as "contains" (e.g. "color/"), but @Pattern Matching's
+  // wildcard match is anchored (^...$). Wrap in * so a bare substring still matches
+  // while an explicit pattern like "V4/*/Primary" keeps working.
+  var containsPattern = '*' + pattern + '*';
   var filtered = styles.filter(function(style) {
-    var result = matchPattern(style.name, pattern, { exact: false, caseSensitive: false });
+    var result = matchPattern(style.name, containsPattern, { exact: false, caseSensitive: false });
     return result && result.match;
   });
   return filtered;

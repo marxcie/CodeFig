@@ -22,7 +22,6 @@
 // | **Remap by name (automatic)** | When **target** is set, **source** can be empty (all collections), and search/replace/batch are **empty**—bindings are rebound to the variable with the **same name** in the target collection (typical: paste from another file → point at local tokens). Works on layer bindings and variable-table aliases. Unresolved / missing variable IDs are counted; Figma does not expose names for those, so they cannot be remapped automatically. |
 // @DOC_END
 
-@import { matchPattern } from "@Pattern Matching"
 
 // ========================================
 // CONFIGURATION

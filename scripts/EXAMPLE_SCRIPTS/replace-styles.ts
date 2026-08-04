@@ -331,7 +331,10 @@ function matchStyleNamePartial(text, pattern) {
   var searchText = String(text || '').toLowerCase();
   var searchPattern = p.toLowerCase();
   var escapedPattern = escapeWildcards(searchPattern);
-  var regexPattern = escapedPattern.replace(/\*/g, '.*');
+  // escapeWildcards escapes * too, so un-escape \* into .* — matching the idiom used
+  // by @Pattern Matching's own replaceWithPattern. Converting a bare * here would
+  // instead turn \* into \.* ("literal dots"), silently killing every wildcard.
+  var regexPattern = escapedPattern.replace(/\\\*/g, '.*');
   try {
     return new RegExp(regexPattern, 'i').test(searchText);
   } catch (e) {
@@ -1239,7 +1242,8 @@ async function findReplacementStyle(currentStyle, styleCache, expectedType, repl
 
     var newStyleName = currentStyle.name;
     var escapedForReplace = escapeWildcards(String(findPattern));
-    var regexSrc = escapedForReplace.replace(/\*/g, '.*');
+    // See the note in the matcher above: un-escape \* rather than converting a bare *.
+    var regexSrc = escapedForReplace.replace(/\\\*/g, '.*');
     var patternRegex = new RegExp(regexSrc, 'gi');
     newStyleName = newStyleName.replace(patternRegex, replacement.to);
 

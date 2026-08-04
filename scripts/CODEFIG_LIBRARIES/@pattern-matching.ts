@@ -110,9 +110,12 @@ function compilePattern(pattern, options = {}) {
     return globToRegex(pattern, caseSensitive);
   }
 
-  // Default wildcard pattern
+  // Default wildcard pattern. Un-escape \* rather than converting a bare * —
+  // escapeWildcards has already turned * into \*, so /\*/ would match the escaped
+  // form and produce \.* ("zero or more literal dots"), killing every wildcard.
+  // globToRegex below has always done this correctly; this line did not.
   const escapedPattern = escapeWildcards(pattern);
-  const regexPattern = escapedPattern.replace(/\*/g, '.*');
+  const regexPattern = escapedPattern.replace(/\\\*/g, '.*');
   return new RegExp(`^${regexPattern}$`, caseSensitive ? 'g' : 'gi');
 }
 
