@@ -30,10 +30,8 @@ npm-debug.log*
 *.tmp
 *.temp
 
-# BETA files
-scripts/_DEBUG_SCRIPTS/*
-scripts/_WIP_SCRIPTS/*
-scripts/_LEGACY_SCRIPTS/*
+# Work in progress: the `_` prefix marks scripts the build skips (shouldExclude()).
+# Intentionally empty — graduate a script or archive it, don't let these pile up.
 scripts/EXAMPLE_SCRIPTS/*.bak*
 scripts/EXAMPLE_SCRIPTS/*.temp*
 scripts/EXAMPLE_SCRIPTS/*.tmp*

@@ -45,7 +45,7 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 
 Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `prebuilt`, `HELP/` → type `help`. Library files are `@`-prefixed (`@core-library.ts`, `@variables.ts`, `@styles.ts`, `@pattern-matching.ts`, `@replacement-engine.ts`, `@math-helpers.ts`, `@infopanel.ts`, `@codefig-ui.ts`, `@foundation-overview.ts`). New folders become new categories.
 
-**Excluded from the build:** anything whose file or folder name starts with `_` or `.`, and `.bak*`/`.backup`/`.old`/`.tmp` files. This is how `_DEBUG_SCRIPTS/`, `_WIP_SCRIPTS/`, and `_experiment.ts` stay in-repo but out of the plugin — many `EXAMPLE_SCRIPTS/_*.ts` files exist and are intentionally unshipped (also gitignored).
+**Excluded from the build:** anything whose file or folder name starts with `_` or `.`, and `.bak*`/`.backup`/`.old`/`.tmp` files (`shouldExclude()`, duplicated in `build-scripts.js` and `validate-scripts.js`). The `_` prefix marks work in progress, and `scripts/` is **kept empty of it by convention** — every `.ts` under `scripts/` today ships. A `_`-prefixed script is a staging area, not a parking lot: graduate it or archive it. Superseded and abandoned scripts were evicted in Aug 2026 and live outside the repo at `~/codefig-archive/` (local only, never committed).
 
 **Display name** resolves in order: `// SCRIPT_NAME: Foo` → first title comment line → prettified filename.
 
