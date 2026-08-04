@@ -11,6 +11,10 @@
 // |--------|--------------|
 // | sourceCollectionName | Exact name of the collection to duplicate. |
 // | newCollectionName | Name for the new collection. |
+//
+// **Not a search pattern.** `sourceCollectionName` is a collection picker — compared with `===`, not with the
+// `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
+// identifier, not a search.
 // @DOC_END
 
 // @UI_CONFIG_START

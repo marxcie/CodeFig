@@ -17,6 +17,10 @@
 // | targetStyleGroup | New root path (e.g. `V2`). |
 // | rebindTargetCollection | Optional. Non-empty = rebind duplicated styles to variables in this collection. Empty = keep original variable references. |
 // | rebindBreakUnmatchedBindings | If true, detach bindings that have no same-name variable in the target collection. |
+//
+// **Not a search pattern.** `sourceStyleGroup` and `targetStyleGroup` are a path pair — compared segment by segment on `/`, not with the
+// `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
+// identifier, not a search.
 // @DOC_END
 
 @import { getAllStyles } from "@Core Library"

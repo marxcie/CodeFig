@@ -9,10 +9,27 @@
 // ## Exported functions
 // | Category | Functions |
 // |----------|-----------|
+// | **Find/replace (use these)** | nameMatches, renameByPattern, patternToRegex, patternMode, patternModeNote |
 // | Matching | matchPattern, compilePattern, expandWildcards, escapeWildcards |
 // | Filtering | filterByCollection, getCollections, validateCollection |
 // | Advanced | fuzzyMatch, regexMatch, globMatch, wildcardMatch |
 // | Rename/Replace | applyFigmaPlaceholders, replaceWithPattern |
+//
+// ## Search patterns
+// | Input | Meaning |
+// |-------|---------|
+// | text          | Matches names containing that text (case-insensitive). |
+// | V4/*/Primary  | * matches any characters. CodeFig extension; Figma has no wildcard. |
+// | (\w+)-(\d+)   | Regular expression — only when "Use regular expression" is ticked. |
+// | (blank find)  | Replaces the entire name. |
+//
+// ## Replacement tokens
+// $&  whole match      $1 $2  capture groups (regex mode only)
+// $n $nn $nnn  ascending      $N $NN $NNN  descending
+//
+// The mode is never guessed from the text: brackets and parens in a name are literal
+// unless useRegex is set. nameMatches and renameByPattern are the single semantic every
+// find/replace script uses — do not write a local matcher.
 // @DOC_END
 
 // ============================================================================
@@ -45,11 +62,153 @@
  */
 
 // ============================================================================
-// PATTERN MATCHING FUNCTIONS
+// SHARED FIND / REPLACE — one semantic for every find-replace script
 // ============================================================================
+//
+// Three modes, never guessed:
+//   literal   (default)         "V4/*/Primary" is that exact text
+//   wildcard  (pattern has *)   "V4/" + anything + "/Primary"
+//   regex     (opts.useRegex)   a full JS regular expression
+//
+// Auto-detection used to infer regex from metacharacters, which silently mangled
+// ordinary names: searchFor "Text [Legacy]" treated [Legacy] as a character class and
+// rewrote the unrelated "Text Legacy Body" to "Textegacy Body". A mode is now a choice.
+//
+// Options object, shared by all three functions:
+//   useRegex   treat the pattern as a regular expression       (default false)
+//   matchCase  case-sensitive                                  (default false)
+//   wholeName  anchor to the whole name instead of a substring (default false)
+
+/** Mode a pattern resolves to: 'regex' | 'wildcard' | 'literal'. */
+function patternMode(pattern, opts) {
+  var o = opts || {};
+  if (o.useRegex) return 'regex';
+  var p = pattern == null ? '' : String(pattern);
+  return p.indexOf('*') !== -1 ? 'wildcard' : 'literal';
+}
 
 /**
- * Match text against pattern with various matching strategies
+ * The regex a pattern compiles to — for matching, for logging, and for previewing.
+ * An unparseable regex falls back to the literal text: a typo in regex mode must not
+ * turn into a pattern that matches something unintended.
+ */
+function patternToRegex(pattern, opts) {
+  var o = opts || {};
+  var p = pattern == null ? '' : String(pattern);
+  var flags = o.matchCase ? 'g' : 'gi';
+  var mode = patternMode(p, o);
+  var source;
+
+  if (mode === 'regex') {
+    source = p;
+  } else if (mode === 'wildcard') {
+    // Un-escape \* rather than converting a bare *: escapeWildcards has already turned
+    // * into \*, so /\*/ would match the escaped form and produce \.* ("zero or more
+    // literal dots"), killing every wildcard. Same correction as commit 55197f7.
+    source = escapeWildcards(p).replace(/\\\*/g, '.*');
+  } else {
+    source = escapeWildcards(p);
+  }
+
+  if (o.wholeName) source = '^(?:' + source + ')$';
+
+  try {
+    return new RegExp(source, flags);
+  } catch (e) {
+    var literal = escapeWildcards(p);
+    return new RegExp(o.wholeName ? '^(?:' + literal + ')$' : literal, flags);
+  }
+}
+
+/**
+ * Does `name` match `pattern`? Substring by default, like Figma's Match field.
+ * A blank pattern matches everything — a filter nobody filled in is not a filter.
+ */
+function nameMatches(name, pattern, opts) {
+  var p = pattern == null ? '' : String(pattern);
+  if (p.trim() === '') return true;
+  return patternToRegex(p, opts).test(name == null ? '' : String(name));
+}
+
+/**
+ * Apply find/replace to one name, replacing every occurrence.
+ * A blank `find` replaces the entire name, which is what Figma's blank Match does.
+ * `index` (0-based) and `total` drive the $n / $N counters; they are per item, so every
+ * occurrence within one name gets the same counter value.
+ */
+function renameByPattern(name, find, replace, index, total, opts) {
+  var text = name == null ? '' : String(name);
+  var replacePattern = replace == null ? '' : String(replace);
+  var findPattern = find == null ? '' : String(find);
+  var i = typeof index === 'number' ? index : 0;
+  var t = typeof total === 'number' ? total : 1;
+
+  if (findPattern === '') {
+    return applyFigmaPlaceholders(replacePattern, {
+      fullMatch: text,
+      groups: [],
+      index: i,
+      total: t
+    });
+  }
+
+  var regex = patternToRegex(findPattern, opts);
+  var out = '';
+  var lastEnd = 0;
+  var matched = false;
+  var match;
+
+  // Spliced by hand rather than via String.replace: the replacement text is already
+  // expanded, so handing it to .replace() would let a $ inside a matched name trigger a
+  // second round of substitution.
+  regex.lastIndex = 0;
+  while ((match = regex.exec(text)) !== null) {
+    matched = true;
+    out += text.slice(lastEnd, match.index);
+    out += applyFigmaPlaceholders(replacePattern, {
+      fullMatch: match[0],
+      groups: match.slice(1),
+      index: i,
+      total: t
+    });
+    lastEnd = match.index + match[0].length;
+    if (match[0] === '') regex.lastIndex++; // zero-length match: step forward or loop forever
+  }
+
+  if (!matched) return text;
+  return out + text.slice(lastEnd);
+}
+
+/**
+ * Note to log when a pattern contains regex metacharacters but regex mode is off, or ''.
+ * Turns the silent no-op ("my (\w+)-(\d+) pattern renames nothing") into an explanation.
+ */
+function patternModeNote(pattern, opts) {
+  var o = opts || {};
+  if (o.useRegex) return '';
+  var p = pattern == null ? '' : String(pattern);
+  if (p === '' || !looksLikeRegex(p.replace(/\*/g, ''))) return '';
+  return 'Note: "' + p + '" is treated as literal text' +
+    (p.indexOf('*') !== -1 ? ' with * wildcards' : '') +
+    '. Tick "Use regular expression" to treat it as a pattern.';
+}
+
+// ============================================================================
+// PATTERN MATCHING FUNCTIONS
+// ============================================================================
+//
+// Legacy surface below. Kept for user scripts that already call it; shipped scripts use
+// nameMatches / renameByPattern instead. Unused by any shipped script, and removable
+// once nothing references them: fuzzyMatch, globMatch, globToRegex, calculateFuzzyScore,
+// levenshteinDistance, expandWildcards, filterByCollection, getCollections,
+// getPatternStats, createPattern, splitPattern, validatePattern, processWildcards,
+// normalizePattern. Still used directly: escapeWildcards, applyFigmaPlaceholders.
+
+/**
+ * Match text against pattern with various matching strategies.
+ * Legacy entry point. Its default (no options) is a **whole-name** wildcard match, which
+ * is why callers wanting "contains" had to wrap the pattern in asterisks — use
+ * nameMatches instead, which is substring by default.
  */
 function matchPattern(text, pattern, options = {}) {
   const {
@@ -278,11 +437,14 @@ function globMatch(text, pattern) {
 }
 
 /**
- * Wildcard match with confidence scoring
+ * Wildcard match with confidence scoring.
+ * Whole-name, via patternToRegex, so there is one wildcard implementation.
  */
 function wildcardMatch(text, pattern) {
-  const regex = compilePattern(pattern);
-  const match = regex.test(text);
+  const p = pattern == null ? '' : String(pattern);
+  // A blank pattern anchored to the whole name matched only an empty name here, whereas
+  // nameMatches reads blank as "no filter". Keep the legacy answer for this entry point.
+  const match = p === '' ? String(text || '') === '' : nameMatches(text, p, { wholeName: true });
 
   if (!match) {
     return {
@@ -506,47 +668,21 @@ function applyFigmaPlaceholders(
 }
 
 /**
- * Apply search/replace to text with optional Figma placeholders.
- * Auto-detects regex: if searchPattern contains regex metacharacters, treats as regex.
+ * Apply search/replace to text with Figma placeholders.
  * index and total are 0-based / count; used for $n, $nn, $nnn, $N, $NN, $NNN.
+ *
+ * Thin wrapper over renameByPattern, kept for scripts that already call it. The one
+ * behaviour change: regex is **no longer auto-detected** from metacharacters — pass
+ * `{ useRegex: true }` for a pattern. Auto-detection is what let "Text [Legacy]" mangle
+ * "Text Legacy Body"; see the SHARED FIND / REPLACE header.
  */
 function replaceWithPattern(
   text,
   searchPattern,
   replacePattern,
   index = 0,
-  total = 1
+  total = 1,
+  opts = {}
 ) {
-  const useRegex = looksLikeRegex(searchPattern);
-  let fullMatch = '';
-  let groups = [];
-
-  if (useRegex) {
-    try {
-      const regex = new RegExp(searchPattern, 'g');
-      const match = regex.exec(text);
-      if (match) {
-        fullMatch = match[0];
-        groups = match.slice(1);
-        const context = { fullMatch, groups, index, total };
-        const replacement = applyFigmaPlaceholders(replacePattern, context);
-        return text.replace(regex, replacement);
-      }
-    } catch (e) {
-      // Fall back to literal
-    }
-  }
-
-  // Literal replace (escape special regex chars, support * as wildcard)
-  const escaped = escapeWildcards(searchPattern).replace(/\\\*/g, '.*');
-  const literalRegex = new RegExp(escaped, 'gi');
-  const match = literalRegex.exec(text);
-  if (!match) {
-    return text;
-  }
-  fullMatch = match[0];
-  groups = match.slice(1);
-  const context = { fullMatch, groups, index, total };
-  const replacement = applyFigmaPlaceholders(replacePattern, context);
-  return text.replace(literalRegex, replacement);
+  return renameByPattern(text, searchPattern, replacePattern, index, total, opts);
 }

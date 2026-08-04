@@ -9,18 +9,37 @@
 // ## Config options
 // | Option | Description |
 // |--------|-------------|
-// | searchIn | Substring of style name; only those styles are updated. Empty = all local text/paint/effect styles. |
+// | searchIn | Style-name pattern; only matching styles are updated. Empty = all local text/paint/effect styles. |
 // | sourceCollection | Collection name of variables currently bound on those styles. |
 // | targetCollection | Collection where replacement variables are resolved (same variable names as in source). |
+// | matchCase | Match `searchIn` case-sensitively. |
+// | useRegex | Treat `searchIn` as a regular expression. |
 // | breakUnmatchedBindings | If true, **detach** source-collection bindings that have **no** matching variable in the target (default: leave those bindings unchanged). You can enable this with an empty target map to strip all source bindings on matching styles. |
+//
+// ## Search patterns
+// | Input | Meaning |
+// |-------|---------|
+// | text | Matches names **containing** that text (case-insensitive). |
+// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
+// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
+// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+//
+// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
+// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
+// matching. Same rules in every CodeFig find/replace script.
 // @DOC_END
 
 @import { buildTargetVariableLookup, rebindStyleVariableBindingsOnStyle } from "@Styles"
+@import { nameMatches, patternModeNote } from "@Pattern Matching"
 
 // @UI_CONFIG_START
 // # Replace style variable bindings
-var searchIn = ""; // @placeholder="V5"
-// Only styles whose name contains this (case-insensitive). Empty = every local text, paint, and effect style.
+var searchIn = ""; // @placeholder="V5/*"
+// Only styles whose name contains this (case-insensitive, `*` allowed). Empty = every local text, paint, and effect style.
+//
+var matchCase = false; // @label: Match case
+var useRegex = false; // @label: Use regular expression
+// Treat searchIn as a regular expression instead of literal text with `*` wildcards.
 //
 var sourceCollection = ""; // @options: variableCollections
 // Variables bound from this collection are replaced (skip “(all collections)” — pick a real collection).
@@ -32,15 +51,14 @@ var breakUnmatchedBindings = false;
 // If true: bindings from the source collection with **no** same-name variable in the target are **removed** (raw values stay). If false, those bindings are left as-is.
 // @UI_CONFIG_END
 
-function styleNameMatches(styleName, searchInVal) {
-  var s = searchInVal != null ? String(searchInVal).trim() : "";
-  if (!s) return true;
-  return String(styleName || "").toLowerCase().indexOf(s.toLowerCase()) !== -1;
-}
-
 async function main() {
   try {
     var searchInVal = typeof searchIn !== "undefined" ? searchIn : "";
+    // One matcher for every CodeFig find/replace script: see @Pattern Matching.
+    var matchOpts = {
+      useRegex: typeof useRegex !== "undefined" && useRegex === true,
+      matchCase: typeof matchCase !== "undefined" && matchCase === true
+    };
     var sourceName = typeof sourceCollection !== "undefined" && sourceCollection != null ? String(sourceCollection).trim() : "";
     var targetName = typeof targetCollection !== "undefined" && targetCollection != null ? String(targetCollection).trim() : "";
 
@@ -59,6 +77,8 @@ async function main() {
 
     console.log("=== Replace style variable bindings ===");
     console.log("searchIn:", searchInVal ? '"' + searchInVal + '"' : "(all styles)");
+    var modeNote = patternModeNote(searchInVal, matchOpts);
+    if (modeNote) console.log(modeNote);
     console.log("Source collection:", sourceName);
     console.log("Target collection:", targetName);
     var breakUnmatched = typeof breakUnmatchedBindings !== "undefined" && breakUnmatchedBindings === true;
@@ -76,7 +96,7 @@ async function main() {
     var textStyles = await figma.getLocalTextStylesAsync();
     for (var t = 0; t < textStyles.length; t++) {
       var ts = textStyles[t];
-      if (!styleNameMatches(ts.name, searchInVal)) continue;
+      if (!nameMatches(ts.name, searchInVal, matchOpts)) continue;
       var c = await rebindStyleVariableBindingsOnStyle(ts, sourceName, lookup, breakUnmatched);
       if (c > 0) {
         total += c;
@@ -87,7 +107,7 @@ async function main() {
     var paintStyles = await figma.getLocalPaintStylesAsync();
     for (var p = 0; p < paintStyles.length; p++) {
       var ps = paintStyles[p];
-      if (!styleNameMatches(ps.name, searchInVal)) continue;
+      if (!nameMatches(ps.name, searchInVal, matchOpts)) continue;
       var c2 = await rebindStyleVariableBindingsOnStyle(ps, sourceName, lookup, breakUnmatched);
       if (c2 > 0) {
         total += c2;
@@ -98,7 +118,7 @@ async function main() {
     var effectStyles = await figma.getLocalEffectStylesAsync();
     for (var e = 0; e < effectStyles.length; e++) {
       var es = effectStyles[e];
-      if (!styleNameMatches(es.name, searchInVal)) continue;
+      if (!nameMatches(es.name, searchInVal, matchOpts)) continue;
       var c3 = await rebindStyleVariableBindingsOnStyle(es, sourceName, lookup, breakUnmatched);
       if (c3 > 0) {
         total += c3;

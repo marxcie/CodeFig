@@ -12,6 +12,10 @@
 // | sourceCollection | Collection to merge (all variables moved out). |
 // | collectionToMergeTo | Destination collection. |
 // | preserveModes | One mapping per line: `source mode, target mode`. Optional. |
+//
+// **Not a search pattern.** The source and target collections are pickers — compared by exact name, not with the
+// `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
+// identifier, not a search.
 // @DOC_END
 
 // @UI_CONFIG_START

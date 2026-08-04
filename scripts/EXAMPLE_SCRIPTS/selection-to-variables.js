@@ -18,6 +18,10 @@
 // | String | Text | Text content |
 //
 // Results are listed in the **Info panel**. Click a row to select the layer.
+//
+// **Not a search pattern.** The collection field is a picker — compared by exact name, not with the
+// `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
+// identifier, not a search.
 // @DOC_END
 
 @import { collectNodesAsync, showProgress, finishCodefigRunProgress } from "@Core Library"

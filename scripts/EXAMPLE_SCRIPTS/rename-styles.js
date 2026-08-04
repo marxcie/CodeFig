@@ -9,20 +9,43 @@
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
-// | searchIn | Optional filter: only styles whose name contains this (e.g. "color/", "Typography/"). |
-// | searchFor | Pattern to find in style names (literal or regex if pattern contains regex chars). |
-// | replaceWith | Replacement string; may use placeholders above. |
+// | searchIn | Optional filter: only styles whose name contains this (e.g. "color/", "Typography/*"). |
+// | searchFor | Pattern to find in style names. |
+// | replaceWith | Replacement string; may use the tokens below. |
+// | matchCase | Match `searchIn` and `searchFor` case-sensitively. |
+// | useRegex | Treat both patterns as regular expressions. |
 // | batchReplacement | Optional array of [search, replace] pairs; if set, overrides searchFor/replaceWith. |
+//
+// ## Search patterns
+// | Input | Meaning |
+// |-------|---------|
+// | text | Matches names **containing** that text (case-insensitive). |
+// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
+// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
+// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+//
+// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
+// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
+// matching. Same rules in every CodeFig find/replace script.
+//
+// ## Replacement tokens
+// | Token | Meaning |
+// |-------|---------|
+// | `$&` | The whole match |
+// | `$1` `$2` | Capture groups (regex mode only) |
+// | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
+// | `$N` `$NN` `$NNN` | Descending counter |
 //
 // ## Examples
 // Simple: searchFor = "font-", replaceWith = "text-"
 // With filter: searchIn = "color/", searchFor = "pine", replaceWith = "Pine"
-// Regex + numbering: searchFor = "(\\w+)-(\\d+)", replaceWith = "$1-$2-$nn"
+// Wildcard filter: searchIn = "V4/*/Primary", searchFor = "V4", replaceWith = "V5"
+// Regex + numbering: useRegex = true, searchFor = "(\\w+)-(\\d+)", replaceWith = "$1-$2-$nn"
 // Batch: batchReplacement = [["LG","XL"], ["MD","LG"], ["SM","MD"]]
 // @DOC_END
 
 @import { getAllStyles } from "@Core Library"
-@import { matchPattern, replaceWithPattern } from "@Pattern Matching"
+@import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
 
 // ========================================
 // CONFIGURATION
@@ -30,11 +53,16 @@
 
 // @UI_CONFIG_START
 // # Batch rename styles
-var searchIn = ""; // @placeholder="text/"
-// Optional, narrow to styles whose name contains this (e.g. "color/", "Typography/")
+var searchIn = ""; // @placeholder="text/*"
+// Optional, narrow to styles whose name contains this (e.g. "color/", "V4/*/Primary")
 //
 var searchFor = ""; // @placeholder="font-"
 var replaceWith = ""; // @placeholder="text-"
+// Leave searchFor empty to replace the whole name. Tokens: $& $1 $n $nn $nnn $N $NN $NNN
+//
+var matchCase = false; // @label: Match case
+var useRegex = false; // @label: Use regular expression
+// Treat searchIn and searchFor as regular expressions instead of literal text with `*` wildcards.
 // ---
 var batchReplacement = ""; // @textarea
 // Batch replacement: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
@@ -79,27 +107,31 @@ function parseBatchReplacementString(str) {
   return out;
 }
 
+// One matcher for every CodeFig find/replace script: see @Pattern Matching.
+function getMatchOpts() {
+  return {
+    useRegex: typeof useRegex !== 'undefined' && useRegex === true,
+    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+  };
+}
+
 function filterBySearchIn(styles, searchInValue) {
   if (!searchInValue || String(searchInValue).trim() === "") {
     return styles;
   }
   var pattern = String(searchInValue).trim();
-  // searchIn is documented as "contains" (e.g. "color/"), but @Pattern Matching's
-  // wildcard match is anchored (^...$). Wrap in * so a bare substring still matches
-  // while an explicit pattern like "V4/*/Primary" keeps working.
-  var containsPattern = '*' + pattern + '*';
-  var filtered = styles.filter(function(style) {
-    var result = matchPattern(style.name, containsPattern, { exact: false, caseSensitive: false });
-    return result && result.match;
+  var opts = getMatchOpts();
+  return styles.filter(function(style) {
+    return nameMatches(style.name, pattern, opts);
   });
-  return filtered;
 }
 
 function renameStylesSingle(styles, searchForVal, replaceWithVal) {
   var count = 0;
+  var opts = getMatchOpts();
   for (var i = 0; i < styles.length; i++) {
     var style = styles[i];
-    var newName = replaceWithPattern(style.name, searchForVal, replaceWithVal, i, styles.length);
+    var newName = renameByPattern(style.name, searchForVal, replaceWithVal, i, styles.length, opts);
     if (newName !== style.name) {
       console.log('Renamed: "' + style.name + '" → "' + newName + '"');
       style.name = newName;
@@ -131,6 +163,13 @@ getAllStyles().then(function(allStyles) {
   var searchInVal = typeof searchIn !== 'undefined' ? searchIn : "";
   var filtered = filterBySearchIn(allStyles, searchInVal);
   var totalCount = 0;
+
+  var searchInNote = patternModeNote(searchInVal, getMatchOpts());
+  if (searchInNote) console.log('searchIn — ' + searchInNote);
+  if (typeof searchFor !== 'undefined') {
+    var searchForNote = patternModeNote(searchFor, getMatchOpts());
+    if (searchForNote) console.log('searchFor — ' + searchForNote);
+  }
 
   var batchList = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
   if (typeof batchList === 'string' && batchList.trim()) {

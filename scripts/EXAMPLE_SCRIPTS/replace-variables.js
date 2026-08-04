@@ -17,11 +17,41 @@
 // | sourceCollection | Limit to bindings whose referenced variable is from this collection; empty = all collections. |
 // | targetCollection | Look up replacement variable in this collection; empty = same as source, then any. |
 // | searchFor / replaceWith | Find/replace applied to variable path (collection + variable). |
+// | matchCase | Match `searchFor` case-sensitively. |
+// | useRegex | Treat `searchFor` as a regular expression. |
 // | batchReplacement | Multiple "search, replace" lines; overrides searchFor/replaceWith. |
 // | **Replace-all (path)** | When **both** source + target are set and search/replace empty: replace the **source collection name** substring with the **target** in the full path (rename in path, not “same token → lookup by name”). |
 // | **Remap by name (automatic)** | When **target** is set, **source** can be empty (all collections), and search/replace/batch are **empty**—bindings are rebound to the variable with the **same name** in the target collection (typical: paste from another file → point at local tokens). Works on layer bindings and variable-table aliases. Unresolved / missing variable IDs are counted; Figma does not expose names for those, so they cannot be remapped automatically. |
+//
+// ## Search patterns
+// | Input | Meaning |
+// |-------|---------|
+// | text | Matches names **containing** that text (case-insensitive). |
+// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
+// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
+// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+//
+// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
+// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
+// matching. Same rules in every CodeFig find/replace script.
+//
+// Patterns are matched against the path with plain `/` separators (`Color/red`, not
+// `Color / red`), and `searchFor` now supports `*` — a variable whose name contains a
+// literal asterisk needs regex mode and `\*`.
+//
+// ## Replacement tokens
+// | Token | Meaning |
+// |-------|---------|
+// | `$&` | The whole match |
+// | `$1` `$2` | Capture groups (regex mode only) |
+// | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
+// | `$N` `$NN` `$NNN` | Descending counter |
+//
+// The counters are **not** useful here: this script rewrites a path to look up an existing
+// target variable, so it walks bindings rather than an ordered list and `$n` is always 1.
 // @DOC_END
 
+@import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
 
 // ========================================
 // CONFIGURATION
@@ -32,12 +62,16 @@
 var rebindScope = "selection"; // @options: selection|variablesCollection|both @radio
 //
 var sourceCollection = ""; // @options: variableCollections
-var searchFor = ""; // @placeholder="color 2"
+var searchFor = ""; // @placeholder="color 2/*"
 // Optional, only rebind when current variable name contains this (e.g. "color 1"")
 // ---
 var targetCollection = ""; // @options: variableCollections
 var replaceWith = ""; // @placeholder="color 1"
 // Optional, replace with this variable name (e.g. "color 2")
+//
+var matchCase = false; // @label: Match case
+var useRegex = false; // @label: Use regular expression
+// Treat searchFor as a regular expression instead of literal text with `*` wildcards.
 // ---
 var batchReplacement = ""; // @textarea
 // Batch: one line per pair. "search to replace" or "search, replace" (overrides searchFor/replaceWith)
@@ -172,15 +206,24 @@ function buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal) {
   return [];
 }
 
-function escapeForGlobalReplace(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// One matcher for every CodeFig find/replace script: see @Pattern Matching. This script used
+// to carry its own escape-and-replace pair, which deliberately escaped `*` — so wildcards
+// worked in the style scripts and not here.
+function getMatchOpts() {
+  return {
+    useRegex: typeof useRegex !== 'undefined' && useRegex === true,
+    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+  };
 }
 
-function replaceAllInName(name, find, replace) {
-  if (!find && !replace) return name;
-  var escaped = escapeForGlobalReplace(find);
-  var regex = new RegExp(escaped, 'gi');
-  return String(name).replace(regex, replace);
+/**
+ * A find pattern as it should be matched against a normalised path. Outside regex mode the
+ * separator is normalised the same way the path is, so "Color / red" and "Color/red" agree;
+ * in regex mode the pattern is left exactly as the user wrote it.
+ */
+function findPatternForPath(find, opts) {
+  var raw = find == null ? '' : String(find);
+  return opts && opts.useRegex ? raw.trim() : normalizeVariablePath(raw);
 }
 
 // Collect all nodes recursively
@@ -448,13 +491,14 @@ async function resolveReplacementForBinding(currentVariable, currentCollectionNa
     newFullPath = normalizeVariablePath(getScope(ctx.targetCollectionVal, currentVariable.name));
     matchedOperation = { remapByName: true };
   } else {
+    var matchOpts = getMatchOpts();
     for (var opIndex = 0; opIndex < ctx.replacements.length; opIndex++) {
       var operation = ctx.replacements[opIndex];
-      var normalizedFind = normalizeVariablePath(operation.find);
+      var normalizedFind = findPatternForPath(operation.find, matchOpts);
       var normalizedReplace = normalizeVariablePath(operation.replace);
       if (!normalizedFind && !normalizedReplace) continue;
-      if (normalizedFullPath.indexOf(normalizedFind) === -1) continue;
-      newFullPath = replaceAllInName(normalizedFullPath, normalizedFind, normalizedReplace);
+      if (!nameMatches(normalizedFullPath, normalizedFind, matchOpts)) continue;
+      newFullPath = renameByPattern(normalizedFullPath, normalizedFind, normalizedReplace, 0, 1, matchOpts);
       if (newFullPath === normalizedFullPath) continue;
       matchedOperation = operation;
       break;
@@ -617,6 +661,8 @@ async function findAndReplaceVariables() {
     console.log('Operations:', replacements.length);
     for (var i = 0; i < replacements.length; i++) {
       console.log('  [' + (i + 1) + '] "' + replacements[i].find + '" → "' + replacements[i].replace + '"');
+      var ruleNote = patternModeNote(replacements[i].find, getMatchOpts());
+      if (ruleNote) console.log('      ' + ruleNote);
     }
   }
   

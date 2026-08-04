@@ -11,6 +11,8 @@
 // |--------|--------------|
 // | searchIn | Optional: only try to rebind when the current style name (partial) matches this; empty = all styles. |
 // | searchFor / replaceWith | Single find/replace pair applied to style names. |
+// | matchCase | Match `searchIn` and `searchFor` case-sensitively. |
+// | useRegex | Treat both patterns as regular expressions. |
 // | batchReplacement | Textarea (UI) or array (script): multiple "search, replace" pairs; when non-empty, overrides searchFor/replaceWith. |
 // | selectionOnly | If true, **replace bindings** only on/under the current selection; if false, whole page. **Style cache** (finding target styles) always scans the **current page** so a **Render styles** overview frame and other layers on the page are visible. |
 //
@@ -28,11 +30,35 @@
 // For a guided “pre-place” workflow, use **render-styles-overview** in the library source file, then copy the generated frame into the target file.
 // - **`replaceStylesScanMaxNodes`** — Max nodes in the **main** page walk (default `40000`). Lower values (e.g. `5000`) can stop before an overview frame at the **bottom** of the layer list.
 // - **`replaceStylesPriorityScanFrameNameSubstrings`** — Matching frames/sections are scanned **in full first** (no node cap). Default includes `Render styles` / `styles overview` (and legacy `warm-up` markers).
+//
+// ## Search patterns
+// | Input | Meaning |
+// |-------|---------|
+// | text | Matches names **containing** that text (case-insensitive). |
+// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
+// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
+// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+//
+// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
+// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
+// matching. Same rules in every CodeFig find/replace script.
+//
+// ## Replacement tokens
+// | Token | Meaning |
+// |-------|---------|
+// | `$&` | The whole match |
+// | `$1` `$2` | Capture groups (regex mode only) |
+// | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
+// | `$N` `$NN` `$NNN` | Descending counter |
+//
+// The counters are **not** useful in this script: it rewrites a name each time a binding is
+// encountered, not once per item in an ordered list, so `$n` is always 1. Use them in
+// **Rename styles** instead. `$&` and capture groups work normally.
 // @DOC_END
 
 // Import memory management utilities and library functions
 @import { processWithOptimization, cleanupMemory, traverseNodes, getAllStyles, collectNodesAsync, showProgress, codefigRunOpBegin, codefigRunOpEnd, finishCodefigRunProgress } from "@Core Library"
-@import { escapeWildcards } from "@Pattern Matching"
+@import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
 
 // ========================================
 // CONFIGURATION
@@ -40,12 +66,17 @@
 
 // @UI_CONFIG_START
 // # Replace styles
-var searchIn = ""; // @placeholder="color/"
+var searchIn = ""; // @placeholder="color/*"
 // Optional, only rebind when current style name contains this (e.g. "color/", "Typography/")
 // ## Important
 // Due to Figma’s style cache quirks, style replacement works with local styles, but for library styles they must exist in the document first. The current workaround is to use Render styles in the library file, which creates a style overview frame with all styles and their bindings. Copy this frame into the target file so the styles become available, then you can replace them.
 var searchFor = ""; // @placeholder="Text V1"
 var replaceWith = ""; // @placeholder="Text V2"
+// Leave searchFor empty to replace the whole name. Tokens: $& and $1 $2 in regex mode
+//
+var matchCase = false; // @label: Match case
+var useRegex = false; // @label: Use regular expression
+// Treat searchIn and searchFor as regular expressions instead of literal text with `*` wildcards.
 // ---
 var batchReplacement = ""; // @textarea
 // Batch: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
@@ -320,26 +351,20 @@ function logReplaceStylesSummary(searchInVal, replacements, localStylesOnlyVal, 
   }
 }
 
-/**
- * Partial style-name match (* = wildcard, case-insensitive).
- * (Avoids @Pattern Matching default here: its wildcard mode is full-string ^…$ only.)
- */
+// One matcher for every CodeFig find/replace script: see @Pattern Matching. This script used
+// to carry its own copy, because the library's default was whole-name only; nameMatches is
+// substring by default, so the copy is gone.
+function getMatchOpts() {
+  return {
+    useRegex: typeof useRegex !== 'undefined' && useRegex === true,
+    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+  };
+}
+
+/** Style-name filter match. A blank pattern matches nothing here — callers guard for it. */
 function matchStyleNamePartial(text, pattern) {
-  if (pattern == null) return false;
-  var p = String(pattern);
-  if (p.trim() === '') return false;
-  var searchText = String(text || '').toLowerCase();
-  var searchPattern = p.toLowerCase();
-  var escapedPattern = escapeWildcards(searchPattern);
-  // escapeWildcards escapes * too, so un-escape \* into .* — matching the idiom used
-  // by @Pattern Matching's own replaceWithPattern. Converting a bare * here would
-  // instead turn \* into \.* ("literal dots"), silently killing every wildcard.
-  var regexPattern = escapedPattern.replace(/\\\*/g, '.*');
-  try {
-    return new RegExp(regexPattern, 'i').test(searchText);
-  } catch (e) {
-    return searchText.indexOf(searchPattern) !== -1;
-  }
+  if (pattern == null || String(pattern).trim() === '') return false;
+  return nameMatches(text, pattern, getMatchOpts());
 }
 
 function styleCacheKey(name, type) {
@@ -543,6 +568,12 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
     var searchInVal = typeof searchIn !== 'undefined' ? searchIn : '';
     rsLog('Starting run | selectionOnly=' + selectionOnlyVal + ' | localStylesOnly=' + localStylesOnlyVal);
     rsLog('searchIn=' + JSON.stringify(String(searchInVal || '')) + ' | rules: ' + JSON.stringify(replacements));
+    var searchInNote = patternModeNote(searchInVal, getMatchOpts());
+    if (searchInNote) console.log('searchIn — ' + searchInNote);
+    for (var rn = 0; rn < replacements.length; rn++) {
+      var ruleNote = patternModeNote(replacements[rn].from, getMatchOpts());
+      if (ruleNote) console.log('searchFor — ' + ruleNote);
+    }
     rsLog(
       'Cache scan: ' +
         (typeof replaceStylesLimitCacheScanToSelection !== 'undefined' && replaceStylesLimitCacheScanToSelection
@@ -1240,12 +1271,9 @@ async function findReplacementStyle(currentStyle, styleCache, expectedType, repl
       continue;
     }
 
-    var newStyleName = currentStyle.name;
-    var escapedForReplace = escapeWildcards(String(findPattern));
-    // See the note in the matcher above: un-escape \* rather than converting a bare *.
-    var regexSrc = escapedForReplace.replace(/\\\*/g, '.*');
-    var patternRegex = new RegExp(regexSrc, 'gi');
-    newStyleName = newStyleName.replace(patternRegex, replacement.to);
+    // index 0 / total 1: bindings are visited as they are encountered, so the $n and $N
+    // counters have no ordered list to count through. $& and capture groups work.
+    var newStyleName = renameByPattern(currentStyle.name, findPattern, replacement.to, 0, 1, getMatchOpts());
 
     if (newStyleName === currentStyle.name) {
       rsIncr('replaceNoNameChange');

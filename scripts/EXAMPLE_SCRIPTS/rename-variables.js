@@ -6,20 +6,51 @@
 // ## Overview
 // searchIn selects which collections/groups to include. searchFor/replaceWith then run on each variable name. Supports Figma-style placeholders: $&, $1 $2, $n $nn $nnn, $N $NN $NNN.
 //
-// ## searchIn scope rules (scope = "CollectionName / variableName") — like Figma find/replace
-// | searchIn | Meaning |
+// ## searchIn scope rules (scope = "Collection/group/variable")
+// searchIn is matched against the variable's full path with plain `/` separators, so the
+// obvious ways to scope all work:
+//
+// | searchIn | Matches |
 // |----------|--------|
 // | (empty) | All variables. |
-// | Typography | Prefix: any scope starting with "Typography" (Typography, Typography-serif, ...). |
-// | Typography/ | Exact collection only (that collection only). |
+// | Typography | Anything whose path contains it: the Typography collection, Typography-serif, a nested Typography group. |
+// | Typography/ | The Typography collection (and any nested group of that name). |
+// | Typography/Body | The Body group inside Typography. |
+// | Body | Any group or variable named Body, in any collection. |
+// | Typography/*/Size | Wildcard: Size under any group in Typography. |
+//
+// Matching is case-insensitive unless **Match case** is ticked. Both `Typography/Body` and
+// `Typography / Body` work — the separator is normalised on both sides.
 //
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
-// | searchIn | Optional: prefix (e.g. Typography) or exact collection (e.g. Typography/); empty = all. |
-// | searchFor | Pattern to find (partial match, literal or regex). |
-// | replaceWith | Replacement string; may use placeholders. |
+// | searchIn | Optional scope filter (see above); empty = all variables. |
+// | searchFor | Pattern to find in the variable name. |
+// | replaceWith | Replacement string; may use the tokens below. |
+// | matchCase | Match `searchIn` and `searchFor` case-sensitively. |
+// | useRegex | Treat both patterns as regular expressions. |
 // | batchReplacement | Optional array of [search, replace] pairs; overrides searchFor/replaceWith. |
+//
+// ## Search patterns
+// | Input | Meaning |
+// |-------|---------|
+// | text | Matches names **containing** that text (case-insensitive). |
+// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
+// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
+// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+//
+// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
+// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
+// matching. Same rules in every CodeFig find/replace script.
+//
+// ## Replacement tokens
+// | Token | Meaning |
+// |-------|---------|
+// | `$&` | The whole match |
+// | `$1` `$2` | Capture groups (regex mode only) |
+// | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
+// | `$N` `$NN` `$NNN` | Descending counter |
 //
 // ## Rename behaviour
 // - **searchIn empty**: Replace in the full hierarchy (collection names and variable paths).
@@ -27,7 +58,7 @@
 // @DOC_END
 
 @import { getAllCollections, getCollectionVariables, getVariable } from "@Variables"
-@import { replaceWithPattern } from "@Pattern Matching"
+@import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
 
 // ============================================================================
 // CONFIGURATION
@@ -35,11 +66,16 @@
 
 // @UI_CONFIG_START
 // # Batch rename variables
-var searchIn = ""; // @placeholder="Typography" — prefix (Typography) or exact collection (Typography/)
-// Optional, narrow to variables whose name contains this (e.g. "color/", "Typography/")
+var searchIn = ""; // @placeholder="Typography/Body"
+// Optional scope: collection, group, or path (e.g. "Typography/", "Typography/Body", "Color/*/Accent")
 //
 var searchFor = ""; // @placeholder="50"
 var replaceWith = ""; // @placeholder="050"
+// Leave searchFor empty to replace the whole name. Tokens: $& $1 $n $nn $nnn $N $NN $NNN
+//
+var matchCase = false; // @label: Match case
+var useRegex = false; // @label: Use regular expression
+// Treat searchIn and searchFor as regular expressions instead of literal text with `*` wildcards.
 // ---
 var batchReplacement = ""; // @textarea
 // Batch replacement: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
@@ -84,20 +120,42 @@ function parseBatchReplacementString(str) {
   return out;
 }
 
-// Build full scope string: "collection name / variable name" (same as Figma hierarchy)
+// One matcher for every CodeFig find/replace script: see @Pattern Matching.
+function getMatchOpts() {
+  return {
+    useRegex: typeof useRegex !== 'undefined' && useRegex === true,
+    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+  };
+}
+
+// Build full scope string: "collection name / variable name" (same as Figma hierarchy).
+// Display form — for logs and error messages, not for matching.
 function getScope(collection, variable) {
   return collection.name + " / " + variable.name;
 }
 
-/** Same rules as replace-variables: empty = all; trailing / = exact collection; else prefix match (like Figma find/replace). */
-function scopeMatchesSearchIn(scope, searchInValue) {
+/** Collapse " / " to "/" so a path reads the way it is typed. */
+function normalizeScopeSeparator(s) {
+  return String(s == null ? '' : s).trim().replace(/\s*\/\s*/g, '/');
+}
+
+/** The path searchIn matches against: "Collection/group/variable". */
+function getScopePath(collection, variable) {
+  return normalizeScopeSeparator(collection.name + '/' + variable.name);
+}
+
+/**
+ * searchIn is a contains match on the scope path, like every other CodeFig find/replace
+ * field. It used to be a case-sensitive **prefix** match against the *displayed* scope,
+ * whose spaced slash meant the obvious "Typography/Body" matched nothing while the
+ * unguessable "Typography / Body" worked. Both work now: the separator is normalised on
+ * the pattern too, except in regex mode where the pattern is the user's own syntax.
+ */
+function scopeMatchesSearchIn(scopePath, searchInValue, opts) {
   var val = searchInValue != null ? String(searchInValue).trim() : '';
   if (val === '') return true;
-  if (val.slice(-1) === '/') {
-    var exact = val.slice(0, -1).trim();
-    return exact !== '' && scope.indexOf(exact + ' / ') === 0;
-  }
-  return scope.indexOf(val) === 0;
+  var pattern = opts && opts.useRegex ? val : normalizeScopeSeparator(val);
+  return nameMatches(scopePath, pattern, opts);
 }
 
 // Get (collection, variable) pairs from all collections, then filter by searchIn.
@@ -117,9 +175,9 @@ async function getVariablesInScope(searchInValue) {
   if (!searchInValue || String(searchInValue).trim() === "") {
     return items;
   }
+  var opts = getMatchOpts();
   var filtered = items.filter(function(item) {
-    var scope = getScope(item.collection, item.variable);
-    return scopeMatchesSearchIn(scope, searchInValue);
+    return scopeMatchesSearchIn(getScopePath(item.collection, item.variable), searchInValue, opts);
   });
   return filtered;
 }
@@ -127,6 +185,7 @@ async function getVariablesInScope(searchInValue) {
 async function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeIsAll) {
   var renamedCount = 0;
   var errors = [];
+  var opts = getMatchOpts();
 
   if (scopeIsAll) {
     var seenCollectionIds = {};
@@ -140,7 +199,7 @@ async function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeI
     }
     for (var cIdx = 0; cIdx < uniqueCollections.length; cIdx++) {
       var coll = uniqueCollections[cIdx];
-      var newCollName = replaceWithPattern(coll.name, searchForVal, replaceWithVal, cIdx, uniqueCollections.length);
+      var newCollName = renameByPattern(coll.name, searchForVal, replaceWithVal, cIdx, uniqueCollections.length, opts);
       if (newCollName !== coll.name) {
         try {
           var oldCollName = coll.name;
@@ -158,7 +217,7 @@ async function renameVariablesSingle(items, searchForVal, replaceWithVal, scopeI
     var item = items[i];
     var variable = item.variable;
     var collection = item.collection;
-    var newName = replaceWithPattern(variable.name, searchForVal, replaceWithVal, i, items.length);
+    var newName = renameByPattern(variable.name, searchForVal, replaceWithVal, i, items.length, opts);
     if (newName === variable.name) continue;
     try {
       var existing = await getVariable(collection, newName);
@@ -202,6 +261,12 @@ async function renameVariablesBatch(items, batchReplacementList, scopeIsAll) {
     console.log('========================');
 
     var searchInVal = typeof searchIn !== 'undefined' ? searchIn : "";
+    var searchInNote = patternModeNote(searchInVal, getMatchOpts());
+    if (searchInNote) console.log('searchIn — ' + searchInNote);
+    if (typeof searchFor !== 'undefined') {
+      var searchForNote = patternModeNote(searchFor, getMatchOpts());
+      if (searchForNote) console.log('searchFor — ' + searchForNote);
+    }
     var items = await getVariablesInScope(searchInVal);
 
     var sorted = items.slice().sort(function(a, b) {

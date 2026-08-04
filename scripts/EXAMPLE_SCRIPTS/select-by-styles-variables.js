@@ -5,20 +5,39 @@
 // Selects elements that use styles or variables matching a search term. Handles partial matches (e.g. "Regular" matches Text/5xl/Regular, Text/6xl/Regular).
 //
 // ## Features
-// - **Search For**: Partial style or variable name (case-insensitive)
+// - **Search For**: Partial style or variable name (case-insensitive), with `*` wildcards
 // - **Select mixed**: When **off** (default), excludes elements with mixed style/variable usage (e.g. text lines mixing bold and regular)
 // - **Selection only**: When on, searches within current selection; when off, searches the whole page
 //
 // ## Usage
-// 1. Enter a partial style or variable name (e.g. "Regular", "500", "Primary")
+// 1. Enter a partial style or variable name (e.g. "Regular", "Text/*/Bold", "Primary")
 // 2. Toggle "Select mixed" if you want to include elements with mixed formatting
 // 3. Click Run to select all matching elements
+//
+// ## Search patterns
+// | Input | Meaning |
+// |-------|---------|
+// | text | Matches names **containing** that text (case-insensitive). |
+// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
+// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
+// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+//
+// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
+// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
+// matching. Same rules in every CodeFig find/replace script.
+//
+// A name containing a literal `*` is now read as a wildcard; escape it as `\*` in regex mode
+// to match the character itself.
 // @DOC_END
 
 // @UI_CONFIG_START
 // # Select by styles or variables
-var searchFor = ""; // @placeholder="Regular"
-// Partial style or variable name (e.g. "Regular", "Text/5xl", "Primary")
+var searchFor = ""; // @placeholder="Text/*/Regular"
+// Partial style or variable name (e.g. "Regular", "Text/5xl", "Text/*/Bold")
+//
+var matchCase = false; // @label: Match case
+var useRegex = false; // @label: Use regular expression
+// Treat searchFor as a regular expression instead of literal text with `*` wildcards.
 //
 var selectMixed = false; // Include elements with mixed style/variable usage (e.g. text with bold + regular)
 //
@@ -27,6 +46,14 @@ var selectionOnly = true; // Search within selection only; otherwise search whol
 // @UI_CONFIG_END
 
 // @import { traverseNodes } from "@Core Library"
+@import { nameMatches, patternModeNote } from "@Pattern Matching"
+
+// One matcher for every CodeFig find/replace script: see @Pattern Matching. Declared here
+// rather than inside main so the node predicates below can reach it.
+var matchOpts = {
+  useRegex: typeof useRegex !== 'undefined' && useRegex === true,
+  matchCase: typeof matchCase !== 'undefined' && matchCase === true
+};
 
 // Collect all nodes from root(s)
 function collectAllNodes(roots) {
@@ -38,17 +65,9 @@ function collectAllNodes(roots) {
   return allNodes;
 }
 
-// Check if name matches search term (partial, case-insensitive)
-function nameMatches(name, searchTerm) {
-  if (!name || typeof name !== 'string') return false;
-  if (!searchTerm || String(searchTerm).trim() === '') return false;
-  return name.toLowerCase().indexOf(String(searchTerm).trim().toLowerCase()) !== -1;
-}
-
 // Check if node uses matching style (async)
 async function nodeUsesMatchingStyle(node, searchTerm, selectMixedVal) {
   if (!searchTerm || String(searchTerm).trim() === '') return false;
-  var term = String(searchTerm).trim().toLowerCase();
 
   // Text nodes: handle mixed formatting via getStyledTextSegments
   if (node.type === 'TEXT' && typeof node.getStyledTextSegments === 'function') {
@@ -63,7 +82,7 @@ async function nodeUsesMatchingStyle(node, searchTerm, selectMixedVal) {
           try {
             var style = await figma.getStyleByIdAsync(seg.textStyleId);
             if (style) {
-              if (nameMatches(style.name, searchTerm)) {
+              if (nameMatches(style.name, searchTerm, matchOpts)) {
                 hasMatchingSegment = true;
               } else {
                 hasNonMatchingSegment = true;
@@ -100,7 +119,7 @@ async function nodeUsesMatchingStyle(node, searchTerm, selectMixedVal) {
     }
     try {
       var style = await figma.getStyleByIdAsync(node[p]);
-      if (style && nameMatches(style.name, searchTerm)) return true;
+      if (style && nameMatches(style.name, searchTerm, matchOpts)) return true;
     } catch (e) {}
   }
 
@@ -123,7 +142,7 @@ async function nodeUsesMatchingVariable(node, searchTerm) {
 
     try {
       var variable = await figma.variables.getVariableByIdAsync(variableId);
-      if (variable && nameMatches(variable.name, searchTerm)) return true;
+      if (variable && nameMatches(variable.name, searchTerm, matchOpts)) return true;
     } catch (e) {}
   }
 
@@ -153,6 +172,9 @@ async function nodeMatches(node, searchTerm, selectMixedVal) {
     figma.notify('Enter a style or variable name to search for');
     return;
   }
+
+  var modeNote = patternModeNote(searchTerm, matchOpts);
+  if (modeNote) console.log(modeNote);
 
   var roots = selectionOnlyVal ? figma.currentPage.selection : [figma.currentPage];
   if (selectionOnlyVal && (!roots || roots.length === 0)) {
