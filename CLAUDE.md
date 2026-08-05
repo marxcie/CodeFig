@@ -81,6 +81,14 @@ Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `pr
 
 **Long-running work:** use `collectNodesAsync`, `processWithOptimization`, `yieldToUI`, `showProgress` from `@Core Library`. Fully synchronous loops block the main thread and starve the progress bar.
 
+## Where things are written down
+
+- **`CHANGELOG.md`** — user-facing changes. Add to `[Unreleased]` as you land a change, not at
+  release time; `build:release` does not touch it.
+- **`DEFERRED.md`** — known issues and work deliberately not done, each with how it was found and
+  what fixing it involves. Add to it whenever you decide *not* to chase something.
+- **`.plans/`** — the numbered plan files (gitignored, local only). All of 01–12 are done.
+
 ## Gotchas
 
 - **Builds write only to `dist/`.** No tracked file changes as a result of any build, so `git status` stays clean after `dev`/`build:dev` and you never need a production build before committing. If a build ever dirties the tree again, that is a bug — fix the build, don't add a warning here.

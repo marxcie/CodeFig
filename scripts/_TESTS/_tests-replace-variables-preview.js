@@ -13,7 +13,7 @@
 // @DOC_END
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, withScratchPage, cleanupTestArtifacts } from "@Test Harness"
-@import { normalizeVariablePath, getScope } from "Replace variables"
+
 @import { previewWouldWrite, previewRecord } from "@Rename Preview"
 
 /** A collection holding one variable of the given type. */

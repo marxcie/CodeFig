@@ -16,7 +16,6 @@
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
 @import { nameMatches } from "@Pattern Matching"
 @import { buildTargetVariableLookup, rebindStyleVariableBindingsOnStyle } from "@Styles"
-@import { previewRow, previewSignature } from "@Rename Preview"
 
 /** A collection with one COLOR variable of the given name. */
 function makeColorCollection(collectionName, variableName, rgb) {

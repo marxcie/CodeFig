@@ -29,7 +29,7 @@
 // @DOC_END
 
 @import { displayResults, createResult, createSelectableResult } from "@InfoPanel"
-@import { collectNodesAsync, showProgress, codefigRunOpBegin, codefigRunOpEnd, finishCodefigRunProgress } from "@Core Library"
+@import { collectNodesAsync, showProgress, codefigRunOpBegin, finishCodefigRunProgress } from "@Core Library"
 
 // @UI_CONFIG_START
 // # Palettes

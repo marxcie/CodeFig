@@ -23,7 +23,7 @@
 // | generateOverview | Optional boolean (default `false`). When `true`, builds a **Spacing — overview** frame (token rows × mode columns, variable-bound width bars). Uses `@Foundation overview`. |
 // @DOC_END
 
-@import { getOrCreateCollection, setupModes, extractModes, processVariables, getVariable } from "@Variables"
+@import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 

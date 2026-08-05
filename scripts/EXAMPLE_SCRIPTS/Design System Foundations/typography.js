@@ -27,7 +27,7 @@
 // @DOC_END
 
 // Import functions from libraries
-@import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables, getCollectionVariables } from "@Variables"
+@import { getOrCreateCollection, setupModes, extractModes, processVariables, getCollectionVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
 

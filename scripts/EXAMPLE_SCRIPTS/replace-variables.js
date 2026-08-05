@@ -59,7 +59,7 @@
 // @DOC_END
 
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
-@import { previewRow, previewRowsFromPlan, previewWouldWrite, previewRecord, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
+@import { previewRowsFromPlan, previewWouldWrite, previewRecord, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
 @import { displayResults } from "@InfoPanel"
 
 // ========================================

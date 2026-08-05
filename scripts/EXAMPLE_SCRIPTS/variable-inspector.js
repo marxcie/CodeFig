@@ -68,7 +68,7 @@ var showHealthScore = false; // Show variable health score (0-100)
 
 // Variable Inspector
 // Detailed inspector showing all variables with their current values for visual identification
-// @import { displayResults, createResult, createSelectableResult, createHtmlResult } from "@InfoPanel"
+// @import { displayResults, createHtmlResult } from "@InfoPanel"
 
 // ===== UTILITY FUNCTIONS =====
 

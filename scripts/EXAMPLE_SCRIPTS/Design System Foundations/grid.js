@@ -23,7 +23,7 @@
 // @DOC_END
 
 // Import functions from libraries
-@import { getOrCreateCollection, getVariable, setupModes, createOrUpdateVariable, extractModes, processVariables } from "@Variables"
+@import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
 
