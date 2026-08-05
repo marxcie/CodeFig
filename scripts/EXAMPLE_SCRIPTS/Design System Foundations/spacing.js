@@ -25,7 +25,7 @@
 
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getVariable } from "@Variables"
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
-@import { generateScale, isPiecewiseScaleType } from "@Math Helpers"
+@import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 
 // ========================================
 // CONFIG HELPERS
@@ -393,7 +393,7 @@ function generateSpacingVariables(config) {
         }
         spacingVal = nextRaw;
         if (gridSize > 0) {
-          spacingVal = roundToGrid(spacingVal, gridSize);
+          spacingVal = snapScaleGrid(spacingVal, gridSize);
         }
         spacingVal = Math.max(minSize, Math.min(maxSize, spacingVal));
       }

@@ -28,7 +28,7 @@
 
 // Import functions from libraries
 @import { getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables, getCollectionVariables } from "@Variables"
-@import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio } from "@Math Helpers"
+@import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
 
 // ========================================
@@ -488,11 +488,6 @@ function variableNamePrefix(group) {
 }
 
 // Round value to grid (8, 4, or 2 pt). Returns value unchanged if gridSize is falsy or <= 0.
-function roundToGrid(value, gridSize) {
-  if (!gridSize || gridSize <= 0) return value;
-  return Math.round(value / gridSize) * gridSize;
-}
-
 // Generate variables programmatically
 function generateTypographyVariables(config) {
   var variables = {};
@@ -524,7 +519,7 @@ function generateTypographyVariables(config) {
       
       var lineHeightRatio = calculateFluidLineHeight(index, config.fontScale.length, viewport, config);
       var lineHeightPx = fontSize * lineHeightRatio;
-      var lineHeight = gridSize > 0 ? roundToGrid(Math.round(lineHeightPx * 100) / 100, gridSize) : Math.round(lineHeightPx * 100) / 100;
+      var lineHeight = gridSize > 0 ? snapScaleGrid(Math.round(lineHeightPx * 100) / 100, gridSize) : Math.round(lineHeightPx * 100) / 100;
       var letterSpacing = calculateFluidLetterSpacing(index, config.fontScale.length, viewport, config);
       
       fontSizeValues[viewportKey] = fontSize;

@@ -25,7 +25,7 @@
 
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getVariable } from "@Variables"
 @import { foundationCreateCornerRadiusOverview } from "@Foundation overview"
-@import { generateScale, isPiecewiseScaleType } from "@Math Helpers"
+@import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 
 // ========================================
 // CONFIG HELPERS
@@ -395,7 +395,7 @@ function generateCornerRadiusVariables(config) {
         }
         radiusVal = nextRaw;
         if (gridSize > 0) {
-          radiusVal = roundToGrid(radiusVal, gridSize);
+          radiusVal = snapScaleGrid(radiusVal, gridSize);
         }
         radiusVal = Math.max(minSize, Math.min(maxSize, radiusVal));
       }

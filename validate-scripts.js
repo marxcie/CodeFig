@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 // Single implementation of @import parsing and function extraction, shared with the
 // UI at run time (inlined into dist/ui.html). Do not re-implement either here.
-const { findImports, extractFunctionMap, resolveImports } = require('./src/import-resolver.js');
+const { findImports, extractFunctionMap, resolveImports, listFunctionNames } = require('./src/import-resolver.js');
 
 // Colors for console output
 const colors = {
@@ -261,6 +261,75 @@ function validateResolvedParse(script, scripts) {
 // tell code from string and regex literals, so it reported "Unmatched braces" against
 // library files that the JS parser accepts — and validateParse above asks that parser
 // directly, which is both stricter and free of false positives.
+
+/**
+ * Every function a runnable script calls must exist after `@import` resolution.
+ *
+ * This catches the one gap the parse checks cannot see: `@import` follows dependencies only
+ * *within* the source script it extracts from, so importing a function that calls a helper
+ * from a **different** script silently leaves that helper undefined. The call then throws
+ * ReferenceError at run time — and since callers often wrap work in try/catch, it usually
+ * surfaces as "nothing happened" rather than an error. Two real cases:
+ *
+ *   - corner-radius.js and spacing.js called roundToGrid(), declared only in typography.js,
+ *     so a run with gridSize > 0 threw on a config path nobody had exercised.
+ *   - a spec importing nodeUsesMatchingStyle did not get nameMatches, and the predicate
+ *     reported "no match" for every node.
+ *
+ * Scope and precision, both deliberate:
+ *   - Only **runnable** scripts. A library's calls resolve in its consumer's context, so
+ *     checking libraries produces false positives by design.
+ *   - Only names some script declares as a function. That filters method calls (`.push(`)
+ *     and prose without needing to parse, which is what keeps this regex-based check honest.
+ *   - Only `name(` with no space, since prose writes `roundToGrid (see below)`.
+ *
+ * Measured at 0 false positives across all 35 runnable scripts when added.
+ */
+function validateResolvedCalls(scripts) {
+  const errors = [];
+
+  const declaredSomewhere = new Map();
+  scripts.forEach((script) => {
+    extractFunctionMap(script.code).forEach((_code, name) => {
+      if (!declaredSomewhere.has(name)) declaredSomewhere.set(name, []);
+      declaredSomewhere.get(name).push(script.filename);
+    });
+  });
+
+  scripts.forEach((script) => {
+    if (script.filename.startsWith('@')) return;
+
+    let resolved;
+    try {
+      resolved = resolveImports(script.code, scripts, {});
+    } catch (e) {
+      return; // validateResolvedParse already reports resolution failures
+    }
+
+    const declaredHere = new Set(listFunctionNames(resolved));
+    const called = new Set();
+    const callRe = /(^|[^.\w$'"])([A-Za-z_$][\w$]*)\(/g;
+    let match;
+    while ((match = callRe.exec(resolved)) !== null) called.add(match[2]);
+
+    [...called]
+      .filter((name) => declaredSomewhere.has(name) && !declaredHere.has(name))
+      .forEach((name) => {
+        errors.push({
+          type: 'unresolved-call',
+          file: script.name,
+          path: script.path,
+          message:
+            `Calls ${name}() but nothing defines it after @import resolution. It is declared in ` +
+            `${declaredSomewhere.get(name).join(', ')} — import it explicitly. Dependency ` +
+            `extraction only follows functions declared in the same source script, so this ` +
+            `would throw ReferenceError at run time (often silently, inside a try/catch).`
+        });
+      });
+  });
+
+  return errors;
+}
 
 // Validate @import statements
 function validateImports(scripts) {
@@ -628,6 +697,10 @@ function validateScripts() {
   const importValidation = validateImports(scripts);
   allErrors.push(...importValidation.errors);
   allWarnings.push(...importValidation.warnings);
+
+  // Every called function must exist after resolution (see validateResolvedCalls).
+  console.log(`${colors.cyan}📞 Checking imported functions resolve their own calls...${colors.reset}`);
+  allErrors.push(...validateResolvedCalls(scripts));
 
   // Piecewise scale regression (Carbon-like anchors @ max=160, min=0, roundTo=2)
   console.log(`${colors.cyan}📐 Checking piecewise scale fixtures...${colors.reset}`);
