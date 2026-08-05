@@ -100,13 +100,18 @@ function getCategoryType(folderName) {
 }
 
 // Check if a file/folder should be excluded
+/** Backups are never worth parsing, staging area or not. */
+function isBackupFile(name) {
+  return Boolean(name.match(/\.(bak\d*|backup|old|tmp)\.js$/i));
+}
+
 function shouldExclude(name) {
   // Exclude files/folders starting with _ or .
   if (name.startsWith('_') || name.startsWith('.')) {
     return true;
   }
   // Exclude backup files
-  if (name.match(/\.(bak\d*|backup|old|tmp)\.js$/i)) {
+  if (isBackupFile(name)) {
     return true;
   }
   return false;
@@ -134,10 +139,19 @@ function getPrebuiltDisplayName(relativePath, scriptType, metadataName) {
   return `Utility Scripts / ${metadataName}`;
 }
 
-// Recursively find all .js files in the scripts directory
-function findAllScripts(scriptsDir) {
+/**
+ * Recursively find all .js files in the scripts directory.
+ *
+ * `options.includeStaging` also returns `_`-prefixed paths, which the build always excludes.
+ * The validator uses it so `scripts/_TESTS/` specs are still parse-checked: a spec that does
+ * not parse should fail here, not in Figma with a cryptic message. Every other caller wants
+ * the shipped inventory, so it stays off by default.
+ */
+function findAllScripts(scriptsDir, options) {
   const scripts = [];
-  
+  const includeStaging = Boolean(options && options.includeStaging);
+  const skip = (name) => (includeStaging ? isBackupFile(name) : shouldExclude(name));
+
   function scanDirectory(dir, relativePath = '') {
     if (!fs.existsSync(dir)) {
       return;
@@ -147,7 +161,7 @@ function findAllScripts(scriptsDir) {
     
     for (const item of items) {
       // Skip excluded items
-      if (shouldExclude(item)) {
+      if (skip(item) || item.startsWith('.')) {
         continue;
       }
       
@@ -158,7 +172,7 @@ function findAllScripts(scriptsDir) {
         // Recursively scan subdirectories
         const newRelativePath = relativePath ? `${relativePath}/${item}` : item;
         scanDirectory(itemPath, newRelativePath);
-      } else if (item.endsWith('.js') && !shouldExclude(item)) {
+      } else if (item.endsWith('.js') && !skip(item)) {
         // Found a script
         const folderName = relativePath.split('/')[0] || 'EXAMPLE_SCRIPTS';
         const scriptCode = fs.readFileSync(itemPath, 'utf8');
@@ -575,14 +589,22 @@ function validateScripts() {
     return { valid: true, errors: [], warnings: [] };
   }
   
-  const scripts = findAllScripts(scriptsDir);
+  // includeStaging: `_TESTS/` specs never ship, but they do run in Figma, so they get the
+  // same parse and import checks. Otherwise a broken spec fails at run time in the plugin
+  // with a cryptic message instead of here.
+  const scripts = findAllScripts(scriptsDir, { includeStaging: true });
   
   if (scripts.length === 0) {
     console.log(`${colors.yellow}⚠️  No scripts found in ${scriptsDir}${colors.reset}\n`);
     return { valid: true, errors: [], warnings: [] };
   }
   
-  console.log(`${colors.blue}📋 Found ${scripts.length} scripts to validate${colors.reset}\n`);
+  const staged = scripts.filter((s) => s.folder.startsWith('_') || s.filename.startsWith('_'));
+  console.log(
+    `${colors.blue}📋 Found ${scripts.length} scripts to validate` +
+      (staged.length ? ` (${staged.length} unshipped, from _-prefixed paths)` : '') +
+      `${colors.reset}\n`
+  );
   
   const allErrors = [];
   const allWarnings = [];

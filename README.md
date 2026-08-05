@@ -153,6 +153,7 @@ Both read the tracked template at `src/manifest.json` and never write to it, so 
 | `npm run dev` | Runs `build:dev`, then watches `src/` and `scripts/`, rebuilds on change, and starts the console log server. |
 | `npm run validate` | Validates that scripts parse the way the sandbox parses them, that `@import`s resolve, and that the scale fixtures hold. Prints `N error(s), M warning(s)`; the exit code tracks errors only. See `scripts/README.md` → Validation. |
 | `npm run validate:soft` | Same report, always exits 0. Used by `build:dev`. |
+| `npm run test:figma` | Runs the in-Figma specs in `scripts/_TESTS/` against the open plugin and exits non-zero on failure. Add a filter (`-- find-replace`) or `--verbose`. Cases that create styles, variables or pages only run in a file whose name contains `codefig-test`, so pointing it at real work is a no-op. |
 | `npm run figma:run -- <script>` | Runs a bundled script **inside the open plugin** from the terminal and exits non-zero if the run logs an error. Requires `npm run dev` and the plugin open on a dev build — it cannot launch Figma. Use `--code "<js>"` or `--file <path>` to run something that is not a bundled script. |
 | `npm run clean` | Removes `dist/`. |
 | `npm run pack` | Runs `clean` and `build:production`, then writes `codefig-plugin.zip` — the contents of `dist/` (`manifest.json`, `code.js`, `ui.html`) at the archive root. Cleaning first keeps stale files from earlier builds out of the zip. Same layout as the GitHub Release asset; requires the `zip` CLI. |

@@ -13,6 +13,7 @@
     "prepare": "node -e \"const fs=require('fs');const p=require('path');const g=p.join(process.cwd(),'.git','info','exclude');if(!fs.existsSync(p.join(process.cwd(),'.git'))) process.exit(0);let c=fs.existsSync(g)?fs.readFileSync(g,'utf8'):'';if(!c.includes('figma-console.log')) fs.appendFileSync(g,'\\nfigma-console.log\\n');\"",
     "clean": "rm -rf dist",
     "figma:run": "node figma-run.js",
+    "test:figma": "node figma-test.js",
     "pack": "npm run clean && npm run build:production && node pack-plugin.js",
     "build:release": "node release.js"
   },
