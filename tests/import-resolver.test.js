@@ -11,6 +11,7 @@
  */
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
 const path = require('path');
 
 const resolver = require('../src/import-resolver.js');
@@ -569,6 +570,30 @@ test('every shipped script resolves its imports into real injected source', () =
 
   assert.deepStrictEqual(softFailures, [], 'no shipped script may soft-fail an import');
   assert.deepStrictEqual(uninjected.sort(), KNOWN_UNINJECTED.slice().sort());
+});
+
+test('the UI decides the InfoPanel button from findImports, not its own regex', () => {
+  // The one other place the UI used to sniff @import textually. `/@import.*InfoPanel/`
+  // matched documentation, so the HELP script offered a panel it never fills. Kept here
+  // rather than in a UI test because what matters is that there is no second opinion
+  // about what an import is.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const fn = ui.match(/function checkInfoPanelAvailability\(scriptCode\) \{[\s\S]*?\n      \}/);
+  assert.ok(fn, 'checkInfoPanelAvailability not found — did it get renamed?');
+  assert.match(fn[0], /imports\.findImports\(/, 'must ask the shared resolver');
+  assert.doesNotMatch(ui, /@import\.\*.*InfoPanel/, 'no regex sniffing of @import may come back');
+
+  const scripts = findAllScripts(path.join(__dirname, '..', 'scripts'));
+  const usesInfoPanel = (s) =>
+    resolver.findImports(s.code).some((imp) => imp.scriptName.indexOf('InfoPanel') !== -1);
+
+  const help = scripts.find((s) => s.filename === 'help-documentation.js');
+  assert.ok(help, 'expected the HELP script in the shipped tree');
+  assert.strictEqual(usesInfoPanel(help), false, 'a documented example is not a use');
+
+  const real = scripts.find((s) => s.filename === 'variable-inspector.js');
+  assert.ok(real, 'expected variable-inspector.js in the shipped tree');
+  assert.strictEqual(usesInfoPanel(real), true, 'a real @InfoPanel import still counts');
 });
 
 test('shipped @import targets resolve to the expected library file', () => {

@@ -1264,9 +1264,21 @@
       let infoPanelAvailable = false;
 
       function checkInfoPanelAvailability(scriptCode) {
-        // Check if script imports @InfoPanel
-        const hasInfoPanelImport = /@import.*@InfoPanel|@import.*InfoPanel/.test(scriptCode);
-        return hasInfoPanelImport;
+        // Does the script actually import @InfoPanel? Asked through the shared resolver
+        // rather than sniffed with a regex, so this agrees with what a run will do: an
+        // @import inside a // @DOC_START block is documentation and does not count. The
+        // HELP script used to show this button on the strength of its own import examples.
+        //
+        // findImports only — never resolveImports: this runs on every keystroke.
+        //
+        // A missing resolver hides the button instead of throwing. processRuntimeImports
+        // is the loud one, on the path where a missing resolver actually breaks something;
+        // taking out script loading over a button would be the wrong trade.
+        const imports = window.CodeFigImports;
+        if (!imports || typeof imports.findImports !== 'function') return false;
+        return imports.findImports(scriptCode || '').some(function (imp) {
+          return imp.scriptName.indexOf('InfoPanel') !== -1;
+        });
       }
 
       function updateInfoPanelButtonVisibility() {
