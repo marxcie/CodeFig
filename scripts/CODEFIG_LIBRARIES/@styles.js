@@ -672,7 +672,26 @@ async function buildTargetVariableLookup(targetCollectionName) {
   return { map: map, getReplacement: getReplacement };
 }
 
-async function rebindProcessTextStyle(style, sourceName, lookup, breakUnmatched) {
+/**
+ * Dry-run plumbing for the rebind functions, so a script can show what a rebind *would* do
+ * before doing it (plan 11). `options` is optional and old four-argument calls behave exactly
+ * as before: no options means write, as always.
+ *
+ *   options.dryRun  compute and report, write nothing
+ *   options.plan    array to push { styleName, styleType, field, action, from*, to* } onto
+ *
+ * Reporting is kept as plain data rather than preview rows so this library stays independent
+ * of @Rename Preview; the calling script turns entries into rows.
+ */
+function rebindIsDryRun(options) {
+  return Boolean(options && options.dryRun);
+}
+
+function rebindRecordPlan(options, entry) {
+  if (options && options.plan) options.plan.push(entry);
+}
+
+async function rebindProcessTextStyle(style, sourceName, lookup, breakUnmatched, options) {
   if (!style.boundVariables || style.remote) return 0;
   var n = 0;
   var props = Object.keys(style.boundVariables);
@@ -687,27 +706,43 @@ async function rebindProcessTextStyle(style, sourceName, lookup, breakUnmatched)
     if (!bindingMatchesSourceCollectionFilter(colName, sourceName)) continue;
     var repl = await lookup.getReplacement(current.name, current.resolvedType);
     if (repl && repl.id !== current.id) {
-      try {
-        style.setBoundVariable(prop, repl);
+      rebindRecordPlan(options, {
+        styleName: style.name, styleType: "TEXT", field: prop, action: "rebind",
+        fromCollection: colName, fromName: current.name, toName: repl.name
+      });
+      if (rebindIsDryRun(options)) {
         n++;
-        console.log('  ✅ Text style "' + style.name + '" · ' + prop + " · " + current.name + " → target collection");
-      } catch (e) {
-        console.log("  ❌ " + style.name + " · " + prop + ": " + (e && e.message));
+      } else {
+        try {
+          style.setBoundVariable(prop, repl);
+          n++;
+          console.log('  ✅ Text style "' + style.name + '" · ' + prop + " · " + current.name + " → target collection");
+        } catch (e) {
+          console.log("  ❌ " + style.name + " · " + prop + ": " + (e && e.message));
+        }
       }
     } else if (breakUnmatched && !repl) {
-      try {
-        style.setBoundVariable(prop, null);
+      rebindRecordPlan(options, {
+        styleName: style.name, styleType: "TEXT", field: prop, action: "detach",
+        fromCollection: colName, fromName: current.name, toName: null
+      });
+      if (rebindIsDryRun(options)) {
         n++;
-        console.log('  🔓 Text style "' + style.name + '" · ' + prop + " · detached (no target match)");
-      } catch (e) {
-        console.log("  ❌ detach " + style.name + " · " + prop + ": " + (e && e.message));
+      } else {
+        try {
+          style.setBoundVariable(prop, null);
+          n++;
+          console.log('  🔓 Text style "' + style.name + '" · ' + prop + " · detached (no target match)");
+        } catch (e) {
+          console.log("  ❌ detach " + style.name + " · " + prop + ": " + (e && e.message));
+        }
       }
     }
   }
   return n;
 }
 
-async function rebindProcessPaintStyle(style, sourceName, lookup, breakUnmatched) {
+async function rebindProcessPaintStyle(style, sourceName, lookup, breakUnmatched, options) {
   if (!style.boundVariables || !style.boundVariables.paints || style.remote) return 0;
   var bv = style.boundVariables.paints;
   if (!Array.isArray(bv) || !style.paints || !style.paints.length) return 0;
@@ -731,6 +766,10 @@ async function rebindProcessPaintStyle(style, sourceName, lookup, breakUnmatched
         paints[j].boundVariables.color = { type: "VARIABLE_ALIAS", id: repl.id };
         changed = true;
         n++;
+        rebindRecordPlan(options, {
+          styleName: style.name, styleType: "PAINT", field: "paint " + (j + 1), action: "rebind",
+          fromCollection: colName, fromName: current.name, toName: repl.name
+        });
       }
     } else if (breakUnmatched && !repl) {
       if (paints[j].boundVariables && paints[j].boundVariables.color) {
@@ -740,11 +779,15 @@ async function rebindProcessPaintStyle(style, sourceName, lookup, breakUnmatched
         }
         changed = true;
         n++;
+        rebindRecordPlan(options, {
+          styleName: style.name, styleType: "PAINT", field: "paint " + (j + 1), action: "detach",
+          fromCollection: colName, fromName: current.name, toName: null
+        });
       }
     }
   }
 
-  if (changed) {
+  if (changed && !rebindIsDryRun(options)) {
     try {
       style.paints = paints;
       console.log('  ✅ Paint style "' + style.name + '" · ' + n + " color binding(s)");
@@ -756,7 +799,7 @@ async function rebindProcessPaintStyle(style, sourceName, lookup, breakUnmatched
   return n;
 }
 
-async function rebindProcessEffectStyle(style, sourceName, lookup, breakUnmatched) {
+async function rebindProcessEffectStyle(style, sourceName, lookup, breakUnmatched, options) {
   if (style.remote || !style.effects || !style.effects.length) return 0;
   var effects = JSON.parse(JSON.stringify(style.effects));
   var ebv = style.boundVariables && style.boundVariables.effects;
@@ -778,11 +821,19 @@ async function rebindProcessEffectStyle(style, sourceName, lookup, breakUnmatche
                 eff.boundVariables[k] = { type: "VARIABLE_ALIAS", id: repl.id };
                 hit = true;
                 n++;
+                rebindRecordPlan(options, {
+                  styleName: style.name, styleType: "EFFECT", field: "effect " + (j + 1) + " · " + k,
+                  action: "rebind", fromCollection: colName, fromName: current.name, toName: repl.name
+                });
               }
             }
             if (!hit) {
               eff.boundVariables.color = { type: "VARIABLE_ALIAS", id: repl.id };
               n++;
+              rebindRecordPlan(options, {
+                styleName: style.name, styleType: "EFFECT", field: "effect " + (j + 1) + " · color",
+                action: "rebind", fromCollection: colName, fromName: current.name, toName: repl.name
+              });
             }
           } else if (breakUnmatched && !repl) {
             var eff2 = effects[j];
@@ -836,7 +887,7 @@ async function rebindProcessEffectStyle(style, sourceName, lookup, breakUnmatche
     }
   }
 
-  if (n > 0) {
+  if (n > 0 && !rebindIsDryRun(options)) {
     try {
       style.effects = effects;
       console.log('  ✅ Effect style "' + style.name + '" · ' + n + " binding(s)");
@@ -852,11 +903,11 @@ async function rebindProcessEffectStyle(style, sourceName, lookup, breakUnmatche
  * Rebind variables on one style to matching names in `lookup` (from buildTargetVariableLookup).
  * @param sourceCollectionName If non-empty, only bindings in that collection are updated. If empty, every binding is eligible.
  */
-async function rebindStyleVariableBindingsOnStyle(style, sourceCollectionName, lookup, breakUnmatched) {
+async function rebindStyleVariableBindingsOnStyle(style, sourceCollectionName, lookup, breakUnmatched, options) {
   var t = style.type;
   var n = 0;
-  if (t === "TEXT") n += await rebindProcessTextStyle(style, sourceCollectionName, lookup, breakUnmatched);
-  else if (t === "PAINT") n += await rebindProcessPaintStyle(style, sourceCollectionName, lookup, breakUnmatched);
-  else if (t === "EFFECT") n += await rebindProcessEffectStyle(style, sourceCollectionName, lookup, breakUnmatched);
+  if (t === "TEXT") n += await rebindProcessTextStyle(style, sourceCollectionName, lookup, breakUnmatched, options);
+  else if (t === "PAINT") n += await rebindProcessPaintStyle(style, sourceCollectionName, lookup, breakUnmatched, options);
+  else if (t === "EFFECT") n += await rebindProcessEffectStyle(style, sourceCollectionName, lookup, breakUnmatched, options);
   return n;
 }

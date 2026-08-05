@@ -12,9 +12,17 @@
 // | searchIn | Style-name pattern; only matching styles are updated. Empty = all local text/paint/effect styles. |
 // | sourceCollection | Collection name of variables currently bound on those styles. |
 // | targetCollection | Collection where replacement variables are resolved (same variable names as in source). |
+// | previewOnly | **On by default.** Lists the bindings that would change and changes nothing; untick and run again to apply. |
 // | matchCase | Match `searchIn` case-sensitively. |
 // | useRegex | Treat `searchIn` as a regular expression. |
 // | breakUnmatchedBindings | If true, **detach** source-collection bindings that have **no** matching variable in the target (default: leave those bindings unchanged). You can enable this with an empty target map to strip all source bindings on matching styles. |
+//
+// ## Preview first
+// Previews by default: the same walk runs in dry-run mode, reporting every binding it would
+// change as `SourceCollection/name → TargetCollection/name` (or `(detached)`), and writing
+// nothing. Untick **Preview only** and run again to apply. Unlike the rename scripts there is
+// no collision flag here — a rebind aims at a variable that already exists, which is the point
+// rather than a clash.
 //
 // ## Search patterns
 // | Input | Meaning |
@@ -31,6 +39,8 @@
 
 @import { buildTargetVariableLookup, rebindStyleVariableBindingsOnStyle } from "@Styles"
 @import { nameMatches, patternModeNote } from "@Pattern Matching"
+@import { previewRow, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
+@import { displayResults } from "@InfoPanel"
 
 // @UI_CONFIG_START
 // # Replace style variable bindings
@@ -47,9 +57,47 @@ var sourceCollection = ""; // @options: variableCollections
 var targetCollection = ""; // @options: variableCollections
 // Same-named variables in this collection become the new bindings.
 // ---
+var previewOnly = true; // @label: Preview only
+// **On by default.** Lists the bindings that would change and changes nothing. Untick and run again to apply.
+//
 var breakUnmatchedBindings = false;
 // If true: bindings from the source collection with **no** same-name variable in the target are **removed** (raw values stay). If false, those bindings are left as-is.
 // @UI_CONFIG_END
+
+/**
+ * Walk every local text, paint and effect style matching `searchIn`, rebinding through
+ * @Styles. With `dryRun` it changes nothing and returns the plan instead — same traversal,
+ * same matching, same replacement lookup, so a preview cannot drift from the apply.
+ */
+async function walkMatchingStyles(searchInVal, matchOpts, sourceName, lookup, breakUnmatched, dryRun) {
+  var plan = [];
+  var options = { dryRun: dryRun === true, plan: plan };
+  var total = 0;
+  var stylesTouched = 0;
+  var i;
+
+  var groups = [
+    await figma.getLocalTextStylesAsync(),
+    await figma.getLocalPaintStylesAsync(),
+    await figma.getLocalEffectStylesAsync()
+  ];
+
+  for (var g = 0; g < groups.length; g++) {
+    var styles = groups[g];
+    for (i = 0; i < styles.length; i++) {
+      if (!nameMatches(styles[i].name, searchInVal, matchOpts)) continue;
+      var changed = await rebindStyleVariableBindingsOnStyle(
+        styles[i], sourceName, lookup, breakUnmatched, options
+      );
+      if (changed > 0) {
+        total += changed;
+        stylesTouched++;
+      }
+    }
+  }
+
+  return { plan: plan, total: total, stylesTouched: stylesTouched };
+}
 
 async function main() {
   try {
@@ -90,47 +138,51 @@ async function main() {
       return;
     }
 
-    var total = 0;
-    var stylesTouched = 0;
+    var previewOnlyVal = typeof previewOnly === "undefined" || previewOnly === true;
 
-    var textStyles = await figma.getLocalTextStylesAsync();
-    for (var t = 0; t < textStyles.length; t++) {
-      var ts = textStyles[t];
-      if (!nameMatches(ts.name, searchInVal, matchOpts)) continue;
-      var c = await rebindStyleVariableBindingsOnStyle(ts, sourceName, lookup, breakUnmatched);
-      if (c > 0) {
-        total += c;
-        stylesTouched++;
-      }
+    // One walk, two modes. The dry run reports through `plan` and writes nothing, so the
+    // preview and the apply pass are the same code path over the same styles — not a
+    // description of it maintained separately.
+    var walk = await walkMatchingStyles(searchInVal, matchOpts, sourceName, lookup, breakUnmatched, previewOnlyVal);
+
+    if (previewOnlyVal) {
+      var rows = walk.plan.map(function (entry) {
+        return previewRow(
+          (entry.fromCollection ? entry.fromCollection + "/" : "") + entry.fromName,
+          entry.action === "detach" ? "(detached)" : targetName + "/" + entry.toName,
+          entry.styleName + " · " + entry.field
+        );
+      });
+      // No collision check here, unlike the rename scripts: a rebind *targets* a variable that
+      // already exists. Its existing is the point, not a clash.
+      logPreviewPlan(rows, { field: "previewOnly" });
+      await savePreviewSignature("replace-style-variable-bindings", previewSignature(rows));
+      displayResults(previewPayload("Replace style variable bindings", rows));
+      figma.notify(
+        "Preview: " + walk.total + " binding change(s) on " + walk.stylesTouched +
+          " style(s). Nothing changed."
+      );
+      return;
     }
 
-    var paintStyles = await figma.getLocalPaintStylesAsync();
-    for (var p = 0; p < paintStyles.length; p++) {
-      var ps = paintStyles[p];
-      if (!nameMatches(ps.name, searchInVal, matchOpts)) continue;
-      var c2 = await rebindStyleVariableBindingsOnStyle(ps, sourceName, lookup, breakUnmatched);
-      if (c2 > 0) {
-        total += c2;
-        stylesTouched++;
-      }
-    }
-
-    var effectStyles = await figma.getLocalEffectStylesAsync();
-    for (var e = 0; e < effectStyles.length; e++) {
-      var es = effectStyles[e];
-      if (!nameMatches(es.name, searchInVal, matchOpts)) continue;
-      var c3 = await rebindStyleVariableBindingsOnStyle(es, sourceName, lookup, breakUnmatched);
-      if (c3 > 0) {
-        total += c3;
-        stylesTouched++;
-      }
-    }
+    var applyRows = walk.plan.map(function (entry) {
+      return previewRow(
+        (entry.fromCollection ? entry.fromCollection + "/" : "") + entry.fromName,
+        entry.action === "detach" ? "(detached)" : targetName + "/" + entry.toName,
+        entry.styleName
+      );
+    });
+    var drift = previewDriftMessage(
+      await readPreviewSignature("replace-style-variable-bindings"),
+      previewSignature(applyRows)
+    );
+    if (drift) console.warn(drift);
 
     console.log("=== Done ===");
-    console.log("Bindings updated:", total, "· Styles modified:", stylesTouched);
+    console.log("Bindings updated:", walk.total, "· Styles modified:", walk.stylesTouched);
 
-    if (total > 0) {
-      figma.notify("✅ " + total + " binding change(s) on " + stylesTouched + " style(s) (replace / detach)");
+    if (walk.total > 0) {
+      figma.notify("✅ " + walk.total + " binding change(s) on " + walk.stylesTouched + " style(s) (replace / detach)");
     } else {
       figma.notify("⚠️ No changes. Check filters, collections, breakUnmatchedBindings, and target variable names.");
     }

@@ -16,6 +16,7 @@
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
 @import { nameMatches } from "@Pattern Matching"
 @import { buildTargetVariableLookup, rebindStyleVariableBindingsOnStyle } from "@Styles"
+@import { previewRow, previewSignature } from "@Rename Preview"
 
 /** A collection with one COLOR variable of the given name. */
 function makeColorCollection(collectionName, variableName, rgb) {
@@ -182,6 +183,84 @@ testBegin('style-variable-bindings');
       try {
         b.remove();
       } catch (e) {}
+    }
+  });
+
+  await itInTestFile('a dry run reports the rebind and writes nothing', async function () {
+    // Plan 11's core property for this script: the same walk, in dry-run mode, must leave the
+    // binding exactly where it was while still describing what it would do.
+    var sourceName = testPrefix() + ' source4';
+    var targetName = testPrefix() + ' target4';
+    var varName = testPrefix() + '/dry/run';
+
+    var source = makeColorCollection(sourceName, varName, { r: 1, g: 0, b: 0 });
+    var target = makeColorCollection(targetName, varName, { r: 0, g: 0, b: 1 });
+    var style = figma.createPaintStyle();
+    style.name = testPrefix() + '/V5/DryRun';
+
+    try {
+      style.paints = [
+        figma.variables.setBoundVariableForPaint(
+          { type: 'SOLID', color: { r: 1, g: 0, b: 0 } },
+          'color',
+          source.variable
+        )
+      ];
+      var before = boundVariableIdOf(style);
+      expect(before).toBe(source.variable.id);
+
+      var lookup = await buildTargetVariableLookup(targetName);
+      var plan = [];
+      var reported = await rebindStyleVariableBindingsOnStyle(
+        style, sourceName, lookup, false, { dryRun: true, plan: plan }
+      );
+
+      expect(reported).toBe(1);
+      expect(boundVariableIdOf(style)).toBe(before, 'the dry run must not touch the binding');
+      expect(plan).toHaveLength(1);
+      expect(plan[0].action).toBe('rebind');
+      expect(plan[0].fromName).toBe(varName);
+      expect(plan[0].toName).toBe(varName);
+      expect(plan[0].styleName).toBe(style.name);
+
+      // And the same call without dryRun does what the dry run described.
+      var applied = await rebindStyleVariableBindingsOnStyle(style, sourceName, lookup, false);
+      expect(applied).toBe(1);
+      expect(boundVariableIdOf(style)).toBe(target.variable.id);
+    } finally {
+      try { style.remove(); } catch (e) {}
+      try { source.collection.remove(); } catch (e) {}
+      try { target.collection.remove(); } catch (e) {}
+    }
+  });
+
+  await itInTestFile('a dry-run detach is reported without detaching', async function () {
+    var sourceName = testPrefix() + ' source5';
+    var targetName = testPrefix() + ' target5';
+    var source = makeColorCollection(sourceName, testPrefix() + '/lonely', { r: 1, g: 0, b: 0 });
+    var target = makeColorCollection(targetName, testPrefix() + '/other', { r: 0, g: 1, b: 0 });
+    var style = figma.createPaintStyle();
+    style.name = testPrefix() + '/V5/DryDetach';
+
+    try {
+      style.paints = [
+        figma.variables.setBoundVariableForPaint(
+          { type: 'SOLID', color: { r: 1, g: 0, b: 0 } },
+          'color',
+          source.variable
+        )
+      ];
+      var lookup = await buildTargetVariableLookup(targetName);
+      var plan = [];
+      await rebindStyleVariableBindingsOnStyle(style, sourceName, lookup, true, { dryRun: true, plan: plan });
+
+      expect(plan).toHaveLength(1);
+      expect(plan[0].action).toBe('detach');
+      expect(boundVariableIdOf(style)).toBe(source.variable.id, 'still bound after a dry run');
+    } finally {
+      try { style.remove(); } catch (e) {}
+      try { source.collection.remove(); } catch (e) {}
+      try { target.collection.remove(); } catch (e) {}
     }
   });
 
