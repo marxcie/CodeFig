@@ -2659,7 +2659,10 @@
             prebuiltScripts = msg.items.map(script => ({
               name: script.name || 'Unnamed',
               code: script.code || '',
-              type: script.type || 'prebuilt'
+              type: script.type || 'prebuilt',
+              // Kept for `npm run figma:run -- <script>`: display names are
+              // "Category / Title (WIP)", so the filename is the stable handle.
+              filename: script.filename || ''
             }));
             allScripts = [...prebuiltScripts, ...userScripts];
             updateScriptList();
@@ -3075,24 +3078,63 @@
         if (level === 'error' && !codefigJob.firstError) codefigJob.firstError = payload;
       }
 
-      /** Resolve a job's `script` against this build: display name, or filename. */
-      function _codefigFindScriptByName(name) {
+      /** "Utility Scripts / Variable inspector (WIP)" -> "variable-inspector-wip" */
+      function _codefigScriptSlug(text) {
+        var last = String(text == null ? '' : text).split('/').pop();
+        return last.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      }
+
+      /**
+       * Resolve a job's `script`. Tried in order: filename, full display name, the slug of
+       * the display name's last segment, then a prefix match. A prefix match that hits more
+       * than one script is reported as ambiguous rather than guessed at — picking one and
+       * running it against a real document is not a coin worth flipping.
+       *
+       * Returns { script } or { error }.
+       */
+      function _codefigResolveJobScript(name) {
         var wanted = String(name == null ? '' : name).trim().toLowerCase();
-        if (!wanted) return null;
+        if (!wanted) return { error: 'The job did not name a script.' };
         var bare = wanted.replace(/\.js$/, '');
-        var i;
+        var slug = _codefigScriptSlug(bare);
+        var i, script;
+
         for (i = 0; i < allScripts.length; i++) {
-          var exact = allScripts[i];
-          var byName = String(exact.name || '').toLowerCase();
-          var byFile = String(exact.filename || '').toLowerCase().replace(/\.js$/, '');
-          if (byName === wanted || byFile === bare) return exact;
+          script = allScripts[i];
+          var file = String(script.filename || '').toLowerCase().replace(/\.js$/, '');
+          if (file && file === bare) return { script: script };
+          if (String(script.name || '').toLowerCase() === wanted) return { script: script };
+          if (_codefigScriptSlug(script.name) === slug) return { script: script };
         }
-        // Loose match so "rename-styles" finds the script displayed as "Rename styles".
+
+        var partial = [];
         for (i = 0; i < allScripts.length; i++) {
-          var loose = allScripts[i];
-          if (String(loose.name || '').toLowerCase().replace(/\s+/g, '-') === bare) return loose;
+          script = allScripts[i];
+          var fileSlug = _codefigScriptSlug(String(script.filename || '').replace(/\.js$/, ''));
+          if (_codefigScriptSlug(script.name).indexOf(slug) === 0 || (fileSlug && fileSlug.indexOf(slug) === 0)) {
+            partial.push(script);
+          }
         }
-        return null;
+        if (partial.length === 1) return { script: partial[0] };
+        if (partial.length > 1) {
+          return {
+            error: '"' + name + '" matches ' + partial.length + ' scripts: ' +
+              partial.map(function (s) { return s.filename || s.name; }).join(', ') +
+              '. Use the exact filename.'
+          };
+        }
+
+        // Nothing matched: say what is available rather than only what is not.
+        var nearby = [];
+        for (i = 0; i < allScripts.length && nearby.length < 6; i++) {
+          var candidate = allScripts[i].filename || allScripts[i].name;
+          if (_codefigScriptSlug(candidate).indexOf(slug.split('-')[0]) !== -1) nearby.push(candidate);
+        }
+        return {
+          error: 'No script named "' + name + '" in this build (' + allScripts.length + ' loaded).' +
+            (nearby.length ? ' Did you mean: ' + nearby.join(', ') + '?' : '') +
+            ' Names are matched against the filename, e.g. "rename-styles".'
+        };
       }
 
       function _codefigQueueReport(ok, error) {
@@ -3133,12 +3175,12 @@
 
         var code = job.code;
         if (!code) {
-          var found = _codefigFindScriptByName(job.script);
-          if (!found) {
-            _codefigQueueReport(false, 'No script named "' + job.script + '" in this build.');
+          var resolved = _codefigResolveJobScript(job.script);
+          if (resolved.error) {
+            _codefigQueueReport(false, resolved.error);
             return;
           }
-          code = found.code;
+          code = resolved.script.code;
         }
 
         try {
