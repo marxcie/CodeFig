@@ -12,6 +12,7 @@
 // | searchIn | Optional filter: only styles whose name contains this (e.g. "color/", "Typography/*"). |
 // | searchFor | Pattern to find in style names. |
 // | replaceWith | Replacement string; may use the tokens below. |
+// | previewOnly | **On by default.** Lists what would change and changes nothing; untick and run again to apply. |
 // | matchCase | Match `searchIn` and `searchFor` case-sensitively. |
 // | useRegex | Treat both patterns as regular expressions. |
 // | batchReplacement | Optional array of [search, replace] pairs; if set, overrides searchFor/replaceWith. |
@@ -36,6 +37,17 @@
 // | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
 // | `$N` `$NN` `$NNN` | Descending counter |
 //
+// ## Preview first
+// The script previews by default: it computes every rename, applies none, and lists them as
+// `old → new` in the InfoPanel and the console. Rows are flagged when the new name already
+// exists, when two rows would produce the same name, when a pattern matched but changed
+// nothing (usually a pattern that does not mean what was intended), or when the result would
+// be empty. Untick **Preview only** and run again to apply.
+//
+// `$n` / `$N` are positional, so they depend on the set of matches. Preview and apply are two
+// runs — if the file changes in between, the numbering moves. The apply run says so when the
+// plan no longer matches what was previewed.
+//
 // ## Examples
 // Simple: searchFor = "font-", replaceWith = "text-"
 // With filter: searchIn = "color/", searchFor = "pine", replaceWith = "Pine"
@@ -46,6 +58,8 @@
 
 @import { getAllStyles } from "@Core Library"
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
+@import { previewRow, flagPreviewCollisions, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
+@import { displayResults } from "@InfoPanel"
 
 // ========================================
 // CONFIGURATION
@@ -63,6 +77,9 @@ var replaceWith = ""; // @placeholder="text-"
 var matchCase = false; // @label: Match case
 var useRegex = false; // @label: Use regular expression
 // Treat searchIn and searchFor as regular expressions instead of literal text with `*` wildcards.
+//
+var previewOnly = true; // @label: Preview only
+// **On by default.** Lists what would change and changes nothing. Untick and run again to apply.
 // ---
 var batchReplacement = ""; // @textarea
 // Batch replacement: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
@@ -141,45 +158,85 @@ function filterBySearchIn(styles, searchInValue) {
   });
 }
 
-function renameStylesSingle(styles, searchForVal, replaceWithVal) {
-  var count = 0;
-  var opts = getMatchOpts();
-  for (var i = 0; i < styles.length; i++) {
-    var style = styles[i];
-    var newName = renameByPattern(style.name, searchForVal, replaceWithVal, i, styles.length, opts);
-    if (newName !== style.name) {
-      // Never rename something to nothing: a name is how it is found again.
-      if (newName.trim() === '') {
-        console.warn('Skipped "' + style.name + '": the replacement would leave an empty name.');
-        continue;
-      }
-      console.log('Renamed: "' + style.name + '" → "' + newName + '"');
-      style.name = newName;
-      count++;
+/** Normalise batchReplacement entries (arrays or objects) to { find, replace } operations. */
+function toRenameOperations(batchReplacementList, searchForVal, replaceWithVal) {
+  var operations = [];
+  var op;
+  if (batchReplacementList && batchReplacementList.length > 0) {
+    for (op = 0; op < batchReplacementList.length; op++) {
+      var pair = batchReplacementList[op];
+      operations.push({
+        find: Array.isArray(pair) ? pair[0] : pair.searchPattern,
+        replace: Array.isArray(pair) ? pair[1] : pair.replacePattern
+      });
     }
+    return operations;
   }
-  return count;
+  return [{ find: searchForVal, replace: replaceWithVal }];
 }
 
-function renameStylesBatch(styles, batchReplacementList) {
-  var totalCount = 0;
-  for (var op = 0; op < batchReplacementList.length; op++) {
-    var pair = batchReplacementList[op];
-    var search = Array.isArray(pair) ? pair[0] : pair.searchPattern;
-    var replace = Array.isArray(pair) ? pair[1] : pair.replacePattern;
-    console.log('--- Batch op ' + (op + 1) + ': "' + search + '" → "' + replace + '"');
-    var count = renameStylesSingle(styles, search, replace);
-    totalCount += count;
-    console.log('Changed: ' + count + ' styles');
+/**
+ * What a run would do, computed without touching anything.
+ *
+ * The preview and the apply pass both read this, which is the only way they cannot disagree.
+ * Batch operations are simulated in sequence against a working copy of the names, because
+ * each operation really does see the previous one's output — a preview that ignored that
+ * would be lying about the end state.
+ *
+ * Counters (`$n`) stay positional over the filtered set, exactly as before, so switching to
+ * a planned apply changes no names.
+ */
+function planRenameStyles(styles, operations) {
+  var opts = getMatchOpts();
+  var entries = [];
+
+  for (var i = 0; i < styles.length; i++) {
+    var working = styles[i].name;
+    var matched = false;
+
+    for (var op = 0; op < operations.length; op++) {
+      var find = operations[op].find;
+      var replace = operations[op].replace;
+      // A blank find means "replace the whole name", which matches everything by definition.
+      var blankFind = find == null || String(find) === '';
+      if (!blankFind && !nameMatches(working, find, opts)) continue;
+      matched = true;
+      working = renameByPattern(working, find, replace, i, styles.length, opts);
+    }
+
+    // Only matched styles are worth a row: an untouched name is not a finding, whereas a
+    // name that matched and came out identical is exactly what a wrong pattern looks like.
+    if (matched) {
+      entries.push({ style: styles[i], row: previewRow(styles[i].name, working, styles[i].type) });
+    }
   }
-  return totalCount;
+
+  return entries;
+}
+
+/** Apply a plan. Rows the plan flagged as unchanged or empty are skipped, as flagged. */
+function applyRenamePlan(entries) {
+  var count = 0;
+  for (var i = 0; i < entries.length; i++) {
+    var row = entries[i].row;
+    if (!row.changed) {
+      if (row.flags.indexOf('empty') !== -1) {
+        console.warn('Skipped "' + row.from + '": the replacement would leave an empty name.');
+      }
+      continue;
+    }
+    console.log('Renamed: "' + row.from + '" → "' + row.to + '"');
+    entries[i].style.name = row.to;
+    count++;
+  }
+  return count;
 }
 
 // ========================================
 // EXECUTION
 // ========================================
 
-getAllStyles().then(function(allStyles) {
+getAllStyles().then(async function(allStyles) {
   var searchInVal = typeof searchIn !== 'undefined' ? searchIn : "";
   var filtered = filterBySearchIn(allStyles, searchInVal);
   var totalCount = 0;
@@ -195,18 +252,48 @@ getAllStyles().then(function(allStyles) {
   if (typeof batchList === 'string' && batchList.trim()) {
     batchList = parseBatchReplacementString(batchList);
   }
-  if (batchList && batchList.length > 0) {
-    console.log('=== BATCH RENAME STYLES ===');
-    console.log('Search in: "' + (searchInVal || '(all)') + '", ' + batchList.length + ' operations, ' + filtered.length + ' styles to process');
-    totalCount = renameStylesBatch(filtered, batchList);
-    figma.notify('Batch complete: Renamed ' + totalCount + ' styles across ' + batchList.length + ' operations');
-  } else if (typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined' &&
-             hasRenameOperation(searchFor, replaceWith)) {
-    console.log('=== RENAME STYLES ===');
-    console.log('Search in: "' + (searchInVal || '(all)') + '", for: "' + searchFor + '", with: "' + replaceWith + '", ' + filtered.length + ' styles to process');
-    totalCount = renameStylesSingle(filtered, searchFor, replaceWith);
-    figma.notify('Renamed ' + totalCount + ' styles');
-  } else {
+  var isBatch = Boolean(batchList && batchList.length > 0);
+  if (!isBatch && !(typeof searchFor !== 'undefined' && typeof replaceWith !== 'undefined' &&
+                    hasRenameOperation(searchFor, replaceWith))) {
     figma.notify('Configure searchFor and replaceWith, or batchReplacement');
+    return;
+  }
+
+  if (isBatch) {
+    console.log('=== BATCH RENAME STYLES ===');
+    console.log('Search in: "' + (searchInVal || '(all)') + '", ' + batchList.length + ' operations, ' + filtered.length + ' styles in scope');
+  } else {
+    console.log('=== RENAME STYLES ===');
+    console.log('Search in: "' + (searchInVal || '(all)') + '", for: "' + searchFor + '", with: "' + replaceWith + '", ' + filtered.length + ' styles in scope');
+  }
+
+  var operations = toRenameOperations(batchList, searchFor, replaceWith);
+  var entries = planRenameStyles(filtered, operations);
+  var rows = entries.map(function (entry) { return entry.row; });
+
+  // Collisions are judged against every style in the file, not just the filtered scope:
+  // renaming into a name that exists outside the scope clashes just as hard.
+  var existingNames = allStyles.map(function (style) { return style.name; });
+  flagPreviewCollisions(rows, existingNames);
+
+  var previewOnlyVal = typeof previewOnly === 'undefined' || previewOnly === true;
+  var signature = previewSignature(rows);
+
+  if (previewOnlyVal) {
+    logPreviewPlan(rows, { field: 'previewOnly' });
+    await savePreviewSignature('rename-styles', signature);
+    displayResults(previewPayload('Rename styles', rows));
+    figma.notify('Preview: ' + rows.filter(function (r) { return r.changed; }).length + ' style(s) would be renamed. Nothing changed.');
+    return;
+  }
+
+  var drift = previewDriftMessage(await readPreviewSignature('rename-styles'), signature);
+  if (drift) console.warn(drift);
+
+  totalCount = applyRenamePlan(entries);
+  if (isBatch) {
+    figma.notify('Batch complete: Renamed ' + totalCount + ' styles across ' + batchList.length + ' operations');
+  } else {
+    figma.notify('Renamed ' + totalCount + ' styles');
   }
 });

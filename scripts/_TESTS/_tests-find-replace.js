@@ -15,8 +15,9 @@
 // @DOC_END
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
+@import { hasRenameOperation, planRenameStyles, applyRenamePlan, toRenameOperations, filterBySearchIn } from "Rename styles"
+@import { previewRow, flagPreviewCollisions, previewCounts, previewSignature } from "@Rename Preview"
 @import { nameMatches, renameByPattern, patternMode, patternModeNote } from "@Pattern Matching"
-@import { hasRenameOperation, renameStylesSingle, filterBySearchIn } from "Rename styles"
 
 // ============================================================================
 // Fixtures
@@ -54,6 +55,11 @@ function removeStyles(styles) {
       styles[i].remove();
     } catch (e) {}
   }
+}
+
+/** A single find/replace operation, the shape planRenameStyles wants. */
+function op(find, replace) {
+  return toRenameOperations(null, find, replace);
 }
 
 function styleNamed(styles, suffix) {
@@ -115,9 +121,11 @@ testBegin('find-replace');
       expect(target).toBeTruthy();
       expect(bystander).toBeTruthy();
 
-      var changed = renameStylesSingle([target, bystander], testPrefix() + '/Text [Legacy]', testPrefix() + '/Text');
+      var entries = planRenameStyles([target, bystander], op(testPrefix() + '/Text [Legacy]', testPrefix() + '/Text'));
+      // The bystander does not even make it into the plan: it never matched.
+      expect(entries).toHaveLength(1);
+      expect(applyRenamePlan(entries)).toBe(1);
 
-      expect(changed).toBe(1);
       expect(target.name).toBe(testPrefix() + '/Text Body');
       expect(bystander.name).toBe(testPrefix() + '/Text Legacy Body');
     } finally {
@@ -130,10 +138,73 @@ testBegin('find-replace');
     try {
       var target = styleNamed(styles, 'Brand (2024)/Accent');
       var bystander = styleNamed(styles, 'Brand 2024/Accent');
-      var changed = renameStylesSingle([target, bystander], 'Brand (2024)/', 'Brand/');
-      expect(changed).toBe(1);
+      var entries = planRenameStyles([target, bystander], op('Brand (2024)/', 'Brand/'));
+      expect(applyRenamePlan(entries)).toBe(1);
       expect(target.name).toBe(testPrefix() + '/Brand/Accent');
       expect(bystander.name).toBe(testPrefix() + '/Brand 2024/Accent');
+    } finally {
+      removeStyles(styles);
+    }
+  });
+
+  await itInTestFile('a preview run changes nothing at all', async function () {
+    // Plan 11's first acceptance criterion, asserted rather than eyeballed.
+    var styles = createTestStyles();
+    try {
+      var before = styles.map(function (style) { return style.name; });
+      var entries = planRenameStyles(styles, op('V4', 'V5'));
+      expect(entries.length > 0).toBe(true);
+      var after = styles.map(function (style) { return style.name; });
+      expect(after.join('|')).toBe(before.join('|'));
+    } finally {
+      removeStyles(styles);
+    }
+  });
+
+  await itInTestFile('the plan lists exactly the changes the apply performs', async function () {
+    // The other half of the criterion: capture the rows, apply, diff against reality.
+    var styles = createTestStyles();
+    try {
+      var entries = planRenameStyles(styles, op('V4', 'V5'));
+      var planned = entries.map(function (entry) {
+        return { style: entry.style, from: entry.row.from, to: entry.row.to, changed: entry.row.changed };
+      });
+
+      applyRenamePlan(entries);
+
+      for (var i = 0; i < planned.length; i++) {
+        var expected = planned[i].changed ? planned[i].to : planned[i].from;
+        expect(planned[i].style.name).toBe(expected);
+      }
+      // And nothing outside the plan moved.
+      var untouched = styleNamed(styles, 'Text Legacy Body');
+      expect(untouched.name).toBe(testPrefix() + '/Text Legacy Body');
+    } finally {
+      removeStyles(styles);
+    }
+  });
+
+  await itInTestFile('a collision with an existing style name is flagged, not silently applied', async function () {
+    var styles = createTestStyles();
+    try {
+      // V4/Brand/Primary → V5/Brand/Primary, which already exists in the fixture set.
+      var entries = planRenameStyles([styleNamed(styles, 'V4/Brand/Primary')], op('V4', 'V5'));
+      var rows = entries.map(function (entry) { return entry.row; });
+      flagPreviewCollisions(rows, styles.map(function (style) { return style.name; }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].flags).toContain('collision');
+      expect(previewCounts(rows).collision).toBe(1);
+    } finally {
+      removeStyles(styles);
+    }
+  });
+
+  await itInTestFile('the signature changes when the plan changes', async function () {
+    var styles = createTestStyles();
+    try {
+      var a = previewSignature(planRenameStyles(styles, op('V4', 'V5')).map(function (e) { return e.row; }));
+      var b = previewSignature(planRenameStyles(styles, op('V4', 'V6')).map(function (e) { return e.row; }));
+      expect(a === b).toBe(false);
     } finally {
       removeStyles(styles);
     }
@@ -151,13 +222,15 @@ testBegin('find-replace');
     }
   });
 
-  await itInTestFile('a rename that would empty a name is skipped, not applied', async function () {
+  await itInTestFile('a rename that would empty a name is flagged and skipped', async function () {
     var styles = createTestStyles();
     try {
       var one = styleNamed(styles, 'V4/Brand/Primary');
       var before = one.name;
-      var changed = renameStylesSingle([one], '*', '');
-      expect(changed).toBe(0);
+      var entries = planRenameStyles([one], op('*', ''));
+      expect(entries).toHaveLength(1);
+      expect(entries[0].row.flags).toContain('empty');
+      expect(applyRenamePlan(entries)).toBe(0);
       expect(one.name).toBe(before);
     } finally {
       removeStyles(styles);
