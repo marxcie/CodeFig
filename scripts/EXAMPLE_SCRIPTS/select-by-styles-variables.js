@@ -48,12 +48,16 @@ var selectionOnly = true; // Search within selection only; otherwise search whol
 // @import { traverseNodes } from "@Core Library"
 @import { nameMatches, patternModeNote } from "@Pattern Matching"
 
-// One matcher for every CodeFig find/replace script: see @Pattern Matching. Declared here
-// rather than inside main so the node predicates below can reach it.
-var matchOpts = {
-  useRegex: typeof useRegex !== 'undefined' && useRegex === true,
-  matchCase: typeof matchCase !== 'undefined' && matchCase === true
-};
+// One matcher for every CodeFig find/replace script: see @Pattern Matching.
+// A function rather than a top-level var, for the same reason the other five scripts use one:
+// `@import` extracts function declarations only, so a var here would leave the predicates
+// below unusable when a spec imports them on their own.
+function getMatchOpts() {
+  return {
+    useRegex: typeof useRegex !== 'undefined' && useRegex === true,
+    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+  };
+}
 
 // Collect all nodes from root(s)
 function collectAllNodes(roots) {
@@ -82,7 +86,7 @@ async function nodeUsesMatchingStyle(node, searchTerm, selectMixedVal) {
           try {
             var style = await figma.getStyleByIdAsync(seg.textStyleId);
             if (style) {
-              if (nameMatches(style.name, searchTerm, matchOpts)) {
+              if (nameMatches(style.name, searchTerm, getMatchOpts())) {
                 hasMatchingSegment = true;
               } else {
                 hasNonMatchingSegment = true;
@@ -119,7 +123,7 @@ async function nodeUsesMatchingStyle(node, searchTerm, selectMixedVal) {
     }
     try {
       var style = await figma.getStyleByIdAsync(node[p]);
-      if (style && nameMatches(style.name, searchTerm, matchOpts)) return true;
+      if (style && nameMatches(style.name, searchTerm, getMatchOpts())) return true;
     } catch (e) {}
   }
 
@@ -142,7 +146,7 @@ async function nodeUsesMatchingVariable(node, searchTerm) {
 
     try {
       var variable = await figma.variables.getVariableByIdAsync(variableId);
-      if (variable && nameMatches(variable.name, searchTerm, matchOpts)) return true;
+      if (variable && nameMatches(variable.name, searchTerm, getMatchOpts())) return true;
     } catch (e) {}
   }
 
@@ -173,7 +177,7 @@ async function nodeMatches(node, searchTerm, selectMixedVal) {
     return;
   }
 
-  var modeNote = patternModeNote(searchTerm, matchOpts);
+  var modeNote = patternModeNote(searchTerm, getMatchOpts());
   if (modeNote) console.log(modeNote);
 
   var roots = selectionOnlyVal ? figma.currentPage.selection : [figma.currentPage];
