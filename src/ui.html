@@ -152,6 +152,9 @@
       // Build flag injected by `build-scripts.js` (dev build allows localhost console forwarding)
       // In source it stays a string placeholder; build replaces it with "true"/"false".
       var CODEFIG_BUILD_IS_DEV = "__CODEFIG_BUILD_IS_DEV__" === "true";
+      // Which build this running plugin came from. Reported with job results so the CLI can
+      // say "reload the plugin" instead of leaving you to guess why an import vanished.
+      var CODEFIG_BUILD_ID = "__CODEFIG_BUILD_ID__";
 
       // === Dev bridge (figma-console-server.js) ===
       // The ONE place this UI reaches localhost. Everything dev-only — console forwarding
@@ -3148,7 +3151,8 @@
         var body = JSON.stringify({
           ok: ok === true,
           output: codefigJob.lines.join('\n'),
-          error: error != null ? String(error) : null
+          error: error != null ? String(error) : null,
+          buildId: CODEFIG_BUILD_ID
         });
         codefigJob.lines = [];
         codefigJob.firstError = null;

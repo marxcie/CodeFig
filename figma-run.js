@@ -28,6 +28,31 @@ const BASE = 'http://127.0.0.1:' + PORT;
 const DEFAULT_TIMEOUT_MS = 130000;
 const POLL_MS = 500;
 
+/** The build id `npm run build:dev` last wrote, or null if there is no dist/. */
+function currentBuildId() {
+  try {
+    return fs.readFileSync(path.join(__dirname, 'dist', 'build-id.txt'), 'utf8').trim();
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Warn when the plugin that ran the job came from an older build than the one on disk.
+ * This is the loop's most common trap: a dev build rewrites dist/, the open plugin keeps
+ * running the previous bundle, and a newly added library looks like a broken import.
+ */
+function warnIfStale(reportedBuildId) {
+  const onDisk = currentBuildId();
+  if (!onDisk || !reportedBuildId || reportedBuildId === onDisk) return false;
+  console.log(
+    '\n⚠️  The plugin is running an older build than dist/ (plugin ' + reportedBuildId +
+      ', on disk ' + onDisk + ').\n' +
+      '   Reload CodeFig in Figma — close and reopen it — then run this again.'
+  );
+  return true;
+}
+
 function parseArgs(argv) {
   const out = { script: null, code: null, timeout: DEFAULT_TIMEOUT_MS, quiet: false };
   for (let i = 0; i < argv.length; i++) {
@@ -107,6 +132,7 @@ async function main() {
     }
 
     if (job.status === 'done') {
+      warnIfStale(job.buildId);
       if (job.output && !args.quiet) {
         console.log('\n--- run output ---');
         console.log(job.output);

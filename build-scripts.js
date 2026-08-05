@@ -6,6 +6,8 @@ const { inlineImportResolver } = require('./build-import-resolver.js');
 const { inlineAppCSS } = require('./build-app-css.js');
 
 const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
+/** Identifies this build, so a stale plugin can be told apart from a broken one. */
+const BUILD_ID = String(Date.now());
 const DEV_LOCALHOST = 'http://localhost:8765';
 const FIGMA_CONSOLE_LOG = path.join(__dirname, 'figma-console.log');
 
@@ -150,6 +152,11 @@ function updateUIHtml() {
   // In production builds, localhost is absent from dist/manifest.json and the UI must not reach for it.
   uiContent = uiContent.replace(/__CODEFIG_BUILD_IS_DEV__/g, isDev ? 'true' : 'false');
 
+  // Stamp the build so the tooling can tell a stale plugin from a real failure. Forgetting to
+  // reload after a dev build is the single easiest mistake in the figma:run / test:figma loop,
+  // and it presents as "the import is broken" rather than "you are running old code".
+  uiContent = uiContent.replace(/__CODEFIG_BUILD_ID__/g, BUILD_ID);
+
   // Inline Buy Me a Coffee brand SVG (src/bmc-button.svg) into footer button
   const bmcSvgPath = path.join(__dirname, 'src', 'bmc-button.svg');
   if (fs.existsSync(bmcSvgPath) && uiContent.includes('<!-- INLINE_BMC_SVG -->')) {
@@ -179,6 +186,7 @@ function updateUIHtml() {
   
   // Write the updated ui.html to dist
   fs.writeFileSync(uiDistPath, uiContent);
+  fs.writeFileSync(path.join(path.dirname(uiDistPath), 'build-id.txt'), BUILD_ID + '\n');
   console.log(`✅ dist/ui.html (${scripts.length} scripts, vendors inlined)`);
 }
 

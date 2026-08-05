@@ -143,6 +143,26 @@ test('a failing run reports ok:false with its error, and the CLI can tell', asyn
   });
 });
 
+test('the build id the plugin reports is kept, so a stale plugin can be spotted', async () => {
+  // Forgetting to reload after a dev build presents as a broken import; the CLI compares
+  // this against dist/build-id.txt to say "reload" instead of leaving you guessing.
+  await withBridge(async ({ base }) => {
+    const id = (await req(base, 'POST', '/jobs', { script: 'x' })).json.id;
+    await req(base, 'GET', '/jobs/next');
+    await req(base, 'POST', '/jobs/' + id + '/result', { ok: true, output: '', buildId: '1234' });
+    assert.equal((await req(base, 'GET', '/jobs/' + id)).json.buildId, '1234');
+  });
+});
+
+test('a result without a build id leaves it null rather than undefined', async () => {
+  await withBridge(async ({ base }) => {
+    const id = (await req(base, 'POST', '/jobs', { script: 'x' })).json.id;
+    await req(base, 'GET', '/jobs/next');
+    await req(base, 'POST', '/jobs/' + id + '/result', { ok: true });
+    assert.equal((await req(base, 'GET', '/jobs/' + id)).json.buildId, null);
+  });
+});
+
 test('results and status for an unknown job are 404, not a silent success', async () => {
   await withBridge(async ({ base }) => {
     assert.equal((await req(base, 'GET', '/jobs/9999')).status, 404);

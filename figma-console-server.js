@@ -131,6 +131,8 @@ function createBridgeServer(options) {
         job.ok = parsed.ok === true;
         job.output = typeof parsed.output === 'string' ? parsed.output : '';
         job.error = parsed.error != null ? String(parsed.error) : null;
+        // Which build ran it, so the CLI can spot a plugin that needs reloading.
+        job.buildId = parsed.buildId != null ? String(parsed.buildId) : null;
         job.finishedAt = Date.now();
         res.writeHead(204, corsHeaders);
         res.end();
@@ -160,6 +162,7 @@ function createBridgeServer(options) {
           ok: null,
           output: '',
           error: null,
+          buildId: null,
           enqueuedAt: Date.now(),
           startedAt: null,
           finishedAt: null

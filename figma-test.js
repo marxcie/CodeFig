@@ -75,6 +75,31 @@ async function runSpec(spec, timeout) {
   }
 }
 
+/** The build id `npm run build:dev` last wrote, or null if there is no dist/. */
+function currentBuildId() {
+  try {
+    return fs.readFileSync(path.join(__dirname, 'dist', 'build-id.txt'), 'utf8').trim();
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Warn when the plugin that ran the job came from an older build than the one on disk.
+ * This is the loop's most common trap: a dev build rewrites dist/, the open plugin keeps
+ * running the previous bundle, and a newly added library looks like a broken import.
+ */
+function warnIfStale(reportedBuildId) {
+  const onDisk = currentBuildId();
+  if (!onDisk || !reportedBuildId || reportedBuildId === onDisk) return false;
+  console.log(
+    '\n⚠️  The plugin is running an older build than dist/ (plugin ' + reportedBuildId +
+      ', on disk ' + onDisk + ').\n' +
+      '   Reload CodeFig in Figma — close and reopen it — then run this again.'
+  );
+  return true;
+}
+
 /**
  * An undefined harness function means the import degraded, which in practice means the open
  * plugin is running a build from before the library existed. Worth saying out loud: the
@@ -126,11 +151,13 @@ async function main() {
   let pass = 0;
   let fail = 0;
   let skip = 0;
+  let staleBuild = false;
   const failedSpecs = [];
 
   for (const spec of specs) {
     const job = await runSpec(spec, args.timeout);
     const summary = parseSummary(job.output);
+    if (job.buildId && currentBuildId() && job.buildId !== currentBuildId()) staleBuild = true;
 
     if (args.verbose && job.output) {
       console.log(job.output.replace(/^/gm, '    '));
@@ -181,6 +208,13 @@ async function main() {
       (skip ? `, ${skip} skipped` : '') +
       ` across ${specs.length} spec${specs.length === 1 ? '' : 's'}.`
   );
+
+  if (staleBuild) {
+    console.log(
+      '\n⚠️  A spec ran on an older build than dist/. Reload CodeFig in Figma (close and\n' +
+        '   reopen), then run this again — results above may be from stale code.'
+    );
+  }
 
   if (skip > 0) {
     console.log(
