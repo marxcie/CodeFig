@@ -17,11 +17,18 @@
 // | sourceCollection | Limit to bindings whose referenced variable is from this collection; empty = all collections. |
 // | targetCollection | Look up replacement variable in this collection; empty = same as source, then any. |
 // | searchFor / replaceWith | Find/replace applied to variable path (collection + variable). |
+// | previewOnly | **On by default.** Lists the bindings that would be rebound and changes nothing; untick and run again to apply. |
 // | matchCase | Match `searchFor` case-sensitively. |
 // | useRegex | Treat `searchFor` as a regular expression. |
 // | batchReplacement | Multiple "search, replace" lines; overrides searchFor/replaceWith. |
 // | **Replace-all (path)** | When **both** source + target are set and search/replace empty: replace the **source collection name** substring with the **target** in the full path (rename in path, not “same token → lookup by name”). |
 // | **Remap by name (automatic)** | When **target** is set, **source** can be empty (all collections), and search/replace/batch are **empty**—bindings are rebound to the variable with the **same name** in the target collection (typical: paste from another file → point at local tokens). Works on layer bindings and variable-table aliases. Unresolved / missing variable IDs are counted; Figma does not expose names for those, so they cannot be remapped automatically. |
+//
+// ## Preview first
+// Previews by default. Every write in the script is guarded, so the preview runs the same
+// traversal — same matching, same cache, same replacement lookup — with the writes switched
+// off, and lists each binding as `SourceCollection/name → TargetCollection/name` against the
+// node and property it belongs to. Untick **Preview only** and run again to apply.
 //
 // ## Search patterns
 // | Input | Meaning |
@@ -52,6 +59,8 @@
 // @DOC_END
 
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
+@import { previewRow, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
+@import { displayResults } from "@InfoPanel"
 
 // ========================================
 // CONFIGURATION
@@ -72,6 +81,9 @@ var replaceWith = ""; // @placeholder="color 1"
 var matchCase = false; // @label: Match case
 var useRegex = false; // @label: Use regular expression
 // Treat searchFor as a regular expression instead of literal text with `*` wildcards.
+//
+var previewOnly = true; // @label: Preview only
+// **On by default.** Lists the bindings that would be rebound and changes nothing. Untick and run again to apply.
 // ---
 var batchReplacement = ""; // @textarea
 // Batch: one line per pair. "search to replace" or "search, replace" (overrides searchFor/replaceWith)
@@ -209,6 +221,32 @@ function buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal) {
 // One matcher for every CodeFig find/replace script: see @Pattern Matching. This script used
 // to carry its own escape-and-replace pair, which deliberately escaped `*` — so wildcards
 // worked in the style scripts and not here.
+/**
+ * Preview plumbing (plan 11). Every write in this script is guarded by rvWouldWrite(ctx) and
+ * preceded by rvRecord(ctx, ...), so the preview and the apply pass are the same traversal
+ * with the writes switched off — not a second description of what the script does.
+ */
+function rvWouldWrite(ctx) {
+  return !(ctx && ctx.previewOnly);
+}
+
+function rvRecord(ctx, where, fromPath, toPath) {
+  if (ctx && ctx.plan) {
+    ctx.plan.push({ where: where, from: fromPath, to: toPath });
+  }
+}
+
+/** The path a variable is known by, for preview rows. */
+async function rvVariablePath(variable) {
+  if (!variable) return '(none)';
+  try {
+    var collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+    return normalizeVariablePath(getScope(collection ? collection.name : '', variable.name));
+  } catch (e) {
+    return variable.name;
+  }
+}
+
 function getMatchOpts() {
   return {
     useRegex: typeof useRegex !== 'undefined' && useRegex === true,
@@ -605,11 +643,19 @@ async function replaceVariableTableAliases(localCollections, ctx) {
 
           if (aliasValue.id === result.replacementVariable.id) continue;
 
-          hostVariable.setValueForMode(mode.modeId, {
-            type: 'VARIABLE_ALIAS',
-            id: result.replacementVariable.id
-          });
-          console.log('  ✅ Replaced variable-table alias →', result.replacementVariable.name);
+          rvRecord(
+            ctx,
+            'variables table · ' + hostVariable.name + ' · mode ' + mode.name,
+            await rvVariablePath(currentVariable),
+            await rvVariablePath(result.replacementVariable)
+          );
+          if (rvWouldWrite(ctx)) {
+            hostVariable.setValueForMode(mode.modeId, {
+              type: 'VARIABLE_ALIAS',
+              id: result.replacementVariable.id
+            });
+            console.log('  ✅ Replaced variable-table alias →', result.replacementVariable.name);
+          }
           replacementCount++;
         } catch (error) {
           var errMsg = error instanceof Error ? error.message : String(error);
@@ -733,13 +779,16 @@ async function findAndReplaceVariables() {
     return;
   }
 
+  var previewOnlyVal = typeof previewOnly === 'undefined' || previewOnly === true;
   var ctx = {
     variableCache: variableCache,
     sourceCollectionVal: sourceCollectionVal,
     targetCollectionVal: targetCollectionVal,
     targetLocalCollectionId: targetLocalCollectionId,
     remapBySameName: remapBySameName,
-    replacements: replacements
+    replacements: replacements,
+    previewOnly: previewOnlyVal,
+    plan: []
   };
   
   var replacementCount = 0;
@@ -833,8 +882,11 @@ async function findAndReplaceVariables() {
               
               if (node.type === 'TEXT') {
                 var textLength = node.characters.length;
-                node.setRangeBoundVariable(0, textLength, property, replacementVariable);
-                console.log('  ✅ Replaced range property:', property);
+                rvRecord(ctx, node.name + ' · ' + property, await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
+                if (rvWouldWrite(ctx)) {
+                  node.setRangeBoundVariable(0, textLength, property, replacementVariable);
+                  console.log('  ✅ Replaced range property:', property);
+                }
                 replacementCount++;
               }
             }
@@ -862,8 +914,11 @@ async function findAndReplaceVariables() {
                     }
                   }
                 }
-                node.fills = fills;
-                console.log('  ✅ Replaced fill color variable');
+                rvRecord(ctx, node.name + ' · fills', await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
+                if (rvWouldWrite(ctx)) {
+                  node.fills = fills;
+                  console.log('  ✅ Replaced fill color variable');
+                }
                 replacementCount++;
               }
             }
@@ -891,15 +946,21 @@ async function findAndReplaceVariables() {
                     }
                   }
                 }
-                node.strokes = strokes;
-                console.log('  ✅ Replaced stroke color variable');
+                rvRecord(ctx, node.name + ' · strokes', await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
+                if (rvWouldWrite(ctx)) {
+                  node.strokes = strokes;
+                  console.log('  ✅ Replaced stroke color variable');
+                }
                 replacementCount++;
               }
             }
             // Handle other supported properties (direct binding)
             else if (SUPPORTED_BOUND_PROPERTIES[property]) {
-              node.setBoundVariable(property, replacementVariable);
-              console.log('  ✅ Replaced property:', property);
+              rvRecord(ctx, node.name + ' · ' + property, await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
+              if (rvWouldWrite(ctx)) {
+                node.setBoundVariable(property, replacementVariable);
+                console.log('  ✅ Replaced property:', property);
+              }
               replacementCount++;
             }
             
@@ -930,6 +991,25 @@ async function findAndReplaceVariables() {
     orphanUnresolvedCount += tableStats.orphanUnresolvedCount;
   }
   
+  if (previewOnlyVal) {
+    var rows = ctx.plan.map(function (entry) {
+      return previewRow(entry.from, entry.to, entry.where);
+    });
+    // No collision flagging: a rebind targets a variable that already exists, which is the
+    // point rather than a clash — same reasoning as replace-style-variable-bindings.
+    logPreviewPlan(rows, { field: 'previewOnly' });
+    await savePreviewSignature('replace-variables', previewSignature(rows));
+    displayResults(previewPayload('Replace variables', rows));
+    figma.notify('Preview: ' + rows.length + ' binding(s) would be rebound. Nothing changed.');
+    return;
+  }
+
+  var driftRows = ctx.plan.map(function (entry) {
+    return previewRow(entry.from, entry.to, entry.where);
+  });
+  var drift = previewDriftMessage(await readPreviewSignature('replace-variables'), previewSignature(driftRows));
+  if (drift) console.warn(drift);
+
   // Summary
   console.log('=== SUMMARY ===');
   if (includeSelection) console.log('Layer bindings replaced:', replacementCount - variableTableCount);
