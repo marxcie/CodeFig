@@ -62,6 +62,12 @@ you what they will do before they do it.
 - **`corner-radius` and `spacing` no longer crash when a grid size is set.** Both called
   `roundToGrid()`, which was declared only in `typography`, so the call threw `ReferenceError`
   on that path. All three now use `snapScaleGrid()` from `@Math Helpers`.
+- **A documented `@import` example no longer runs as a real import.** `@import` inside a
+  `// @DOC_START` … `// @DOC_END` block is now treated as documentation. Opening **Help &
+  documentation** showed an "Import failed" notification for the placeholder
+  `@import { myFunction } from "My Custom Script"`, and its other three examples were injecting
+  library source into the script for no reason. Write examples in your own doc blocks freely;
+  outside a doc block, a commented-out `// @import` still imports, unchanged.
 - Wildcards work in the default match path again (`compilePattern` produced "zero or more
   literal dots" from every `*`).
 - Three libraries were real TypeScript, which made 60 of their 71 functions impossible to
@@ -85,6 +91,8 @@ you what they will do before they do it.
   bridge queue, script-name resolution and the dev-only guard.
 - `npm run validate` now fails a build when a runnable script calls a function nothing defines
   after `@import` resolution — the gap that hid the `roundToGrid` crash.
+- `validate-scripts.js` carries no per-file exemptions. The doc-block rule above removed the last
+  one (`help-documentation.js`), which had been silencing every import check for that file.
 - Builds no longer touch a tracked file. `manifest.json` moved to `src/manifest.json` as a
   template and the build generates `dist/manifest.json`. **Import `dist/manifest.json` in
   Figma**; existing dev setups must re-import once.

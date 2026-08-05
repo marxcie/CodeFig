@@ -362,7 +362,130 @@ test('$-patterns in library source are spliced literally, not as replacement pat
 });
 
 // ---------------------------------------------------------------------------
-// 5. Script-name matching
+// 5. Doc blocks
+// ---------------------------------------------------------------------------
+
+test('an @import inside a // @DOC_START block is documentation, not an import', () => {
+  // Why this exists: HELP/help-documentation.js documents the syntax with four examples.
+  // All four used to run — three injecting library code into every run of the HELP script,
+  // and `from "My Custom Script"` showing the user an "Import failed" notification.
+  const code = [
+    '// @DOC_START',
+    '// ## @import system',
+    '// ```',
+    '// @import { helperOne } from "@Core Library"',
+    '// @import { myFunction } from "My Custom Script"',
+    '// @import * from "@Core Library"',
+    '// @import { helperTwo }',
+    '// ```',
+    '// @DOC_END',
+    'function realWork() { return 1; }'
+  ].join('\n');
+
+  assert.deepStrictEqual(resolver.findImports(code), []);
+  const { code: out, notices } = resolve(code + PAD);
+  assert.strictEqual(out, code + PAD, 'the doc block must come through untouched');
+  assert.deepStrictEqual(notices, [], 'a documented example must not notify');
+});
+
+test('an @import outside the doc block is still honoured', () => {
+  const code = [
+    '// @DOC_START',
+    '// @import { myFunction } from "My Custom Script"',
+    '// @DOC_END',
+    '@import { helperOne } from "@Core Library"',
+    'function realWork() { return helperOne(); }'
+  ].join('\n');
+
+  const { code: out, notices } = resolve(code + PAD);
+  assert.match(out, /function helperOne\(\)/);
+  assert.doesNotMatch(out, /^@import/m, 'the live import must be spliced out');
+  assert.match(out, /\/\/ @import \{ myFunction \} from "My Custom Script"/, 'the example stays');
+  assert.deepStrictEqual(notices, []);
+});
+
+test('a commented @import outside a doc block still resolves', () => {
+  // Deliberately unchanged: comments are not respected outside doc blocks. Two shipped
+  // scripts (select-by-styles-variables.js, variable-inspector.js) carried a commented
+  // import that was doing real work; both are un-commented now, but user scripts saved in
+  // clientStorage may rely on this, and narrowing the rule to doc blocks is what makes the
+  // change safe to ship. `// ` is left in place, so the marker line becomes `// // Runtime
+  // imported from: …` and the injected functions land on the lines below it, uncommented.
+  const code = '// @import { helperOne } from "@Core Library"\nfunction realWork() { return helperOne(); }';
+  const { code: out } = resolve(code + PAD);
+  assert.match(out, /function helperOne\(\)/);
+  assert.match(out, /\/\/ \/\/ Runtime imported from/);
+});
+
+test('a documented example does not steal the splice from an identical live import', () => {
+  // findImports skips the example, but its text is still there for indexOf to find — so a
+  // text-first splice would inject into the docs and leave the real @import in the code.
+  const statement = '@import { helperOne } from "@Core Library"';
+  const code = [
+    '// @DOC_START',
+    '// ' + statement,
+    '// @DOC_END',
+    statement,
+    'function realWork() { return helperOne(); }'
+  ].join('\n');
+
+  const { code: out } = resolve(code + PAD);
+  assert.match(out, /^\/\/ @import \{ helperOne \} from "@Core Library"$/m, 'docs untouched');
+  assert.doesNotMatch(out, /^@import/m, 'the live import is the one that got spliced');
+  assert.strictEqual((out.match(/function helperOne\(\)/g) || []).length, 1);
+});
+
+test('stripImports removes live imports and leaves documented examples alone', () => {
+  // validate-scripts.js strips markers before asking `new Function` whether a script
+  // parses. Stripping the example instead of the real import would leave `@import ...` in
+  // the code and report a syntax error against a script that is fine.
+  const statement = '@import { helperOne } from "@Core Library"';
+  const code = [
+    '// @DOC_START',
+    '// ' + statement,
+    '// @DOC_END',
+    statement,
+    'function realWork() { return helperOne(); }'
+  ].join('\n');
+
+  const stripped = resolver.stripImports(code);
+  assert.match(stripped, /^\/\/ @import \{ helperOne \}/m, 'the example survives, still commented');
+  assert.doesNotMatch(stripped, /^@import/m);
+  assert.doesNotThrow(() => new Function(stripped), 'what is left must parse');
+});
+
+test('doc-block ranges need both markers, and several blocks are supported', () => {
+  // An unterminated @DOC_START does NOT swallow the rest of the file: a stray marker
+  // leaving the imports below it working is far better than silently disabling them,
+  // which shows up in Figma as a script that runs and does nothing. The UI is equally
+  // strict — extractSection renders no docs without both markers.
+  const unterminated = '// @DOC_START\n@import { helperOne } from "@Core Library"\n';
+  assert.deepStrictEqual(resolver.findDocBlockRanges(unterminated), []);
+  assert.strictEqual(resolver.findImports(unterminated).length, 1);
+
+  const twoBlocks = [
+    '// @DOC_START',
+    '// @import { a } from "One"',
+    '// @DOC_END',
+    '@import { helperOne } from "@Core Library"',
+    '  // @DOC_START',
+    '  // @import { b } from "Two"',
+    '  // @DOC_END'
+  ].join('\n');
+  assert.strictEqual(resolver.findDocBlockRanges(twoBlocks).length, 2, 'indented markers count');
+  assert.deepStrictEqual(
+    resolver.findImports(twoBlocks).map((i) => i.scriptName),
+    ['@Core Library']
+  );
+
+  // Only a whole line is a marker — the words inside prose are not.
+  const prose = '// The block between // @DOC_START and // @DOC_END is markdown.\n@import { helperOne }';
+  assert.deepStrictEqual(resolver.findDocBlockRanges(prose), []);
+  assert.strictEqual(resolver.findImports(prose).length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// 6. Script-name matching
 // ---------------------------------------------------------------------------
 
 test('findScript matches display name, " / " suffix, filename and @-prefix', () => {
@@ -386,19 +509,19 @@ test('filename matching ignores the extension, so pre-rename .ts entries still r
 });
 
 // ---------------------------------------------------------------------------
-// 6. Pin against the real shipped script tree
+// 7. Pin against the real shipped script tree
 // ---------------------------------------------------------------------------
 
 test('every @import in the shipped script tree resolves to a real script', () => {
   const scripts = findAllScripts(path.join(__dirname, '..', 'scripts'));
   assert.ok(scripts.length > 0, 'expected to find shipped scripts');
 
+  // No HELP/ exemption and no "My Custom Script" placeholder allowance: HELP/'s examples
+  // live in a doc block, so findImports no longer reports them at all. If either
+  // exemption becomes necessary again, a documented example has gone live.
   const unresolved = [];
   scripts.forEach((s) => {
-    // HELP/ documents the syntax with deliberately fictional targets.
-    if (s.folder === 'HELP') return;
     resolver.findImports(s.code).forEach((imp) => {
-      if (imp.scriptName === 'My Custom Script') return; // documented placeholder
       if (!resolver.findScript(scripts, imp.scriptName)) {
         unresolved.push(s.name + ' -> ' + imp.scriptName);
       }
@@ -429,7 +552,6 @@ test('every shipped script resolves its imports into real injected source', () =
   const uninjected = [];
 
   scripts.forEach((s) => {
-    if (s.folder === 'HELP') return;
     const imports = resolver.findImports(s.code);
     if (!imports.length) return;
 
@@ -438,7 +560,6 @@ test('every shipped script resolves its imports into real injected source', () =
 
     imports.forEach((imp) => {
       if (!imp.functionNames) return;
-      if (imp.scriptName === 'My Custom Script') return; // documented placeholder
       imp.functionNames.forEach((name) => {
         const declared = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\(').test(out);
         if (!declared) uninjected.push(s.name + ' :: ' + name);

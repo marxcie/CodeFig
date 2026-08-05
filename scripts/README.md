@@ -102,6 +102,10 @@ Scripts can import functions from library scripts using `@import` statements:
 @import { myFunction } from "My Custom Script"
 ```
 
+An `@import` inside a `// @DOC_START` … `// @DOC_END` block is an example, not an import — it is
+not executed, so a script can document the syntax. Anywhere else a commented-out `// @import`
+**does** still import: `@import` is matched textually, not parsed as JavaScript.
+
 Available library scripts:
 - `@core-library.js` - Core utility functions (nodes, styles, memory, colors)
 - `@codefig-ui.js` - CodeFigUI config forms (section, toggle, number, string, select, sendToUI)

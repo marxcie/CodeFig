@@ -45,7 +45,7 @@ var selectMixed = false; // Include elements with mixed style/variable usage (e.
 var selectionOnly = true; // Search within selection only; otherwise search whole page
 // @UI_CONFIG_END
 
-// @import { traverseNodes } from "@Core Library"
+@import { traverseNodes } from "@Core Library"
 @import { nameMatches, patternModeNote } from "@Pattern Matching"
 
 // One matcher for every CodeFig find/replace script: see @Pattern Matching.

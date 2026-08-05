@@ -10,62 +10,7 @@ forgotten one.
 
 ---
 
-## 1. `@import` inside a doc block is a live import
-
-**What.** The resolver's `@import` regex is not line-anchored and does not know about comments,
-so an `@import` written *inside* a `// @DOC_START … // @DOC_END` block executes as a real import.
-
-`scripts/HELP/help-documentation.js` documents the import system with four examples. All four
-run: three inject functions into every run of that script for no reason, and
-`@import { myFunction } from "My Custom Script"` fails, which shows the user an
-"Import failed" notification when they open the HELP script.
-
-**How it was found.** Measuring dead imports during cleanup; the HELP script's "unused" imports
-turned out to be documentation.
-
-**Why it was left.** The fix belongs in `src/import-resolver.js`, the most safety-critical shared
-file in the repo, and it was found at the end of a long session. It is also load-bearing in a
-surprising way: `select-by-styles-variables.js` has a *commented* `// @import { traverseNodes }`
-that works **only** because comments are not respected. Changing the rule without checking every
-script would break that.
-
-**Fix.** Make the resolver skip `@import` occurrences inside a `@DOC_START`/`@DOC_END` range, then
-un-comment the `traverseNodes` import in `select-by-styles-variables.js` so it stops relying on
-the loophole. `tests/import-resolver.test.js` is the place to pin both. Roughly an hour, mostly
-in tests.
-
----
-
-## 2. `validate` carries a hardcoded exemption for `help-documentation.js`
-
-**What.** `validateImports()` in `validate-scripts.js` skips that one file outright:
-
-```js
-// Skip validation for help-documentation.js (contains example imports)
-if (script.filename === 'help-documentation.js' || script.name.includes('help & documentation')) return;
-```
-
-So the validator is **not** broken — it has a targeted workaround that exists only because of
-item 1. Without the exemption it would correctly reject
-`@import { myFunction } from "My Custom Script"`, since no such script exists.
-
-**Why it matters.** The exemption is the only reason a HELP script can document the import syntax
-at all, and it silences *every* import check for that file, including real mistakes. It is also a
-per-filename special case, so a second HELP script documenting imports would fail the build.
-
-**Fix.** Fixing item 1 makes this exemption unnecessary — delete it in the same commit. That is
-the tell that the two belong together, and the order matters: fix the resolver, then remove the
-workaround, then confirm `validate` still passes with the file no longer exempt.
-
-**Note for whoever picks this up.** Two of the four example imports in that file
-(`getCollection`, `setVariableValue` from `@Variables`) do resolve to real functions, so only
-`myFunction from "My Custom Script"` actually fails today. An earlier version of this document
-claimed the validator had a general blind spot to bad imports. It does not — that was wrong, and
-the exemption above is the whole story.
-
----
-
-## 3. `matchPattern`'s `caseSensitive` option has never worked
+## 1. `matchPattern`'s `caseSensitive` option has never worked
 
 **What.** In its default (wildcard) mode, `matchPattern(text, pattern, { caseSensitive: true })`
 still matches case-insensitively: the flag only ever suppressed a pre-lowercasing step, while the
@@ -80,7 +25,7 @@ saying so. Decide at some point whether to fix it or delete the function.
 
 ---
 
-## 4. The legacy half of `@Pattern Matching`
+## 2. The legacy half of `@Pattern Matching`
 
 **What.** 13 functions are marked *unused-by-shipped* in the library header: `fuzzyMatch`,
 `globMatch`, `globToRegex`, `calculateFuzzyScore`, `levenshteinDistance`, `expandWildcards`,
@@ -96,7 +41,7 @@ header. Worth deciding rather than drifting.
 
 ---
 
-## 5. Two more copies of `matchPattern`
+## 3. Two more copies of `matchPattern`
 
 **What.** `@styles.js` and `@replacement-engine.js` each carry their own `matchPattern`, separate
 from the one in `@Pattern Matching`. This is *structural*, not sloppiness: `@import` extraction
@@ -112,7 +57,7 @@ which is what the new `validateResolvedCalls` check would then enforce.
 
 ---
 
-## 6. `release.js` can lose its build-then-bump dance
+## 4. `release.js` can lose its build-then-bump dance
 
 **What.** Its header used to explain that `npm version` was avoided because `build:production`
 rewrote `manifest.json`, leaving the tree dirty. Plan 09 removed that constraint — builds no
@@ -125,7 +70,7 @@ release, and decide separately. A `TODO` in `release.js` records it.
 
 ---
 
-## 7. `variable-inspector.js` declares a function in an unimportable form
+## 5. `variable-inspector.js` declares a function in an unimportable form
 
 **What.** `var collectAllNodes = function (nodes) { … }`. The resolver recognises `var`-assigned
 functions as *names* but cannot extract them, so nothing can import it — and a spec that tried
@@ -139,7 +84,7 @@ file. The same applies to any `var x = function` at the top level of a script.
 
 ---
 
-## 8. `shouldExclude()` exists twice
+## 6. `shouldExclude()` exists twice
 
 `build-scripts.js` and `validate-scripts.js` each define it, and they have already diverged once
 on purpose (the validator now takes `{ includeStaging: true }` so `_TESTS/` specs are still
@@ -148,7 +93,7 @@ intentional, so this is low priority.
 
 ---
 
-## 9. Preview has no in-panel Apply button
+## 7. Preview has no in-panel Apply button
 
 **What.** Applying a previewed plan means unticking **Preview only** and running again. Plan 11
 left open whether an in-panel Apply button is worth the plumbing.
@@ -163,7 +108,7 @@ warning fires in ordinary use.
 
 ---
 
-## 10. Golden snapshots for the in-Figma specs
+## 8. Golden snapshots for the in-Figma specs
 
 Plan 12 deferred rather than rejected this: after a spec runs, serialise the scratch page tree
 (`type`, `name`, layout, `boundVariables`) and diff against a committed file. Cheap now the
@@ -178,7 +123,7 @@ Linux build, so a self-hosted Mac, and it breaks on Figma updates).
 
 ---
 
-## 11. `colors.js` has never been verified against a real file
+## 9. `colors.js` has never been verified against a real file
 
 Graduated rather than archived during plan 05's triage, but never run. Everything else under
 `scripts/` has been exercised at least once. Now that `npm run figma:run -- colors` exists, this

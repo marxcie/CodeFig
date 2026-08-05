@@ -11,6 +11,10 @@
  * splices it in place of the `@import` line. Failures degrade to a comment plus a
  * notification, never an error.
  *
+ * Comments are not respected — a commented-out `@import` still imports — with exactly
+ * one exception: an `@import` inside a `// @DOC_START` … `// @DOC_END` block is
+ * documentation, and findImports skips it. See findDocBlockRanges.
+ *
  * Covered by tests/import-resolver.test.js. Behaviour here is pinned deliberately —
  * see the note on findFunctionBodyRange before "improving" the extractor.
  */
@@ -60,6 +64,58 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Doc blocks
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Doc-block delimiters, line-anchored to match the UI's extractSection exactly, so
+   * the range skipped here is the range rendered in the Documentation tab.
+   */
+  var DOC_START_LINE = /^[ \t]*\/\/[ \t]*@DOC_START[ \t]*$/;
+  var DOC_END_LINE = /^[ \t]*\/\/[ \t]*@DOC_END[ \t]*$/;
+
+  /**
+   * Character ranges covered by `// @DOC_START` … `// @DOC_END` blocks, so an `@import`
+   * written as an *example* in a script's documentation is not executed as a real one.
+   * `scripts/HELP/help-documentation.js` documents the syntax with four examples; before
+   * this, three of them injected library code into every run and the fourth showed the
+   * user an "Import failed" notification. It also forced validate-scripts.js to exempt
+   * that file, which silenced every import check for it.
+   *
+   * A block needs **both** markers: an unterminated `// @DOC_START` is not treated as
+   * running to end of file. That is the safe direction — a stray marker then leaves the
+   * imports below it working rather than silently disabling all of them, which reads as
+   * "the script does nothing" and is the failure mode this whole file is careful about.
+   * The UI is equally strict: extractSection renders no docs at all without both.
+   */
+  function findDocBlockRanges(code) {
+    var ranges = [];
+    var openIndex = -1;
+    var lineStart = 0;
+    while (lineStart <= code.length) {
+      var newlineIndex = code.indexOf('\n', lineStart);
+      var lineEnd = newlineIndex === -1 ? code.length : newlineIndex;
+      var line = code.slice(lineStart, lineEnd).replace(/\r$/, '');
+      if (openIndex === -1) {
+        if (DOC_START_LINE.test(line)) openIndex = lineStart;
+      } else if (DOC_END_LINE.test(line)) {
+        ranges.push({ start: openIndex, end: lineEnd });
+        openIndex = -1;
+      }
+      if (newlineIndex === -1) break;
+      lineStart = newlineIndex + 1;
+    }
+    return ranges;
+  }
+
+  function isInsideDocBlock(ranges, index) {
+    for (var i = 0; i < ranges.length; i++) {
+      if (index >= ranges[i].start && index < ranges[i].end) return true;
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------------------
   // Parsing
   // ---------------------------------------------------------------------------
 
@@ -70,13 +126,18 @@
    * which is the order resolveImports splices them in. Each descriptor is
    * `{ kind, statement, index, functionNames, scriptName }`; `functionNames` is null
    * for the wildcard forms, which only know their names once the source is located.
+   *
+   * Occurrences inside a doc block are skipped — the single place that rule lives, so
+   * the UI and the validator can never disagree about what counts as an import.
    */
   function findImports(code) {
     var imports = [];
+    var docRanges = findDocBlockRanges(code);
     ['withFrom', 'simple', 'wildcardFrom', 'wildcard'].forEach(function (kind) {
       var regex = rx(kind);
       var match;
       while ((match = regex.exec(code)) !== null) {
+        if (isInsideDocBlock(docRanges, match.index)) continue;
         if (kind === 'withFrom') {
           imports.push({
             kind: kind,
@@ -500,18 +561,47 @@
   // ---------------------------------------------------------------------------
 
   /**
-   * Replace the first occurrence of `statement` with `text`, literally.
+   * Replace the first occurrence of `statement` *outside any doc block* with `text`.
    *
-   * Must use a replacer function: with a string replacement, String.replace treats
-   * `$&`, `` $` ``, `$'` and `$1` in the *replacement* as patterns. Library sources
-   * are full of them — `` `^${pattern}$` `` in @pattern-matching.js ends in `` $` ``,
-   * which as a pattern means "everything before the match" and silently pastes the
-   * consuming script's own header into the middle of a template literal.
+   * Two things are load-bearing. Splicing by index keeps the replacement literal:
+   * String.replace with a string replacement treats `$&`, `` $` ``, `$'` and `$1` in
+   * the *replacement* as patterns, and library sources are full of them —
+   * `` `^${pattern}$` `` in @pattern-matching.js ends in `` $` ``, which as a pattern
+   * means "everything before the match" and silently pastes the consuming script's own
+   * header into the middle of a template literal.
+   *
+   * And skipping doc blocks keeps the splice on the import that asked for it: findImports
+   * ignores a documented example, but the example's text is still there to be matched, so
+   * a script whose docs show the same line it really imports would otherwise get the
+   * functions injected into its documentation and leave the live `@import` in place.
    */
   function spliceAt(code, statement, text) {
-    return code.replace(statement, function () {
-      return text;
+    var docRanges = findDocBlockRanges(code);
+    var from = 0;
+    var at;
+    while ((at = code.indexOf(statement, from)) !== -1) {
+      if (!isInsideDocBlock(docRanges, at)) {
+        return code.slice(0, at) + text + code.slice(at + statement.length);
+      }
+      from = at + 1;
+    }
+    return code;
+  }
+
+  /**
+   * Remove every `@import` statement, leaving documented examples in place.
+   *
+   * `@import` is not JavaScript, so validate-scripts.js strips the markers before asking
+   * `new Function` whether a script parses. That belongs here so both sides share one
+   * rule: a text-first strip would delete a documented example and leave the real import
+   * in the code, failing the parse check on a script that is fine.
+   */
+  function stripImports(code) {
+    var stripped = code;
+    findImports(code).forEach(function (imp) {
+      stripped = spliceAt(stripped, imp.statement, '');
     });
+    return stripped;
   }
 
   /** Splice one import statement, or replace it with a failure comment. */
@@ -598,6 +688,8 @@
     DEFAULT_LIBRARY: DEFAULT_LIBRARY,
     MAX_DEPENDENCY_DEPTH: MAX_DEPENDENCY_DEPTH,
     findImports: findImports,
+    findDocBlockRanges: findDocBlockRanges,
+    stripImports: stripImports,
     findScript: findScript,
     listFunctionNames: listFunctionNames,
     extractFunctions: extractFunctions,

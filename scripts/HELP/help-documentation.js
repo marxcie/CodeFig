@@ -56,6 +56,8 @@
 //
 // **User libraries:** Name a script with an `@` prefix (e.g. `@My Utils`) to make it a library. Other scripts can `@import` from it; libraries are not run directly.
 //
+// **In your own docs:** the examples above are inside this script's doc block, so they are *not* executed. Outside a doc block, `@import` is matched as text — a commented-out `// @import` still imports.
+//
 // ## Common patterns
 //
 // - **Get data:** `figma.variables.getLocalVariableCollections()`, `figma.getLocalTextStyles()`

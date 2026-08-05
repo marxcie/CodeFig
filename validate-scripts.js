@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 // Single implementation of @import parsing and function extraction, shared with the
 // UI at run time (inlined into dist/ui.html). Do not re-implement either here.
-const { findImports, extractFunctionMap, resolveImports, listFunctionNames } = require('./src/import-resolver.js');
+const { findImports, stripImports, extractFunctionMap, resolveImports, listFunctionNames } = require('./src/import-resolver.js');
 
 // Colors for console output
 const colors = {
@@ -206,14 +206,11 @@ function findAllScripts(scriptsDir, options) {
  * blocks and `as` casts are syntax errors, not types. Asking the engine is a positive
  * check and strictly better than grepping for TypeScript-shaped syntax.
  *
- * `@import` markers are not JS either, so they are removed first — via findImports from
+ * `@import` markers are not JS either, so they are removed first — via stripImports from
  * the shared resolver, so this can never disagree with what the UI strips at run time.
  */
 function validateParse(script) {
-  let code = script.code;
-  findImports(code).forEach(imp => {
-    code = code.replace(imp.statement, '');
-  });
+  const code = stripImports(script.code);
 
   try {
     new Function('figma', 'console', 'window', code);
@@ -239,11 +236,8 @@ function validateParse(script) {
 function validateResolvedParse(script, scripts) {
   if (findImports(script.code).length === 0) return null;
 
-  let resolved = resolveImports(script.code, scripts, {});
   // A soft-failed import leaves a comment; any surviving marker is prose, not code.
-  findImports(resolved).forEach(imp => {
-    resolved = resolved.replace(imp.statement, '');
-  });
+  const resolved = stripImports(resolveImports(script.code, scripts, {}));
 
   try {
     new Function('figma', 'console', 'window', resolved);
@@ -419,10 +413,10 @@ function validateImports(scripts) {
   // Validate imports in each script. Parsing comes from the shared resolver, so the
   // validator can never fall behind on a syntax the UI accepts.
   scripts.forEach(script => {
-    // Skip validation for help-documentation.js (contains example imports)
-    if (script.filename === 'help-documentation.js' || script.name.includes('help & documentation')) {
-      return;
-    }
+    // No per-file exemptions. help-documentation.js needed one until findImports learned
+    // to skip `// @DOC_START` … `// @DOC_END` ranges: its four example imports parsed as
+    // real ones, so checking them meant rejecting `from "My Custom Script"`. Now they are
+    // not imports at all, and a second HELP script documenting the syntax needs nothing.
 
     // Skip validation for library files themselves (they are the source, not consumers)
     if (libraryScripts.some(lib => lib.filename === script.filename)) {
