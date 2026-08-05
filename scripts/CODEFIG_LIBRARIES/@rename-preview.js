@@ -14,6 +14,7 @@
 // |----------|-----------|
 // | Plan | previewRow, flagPreviewCollisions, previewCounts |
 // | Present | previewPayload, logPreviewPlan |
+// | Guarding writes | previewWouldWrite, previewRecord, previewRowsFromPlan |
 // | Preview → apply | previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage |
 //
 // ## Usage
@@ -201,6 +202,47 @@ function logPreviewPlan(rows, options) {
     'To apply: untick "Preview only"' + (opts.field ? ' (' + opts.field + ')' : '') + ' and run again.'
   );
   return counts;
+}
+
+// ============================================================================
+// GUARDING WRITES
+// ============================================================================
+//
+// The rename scripts can compute a plan up front, because a rename is one assignment per item.
+// The replace scripts cannot: their writes are scattered through node traversal and style
+// resolution, so the preview has to be *the same traversal with the writes switched off*. These
+// two functions are that switch, shared so every script guards its writes identically.
+//
+//     previewRecord(state, where, from, to);
+//     if (previewWouldWrite(state)) { ...the actual write... }
+//
+// `state` is `{ previewOnly: boolean, plan: array }`.
+
+/**
+ * Should this run actually write? **Absent state means yes.**
+ *
+ * That default is deliberate. A saved copy of a script from before its preview existed passes
+ * no state at all, and silently not writing would be a worse failure than writing: the user
+ * would believe the run had applied.
+ */
+function previewWouldWrite(state) {
+  return !(state && state.previewOnly);
+}
+
+/** Record one intended change. A no-op when there is no plan to record into. */
+function previewRecord(state, where, from, to) {
+  if (state && state.plan) {
+    state.plan.push({ where: where, from: from, to: to });
+  }
+}
+
+/** Turn recorded entries into rows for previewPayload / logPreviewPlan. */
+function previewRowsFromPlan(plan) {
+  var rows = [];
+  for (var i = 0; i < (plan ? plan.length : 0); i++) {
+    rows.push(previewRow(plan[i].from, plan[i].to, plan[i].where));
+  }
+  return rows;
 }
 
 // ============================================================================

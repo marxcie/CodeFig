@@ -13,7 +13,8 @@
 // @DOC_END
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, withScratchPage, cleanupTestArtifacts } from "@Test Harness"
-@import { rvWouldWrite, rvRecord, normalizeVariablePath, getScope } from "Replace variables"
+@import { normalizeVariablePath, getScope } from "Replace variables"
+@import { previewWouldWrite, previewRecord } from "@Rename Preview"
 
 /** A collection holding one variable of the given type. */
 function makeCollection(name, variableName, type, value) {
@@ -33,22 +34,22 @@ function boundIdFor(node, property) {
 testBegin('replace-variables-preview');
 
 (async function () {
-  await it('the guard says "do not write" in preview mode and "write" otherwise', function () {
-    expect(rvWouldWrite({ previewOnly: true })).toBe(false);
-    expect(rvWouldWrite({ previewOnly: false })).toBe(true);
+  await it('the shared guard says "do not write" in preview mode and "write" otherwise', function () {
+    expect(previewWouldWrite({ previewOnly: true })).toBe(false);
+    expect(previewWouldWrite({ previewOnly: false })).toBe(true);
     // A missing context must default to writing: the apply path passes a ctx without the flag
     // in older saved copies of this script, and silently not writing would be worse.
-    expect(rvWouldWrite({})).toBe(true);
-    expect(rvWouldWrite(null)).toBe(true);
+    expect(previewWouldWrite({})).toBe(true);
+    expect(previewWouldWrite(null)).toBe(true);
   });
 
   await it('recording a row is a no-op without a plan to record into', function () {
     var ctx = { previewOnly: true };
-    rvRecord(ctx, 'somewhere', 'a', 'b');
+    previewRecord(ctx, 'somewhere', 'a', 'b');
     expect(ctx.plan === undefined).toBe(true);
 
     var withPlan = { previewOnly: true, plan: [] };
-    rvRecord(withPlan, 'node · fills', 'Source/red', 'Target/red');
+    previewRecord(withPlan, 'node · fills', 'Source/red', 'Target/red');
     expect(withPlan.plan).toHaveLength(1);
     expect(withPlan.plan[0].where).toBe('node · fills');
     expect(withPlan.plan[0].from).toBe('Source/red');
@@ -67,11 +68,11 @@ testBegin('replace-variables-preview');
 
         // What the script does at its direct-binding site, both ways.
         var previewCtx = { previewOnly: true, plan: [] };
-        if (rvWouldWrite(previewCtx)) rect.setBoundVariable('topLeftRadius', null);
+        if (previewWouldWrite(previewCtx)) rect.setBoundVariable('topLeftRadius', null);
         expect(boundIdFor(rect, 'topLeftRadius')).toBe(before, 'preview must not unbind');
 
         var applyCtx = { previewOnly: false, plan: [] };
-        if (rvWouldWrite(applyCtx)) rect.setBoundVariable('topLeftRadius', null);
+        if (previewWouldWrite(applyCtx)) rect.setBoundVariable('topLeftRadius', null);
         expect(boundIdFor(rect, 'topLeftRadius')).toBe(null, 'apply does unbind');
       });
     } finally {
@@ -101,12 +102,15 @@ testBegin('replace-variables-preview');
         delete stripped[0].boundVariables;
 
         var previewCtx = { previewOnly: true, plan: [] };
-        if (rvWouldWrite(previewCtx)) rect.fills = stripped;
+        if (previewWouldWrite(previewCtx)) rect.fills = stripped;
         expect(rect.fills[0].boundVariables.color.id).toBe(boundBefore, 'preview must not rewrite fills');
 
         var applyCtx = { previewOnly: false, plan: [] };
-        if (rvWouldWrite(applyCtx)) rect.fills = stripped;
-        expect(rect.fills[0].boundVariables === undefined).toBe(true, 'apply does rewrite fills');
+        if (previewWouldWrite(applyCtx)) rect.fills = stripped;
+        // Figma normalises a stripped paint to an empty boundVariables rather than dropping the
+        // container, so assert the colour binding is gone rather than the shape around it.
+        var after = rect.fills[0].boundVariables;
+        expect(!after || !after.color).toBe(true, 'apply does rewrite fills');
       });
     } finally {
       try {
@@ -125,11 +129,11 @@ testBegin('replace-variables-preview');
       expect(before.id).toBe(target.variable.id);
 
       var previewCtx = { previewOnly: true, plan: [] };
-      if (rvWouldWrite(previewCtx)) host.variable.setValueForMode(modeId, 16);
+      if (previewWouldWrite(previewCtx)) host.variable.setValueForMode(modeId, 16);
       expect(host.variable.valuesByMode[modeId].id).toBe(target.variable.id, 'preview must not rewrite the alias');
 
       var applyCtx = { previewOnly: false, plan: [] };
-      if (rvWouldWrite(applyCtx)) host.variable.setValueForMode(modeId, 16);
+      if (previewWouldWrite(applyCtx)) host.variable.setValueForMode(modeId, 16);
       expect(host.variable.valuesByMode[modeId]).toBe(16, 'apply does rewrite it');
     } finally {
       try { host.collection.remove(); } catch (e) {}

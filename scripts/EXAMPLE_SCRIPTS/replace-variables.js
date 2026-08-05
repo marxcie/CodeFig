@@ -59,7 +59,7 @@
 // @DOC_END
 
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
-@import { previewRow, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
+@import { previewRow, previewRowsFromPlan, previewWouldWrite, previewRecord, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
 @import { displayResults } from "@InfoPanel"
 
 // ========================================
@@ -221,21 +221,6 @@ function buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal) {
 // One matcher for every CodeFig find/replace script: see @Pattern Matching. This script used
 // to carry its own escape-and-replace pair, which deliberately escaped `*` — so wildcards
 // worked in the style scripts and not here.
-/**
- * Preview plumbing (plan 11). Every write in this script is guarded by rvWouldWrite(ctx) and
- * preceded by rvRecord(ctx, ...), so the preview and the apply pass are the same traversal
- * with the writes switched off — not a second description of what the script does.
- */
-function rvWouldWrite(ctx) {
-  return !(ctx && ctx.previewOnly);
-}
-
-function rvRecord(ctx, where, fromPath, toPath) {
-  if (ctx && ctx.plan) {
-    ctx.plan.push({ where: where, from: fromPath, to: toPath });
-  }
-}
-
 /** The path a variable is known by, for preview rows. */
 async function rvVariablePath(variable) {
   if (!variable) return '(none)';
@@ -643,13 +628,13 @@ async function replaceVariableTableAliases(localCollections, ctx) {
 
           if (aliasValue.id === result.replacementVariable.id) continue;
 
-          rvRecord(
+          previewRecord(
             ctx,
             'variables table · ' + hostVariable.name + ' · mode ' + mode.name,
             await rvVariablePath(currentVariable),
             await rvVariablePath(result.replacementVariable)
           );
-          if (rvWouldWrite(ctx)) {
+          if (previewWouldWrite(ctx)) {
             hostVariable.setValueForMode(mode.modeId, {
               type: 'VARIABLE_ALIAS',
               id: result.replacementVariable.id
@@ -882,8 +867,8 @@ async function findAndReplaceVariables() {
               
               if (node.type === 'TEXT') {
                 var textLength = node.characters.length;
-                rvRecord(ctx, node.name + ' · ' + property, await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
-                if (rvWouldWrite(ctx)) {
+                previewRecord(ctx, node.name + ' · ' + property, await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
+                if (previewWouldWrite(ctx)) {
                   node.setRangeBoundVariable(0, textLength, property, replacementVariable);
                   console.log('  ✅ Replaced range property:', property);
                 }
@@ -914,8 +899,8 @@ async function findAndReplaceVariables() {
                     }
                   }
                 }
-                rvRecord(ctx, node.name + ' · fills', await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
-                if (rvWouldWrite(ctx)) {
+                previewRecord(ctx, node.name + ' · fills', await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
+                if (previewWouldWrite(ctx)) {
                   node.fills = fills;
                   console.log('  ✅ Replaced fill color variable');
                 }
@@ -946,8 +931,8 @@ async function findAndReplaceVariables() {
                     }
                   }
                 }
-                rvRecord(ctx, node.name + ' · strokes', await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
-                if (rvWouldWrite(ctx)) {
+                previewRecord(ctx, node.name + ' · strokes', await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
+                if (previewWouldWrite(ctx)) {
                   node.strokes = strokes;
                   console.log('  ✅ Replaced stroke color variable');
                 }
@@ -956,8 +941,8 @@ async function findAndReplaceVariables() {
             }
             // Handle other supported properties (direct binding)
             else if (SUPPORTED_BOUND_PROPERTIES[property]) {
-              rvRecord(ctx, node.name + ' · ' + property, await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
-              if (rvWouldWrite(ctx)) {
+              previewRecord(ctx, node.name + ' · ' + property, await rvVariablePath(currentVariable), await rvVariablePath(replacementVariable));
+              if (previewWouldWrite(ctx)) {
                 node.setBoundVariable(property, replacementVariable);
                 console.log('  ✅ Replaced property:', property);
               }
@@ -992,9 +977,7 @@ async function findAndReplaceVariables() {
   }
   
   if (previewOnlyVal) {
-    var rows = ctx.plan.map(function (entry) {
-      return previewRow(entry.from, entry.to, entry.where);
-    });
+    var rows = previewRowsFromPlan(ctx.plan);
     // No collision flagging: a rebind targets a variable that already exists, which is the
     // point rather than a clash — same reasoning as replace-style-variable-bindings.
     logPreviewPlan(rows, { field: 'previewOnly' });
@@ -1004,9 +987,7 @@ async function findAndReplaceVariables() {
     return;
   }
 
-  var driftRows = ctx.plan.map(function (entry) {
-    return previewRow(entry.from, entry.to, entry.where);
-  });
+  var driftRows = previewRowsFromPlan(ctx.plan);
   var drift = previewDriftMessage(await readPreviewSignature('replace-variables'), previewSignature(driftRows));
   if (drift) console.warn(drift);
 

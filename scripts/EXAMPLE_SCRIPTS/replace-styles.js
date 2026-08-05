@@ -59,6 +59,8 @@
 // Import memory management utilities and library functions
 @import { processWithOptimization, cleanupMemory, traverseNodes, getAllStyles, collectNodesAsync, showProgress, codefigRunOpBegin, codefigRunOpEnd, finishCodefigRunProgress } from "@Core Library"
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
+@import { previewWouldWrite, previewRecord, previewRowsFromPlan, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
+@import { displayResults } from "@InfoPanel"
 
 // ========================================
 // CONFIGURATION
@@ -77,6 +79,9 @@ var replaceWith = ""; // @placeholder="Text V2"
 var matchCase = false; // @label: Match case
 var useRegex = false; // @label: Use regular expression
 // Treat searchIn and searchFor as regular expressions instead of literal text with `*` wildcards.
+//
+var previewOnly = true; // @label: Preview only
+// **On by default.** Lists the style bindings that would be rebound and changes nothing. Untick and run again to apply.
 // ---
 var batchReplacement = ""; // @textarea
 // Batch: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
@@ -583,6 +588,11 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         (selectionOnlyVal ? 'selection only' : 'whole page')
     );
     
+    // Preview state travels with the traversal: the same walk runs with the writes switched
+    // off, rather than a separate pass that describes what this one would do.
+    var previewOnlyVal = typeof previewOnly === 'undefined' || previewOnly === true;
+    var preview = { previewOnly: previewOnlyVal, plan: [] };
+
     var nodes = selectionOnlyVal ? figma.currentPage.selection : [figma.currentPage];
     
     if (selectionOnlyVal && nodes.length === 0) {
@@ -634,9 +644,9 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         var nodeName = node.name || 'Unnamed';
         
         if (node.type === 'TEXT') {
-          replacementCount += await processTextNode(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal);
+          replacementCount += await processTextNode(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal, preview);
         }
-        replacementCount += await processOtherStyles(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal);
+        replacementCount += await processOtherStyles(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal, preview);
         
         return replacementCount;
       }, {
@@ -644,7 +654,7 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         showProgress: true,
         operation: 'Replacing styles',
         maxNodes: undefined // Already capped at 8000 in collectAllNodes
-      }).then(function(resolved) {
+      }).then(async function(resolved) {
         var totalReplacements = 0;
         var resultsArray = resolved && resolved.results ? resolved.results : (Array.isArray(resolved) ? resolved : []);
         for (var i = 0; i < resultsArray.length; i++) {
@@ -659,7 +669,21 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         console.log('✅ Total replacements: ' + totalReplacements);
 
         logReplaceStylesSummary(searchInVal, replacements, localStylesOnlyVal, totalReplacements);
-        
+
+        var rows = previewRowsFromPlan(preview.plan);
+        // No collision flagging: a style rebind targets a style that already exists — the
+        // lookup only succeeds because it does. Same reasoning as the other replace scripts.
+        if (previewOnlyVal) {
+          logPreviewPlan(rows, { field: 'previewOnly' });
+          await savePreviewSignature('replace-styles', previewSignature(rows));
+          displayResults(previewPayload('Replace styles', rows));
+          figma.notify('Preview: ' + rows.length + ' binding(s) would be rebound. Nothing changed.');
+          return { success: true, replacements: 0, preview: rows.length, error: null };
+        }
+
+        var drift = previewDriftMessage(await readPreviewSignature('replace-styles'), previewSignature(rows));
+        if (drift) console.warn(drift);
+
         if (totalReplacements > 0) {
           figma.notify('✅ Replaced ' + totalReplacements + ' styles');
         } else {
@@ -1093,7 +1117,7 @@ function scanDocumentForLibraryStyles(cache, traverseRoots) {
   });
 }
 
-async function processTextNode(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal) {
+async function processTextNode(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal, preview) {
   var totalReplacements = 0;
   rsIncr('textNodesSeen');
 
@@ -1115,10 +1139,13 @@ async function processTextNode(node, styleCache, nodeName, replacements, searchI
           var ctx = 'TEXT «' + nodeName + '» chars ' + segment.start + '-' + segment.end + ' | current="' + currentStyle.name + '"';
           var newStyle = await findReplacementStyle(currentStyle, styleCache, 'TEXT', replacements, searchInVal, localStylesOnlyVal, ctx);
           if (newStyle) {
+            previewRecord(preview, 'TEXT «' + nodeName + '» chars ' + segment.start + '-' + segment.end, currentStyle.name, newStyle.name);
             try {
-              await node.setRangeTextStyleIdAsync(segment.start, segment.end, newStyle.id);
+              if (previewWouldWrite(preview)) {
+                await node.setRangeTextStyleIdAsync(segment.start, segment.end, newStyle.id);
+                console.log('✅ Text: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
+              }
               totalReplacements++;
-              console.log('✅ Text: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
             } catch (applyErr) {
               rsIncr('applyErrors');
               console.log('⚠️ setRangeTextStyleIdAsync: ' + (applyErr && applyErr.message));
@@ -1144,7 +1171,7 @@ async function processTextNode(node, styleCache, nodeName, replacements, searchI
   return totalReplacements;
 }
 
-async function processOtherStyles(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal) {
+async function processOtherStyles(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal, preview) {
   var totalReplacements = 0;
 
   if ('fillStyleId' in node && node.fillStyleId && node.fillStyleId !== figma.mixed) {
@@ -1155,10 +1182,13 @@ async function processOtherStyles(node, styleCache, nodeName, replacements, sear
         var ctxF = 'FILL «' + nodeName + '» (' + node.type + ') | "' + currentStyle.name + '"';
         var newStyle = await findReplacementStyle(currentStyle, styleCache, 'PAINT', replacements, searchInVal, localStylesOnlyVal, ctxF);
         if (newStyle) {
+          previewRecord(preview, ctxF, currentStyle.name, newStyle.name);
           try {
-            await node.setFillStyleIdAsync(newStyle.id);
+            if (previewWouldWrite(preview)) {
+              await node.setFillStyleIdAsync(newStyle.id);
+              console.log('✅ Fill: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
+            }
             totalReplacements++;
-            console.log('✅ Fill: "' + currentStyle.name + '" → "' + newStyle.name + '" in "' + nodeName + '"');
           } catch (ae) {
             rsIncr('applyErrors');
             rsDetail(ctxF + ' | setFillStyleIdAsync: ' + (ae && ae.message));
@@ -1184,10 +1214,13 @@ async function processOtherStyles(node, styleCache, nodeName, replacements, sear
         var ctxS = 'STROKE «' + nodeName + '» (' + node.type + ') | "' + currentStyleS.name + '"';
         var newStyleS = await findReplacementStyle(currentStyleS, styleCache, 'PAINT', replacements, searchInVal, localStylesOnlyVal, ctxS);
         if (newStyleS) {
+          previewRecord(preview, ctxS, currentStyleS.name, newStyleS.name);
           try {
-            await node.setStrokeStyleIdAsync(newStyleS.id);
+            if (previewWouldWrite(preview)) {
+              await node.setStrokeStyleIdAsync(newStyleS.id);
+              console.log('✅ Stroke: "' + currentStyleS.name + '" → "' + newStyleS.name + '" in "' + nodeName + '"');
+            }
             totalReplacements++;
-            console.log('✅ Stroke: "' + currentStyleS.name + '" → "' + newStyleS.name + '" in "' + nodeName + '"');
           } catch (ae2) {
             rsIncr('applyErrors');
             rsDetail(ctxS + ' | setStrokeStyleIdAsync: ' + (ae2 && ae2.message));
@@ -1212,10 +1245,13 @@ async function processOtherStyles(node, styleCache, nodeName, replacements, sear
         var ctxE = 'EFFECT «' + nodeName + '» (' + node.type + ') | "' + currentStyleE.name + '"';
         var newStyleE = await findReplacementStyle(currentStyleE, styleCache, 'EFFECT', replacements, searchInVal, localStylesOnlyVal, ctxE);
         if (newStyleE) {
+          previewRecord(preview, ctxE, currentStyleE.name, newStyleE.name);
           try {
-            await node.setEffectStyleIdAsync(newStyleE.id);
+            if (previewWouldWrite(preview)) {
+              await node.setEffectStyleIdAsync(newStyleE.id);
+              console.log('✅ Effect: "' + currentStyleE.name + '" → "' + newStyleE.name + '" in "' + nodeName + '"');
+            }
             totalReplacements++;
-            console.log('✅ Effect: "' + currentStyleE.name + '" → "' + newStyleE.name + '" in "' + nodeName + '"');
           } catch (ae3) {
             rsIncr('applyErrors');
             rsDetail(ctxE + ' | setEffectStyleIdAsync: ' + (ae3 && ae3.message));

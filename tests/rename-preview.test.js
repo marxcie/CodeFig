@@ -28,6 +28,9 @@ function loadLibrary() {
     'previewFlagLabel',
     'previewPayload',
     'logPreviewPlan',
+    'previewWouldWrite',
+    'previewRecord',
+    'previewRowsFromPlan',
     'previewSignature',
     'previewStorageKey',
     'previewDriftMessage'
@@ -184,6 +187,45 @@ test('the console plan says outright that nothing has changed', () => {
   assert.match(output, /"a" → "b"/);
   assert.match(output, /untick "Preview only" \(previewOnly\)/);
   assert.equal(logged.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Guarding writes
+// ---------------------------------------------------------------------------
+
+test('the write guard blocks a preview run and allows an apply run', () => {
+  assert.equal(lib.previewWouldWrite({ previewOnly: true }), false);
+  assert.equal(lib.previewWouldWrite({ previewOnly: false }), true);
+});
+
+test('absent state means write, which is the safe direction here', () => {
+  // A saved copy of a script from before its preview existed passes no state. Silently not
+  // writing would be worse than writing: the user would believe the run had applied.
+  assert.equal(lib.previewWouldWrite(undefined), true);
+  assert.equal(lib.previewWouldWrite(null), true);
+  assert.equal(lib.previewWouldWrite({}), true);
+});
+
+test('recording is a no-op without a plan, and captures where the change was', () => {
+  const stateless = { previewOnly: true };
+  lib.previewRecord(stateless, 'somewhere', 'a', 'b');
+  assert.equal(stateless.plan, undefined);
+
+  const state = { previewOnly: true, plan: [] };
+  lib.previewRecord(state, 'Rect · fills', 'Source/red', 'Target/red');
+  assert.deepEqual(state.plan, [{ where: 'Rect · fills', from: 'Source/red', to: 'Target/red' }]);
+});
+
+test('recorded entries convert to rows with the location as context', () => {
+  const state = { previewOnly: true, plan: [] };
+  lib.previewRecord(state, 'Rect · fills', 'Source/red', 'Target/red');
+  lib.previewRecord(state, 'Text · fontSize', 'Source/lg', 'Source/lg');
+  const rows = lib.previewRowsFromPlan(state.plan);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].context, 'Rect · fills');
+  assert.equal(rows[0].changed, true);
+  assert.deepEqual(rows[1].flags, ['unchanged'], 'a rebind to the same thing is still worth flagging');
+  assert.deepEqual(lib.previewRowsFromPlan(null), [], 'no plan is an empty plan');
 });
 
 // ---------------------------------------------------------------------------
