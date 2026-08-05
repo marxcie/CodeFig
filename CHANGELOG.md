@@ -93,6 +93,11 @@ you what they will do before they do it.
   after `@import` resolution — the gap that hid the `roundToGrid` crash.
 - `validate-scripts.js` carries no per-file exemptions. The doc-block rule above removed the last
   one (`help-documentation.js`), which had been silencing every import check for that file.
+- `build:release` bumps with a single `npm version` call instead of bumping, syncing the lockfile,
+  staging and committing by hand. That dance existed because builds used to rewrite a tracked
+  `manifest.json`; they no longer touch a tracked file. Same commit message, same annotated `v`
+  tag, and build + pack still run before the bump so a validation failure stops the release
+  before a tag exists.
 - Builds no longer touch a tracked file. `manifest.json` moved to `src/manifest.json` as a
   template and the build generates `dist/manifest.json`. **Import `dist/manifest.json` in
   Figma**; existing dev setups must re-import once.

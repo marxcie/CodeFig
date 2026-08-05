@@ -1,9 +1,14 @@
 /**
- * Production build → pack → bump package version → one git commit (package.json, lockfile) → tag.
+ * Production build → pack → `npm version` (bump, commit, tag).
  *
- * TODO: builds no longer rewrite a tracked manifest, so the build-then-bump-then-commit-together
- * dance below could collapse into a plain `npm version` flow. Left as-is deliberately; simplify
- * separately.
+ * The bump is one `npm version` call because builds write only to `dist/`. This script used
+ * to bump, sync the lockfile, stage and commit by hand: `build:production` rewrote the
+ * tracked `manifest.json`, so the tree was dirty by the time the bump ran and the two had
+ * to be committed together. Plan 09 moved the manifest to a template — `src/manifest.json`
+ * in, `dist/manifest.json` out — and the constraint went with it.
+ *
+ * Build and pack still run *before* the bump, which is the part worth keeping: `npm version`
+ * refuses a dirty tree, and validation failing must stop the release before a tag exists.
  *
  * Usage:
  *   npm run build:release -- patch
@@ -169,15 +174,25 @@ Options:
   }
 
   const fromVer = readPackageVersion();
-  const next = computeNextVersion(fromVer, bump);
-  const tag = `v${next}`;
 
-  console.log(`\n→ Version ${fromVer} → ${next} (package.json + lockfile + src/manifest.json)…\n`);
-  run(`npm pkg set version=${next}`);
-  run('npm install --package-lock-only');
-  git(['add', 'package.json', 'package-lock.json', 'src/manifest.json']);
-  run(`git commit -m "chore: release ${next}"`);
-  run(`git tag -a "${tag}" -m "chore: release ${next}"`);
+  console.log(`\n→ Version ${fromVer} → ${computeNextVersion(fromVer, bump)} (npm version: bump, commit, tag)…\n`);
+  // Bumps package.json + package-lock.json, commits both, and creates the annotated
+  // v-prefixed tag. %s is npm's placeholder for the new version, so the commit and tag
+  // message stays "chore: release <version>".
+  try {
+    run(`npm version ${bump} -m "chore: release %s"`);
+  } catch (e) {
+    console.error(
+      '\n❌ `npm version` failed — check `git status` and `git tag -l` before retrying.\n' +
+        '   It bumps, commits and tags in that order, so a failure part-way can leave the\n' +
+        '   version bumped without a commit, or committed without a tag.\n'
+    );
+    process.exit(e.status || 1);
+  }
+
+  // Read back rather than trusting the arithmetic: npm owns the version now.
+  const next = readPackageVersion();
+  const tag = `v${next}`;
 
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
 

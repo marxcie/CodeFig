@@ -57,20 +57,7 @@ which is what the new `validateResolvedCalls` check would then enforce.
 
 ---
 
-## 4. `release.js` can lose its build-then-bump dance
-
-**What.** Its header used to explain that `npm version` was avoided because `build:production`
-rewrote `manifest.json`, leaving the tree dirty. Plan 09 removed that constraint — builds no
-longer touch tracked files — so the bump could now be a plain `npm version` flow.
-
-**Why it was left.** Plan 09 said to land the manifest change first, confirm a `--dry-run`
-release, and decide separately. A `TODO` in `release.js` records it.
-
-**Fix.** Small. Worth doing before the next release rather than after.
-
----
-
-## 5. `variable-inspector.js` declares a function in an unimportable form
+## 4. `variable-inspector.js` declares a function in an unimportable form
 
 **What.** `var collectAllNodes = function (nodes) { … }`. The resolver recognises `var`-assigned
 functions as *names* but cannot extract them, so nothing can import it — and a spec that tried
@@ -84,7 +71,7 @@ file. The same applies to any `var x = function` at the top level of a script.
 
 ---
 
-## 6. `shouldExclude()` exists twice
+## 5. `shouldExclude()` exists twice
 
 `build-scripts.js` and `validate-scripts.js` each define it, and they have already diverged once
 on purpose (the validator now takes `{ includeStaging: true }` so `_TESTS/` specs are still
@@ -93,7 +80,7 @@ intentional, so this is low priority.
 
 ---
 
-## 7. Preview has no in-panel Apply button
+## 6. Preview has no in-panel Apply button
 
 **What.** Applying a previewed plan means unticking **Preview only** and running again. Plan 11
 left open whether an in-panel Apply button is worth the plumbing.
@@ -108,7 +95,7 @@ warning fires in ordinary use.
 
 ---
 
-## 8. Golden snapshots for the in-Figma specs
+## 7. Golden snapshots for the in-Figma specs
 
 Plan 12 deferred rather than rejected this: after a spec runs, serialise the scratch page tree
 (`type`, `name`, layout, `boundVariables`) and diff against a committed file. Cheap now the
@@ -123,7 +110,7 @@ Linux build, so a self-hosted Mac, and it breaks on Figma updates).
 
 ---
 
-## 9. `colors.js` has never been verified against a real file
+## 8. `colors.js` has never been verified against a real file
 
 Graduated rather than archived during plan 05's triage, but never run. Everything else under
 `scripts/` has been exercised at least once. Now that `npm run figma:run -- colors` exists, this
