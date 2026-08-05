@@ -36,21 +36,32 @@ in tests.
 
 ---
 
-## 2. `npm run validate` does not catch every bad import
+## 2. `validate` carries a hardcoded exemption for `help-documentation.js`
 
-**What.** Plan 06 states that "an `@import` names a script or function that does not exist" is an
-error that fails the build. It is not always caught: `help-documentation.js` imports from
-`"My Custom Script"` (does not exist) and names `getCollection` / `setVariableValue` (not in
-`@Variables`), and `validate` reports **0 errors**.
+**What.** `validateImports()` in `validate-scripts.js` skips that one file outright:
 
-**How it was found.** Investigating item 1 — the resolver reported `Import failed: My Custom
-Script not found` at run time while the validator was silent.
+```js
+// Skip validation for help-documentation.js (contains example imports)
+if (script.filename === 'help-documentation.js' || script.name.includes('help & documentation')) return;
+```
 
-**Why it was left.** Item 1 is its cause or close to it, and the two should be fixed together.
+So the validator is **not** broken — it has a targeted workaround that exists only because of
+item 1. Without the exemption it would correctly reject
+`@import { myFunction } from "My Custom Script"`, since no such script exists.
 
-**Fix.** Work out which branch of `validateImports()` skips these — likely the library-only
-`libraryScripts` filter, which means imports from *scripts* (as opposed to libraries) are not
-checked at all. Note that importing from a script is legitimate and used by `scripts/_TESTS/`.
+**Why it matters.** The exemption is the only reason a HELP script can document the import syntax
+at all, and it silences *every* import check for that file, including real mistakes. It is also a
+per-filename special case, so a second HELP script documenting imports would fail the build.
+
+**Fix.** Fixing item 1 makes this exemption unnecessary — delete it in the same commit. That is
+the tell that the two belong together, and the order matters: fix the resolver, then remove the
+workaround, then confirm `validate` still passes with the file no longer exempt.
+
+**Note for whoever picks this up.** Two of the four example imports in that file
+(`getCollection`, `setVariableValue` from `@Variables`) do resolve to real functions, so only
+`myFunction from "My Custom Script"` actually fails today. An earlier version of this document
+claimed the validator had a general blind spot to bad imports. It does not — that was wrong, and
+the exemption above is the whole story.
 
 ---
 
