@@ -20,7 +20,8 @@ a plain statement of the new default.
 ## [Unreleased]
 
 The find/replace scripts were the focus: they now agree on what a pattern means, and they show
-you what they will do before they do it.
+you what they will do before they do it. The Design System Foundations scripts also stopped
+deleting variable modes they did not recognise.
 
 ### Changed
 
@@ -49,9 +50,18 @@ you what they will do before they do it.
 - Scripts that gained capability they did not have: `replace-styles` and `replace-variables` now
   support the `$&` / `$1` replacement tokens; `select-by-styles-variables` and
   `replace-style-variable-bindings` now support `*` wildcards.
+- Figma's default `Mode 1` on a newly created collection is now renamed to your first viewport
+  rather than deleted and replaced, which uses one fewer mode from your plan's budget.
 
 ### Fixed
 
+- **Running a Design System Foundations script no longer deletes variable modes it does not
+  recognise.** Previously, because all four scripts share one collection and each carried its own
+  list of viewports, running one could remove another's modes — and every value stored in them.
+  Renaming a viewport in one script, or adding a mode by hand, was enough. Modes are now only ever
+  added; anything else in the collection is reported and left alone.
+- **A token value of `0` is now written.** It was silently skipped, so a spacing or radius token
+  could not be changed *to* zero: the old value stayed and nothing was logged.
 - **`searchFor = "Text [Legacy]"` no longer mangles unrelated names.** Regex auto-detection read
   `[Legacy]` as a character class, so `Text Legacy Body` became `Textegacy Body` with no warning
   and no preview. Same class of bug: `Brand (2024)/` also renamed `Brand 2024/Accent`.

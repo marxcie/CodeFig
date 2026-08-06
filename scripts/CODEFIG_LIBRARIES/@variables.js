@@ -9,9 +9,16 @@
 // ## Exported functions
 // | Category | Functions |
 // |----------|-----------|
-// | Collections | getAllCollections, getCollection, getOrCreateCollection, setupModes |
+// | Collections | getAllCollections, getCollection, getOrCreateCollection |
+// | Modes | planModes, setupModes, removeModes |
 // | Variables | getVariable, getCollectionVariables, getVariableValue, setVariableValue, createOrUpdateVariable |
-// | Batch | extractModes, processVariables |
+// | Batch | extractModes, resolveModeValues, processVariables |
+//
+// ## Modes are only ever added
+// `setupModes` adds what is missing and reports anything else the collection has. It never
+// removes a mode, because several scripts share one collection and a mode you do not
+// recognise is someone else's — along with every value stored in it. `removeModes` is the
+// explicit path, for a caller that has shown the user what will go.
 // @DOC_END
 
 // ============================================================================
@@ -457,67 +464,191 @@ async function getOrCreateCollection(name) {
 }
 
 /**
- * Setup modes for a collection
- * Figma creates new collections with a default first mode (e.g. "Mode 1").
- * We replace that with only the desired mode names so we don't end up with
- * Mode 1 + Desktop + Tablet + Mobile (or similar).
+ * Plan the mode changes for a collection, without making any.
  *
- * When the collection has no variables yet, we rebuild mode order to match `modeNames`
- * (Figma otherwise keeps existing mode order and only appends new modes).
+ * Pure — no Figma calls — so the rules are testable in Node (tests/foundation-modes.test.js).
+ *
+ * **Nothing is ever removed.** A mode this script does not recognise belongs to another
+ * script or to the user: the Design System Foundations scripts share one collection and each
+ * carries its own list of viewports, so "not in my list" never meant "safe to delete".
+ * Figma gives no way to tell whether a mode holds anything either — adding a mode copies the
+ * first mode's values, so every variable has an entry for every mode. Removal is therefore
+ * not made smart, it is made explicit: see removeModes.
+ *
+ * state:  { name, modes: [{ modeId, name }], hasVariables }
+ * returns { rename: { modeId, from, to } | null,
+ *           add:    [names],   // not present, wanted
+ *           keep:   [names],   // present and wanted
+ *           extra:  [names],   // present, not wanted — left alone
+ *           reorder: bool }
+ */
+function planModes(state, modeNames) {
+  var wanted = modeNames || [];
+  var modes = (state && state.modes) || [];
+  var hasVariables = !!(state && state.hasVariables);
+  var current = modes.map(function(m) { return m.name; });
+
+  // Figma creates a collection with one default mode ("Mode 1"). Renaming it costs one mode
+  // from the file's budget instead of two, keeps it as the default mode, and cannot delete
+  // anything. Only while the collection is empty — renaming a populated mode would silently
+  // relabel whatever is already stored in it.
+  var rename = null;
+  if (modes.length === 1 && !hasVariables && wanted.length > 0 && wanted.indexOf(current[0]) === -1) {
+    rename = { modeId: modes[0].modeId, from: current[0], to: wanted[0] };
+    current = [wanted[0]];
+  }
+
+  var keep = [];
+  var add = [];
+  wanted.forEach(function(name) {
+    if (current.indexOf(name) !== -1) keep.push(name);
+    else add.push(name);
+  });
+
+  var extra = current.filter(function(name) { return wanted.indexOf(name) === -1; });
+
+  // Order can only be corrected by rebuilding the modes, which is safe only while the
+  // collection holds no variables — there are no values yet to lose.
+  var sameSet = add.length === 0 && extra.length === 0 && current.length === wanted.length;
+  var orderOk = sameSet && wanted.every(function(n, idx) { return current[idx] === n; });
+
+  return {
+    rename: rename,
+    add: add,
+    keep: keep,
+    extra: extra,
+    reorder: sameSet && !orderOk && !hasVariables
+  };
+}
+
+/**
+ * Setup modes for a collection: apply the plan from planModes, and nothing else.
+ *
+ * Adds what is missing, renames Figma's default mode on a fresh collection, and reports
+ * anything else the collection has rather than removing it. Returns the plan plus what was
+ * actually applied — callers ignore it today, but a preview will not.
  */
 function setupModes(collection, modeNames) {
-  console.log('Setting up modes: ' + modeNames.join(', '));
-  var hadVariables = !!(collection.variableIds && collection.variableIds.length > 0);
+  var wanted = modeNames || [];
+  var state = {
+    name: collection.name,
+    modes: collection.modes.map(function(m) { return { modeId: m.modeId, name: m.name }; }),
+    hasVariables: !!(collection.variableIds && collection.variableIds.length > 0)
+  };
+  var plan = planModes(state, wanted);
+  var canRename = typeof collection.renameMode === 'function';
+  var applied = { renamed: false, added: [], reordered: false };
+  var blocked = [];
+  var modeLimit = null;
 
-  // 1. Add any missing modes (so we have at least our desired set before removing defaults)
-  for (var i = 0; i < modeNames.length; i++) {
-    var modeName = modeNames[i];
-    var existingMode = collection.modes.find(function(m) { return m.name === modeName; });
-    if (!existingMode) {
-      collection.addMode(modeName);
+  console.log('Setting up modes: ' + wanted.join(', '));
+
+  var toAdd = plan.add.slice();
+  if (plan.rename && canRename) {
+    collection.renameMode(plan.rename.modeId, plan.rename.to);
+    applied.renamed = true;
+    console.log('Renamed default mode "' + plan.rename.from + '" to "' + plan.rename.to + '"');
+  } else if (plan.rename) {
+    // No renameMode on this API surface: add the mode instead and leave the default as extra.
+    toAdd.unshift(plan.rename.to);
+    plan.extra = plan.extra.concat([plan.rename.from]);
+    plan.rename = null;
+  }
+
+  for (var i = 0; i < toAdd.length; i++) {
+    try {
+      collection.addMode(toAdd[i]);
+      applied.added.push(toAdd[i]);
+    } catch (e) {
+      // addMode throws when the file's per-collection mode budget is spent, and the number
+      // is not discoverable up front — so report the count at the point of failure rather
+      // than a hardcoded table, and stop instead of crashing the run.
+      modeLimit = collection.modes.length;
+      blocked = toAdd.slice(i);
+      console.error(
+        'Mode limit reached for collection "' + collection.name + '": Figma allowed ' +
+        modeLimit + ' modes on this plan. Modes not created: ' + blocked.join(', ')
+      );
+      break;
     }
   }
 
-  // 2. Remove any mode not in our list (e.g. default "Mode 1" from createVariableCollection)
-  for (var j = collection.modes.length - 1; j >= 0; j--) {
-    var mode = collection.modes[j];
-    if (modeNames.indexOf(mode.name) === -1) {
-      collection.removeMode(mode.modeId);
+  if (plan.reorder && blocked.length === 0 && canRename) {
+    // Safe only because the plan requires the same set of modes and no variables: the values
+    // this rebuild would drop do not exist yet.
+    while (collection.modes.length > 1) {
+      collection.removeMode(collection.modes[collection.modes.length - 1].modeId);
     }
+    collection.renameMode(collection.modes[0].modeId, wanted[0]);
+    for (var r = 1; r < wanted.length; r++) {
+      collection.addMode(wanted[r]);
+    }
+    applied.reordered = true;
+    console.log('Modes reordered to match requested order (collection had no variables yet).');
+  } else if (!plan.reorder && !plan.rename && plan.add.length === 0 && plan.extra.length === 0 &&
+             wanted.length === state.modes.length &&
+             !wanted.every(function(n, idx) { return state.modes[idx].name === n; })) {
+    console.warn('Variable collection "' + collection.name + '": modes match your config but order differs. Figma cannot reorder modes when the collection already has variables. Delete this collection in the Variables panel and re-run the script to apply config order.');
   }
 
-  // 3. Align order with modeNames when the collection is still empty (no variables)
-  var curNames = collection.modes.map(function(m) {
-    return m.name;
-  });
-  var orderOk = modeNames.length === curNames.length && modeNames.every(function(n, idx) {
-    return curNames[idx] === n;
-  });
-  if (!orderOk && modeNames.length > 0) {
-    var sameMultiset = modeNames.length === curNames.length &&
-      modeNames.every(function(n) {
-        return curNames.indexOf(n) !== -1;
-      }) &&
-      curNames.every(function(n) {
-        return modeNames.indexOf(n) !== -1;
-      });
-    if (sameMultiset && !hadVariables && typeof collection.renameMode === 'function') {
-      while (collection.modes.length > 1) {
-        collection.removeMode(collection.modes[collection.modes.length - 1].modeId);
-      }
-      collection.renameMode(collection.modes[0].modeId, modeNames[0]);
-      for (var r = 1; r < modeNames.length; r++) {
-        collection.addMode(modeNames[r]);
-      }
-      console.log('Modes reordered to match requested order (collection had no variables yet).');
-    } else if (sameMultiset && hadVariables) {
-      console.warn('Variable collection "' + collection.name + '": modes match your config but order differs. Figma cannot reorder modes when the collection already has variables. Delete this collection in the Variables panel and re-run the script to apply config order.');
-    }
+  if (plan.extra.length > 0) {
+    console.log(
+      'Collection "' + collection.name + '" also has modes: ' + plan.extra.join(', ') +
+      '. Left untouched — this script did not create them.'
+    );
   }
 
   console.log('Modes setup complete: ' + collection.modes.map(function(m) {
     return m.name;
   }).join(', '));
+
+  return {
+    rename: plan.rename,
+    add: plan.add,
+    keep: plan.keep,
+    extra: plan.extra,
+    reorder: plan.reorder,
+    applied: applied,
+    blocked: blocked,
+    modeLimit: modeLimit
+  };
+}
+
+/**
+ * Remove modes from a collection, deliberately.
+ *
+ * The explicit counterpart to setupModes, which never removes anything. Nothing calls this
+ * yet: it exists so the capability is not lost, for a UI that previews the removal first.
+ * A mode's values go with it, and there is no way to check whether a mode is in use.
+ *
+ * Returns { removed: [names], skipped: [{ name, reason }] }.
+ */
+function removeModes(collection, modeNames) {
+  var result = { removed: [], skipped: [] };
+  var wanted = modeNames || [];
+
+  for (var i = 0; i < wanted.length; i++) {
+    var name = wanted[i];
+    var mode = collection.modes.find(function(m) { return m.name === name; });
+
+    if (!mode) {
+      result.skipped.push({ name: name, reason: 'not found in collection "' + collection.name + '"' });
+      continue;
+    }
+    if (collection.modes.length <= 1) {
+      result.skipped.push({ name: name, reason: 'the last mode in a collection cannot be removed' });
+      continue;
+    }
+    try {
+      collection.removeMode(mode.modeId);
+      result.removed.push(name);
+      console.log('Removed mode "' + name + '" from collection "' + collection.name + '"');
+    } catch (e) {
+      result.skipped.push({ name: name, reason: (e && e.message) || String(e) });
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -645,6 +776,34 @@ function extractModes(config) {
 }
 
 /**
+ * The values a variable should carry, one entry per requested mode.
+ *
+ * `values[mode]` may be a literal or a `function(configValues)`; a function that throws is
+ * rethrown so processVariables can count the variable as skipped.
+ *
+ * Presence is tested with hasOwnProperty, not truthiness: `0`, `""` and `false` are values.
+ * Dropping them here meant "set this token to zero" silently did nothing — createOrUpdateVariable
+ * guards on `!== undefined`, so a value that never arrives is a value that is never written.
+ */
+function resolveModeValues(varConfig, modes, configValues) {
+  var values = {};
+  if (!varConfig || !varConfig.values) return values;
+
+  (modes || []).forEach(function(mode) {
+    if (!Object.prototype.hasOwnProperty.call(varConfig.values, mode)) return;
+    var value = varConfig.values[mode];
+    try {
+      values[mode] = (typeof value === 'function') ? value(configValues) : value;
+    } catch (e) {
+      console.error('Error calculating value for mode ' + mode + ':', e);
+      throw e;
+    }
+  });
+
+  return values;
+}
+
+/**
  * Process multiple variables
  */
 async function processVariables(collection, variables, configValues, modes) {
@@ -661,27 +820,13 @@ async function processVariables(collection, variables, configValues, modes) {
       
       var calculatedConfig = {
         type: varConfig.type,
-        values: {}
+        values: resolveModeValues(varConfig, modes, configValues)
       };
       if (varConfig.scopes && Array.isArray(varConfig.scopes)) {
         calculatedConfig.scopes = varConfig.scopes;
       }
 
-      modes.forEach(function(mode) {
-        if (varConfig.values && varConfig.values[mode]) {
-          try {
-            if (typeof varConfig.values[mode] === 'function') {
-              calculatedConfig.values[mode] = varConfig.values[mode](configValues);
-            } else {
-              calculatedConfig.values[mode] = varConfig.values[mode];
-            }
-          } catch (e) {
-            console.error('Error calculating value for mode ' + mode + ':', e);
-            throw e;
-          }
-        }
-      });
-      
+
       var result = await createOrUpdateVariable(collection, varName, calculatedConfig, modes);
       if (result === 'skipped') {
         stats.skipped++;
