@@ -507,34 +507,40 @@
    * Fuzzy-match an import target against the script list, best match first:
    * exact display name, filename, @-prefixed variants, " / "-suffix (case sensitive
    * then insensitive), and finally a bare substring match.
+   *
+   * Each rule is tried across **every** script before the next rule is tried. That ordering is
+   * the whole point: this used to be one `find` over the OR of all the rules, so the winner was
+   * whichever script the build happened to read first (`readdirSync`, unsorted) — and
+   * `"@Foundation"` is a substring of `"@Foundation overview"`. An import resolving to the
+   * wrong library is a `ReferenceError` at run time, or a build error if you are lucky.
    */
   function findScript(scripts, scriptName) {
-    var found = scripts.find(function (script) {
-      // Exact match (highest priority)
-      if (script.name === scriptName) return true;
+    var lower = String(scriptName).toLowerCase();
+    var isAtName = scriptName.charAt(0) === '@';
 
-      // Filename match (high priority)
-      if (script.filename && basenameWithoutExtension(script.filename) === scriptName) return true;
+    var rules = [
+      // Exact display name.
+      function (script) { return script.name === scriptName; },
+      // Filename, extension-agnostic.
+      function (script) { return !!script.filename && basenameWithoutExtension(script.filename) === scriptName; },
+      // "@Variables" matching "Utility Scripts / @Variables".
+      function (script) { return script.name.endsWith(' / ' + scriptName); },
+      // "@Variables" matching a file called variables.js.
+      function (script) {
+        return isAtName && !!script.filename &&
+          basenameWithoutExtension(script.filename) === scriptName.replace('@', '');
+      },
+      // Case-insensitive end-of-name.
+      function (script) { return script.name.toLowerCase().endsWith(' / ' + lower); },
+      // Substring, the loosest thing we accept.
+      function (script) { return script.name.indexOf(scriptName) !== -1; }
+    ];
 
-      // @-prefixed names (e.g. "@Variables" matches "Utility Scripts / @Variables")
-      if (scriptName.charAt(0) === '@') {
-        if (script.name.endsWith(' / ' + scriptName)) return true;
-        if (script.name.indexOf(scriptName) !== -1) return true;
-        if (script.filename && basenameWithoutExtension(script.filename) === scriptName.replace('@', '')) return true;
-      }
-
-      // End-of-name match (e.g. "Replace Styles" matches "Utility Scripts / Replace Styles")
-      if (script.name.endsWith(' / ' + scriptName)) return true;
-
-      // Case insensitive end-of-name match
-      if (script.name.toLowerCase().endsWith(' / ' + scriptName.toLowerCase())) return true;
-
-      // Partial match (lowest priority)
-      if (script.name.indexOf(scriptName) !== -1) return true;
-
-      return false;
-    });
-    return found || null;
+    for (var i = 0; i < rules.length; i++) {
+      var found = scripts.find(rules[i]);
+      if (found) return found;
+    }
+    return null;
   }
 
   /** Looser lookup used only to expand `@import * from "X"` into a name list. */

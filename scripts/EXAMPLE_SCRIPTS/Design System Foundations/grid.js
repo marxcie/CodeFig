@@ -26,15 +26,11 @@
 @import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup } from "@Foundation"
 
 // ========================================
 // GRID SYSTEM CONFIGURATION
 // ========================================
-
-// Helper: optional folder prefix (no leading slash when empty — Figma rejects names like "/columns")
-function variableNamePrefix(group) {
-  return group ? group + '/' : '';
-}
 
 // Build keyed viewport map from modes[] (insertion order preserved for Object.keys)
 function gridModesToInnerConfig(modes) {
@@ -65,26 +61,6 @@ function resolveGridInnerConfig(config) {
   return {};
 }
 
-function resolveCollectionName(config) {
-  if (config.collectionName != null && config.collectionName !== '') {
-    return config.collectionName;
-  }
-  if (config.structure && config.structure.variableCollection != null) {
-    return config.structure.variableCollection;
-  }
-  return 'Responsive System';
-}
-
-function resolveGroup(config) {
-  if (config.group !== undefined && config.group !== null) {
-    return config.group;
-  }
-  if (config.structure && config.structure.variableGroup !== undefined) {
-    return config.structure.variableGroup;
-  }
-  return '';
-}
-
 function resolveExtensionColumns(config) {
   if (!config || typeof config.extensionColumns !== 'number' || config.extensionColumns <= 0) {
     return 0;
@@ -99,11 +75,6 @@ function getViewportConfigKeys(innerConfig) {
     var vc = innerConfig[k];
     return !!(vc && typeof vc === 'object' && typeof vc.containerWidth === 'number' && typeof vc.columns === 'number');
   });
-}
-
-function modeLabelFromViewportKey(key) {
-  if (!key || typeof key !== 'string') return 'Default';
-  return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 // Pixel width for col-1..col-N: spans up to N columns, or full content width when N exceeds this viewport's column count
@@ -214,7 +185,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
       var values = {};
       for (var vi = 0; vi < viewportKeys.length; vi++) {
         (function(vk) {
-          var modeName = modeLabelFromViewportKey(vk);
+          var modeName = viewportLabel(vk);
           values[modeName] = function(config) {
             return valueFn(config[vk]);
           };
@@ -252,7 +223,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
         var colValues = {};
         for (var vi = 0; vi < viewportKeys.length; vi++) {
           (function(vk) {
-            var modeName = modeLabelFromViewportKey(vk);
+            var modeName = viewportLabel(vk);
             colValues[modeName] = function(configCtx) {
               if (isExtensionCol) {
                 return calculateExtensionColumnVariable(c, configCtx[vk]);
@@ -280,7 +251,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 async function createOrUpdateCollection(config) {
   var collectionName = resolveCollectionName(config);
   var group = resolveGroup(config);
-  var prefix = variableNamePrefix(group);
+  var prefix = namePrefix(group);
   var innerConfig = resolveGridInnerConfig(config);
 
   // Resolve variables (may be a function of config for dynamic column count; pass full config for options like distributeToMaxColumns)
@@ -292,7 +263,7 @@ async function createOrUpdateCollection(config) {
   var collection = await getOrCreateCollection(collectionName);
   
   // Mode order follows modes[] array or legacy config key order
-  var modes = getViewportConfigKeys(innerConfig).map(modeLabelFromViewportKey);
+  var modes = getViewportConfigKeys(innerConfig).map(function(k) { return viewportLabel(k); });
   if (modes.length === 0) {
     modes = extractModes({ variables: variables });
   }
@@ -322,7 +293,7 @@ async function createOrUpdateCollection(config) {
 // One layout grid style: COLUMNS, left (MIN); count, width (col-1), gutter, offset (padding) bound to variables
 async function createGridStyles(collection, config) {
   var group = resolveGroup(config);
-  var prefix = variableNamePrefix(group);
+  var prefix = namePrefix(group);
   var styleName = "Grid";
   var styleStats = { created: 0, updated: 0 };
 

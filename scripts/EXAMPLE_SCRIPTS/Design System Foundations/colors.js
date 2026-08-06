@@ -15,16 +15,13 @@
 
 // Import functions from libraries
 @import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
+@import { namePrefix } from "@Foundation"
 
 // ========================================
 // COLOR SYSTEM CONFIGURATION
 // ========================================
 
 // Helper: variable name prefix (no leading slash when group is empty — Figma rejects names like "/primary/50")
-function variableNamePrefix(group) {
-  return group ? group + '/' : '';
-}
-
 // Use existing config if already defined, otherwise use default
 var colorConfig = typeof colorConfig !== 'undefined' ? colorConfig : {
   // @CONFIG_START
@@ -182,7 +179,7 @@ var colorConfig = typeof colorConfig !== 'undefined' ? colorConfig : {
 async function createOrUpdateCollection(config) {
   var collectionName = (config.structure && config.structure.variableCollection != null) ? config.structure.variableCollection : config.collectionName;
   var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
-  var prefix = variableNamePrefix(group);
+  var prefix = namePrefix(group);
   
   console.log('=== COLOR SYSTEM MANAGER ===');
   console.log('Processing collection: ' + collectionName + (group ? ' (group: ' + group + ')' : ' (no group)'));

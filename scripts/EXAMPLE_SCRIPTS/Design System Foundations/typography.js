@@ -30,6 +30,7 @@
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getCollectionVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup } from "@Foundation"
 
 // ========================================
 // CONFIG HELPERS (collection, modes, fontSizes)
@@ -143,34 +144,6 @@ function validateTypographyScalingTypeConfig(config) {
 }
 
 // Resolve collection name from wrapper config or raw data object.
-function resolveCollectionName(config) {
-  if (config.collectionName != null && config.collectionName !== '') {
-    return config.collectionName;
-  }
-  var data = config.config || config;
-  if (data.collectionName != null && data.collectionName !== '') {
-    return data.collectionName;
-  }
-  if (data.structure && data.structure.variableCollection != null) {
-    return data.structure.variableCollection;
-  }
-  return 'Responsive System';
-}
-
-function resolveGroup(config) {
-  if (config.group !== undefined && config.group !== null) {
-    return config.group;
-  }
-  var data = config.config || config;
-  if (data.group !== undefined && data.group !== null) {
-    return data.group;
-  }
-  if (data.structure && data.structure.variableGroup !== undefined) {
-    return data.structure.variableGroup;
-  }
-  return '';
-}
-
 // ========================================
 // ADVANCED TYPOGRAPHY SYSTEM CONFIGURATION
 // ========================================
@@ -479,19 +452,11 @@ function calculateFluidLetterSpacing(scaleIndex, totalSteps, viewport, config) {
 }
 
 // Helper: variable name prefix (no leading slash or empty path — Figma rejects bad path segments)
-function variableNamePrefix(group) {
-  if (!group || typeof group !== 'string') return '';
-  var trimmed = String(group);
-  if (trimmed.charAt(0) === '/') trimmed = trimmed.slice(1);
-  if (trimmed.charAt(trimmed.length - 1) === '/') trimmed = trimmed.slice(0, -1);
-  return trimmed ? trimmed + '/' : '';
-}
-
 // Round value to grid (8, 4, or 2 pt). Returns value unchanged if gridSize is falsy or <= 0.
 // Generate variables programmatically
 function generateTypographyVariables(config) {
   var variables = {};
-  var prefix = variableNamePrefix(resolveGroup({ config: config }));
+  var prefix = namePrefix(resolveGroup({ config: config }));
   
   var viewportNames = Object.keys(config.fontSizes);
   var baseIndex = config.fontScale.indexOf(config.fontSizes[viewportNames[0]].baseFont.level);
@@ -509,7 +474,7 @@ function generateTypographyVariables(config) {
     var letterSpacingValues = {};
     
     viewportNames.forEach(function(viewport) {
-      var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1); // Capitalize first letter
+      var viewportKey = viewportLabel(viewport);
       var minSize = config.fontSizes[viewport].minFont.size;
       var maxSize = config.fontSizes[viewport].maxFont.size;
       var scaleArr = fontScalesByViewport[viewport];
@@ -556,7 +521,7 @@ function generateTypographyVariables(config) {
     // Create values object with same value for all viewports
     var weightValues = {};
     viewportNames.forEach(function(viewport) {
-      var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
+      var viewportKey = viewportLabel(viewport);
       weightValues[viewportKey] = weightValue;
     });
     
@@ -583,7 +548,7 @@ function generateTypographyVariables(config) {
   // Font family - store as string with same value for all modes
   var fontFamilyValues = {};
   viewportNames.forEach(function(viewport) {
-    var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
+    var viewportKey = viewportLabel(viewport);
     fontFamilyValues[viewportKey] = config.fontFamily;
   });
   
@@ -634,7 +599,7 @@ async function logConflictingTypographyWeightVariables(collection, config, colle
   var data = config.config || config;
   if (!data || !data.fontWeights || typeof data.fontWeights !== 'object') return;
 
-  var prefix = variableNamePrefix(resolveGroup(config));
+  var prefix = namePrefix(resolveGroup(config));
   var variables = collectionVariables || await getCollectionVariables(collection);
   console.log('Checking typography weight variables for conflicts...');
 
@@ -692,7 +657,7 @@ async function createOrUpdateCollection(config) {
   var collection = await getOrCreateCollection(collectionName);
   
   var modes = Object.keys(data.fontSizes || {}).map(function(k) {
-    return k.charAt(0).toUpperCase() + k.slice(1);
+    return viewportLabel(k);
   });
   if (modes.length === 0) {
     modes = extractModes({ variables: config.variables });
@@ -758,18 +723,18 @@ function createOrUpdateTextStyles(config, collection) {
           stats.created++;
         }
         
-        var namePrefix = variableNamePrefix(resolveGroup(config));
-        var fontSizeVar = variableList.find(function(v) { return v && v.name === namePrefix + scaleName + '/font-size'; });
+        var prefix = namePrefix(resolveGroup(config));
+        var fontSizeVar = variableList.find(function(v) { return v && v.name === prefix + scaleName + '/font-size'; });
         
-        var lineHeightVar = variableList.find(function(v) { return v && v.name === namePrefix + scaleName + '/line-height'; });
+        var lineHeightVar = variableList.find(function(v) { return v && v.name === prefix + scaleName + '/line-height'; });
         
-        var letterSpacingVar = variableList.find(function(v) { return v && v.name === namePrefix + scaleName + '/letter-spacing'; });
+        var letterSpacingVar = variableList.find(function(v) { return v && v.name === prefix + scaleName + '/letter-spacing'; });
         
-        var fontWeightVar = variableList.find(function(v) { return v && v.name === namePrefix + 'font-weight/' + weightName; });
+        var fontWeightVar = variableList.find(function(v) { return v && v.name === prefix + 'font-weight/' + weightName; });
           
-        var fontStyleVar = variableList.find(function(v) { return v && v.name === namePrefix + 'font-style/' + weightName; });
+        var fontStyleVar = variableList.find(function(v) { return v && v.name === prefix + 'font-style/' + weightName; });
         
-        var fontFamilyVar = variableList.find(function(v) { return v && v.name === namePrefix + 'font-family/primary'; });
+        var fontFamilyVar = variableList.find(function(v) { return v && v.name === prefix + 'font-family/primary'; });
         
         // Apply variables to the text style
         if (fontSizeVar) {
@@ -887,7 +852,7 @@ async function createTypographySystem(customConfig) {
       var totalSteps = customConfig.fontScale.length;
       
       viewportNames.forEach(function(viewport) {
-        var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
+        var viewportKey = viewportLabel(viewport);
         
         // Calculate font size (simplified version)
         var baseIndex = customConfig.fontScale.indexOf(customConfig.fontSizes[viewport].baseFont.level);
@@ -902,7 +867,7 @@ async function createTypographySystem(customConfig) {
         }
         
         // Store variables in the correct format (no leading slash when group empty)
-        var variableName = variableNamePrefix(resolveGroup({ config: customConfig })) + scaleName + '/font-size';
+        var variableName = namePrefix(resolveGroup({ config: customConfig })) + scaleName + '/font-size';
         
         if (!typographyVariables[variableName]) {
           typographyVariables[variableName] = {

@@ -52,6 +52,9 @@ deleting variable modes they did not recognise.
   `replace-style-variable-bindings` now support `*` wildcards.
 - Figma's default `Mode 1` on a newly created collection is now renamed to your first viewport
   rather than deleted and replaced, which uses one fewer mode from your plan's budget.
+- Grid now honours a nested `{ config: { collectionName, group } }` config the way Spacing,
+  Corner radius and Typography always have. Previously it read only the top level, so a pasted
+  config quietly wrote to `Responsive System`.
 
 ### Fixed
 
@@ -90,6 +93,16 @@ deleting variable modes they did not recognise.
 
 ### Developer
 
+- **New `@Foundation` library.** One viewport registry per file, one manifest per generated token
+  set, and one copy of the helpers that had been written five times across the Design System
+  Foundations scripts. Two collections can hold two sets — "Spacing A" and "Spacing B" — while
+  sharing the file's viewports. Reading it back reconciles the registry against the collections'
+  modes and the `viewport-width` variable, and where they disagree the file wins and the
+  disagreement is reported. Nothing generates tokens through it yet; the four scripts adopt it as
+  they are rewritten.
+- `@import` now prefers an exact script-name match over a substring one. Every rule used to be
+  tried at once and the winner was whichever script the build read first, so
+  `@import … from "@X"` could resolve to `@X something else`.
 - **Run scripts in Figma from a terminal.** `npm run figma:run -- <script>` hands a job to the
   open plugin and exits on its result; `npm run test:figma` runs the in-Figma specs in
   `scripts/_TESTS/`. Both need `npm run dev` and the plugin open — Figma has no headless mode.

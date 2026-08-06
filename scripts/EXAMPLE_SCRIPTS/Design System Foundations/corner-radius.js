@@ -25,6 +25,7 @@
 
 @import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateCornerRadiusOverview } from "@Foundation overview"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 
 // ========================================
@@ -174,34 +175,6 @@ function ensureCompatRadiusConfig(config) {
       config.scaling.roundTo = rt;
     }
   }
-}
-
-function resolveCollectionName(config) {
-  if (config.collectionName != null && config.collectionName !== '') {
-    return config.collectionName;
-  }
-  var data = config.config || config;
-  if (data.collectionName != null && data.collectionName !== '') {
-    return data.collectionName;
-  }
-  if (data.structure && data.structure.variableCollection != null) {
-    return data.structure.variableCollection;
-  }
-  return 'Responsive System';
-}
-
-function resolveGroup(config) {
-  if (config.group !== undefined && config.group !== null) {
-    return config.group;
-  }
-  var data = config.config || config;
-  if (data.group !== undefined && data.group !== null) {
-    return data.group;
-  }
-  if (data.structure && data.structure.variableGroup !== undefined) {
-    return data.structure.variableGroup;
-  }
-  return '';
 }
 
 /** Known `scaling.type` values for corner radius (case-insensitive, except piecewise names). */
@@ -355,15 +328,9 @@ function calculateFluidRadius(scaleIndex, totalSteps, viewport, config) {
   return Math.max(opts.min, Math.min(opts.max, v));
 }
 
-function variableNamePrefix(group) {
-  if (!group || typeof group !== 'string') return '';
-  var trimmed = group.replace(/^\//, '').replace(/\/$/, '');
-  return trimmed ? trimmed + '/' : '';
-}
-
 function generateCornerRadiusVariables(config) {
   var variables = {};
-  var prefix = variableNamePrefix(resolveGroup({ config: config }));
+  var prefix = namePrefix(resolveGroup({ config: config }));
   var viewportNames = Object.keys(config.radiusSizes || {});
   if (viewportNames.length === 0 || !Array.isArray(config.radii) || config.radii.length === 0) {
     return variables;
@@ -371,7 +338,7 @@ function generateCornerRadiusVariables(config) {
 
   var lastRadiusPerViewport = {};
   viewportNames.forEach(function(viewport) {
-    var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
+    var viewportKey = viewportLabel(viewport);
     lastRadiusPerViewport[viewportKey] = -1;
   });
 
@@ -381,7 +348,7 @@ function generateCornerRadiusVariables(config) {
     var values = {};
 
     viewportNames.forEach(function(viewport) {
-      var viewportKey = viewport.charAt(0).toUpperCase() + viewport.slice(1);
+      var viewportKey = viewportLabel(viewport);
       var minSize = config.radiusSizes[viewport].min;
       var maxSize = config.radiusSizes[viewport].max;
       var radiusVal = calculateFluidRadius(index, config.radii.length, viewport, config);
@@ -447,7 +414,7 @@ async function createOrUpdateCollection(config) {
   var collection = await getOrCreateCollection(collectionName);
 
   var modes = Object.keys(data.radiusSizes || {}).map(function(k) {
-    return k.charAt(0).toUpperCase() + k.slice(1);
+    return viewportLabel(k);
   });
   if (modes.length === 0) {
     modes = extractModes({ variables: config.variables });

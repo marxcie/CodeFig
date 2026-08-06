@@ -501,6 +501,25 @@ test('findScript matches display name, " / " suffix, filename and @-prefix', () 
   assert.strictEqual(resolver.findScript(scripts, 'Nothing Like This'), null);
 });
 
+test('an exact name beats a substring, whichever order the scripts arrive in', () => {
+  // "@Foundation" is a substring of "@Foundation overview", and findScript used to return
+  // the first script matching *any* rule — so resolution depended on the order
+  // build-scripts.js happened to read the directory in (readdirSync, no sort). Both orders
+  // must give the exact match, or an import silently resolves to the wrong library.
+  const foundation = script('CodeFig Libraries / @Foundation', 'function readFoundation() {}', '@foundation.js');
+  const overview = script('CodeFig Libraries / @Foundation overview', 'function foundationCreateGridOverview() {}', '@foundation-overview.js');
+
+  for (const scripts of [[overview, foundation], [foundation, overview]]) {
+    assert.strictEqual(resolver.findScript(scripts, '@Foundation').filename, '@foundation.js');
+    assert.strictEqual(resolver.findScript(scripts, '@Foundation overview').filename, '@foundation-overview.js');
+  }
+});
+
+test('the substring rule still resolves a name that matches nothing exactly', () => {
+  const scripts = [script('CodeFig Libraries / @Foundation overview', 'function a() {}', '@foundation-overview.js')];
+  assert.strictEqual(resolver.findScript(scripts, '@Foundation').filename, '@foundation-overview.js');
+});
+
 test('filename matching ignores the extension, so pre-rename .ts entries still resolve', () => {
   // Shipped scripts became .js in Aug 2026. Matching on the basename keeps scripts a
   // user exported from an older build — and any future extension — resolvable.

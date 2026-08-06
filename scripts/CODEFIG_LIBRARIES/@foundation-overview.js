@@ -243,19 +243,6 @@ function foundationFinalizeOverview(wrapper) {
   foundationReorderSectionChildren(wrapper);
 }
 
-function foundationVariableNamePrefix(group) {
-  if (!group || typeof group !== "string") return "";
-  var trimmed = String(group);
-  if (trimmed.charAt(0) === "/") trimmed = trimmed.slice(1);
-  if (trimmed.charAt(trimmed.length - 1) === "/") trimmed = trimmed.slice(0, -1);
-  return trimmed ? trimmed + "/" : "";
-}
-
-function foundationModeLabelFromKey(key) {
-  if (!key || typeof key !== "string") return "Default";
-  return key.charAt(0).toUpperCase() + key.slice(1);
-}
-
 function foundationResolveCollectionNameFromInnerData(data) {
   if (data && data.collectionName != null && data.collectionName !== "") {
     return data.collectionName;
@@ -326,7 +313,7 @@ function foundationStyleGoesRegularColumn(style) {
 
 async function foundationCreateCornerRadiusOverview(collection, data) {
   var group = data && data.group != null ? data.group : "";
-  var prefix = foundationVariableNamePrefix(group);
+  var prefix = namePrefix(group);
   var radii = (data && data.radii) || [];
   var viewportKeys = Object.keys((data && data.radiusSizes) || {});
   if (radii.length === 0 || viewportKeys.length === 0) {
@@ -395,7 +382,7 @@ async function foundationCreateCornerRadiusOverview(collection, data) {
   var vi;
   for (vi = 0; vi < viewportKeys.length; vi++) {
     var vk = viewportKeys[vi];
-    var modeLabel = foundationModeLabelFromKey(vk);
+    var modeLabel = viewportLabel(vk);
     var mode = collection.modes.find(function (m) {
       return m.name === modeLabel;
     });
@@ -444,7 +431,7 @@ async function foundationCreateCornerRadiusOverview(collection, data) {
 
 async function foundationCreateSpacingOverview(collection, data) {
   var group = data && data.group != null ? data.group : "";
-  var prefix = foundationVariableNamePrefix(group);
+  var prefix = namePrefix(group);
   var spacings = (data && data.spacings) || [];
   var viewportKeys = Object.keys((data && data.spacingSizes) || {});
   if (spacings.length === 0 || viewportKeys.length === 0) {
@@ -512,7 +499,7 @@ async function foundationCreateSpacingOverview(collection, data) {
   var vj;
   for (vj = 0; vj < viewportKeys.length; vj++) {
     var vkSp = viewportKeys[vj];
-    var modeLabelSp = foundationModeLabelFromKey(vkSp);
+    var modeLabelSp = viewportLabel(vkSp);
     var modeSp = collection.modes.find(function (m) {
       return m.name === modeLabelSp;
     });
@@ -740,10 +727,7 @@ async function foundationCreateGridOverview(collection, config, gridStyle) {
   var i;
   for (i = 0; i < viewportKeys.length; i++) {
     var vk = viewportKeys[i];
-    var modeLabel =
-      vk && typeof vk === "string" && vk.length
-        ? vk.charAt(0).toUpperCase() + vk.slice(1)
-        : "Default";
+    var modeLabel = viewportLabel(vk);
     var vc = innerConfig[vk];
 
     var block = figma.createFrame();
