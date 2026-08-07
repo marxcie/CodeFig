@@ -291,3 +291,33 @@ test('a recorded slice carries no derivation a run wrote onto the config', () =>
   const slice = ctx.rampManifestSlice(resolved, spec);
   assert.equal(JSON.stringify(slice).indexOf('spacingSizes'), -1);
 });
+
+// ---------------------------------------------------------------------------
+// Modes a run did not declare
+// ---------------------------------------------------------------------------
+
+test('a run names the modes it left holding copied values', () => {
+  // Figma copies the first mode's values into every mode it creates, so a config that declares
+  // fewer viewports than its collection has leaves numbers behind that nothing chose. Modes are
+  // only ever added, which is right — but saying nothing about it reads as a bug later.
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const radius = ctx.radiusRampSpec();
+
+  assert.equal(
+    ctx.describeUndeclaredModes(radius, ['Mobile'], ['Mobile', 'Desktop']),
+    "Corner radius defines 1 of this collection's 2 modes; Desktop keeps copied values."
+  );
+  assert.equal(
+    ctx.describeUndeclaredModes(radius, ['Mobile'], ['Mobile', 'Tablet', 'Desktop']),
+    "Corner radius defines 1 of this collection's 3 modes; Tablet, Desktop keep copied values."
+  );
+});
+
+test('a run that covers every mode says nothing about it', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spacing = ctx.spacingRampSpec();
+  assert.equal(ctx.describeUndeclaredModes(spacing, ['Mobile', 'Desktop'], ['Mobile', 'Desktop']), null);
+  assert.equal(ctx.describeUndeclaredModes(spacing, [], []), null);
+});

@@ -42,7 +42,7 @@
 // | Specs | spacingRampSpec, radiusRampSpec |
 // | Config | ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, resolveRampRoundTo, validateRampScalingType |
 // | Scale | buildRampScaleOpts, calculateRampValue, generateRampVariables |
-// | Run | runLinearRamp |
+// | Run | runLinearRamp, describeUndeclaredModes |
 // @DOC_END
 
 // ============================================================================
@@ -382,6 +382,27 @@ function generateRampVariables(config, spec) {
 // ============================================================================
 
 /**
+ * What this run left alone, said out loud.
+ *
+ * A config that names fewer viewports than its collection has modes is legitimate — modes are
+ * only ever added (plan 15), and radius may well not care about a breakpoint spacing does. But
+ * Figma copies the first mode's values into every mode it creates, so the undeclared ones end up
+ * holding numbers this run never chose. Silence there reads as a bug to whoever finds it later.
+ */
+function describeUndeclaredModes(spec, declaredLabels, collectionModeNames) {
+  var declared = declaredLabels || [];
+  var all = collectionModeNames || [];
+  var undeclared = [];
+  for (var i = 0; i < all.length; i++) {
+    if (declared.indexOf(all[i]) === -1) undeclared.push(all[i]);
+  }
+  if (undeclared.length === 0) return null;
+  return spec.label + ' defines ' + declared.length + " of this collection's " + all.length +
+    ' modes; ' + undeclared.join(', ') + (undeclared.length === 1 ? ' keeps' : ' keep') +
+    ' copied values.';
+}
+
+/**
  * The v1 slice to record for this run — the **whole** slice, never hand-picked fields.
  *
  * A partial manifest round-trips faithfully as a partial config, so a field left out here is a
@@ -445,11 +466,18 @@ async function runLinearRamp(config, spec) {
     console.warn('Variables were written. The set could not be recorded: ' + (e && e.message ? e.message : e));
   }
 
+  var undeclared = describeUndeclaredModes(
+    spec,
+    modes,
+    collection.modes.map(function(m) { return m.name; })
+  );
+  if (undeclared) console.log(undeclared);
+
   console.log('=== ' + spec.label.toUpperCase() + ' SUMMARY ===');
   console.log('Collection: ' + collectionName);
   console.log('Variables created: ' + stats.created);
   console.log('Variables updated: ' + stats.updated);
   console.log('Variables skipped: ' + stats.skipped);
 
-  return { collection: collection, stats: stats, manifest: manifest };
+  return { collection: collection, stats: stats, manifest: manifest, undeclaredModes: undeclared };
 }
