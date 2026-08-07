@@ -84,6 +84,16 @@ deleting variable modes they did not recognise.
 
 ### Fixed
 
+- **CodeFig no longer suggests deleting a variable collection, and will not delete a published
+  one.** A variable's id and its published key are created with the variable: delete and recreate
+  it and every layer bound to it loses its binding, while every file subscribing to your library
+  gets a "missing variable" it cannot relink. Renaming is safe. Two places got this wrong. When a
+  collection's modes matched your config but sat in a different order, the run told you to delete
+  the collection and start again — it now recommends living with the order, says what deleting
+  would cost, and says when your collection is published so the cost would land in other files
+  too. And `merge-variable-collections` removed the source collection unconditionally; it now
+  refuses when that collection is published, and no longer falls back to deleting its variables
+  one by one.
 - **Running a Design System Foundations script no longer deletes variable modes it does not
   recognise.** Previously, because all four scripts share one collection and each carried its own
   list of viewports, running one could remove another's modes — and every value stored in them.

@@ -118,6 +118,41 @@ is a five-minute job in a `codefig-test` file.
 
 ---
 
+## 9. `merge-variable-collections` treats "unpublished" as "unused"
+
+**What.** The script copies a source collection's variables into a destination, rebinds this
+document, and then removes the source. Plan 19b's never-delete invariant added a guard: it now
+refuses to remove a collection whose `getPublishStatusAsync()` is anything but `UNPUBLISHED`, and
+tells you to delete it yourself once you know nothing depends on it.
+
+That closes the worst hole — a published collection's variables carry keys that other files
+subscribe to, and recreating them elsewhere leaves those files with missing variables they cannot
+relink. But the refusal's wording still implies the converse, and the converse is not true:
+**unpublished does not mean unused.** An unpublished collection's variables can be bound by nodes
+in this file that the rebind pass missed, aliased by variables in *other* local collections, or
+referenced from a component that lives here and is instanced elsewhere.
+
+**How it was found.** Reading for the never-delete invariant in plan 19b, after the same class of
+mistake turned up in `setupModes`' advice to delete a collection to fix mode order.
+
+**Why it was left.** The guard is a strict improvement and it was cheap. Doing it properly is a
+different job: the script's whole contract is "merge and remove", and making removal safe means
+deciding what happens when it *cannot* safely remove — which is a UX question about a script
+nobody has run against a real published library yet.
+
+**What a proper treatment involves.**
+- Count actual consumers before removing: variables aliasing the source's variables
+  (`VARIABLE_ALIAS` values across every local collection), and bound nodes the rebind pass did not
+  reach. Figma has no reverse index for either, so both are document walks.
+- Make removal **opt-in** rather than the default — `removeSource: false` — so the safe path is the
+  one you get by not thinking about it, and the destructive one is a sentence you had to write.
+- Preview it, the way the find/replace scripts preview: "would remove *Old tokens* — 40 variables,
+  0 aliases, 12 bound nodes rebound". Removal is the one operation in this repo with no undo worth
+  relying on.
+- Say the true thing in the refusal: *not published* is evidence, not proof.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.
