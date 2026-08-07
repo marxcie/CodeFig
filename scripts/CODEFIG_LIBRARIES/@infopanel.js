@@ -180,6 +180,44 @@ function createResult(message, details, severity) {
 }
 
 /**
+ * A result that carries a payload to copy: the panel renders a "Copy to clipboard" button and
+ * the text itself in a selectable block. Use this for anything a user needs to take elsewhere —
+ * a config, an export — rather than printing it into the console and asking them to select it.
+ * @param {string} message - Headline for the entry
+ * @param {string} text - The payload
+ * @param {string} details - Optional line under the headline
+ * @param {string} severity - Severity level (error, warning, info, success)
+ */
+function createCopyResult(message, text, details, severity) {
+  return {
+    message: message,
+    details: details,
+    severity: severity || 'info',
+    copyText: text
+  };
+}
+
+/**
+ * Put text on the system clipboard. The sandbox cannot reach it, so this asks the UI, which
+ * handles COPY_TO_CLIPBOARD. Returns false when the message could not be posted at all — a
+ * successful post is not proof the browser copied.
+ * @param {string} text - The payload
+ * @param {string} notifyMessage - Toast shown on success
+ */
+function requestClipboardCopy(text, notifyMessage) {
+  try {
+    figma.ui.postMessage({
+      type: 'COPY_TO_CLIPBOARD',
+      text: text,
+      notifyMessage: notifyMessage || 'Copied to clipboard'
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
  * Create a result with custom HTML structure
  * @param {string} html - Custom HTML content for the entry
  * @param {string|Array} nodeIds - Node ID(s) for selection (optional)

@@ -26,7 +26,7 @@
 // | modeNames | Optional comma- or line-separated mode names. Empty exports all modes. |
 // @DOC_END
 
-@import { displayResults, createResult } from "@InfoPanel"
+@import { displayResults, createResult, createCopyResult, requestClipboardCopy } from "@InfoPanel"
 @import { finishCodefigRunProgress } from "@Core Library"
 
 // @UI_CONFIG_START
@@ -202,19 +202,6 @@ async function exportCollection(collection, modeFilters, missingModes) {
   return { data: byMode, count: total };
 }
 
-function requestClipboardCopy(text) {
-  try {
-    figma.ui.postMessage({
-      type: "COPY_TO_CLIPBOARD",
-      text: text,
-      notifyMessage: "Variables JSON copied to clipboard",
-    });
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
 async function run() {
   var selectedCollections = parseCollectionNames();
   if (!selectedCollections.length) {
@@ -285,12 +272,7 @@ async function run() {
     title: "Copy simple variables JSON",
     results: [
       createResult("Copied to clipboard", summary, "success"),
-      {
-        message: "Variables JSON",
-        details: "Use the copy button if clipboard access was blocked.",
-        severity: "info",
-        copyText: json,
-      },
+      createCopyResult("Variables JSON", json, "Use the copy button if clipboard access was blocked."),
     ],
     type: "success",
     showFilters: false,

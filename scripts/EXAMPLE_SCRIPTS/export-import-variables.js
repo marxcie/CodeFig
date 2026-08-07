@@ -18,7 +18,7 @@
 // @DOC_END
 
 @import { getOrCreateCollection, getVariable } from "@Variables"
-@import { displayResults, createResult } from "@InfoPanel"
+@import { displayResults, createResult, createCopyResult, requestClipboardCopy } from "@InfoPanel"
 @import { finishCodefigRunProgress } from "@Core Library"
 
 // @UI_CONFIG_START
@@ -146,19 +146,6 @@ async function exportCollection(collection) {
   };
 }
 
-function requestClipboardCopy(text, notifyMessage) {
-  try {
-    figma.ui.postMessage({
-      type: "COPY_TO_CLIPBOARD",
-      text: text,
-      notifyMessage: notifyMessage || "Variables copied to clipboard",
-    });
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
 async function runExport() {
   var collectionNames = parseCollectionNames();
   if (!collectionNames.length) {
@@ -239,12 +226,7 @@ async function runExport() {
       title: "Export/import variables",
       results: [
         createResult("Copied to clipboard", summary, "success"),
-        {
-          message: "Variable export JSON",
-          details: "Paste into Import mode in the target file if needed.",
-          severity: "info",
-          copyText: json,
-        },
+        createCopyResult("Variable export JSON", json, "Paste into Import mode in the target file if needed."),
       ],
       type: "success",
       showFilters: false,

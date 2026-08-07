@@ -32,6 +32,19 @@
 //
 // `npm run validate` fails the build when a runnable script misses one.
 //
+// ## The portable config
+// One v1 shape does three jobs: the blob you paste between files, the `config` slice a manifest
+// records, and what Copy config puts on the clipboard or writes to a text layer.
+// `normaliseConfig` accepts every shape CodeFig has ever taken — the current top level, the
+// legacy `structure.*`, the internal `{collectionName, group, config, variables}` wrapper,
+// `spacingScaling` / `fontScaling`, `figmaStyles`, every `roundTo` spelling — and reports what it
+// translated. `toDomainConfig(v1, domain)` converts back to the shape today's unrewritten scripts
+// read, which is what keeps the two normalisation paths from disagreeing until phases 3-5.
+//
+// **v1 carries declared inputs only.** A run mutates its config in place (`materializeSpacingSizes`
+// and friends), and exporting a derivation freezes it: paste that elsewhere and `steps: 6`
+// regenerates nothing. Derived fields are dropped on the way in and reported.
+//
 // ## Exported functions
 // | Category | Functions |
 // |----------|-----------|
@@ -42,7 +55,14 @@
 // | Reconciliation | reconcileFoundation, describeFoundation |
 // | Figma | readFoundation, writeRegistry, readManifest, writeManifest |
 // | Modes | planFoundationModes, applyFoundationModes |
+// | Config | normaliseConfig, toDomainConfig, toPortableConfig, emptyPortableConfig, configDomainOf |
+// | Config text | serialisePortableConfig, parsePortableConfig, describeConfigTranslations |
+// | Config on canvas | writeConfigToTextLayer, readConfigFromTextLayer, findConfigTextLayers |
 // | Stamps | stampValue, readStampFrom, stampToken, readStamp, findByStamp |
+//
+// `requestClipboardCopy` and `createCopyResult` live in `@InfoPanel`, not here — putting the
+// clipboard plumbing in the results library is what lets a script use it without depending on
+// the foundation.
 // @DOC_END
 
 // ============================================================================
@@ -667,7 +687,9 @@ function writeManifest(collection, set) {
     group: s.group != null ? s.group : existing.group,
     modes: s.modes != null ? s.modes : existing.modes,
     tokens: s.tokens != null ? s.tokens : existing.tokens,
-    config: s.config != null ? s.config : existing.config
+    // Normalised on the way in, so a manifest can never hold a shape the reader would refuse —
+    // and so a run's derived fields (spacingSizes and friends) never reach the file at all.
+    config: normaliseDomainSlice(s.config != null ? s.config : existing.config)
   };
   var text = serialiseManifest(merged);
   if (text.length > foundationEntrySizeLimit()) {
@@ -788,4 +810,856 @@ function findByStamp(candidates, domain, tokenKey, getData, exactName) {
     if (exactName != null && matches[j].name === exactName) return matches[j];
   }
   return matches[0];
+}
+
+// ============================================================================
+// THE PORTABLE v1 CONFIG
+//
+// One shape for three jobs: the blob you paste between files, the `config` slice a manifest
+// records, and what Copy config puts on the clipboard. Declared inputs only — a run mutates a
+// config in place (materializeSpacingSizes and friends), and exporting a derivation freezes it.
+// ============================================================================
+
+function foundationConfigVersion() {
+  return 1;
+}
+
+function foundationConfigKind() {
+  return 'codefig.foundation';
+}
+
+/** An empty but valid v1 config. */
+function emptyPortableConfig() {
+  return {
+    v: foundationConfigVersion(),
+    kind: foundationConfigKind(),
+    updated: new Date().toISOString(),
+    collection: null,
+    group: null,
+    lineGrid: null,
+    viewports: [],
+    domains: {}
+  };
+}
+
+/** Fields a run writes back onto a config. Never exported: they freeze if they are. */
+function foundationDerivedKeys() {
+  return ['spacingSizes', 'radiusSizes', 'fontSizes'];
+}
+
+/** Keys the reader consumes at the top level, whatever the domain. */
+function foundationStructuralKeys() {
+  return [
+    'collectionName', 'group', 'structure', 'config', 'variables', 'modes',
+    'v', 'kind', 'updated', 'collection', 'viewports', 'domains', 'lineGrid', 'sets'
+  ];
+}
+
+/** Keys each domain understands, so anything else can be preserved as `extra`. */
+function foundationDomainKeys(domain) {
+  var common = [
+    'scaling', 'spacingScaling', 'fontScaling', 'roundTo', 'roundUpperValuesTo',
+    'roundLowerValuesTo', 'rangeMode', 'steps', 'defaultBaseLevel', 'generateOverview'
+  ].concat(foundationDerivedKeys());
+  if (domain === 'spacing') return common.concat(['spacings']);
+  if (domain === 'radius') return common.concat(['radii']);
+  if (domain === 'typography') return common.concat(['fontScale', 'fontWeights', 'styles', 'figmaStyles']);
+  if (domain === 'grid') return common.concat(['distributeToMaxColumns', 'extensionColumns']);
+  return common;
+}
+
+/** The array key each domain calls its token list. */
+function foundationTokensKey(domain) {
+  if (domain === 'spacing') return 'spacings';
+  if (domain === 'radius') return 'radii';
+  if (domain === 'typography') return 'fontScale';
+  return null;
+}
+
+/** A viewport payload, as a legacy config spells it: an object with layout or scale fields. */
+function isViewportPayload(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return typeof value.containerWidth === 'number' ||
+    typeof value.min === 'number' ||
+    typeof value.max === 'number' ||
+    !!value.baseFont || !!value.minFont || !!value.maxFont;
+}
+
+/**
+ * Which domain a legacy config describes, from what it carries. Null when it says nothing —
+ * kept and reported rather than guessed at.
+ */
+function configDomainOf(inner) {
+  if (!inner || typeof inner !== 'object') return null;
+  if (inner.spacings !== undefined || inner.spacingScaling !== undefined || inner.spacingSizes !== undefined) return 'spacing';
+  if (inner.radii !== undefined || inner.radiusSizes !== undefined) return 'radius';
+  if (inner.fontScale !== undefined || inner.fontSizes !== undefined || inner.fontWeights !== undefined ||
+      inner.fontScaling !== undefined || inner.figmaStyles !== undefined || inner.styles !== undefined) return 'typography';
+
+  var modes = Array.isArray(inner.modes) ? inner.modes : [];
+  for (var i = 0; i < modes.length; i++) {
+    if (modes[i] && (typeof modes[i].containerWidth === 'number' || typeof modes[i].columns === 'number')) return 'grid';
+  }
+  for (var key in inner) {
+    if (!Object.prototype.hasOwnProperty.call(inner, key)) continue;
+    var v = inner[key];
+    if (v && typeof v === 'object' && typeof v.containerWidth === 'number' && typeof v.columns === 'number') return 'grid';
+  }
+  return null;
+}
+
+/**
+ * The rounding step, with exactly the precedence the scripts end up with.
+ *
+ * Two stages, because the scripts have two. `ensureCompat*` runs first and, when a
+ * `spacingScaling` / `fontScaling` alias is present, copies its `roundTo` — or its
+ * `roundUpperValuesTo` — over the top-level `roundTo`. Only then does `resolveRoundTo` pick
+ * between what is left. An alias therefore *wins*, which is not what the ladder looks like.
+ */
+function foundationResolveRoundTo(inner, alias) {
+  if (!inner || typeof inner !== 'object') return 0;
+  var scaling = alias || inner.scaling || {};
+  if (alias) {
+    if (typeof alias.roundTo === 'number' && alias.roundTo > 0) return alias.roundTo;
+    if (typeof alias.roundUpperValuesTo === 'number' && alias.roundUpperValuesTo > 0) return alias.roundUpperValuesTo;
+  }
+  if (typeof inner.roundTo === 'number' && inner.roundTo > 0) return inner.roundTo;
+  if (typeof scaling.roundTo === 'number' && scaling.roundTo > 0) return scaling.roundTo;
+  if (typeof scaling.roundUpperValuesTo === 'number' && scaling.roundUpperValuesTo > 0) return scaling.roundUpperValuesTo;
+  if (typeof inner.roundUpperValuesTo === 'number' && inner.roundUpperValuesTo > 0) return inner.roundUpperValuesTo;
+  return 0;
+}
+
+function foundationTranslation(from, to, note) {
+  return { from: from, to: to, note: note || '' };
+}
+
+/** Plain deep copy, so nothing the reader returns aliases what it was given. */
+function foundationClone(value) {
+  if (value === undefined) return undefined;
+  return JSON.parse(JSON.stringify(value));
+}
+
+/**
+ * Normalise any config CodeFig has ever accepted into the v1 shape, and say what changed.
+ *
+ * Accepts: the current top-level shape, the legacy `structure.*` shape, the internal
+ * `{collectionName, group, config, variables}` wrapper each script builds, `spacingScaling` /
+ * `fontScaling`, `figmaStyles`, every `roundTo` spelling, `modes[]`, grid's viewport-keyed
+ * objects, and a v1 config (idempotently).
+ *
+ * Never silently lossy: a key it does not recognise is kept under `domains.<d>.extra` and
+ * reported, because losing a field nobody has met yet is worse than not understanding it.
+ *
+ * → { config, translations: [{from, to, note}], warnings: [{code, message}] }
+ */
+function normaliseConfig(raw) {
+  var warnings = [];
+  var translations = [];
+  var out = emptyPortableConfig();
+
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    warnings.push(foundationWarning('config-not-an-object', 'A config must be a JSON object. Nothing was read.'));
+    return { config: out, translations: translations, warnings: warnings };
+  }
+
+  if (raw.v === foundationConfigVersion() && raw.domains && typeof raw.domains === 'object') {
+    return normaliseV1Config(raw);
+  }
+  if (typeof raw.v === 'number' && raw.v !== foundationConfigVersion()) {
+    warnings.push(foundationWarning('config-version', 'This config was written by a newer version of CodeFig (v' + raw.v + ').'));
+    return { config: out, translations: translations, warnings: warnings };
+  }
+
+  // The wrapper each script builds around the user's object is not a user shape, but it is what
+  // you get if you copy the wrong variable out of a script.
+  var inner = raw;
+  if (raw.config && typeof raw.config === 'object' && !Array.isArray(raw.config)) {
+    inner = raw.config;
+    translations.push(foundationTranslation('config.config', '(unwrapped)', 'read the inner config object'));
+  }
+  if (raw.variables !== undefined) {
+    translations.push(foundationTranslation('variables', '(dropped)', 'variables are computed from the config'));
+  }
+
+  // Collection and group, across all three layers.
+  if (raw.collectionName != null && raw.collectionName !== '') {
+    out.collection = raw.collectionName;
+  } else if (inner.collectionName != null && inner.collectionName !== '') {
+    out.collection = inner.collectionName;
+  } else if (inner.structure && inner.structure.variableCollection != null && inner.structure.variableCollection !== '') {
+    out.collection = inner.structure.variableCollection;
+    translations.push(foundationTranslation('structure.variableCollection', 'collection'));
+  } else if (raw.structure && raw.structure.variableCollection != null && raw.structure.variableCollection !== '') {
+    out.collection = raw.structure.variableCollection;
+    translations.push(foundationTranslation('structure.variableCollection', 'collection'));
+  } else {
+    out.collection = 'Responsive System';
+  }
+
+  if (raw.group !== undefined && raw.group !== null) {
+    out.group = raw.group;
+  } else if (inner.group !== undefined && inner.group !== null) {
+    out.group = inner.group;
+  } else if (inner.structure && inner.structure.variableGroup !== undefined) {
+    out.group = inner.structure.variableGroup;
+    translations.push(foundationTranslation('structure.variableGroup', 'group'));
+  } else if (raw.structure && raw.structure.variableGroup !== undefined) {
+    out.group = raw.structure.variableGroup;
+    translations.push(foundationTranslation('structure.variableGroup', 'group'));
+  } else {
+    out.group = '';
+  }
+
+  if (typeof inner.lineGrid === 'number') out.lineGrid = inner.lineGrid;
+
+  var domain = configDomainOf(inner);
+  if (!domain) {
+    domain = 'unknown';
+    warnings.push(foundationWarning('config-domain-unknown', 'Could not tell which kind of config this is. Its settings were kept but not interpreted.'));
+  }
+
+  var built = buildDomainSlice(inner, domain, translations, warnings);
+  out.viewports = built.viewports;
+  out.domains[domain] = built.slice;
+
+  return { config: out, translations: translations, warnings: warnings };
+}
+
+/** Viewports and one domain slice, out of a legacy inner config. */
+function buildDomainSlice(inner, domain, translations, warnings) {
+  var slice = {
+    tokens: null,
+    nameTemplate: null,
+    steps: null,
+    scaling: {},
+    perViewport: {},
+    extra: {}
+  };
+  var viewports = [];
+  var seen = {};
+  var i;
+
+  function addViewport(name, payload) {
+    var entry = normaliseViewport({
+      key: name,
+      width: payload && typeof payload.containerWidth === 'number' ? payload.containerWidth
+        : (payload && typeof payload.width === 'number' ? payload.width : undefined)
+    });
+    if (!entry || seen[entry.key]) return;
+    seen[entry.key] = true;
+    viewports.push(entry);
+    var carried = {};
+    for (var k in payload) {
+      if (!Object.prototype.hasOwnProperty.call(payload, k)) continue;
+      if (k === 'name') continue;
+      carried[k] = foundationClone(payload[k]);
+    }
+    slice.perViewport[entry.key] = carried;
+  }
+
+  // modes[], the current spelling.
+  var modes = Array.isArray(inner.modes) ? inner.modes : [];
+  for (i = 0; i < modes.length; i++) {
+    if (modes[i] && typeof modes[i].name === 'string' && modes[i].name) addViewport(modes[i].name, modes[i]);
+  }
+  // Grid's other spelling: viewport objects as top-level keys.
+  for (var key in inner) {
+    if (!Object.prototype.hasOwnProperty.call(inner, key)) continue;
+    if (foundationStructuralKeys().indexOf(key) !== -1) continue;
+    if (foundationDomainKeys(domain).indexOf(key) !== -1) continue;
+    if (isViewportPayload(inner[key])) addViewport(key, inner[key]);
+  }
+  // The registry sorts viewports mobile-first; a config block has the order its author wrote.
+  // Those are different things, and conflating them would reverse someone's `modes` array the
+  // first time they round-tripped a config through this. Keep the declared order for printing.
+  if (viewports.length > 0) {
+    slice.viewportOrder = viewports.map(function(v) { return v.key; });
+  }
+  viewports = sortViewports(viewports);
+
+  // Scaling, folded from whichever alias carried it.
+  var scalingSource = null;
+  var scalingIsAlias = false;
+  if (inner.spacingScaling && typeof inner.spacingScaling === 'object') {
+    scalingSource = inner.spacingScaling;
+    scalingIsAlias = true;
+    translations.push(foundationTranslation('spacingScaling', 'scaling'));
+    if (inner.fontScaling && typeof inner.fontScaling === 'object') {
+      warnings.push(foundationWarning('config-ignored', 'Both spacingScaling and fontScaling were set. spacingScaling wins, as it does at run time; fontScaling was ignored.'));
+    }
+  } else if (inner.fontScaling && typeof inner.fontScaling === 'object') {
+    scalingSource = inner.fontScaling;
+    scalingIsAlias = true;
+    translations.push(foundationTranslation('fontScaling', 'scaling'));
+  } else if (inner.scaling && typeof inner.scaling === 'object') {
+    scalingSource = inner.scaling;
+  }
+  if (scalingSource) {
+    var fields = ['type', 'ease', 'rangeMode', 'easeInExponent', 'easeOutExponent'];
+    for (i = 0; i < fields.length; i++) {
+      if (scalingSource[fields[i]] !== undefined) slice.scaling[fields[i]] = scalingSource[fields[i]];
+    }
+  }
+  if (inner.rangeMode !== undefined && slice.scaling.rangeMode === undefined) slice.scaling.rangeMode = inner.rangeMode;
+  slice.scaling.roundTo = foundationResolveRoundTo(inner, scalingIsAlias ? scalingSource : null);
+  if (inner.roundUpperValuesTo !== undefined ||
+      (inner.scaling && inner.scaling.roundUpperValuesTo !== undefined) ||
+      (scalingIsAlias && scalingSource.roundUpperValuesTo !== undefined)) {
+    translations.push(foundationTranslation('roundUpperValuesTo', 'scaling.roundTo'));
+  }
+  if (domain === 'typography') {
+    // typography.js reads this off the alias too (typography.js:82-83).
+    var lower = (scalingIsAlias && typeof scalingSource.roundLowerValuesTo === 'number')
+      ? scalingSource.roundLowerValuesTo
+      : inner.roundLowerValuesTo;
+    if (typeof lower === 'number') slice.roundLowerValuesTo = lower;
+  }
+
+  // Tokens: an explicit list, or a template plus a count.
+  var tokensKey = foundationTokensKey(domain);
+  var tokens = tokensKey ? inner[tokensKey] : undefined;
+  var steps = typeof inner.steps === 'number' ? inner.steps : null;
+  if (Array.isArray(tokens) && tokens.length > 0) {
+    slice.tokens = foundationClone(tokens);
+    if (steps !== null) {
+      // A list always wins over a count at run time, so dropping the count preserves behaviour.
+      // This is also what a post-run config looks like: `steps` spent, `spacings` expanded.
+      translations.push(foundationTranslation('steps', '(dropped)', 'the token list is explicit, so the step count is unused'));
+    }
+  } else if (typeof tokens === 'string' && tokens.trim()) {
+    slice.nameTemplate = tokens.trim();
+    slice.steps = steps;
+  } else if (steps !== null) {
+    slice.steps = steps;
+  }
+
+  // Passthroughs each domain reads.
+  if (typeof inner.defaultBaseLevel === 'string') slice.defaultBaseLevel = inner.defaultBaseLevel;
+  if (inner.generateOverview !== undefined) slice.generateOverview = !!inner.generateOverview;
+  if (domain === 'typography') {
+    if (inner.figmaStyles !== undefined) {
+      slice.styles = foundationClone(inner.figmaStyles);
+      translations.push(foundationTranslation('figmaStyles', 'styles'));
+    } else if (inner.styles !== undefined) {
+      slice.styles = foundationClone(inner.styles);
+    }
+    if (Array.isArray(inner.fontWeights) || (inner.fontWeights && typeof inner.fontWeights === 'object')) {
+      slice.fontWeights = foundationClone(inner.fontWeights);
+    }
+  }
+  if (domain === 'grid') {
+    if (inner.distributeToMaxColumns !== undefined) slice.distributeToMaxColumns = !!inner.distributeToMaxColumns;
+    if (typeof inner.extensionColumns === 'number') slice.extensionColumns = inner.extensionColumns;
+  }
+
+  // Derived fields: dropped, and said out loud.
+  var derived = foundationDerivedKeys();
+  for (i = 0; i < derived.length; i++) {
+    if (inner[derived[i]] !== undefined) {
+      translations.push(foundationTranslation(derived[i], '(dropped)', 'recomputed on every run'));
+    }
+  }
+
+  // Anything left is someone's field this table has not met. Keep it.
+  var unknown = [];
+  for (var extraKey in inner) {
+    if (!Object.prototype.hasOwnProperty.call(inner, extraKey)) continue;
+    if (foundationStructuralKeys().indexOf(extraKey) !== -1) continue;
+    if (foundationDomainKeys(domain).indexOf(extraKey) !== -1) continue;
+    if (seen[viewportKeyFromLabel(extraKey)] && isViewportPayload(inner[extraKey])) continue;
+    slice.extra[extraKey] = foundationClone(inner[extraKey]);
+    unknown.push(extraKey);
+  }
+  if (unknown.length > 0) {
+    warnings.push(foundationWarning('config-unknown-key', 'Kept, but not interpreted: ' + unknown.join(', ') + '.', { keys: unknown }));
+  }
+
+  return { slice: slice, viewports: viewports };
+}
+
+/** A v1 config in, the same v1 config out — so a round trip through a text layer cannot drift. */
+function normaliseV1Config(raw) {
+  var warnings = [];
+  var out = emptyPortableConfig();
+  var i;
+
+  out.collection = raw.collection != null ? raw.collection : null;
+  out.group = raw.group != null ? raw.group : null;
+  out.lineGrid = typeof raw.lineGrid === 'number' ? raw.lineGrid : null;
+
+  var viewports = [];
+  var list = Array.isArray(raw.viewports) ? raw.viewports : [];
+  for (i = 0; i < list.length; i++) {
+    var v = normaliseViewport(list[i]);
+    if (v) viewports.push(v);
+  }
+  out.viewports = sortViewports(viewports);
+
+  for (var domain in raw.domains) {
+    if (!Object.prototype.hasOwnProperty.call(raw.domains, domain)) continue;
+    out.domains[domain] = normaliseDomainSlice(raw.domains[domain]);
+  }
+  if (Array.isArray(raw.sets) && raw.sets.length > 0) {
+    out.sets = [];
+    for (i = 0; i < raw.sets.length; i++) {
+      var set = raw.sets[i] || {};
+      out.sets.push({
+        collection: set.collection != null ? set.collection : out.collection,
+        group: set.group != null ? set.group : out.group,
+        domain: String(set.domain || ''),
+        config: normaliseDomainSlice(set.config)
+      });
+    }
+  }
+
+  return { config: out, translations: [], warnings: warnings };
+}
+
+/** One domain slice, with the derived fields stripped wherever it came from. */
+function normaliseDomainSlice(raw) {
+  var slice = {
+    tokens: null,
+    nameTemplate: null,
+    steps: null,
+    scaling: {},
+    perViewport: {},
+    extra: {}
+  };
+  if (!raw || typeof raw !== 'object') return slice;
+
+  var derived = foundationDerivedKeys();
+  for (var key in raw) {
+    if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
+    if (derived.indexOf(key) !== -1) continue;
+    slice[key] = foundationClone(raw[key]);
+  }
+  if (!slice.scaling || typeof slice.scaling !== 'object') slice.scaling = {};
+  if (!slice.perViewport || typeof slice.perViewport !== 'object') slice.perViewport = {};
+  if (!slice.extra || typeof slice.extra !== 'object') slice.extra = {};
+  if (slice.tokens === undefined) slice.tokens = null;
+  if (slice.nameTemplate === undefined) slice.nameTemplate = null;
+  if (slice.steps === undefined) slice.steps = null;
+  return slice;
+}
+
+/**
+ * The bridge back: a v1 config in the shape today's unrewritten scripts read.
+ *
+ * Two normalisation paths exist for the length of phases 3-5 — this reader and each script's own
+ * `ensureCompat*` — and this is what keeps them from disagreeing. Each domain rewrite deletes its
+ * branch. Viewports with no payload for this domain are skipped: a mode with no min/max would
+ * generate different values, not merely an extra mode.
+ */
+function toDomainConfig(v1, domain, options) {
+  var opts = options || {};
+  var config = (v1 && v1.domains && v1.domains[domain]) ? v1.domains[domain] : null;
+
+  if (!config && v1 && Array.isArray(v1.sets)) {
+    for (var s = 0; s < v1.sets.length; s++) {
+      if (v1.sets[s].domain !== domain) continue;
+      if (opts.collection && v1.sets[s].collection !== opts.collection) continue;
+      config = v1.sets[s].config;
+      break;
+    }
+  }
+  if (!config) return null;
+
+  // Built in the order the shipped config blocks are written, because this object is what a
+  // user pastes back into one.
+  var out = {};
+
+  // A slice's own collection and group win over the config's defaults — that is how a config
+  // carrying Grid in one collection and Spacing in another stays one config.
+  out.collectionName = opts.collection != null ? opts.collection
+    : (config.collection != null ? config.collection
+      : (v1.collection != null ? v1.collection : 'Responsive System'));
+  out.group = opts.group != null ? opts.group
+    : (config.group != null ? config.group
+      : (v1.group != null ? v1.group : ''));
+
+  var tokensKey = foundationTokensKey(domain);
+  if (tokensKey) {
+    if (Array.isArray(config.tokens) && config.tokens.length > 0) {
+      out[tokensKey] = foundationClone(config.tokens);
+    } else if (config.nameTemplate) {
+      out[tokensKey] = config.nameTemplate;
+      if (typeof config.steps === 'number') out.steps = config.steps;
+    }
+  }
+  if (out.steps === undefined && typeof config.steps === 'number' && !config.nameTemplate) out.steps = config.steps;
+
+  if (config.scaling && typeof config.scaling === 'object') {
+    // `roundTo: 0` is v1's way of saying "no rounding", which is worth being explicit about in
+    // the stored shape and is noise in a pasted block — Grid does not read `scaling` at all.
+    var scaling = {};
+    for (var sk in config.scaling) {
+      if (!Object.prototype.hasOwnProperty.call(config.scaling, sk)) continue;
+      if (sk === 'roundTo' && !(config.scaling[sk] > 0)) continue;
+      scaling[sk] = foundationClone(config.scaling[sk]);
+    }
+    if (Object.keys(scaling).length > 0) {
+      out.scaling = scaling;
+      if (typeof scaling.roundTo === 'number' && scaling.roundTo > 0) out.roundTo = scaling.roundTo;
+    }
+  }
+  if (config.defaultBaseLevel !== undefined) out.defaultBaseLevel = config.defaultBaseLevel;
+  if (config.generateOverview !== undefined) out.generateOverview = config.generateOverview;
+  if (config.styles !== undefined) out.styles = foundationClone(config.styles);
+  if (config.fontWeights !== undefined) out.fontWeights = foundationClone(config.fontWeights);
+  if (config.roundLowerValuesTo !== undefined) out.roundLowerValuesTo = config.roundLowerValuesTo;
+  if (config.distributeToMaxColumns !== undefined) out.distributeToMaxColumns = config.distributeToMaxColumns;
+  if (config.extensionColumns !== undefined) out.extensionColumns = config.extensionColumns;
+  if (typeof v1.lineGrid === 'number') out.lineGrid = v1.lineGrid;
+
+  // The author's order when we know it, the registry's otherwise.
+  var modes = [];
+  var order = Array.isArray(config.viewportOrder) && config.viewportOrder.length > 0
+    ? config.viewportOrder.map(function(key) { return { key: key }; })
+    : (Array.isArray(v1.viewports) ? v1.viewports : []);
+  var viewports = order;
+  for (var i = 0; i < viewports.length; i++) {
+    var payload = config.perViewport[viewports[i].key];
+    if (!payload) continue;
+    var mode = { name: viewports[i].key };
+    for (var k in payload) {
+      if (Object.prototype.hasOwnProperty.call(payload, k)) mode[k] = foundationClone(payload[k]);
+    }
+    modes.push(mode);
+  }
+  if (modes.length > 0) out.modes = modes;
+
+  // Anything the reader kept but did not interpret goes last, so it never displaces a field the
+  // script actually reads.
+  for (var extraKey in config.extra) {
+    if (Object.prototype.hasOwnProperty.call(config.extra, extraKey) && out[extraKey] === undefined) {
+      out[extraKey] = foundationClone(config.extra[extraKey]);
+    }
+  }
+
+  return out;
+}
+
+// ============================================================================
+// PRINTING A CONFIG BACK INTO A CONFIG BLOCK
+//
+// What a user pastes is the *contents* of a script's `@CONFIG_START` block — a property list in
+// a JS object literal, not JSON. Emitting JSON would be a second format to learn, which is the
+// thing this whole plan exists to avoid. So the clipboard gets the shape the block already has:
+// unquoted keys, two-space indent, objects in arrays expanded.
+// ============================================================================
+
+/** Can this key be written without quotes in a JS object literal? */
+function isPlainConfigKey(key) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(String(key));
+}
+
+function formatConfigString(value) {
+  return JSON.stringify(String(value));
+}
+
+/** One value, indented for its depth. Arrays of primitives stay on one line. */
+function formatConfigLiteral(value, indent) {
+  var pad = new Array(indent + 1).join('  ');
+  var innerPad = new Array(indent + 2).join('  ');
+  var i;
+
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'string') return formatConfigString(value);
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    var allPrimitive = true;
+    for (i = 0; i < value.length; i++) {
+      if (value[i] !== null && typeof value[i] === 'object') allPrimitive = false;
+    }
+    if (allPrimitive) {
+      var inline = [];
+      for (i = 0; i < value.length; i++) inline.push(formatConfigLiteral(value[i], 0));
+      return '[' + inline.join(', ') + ']';
+    }
+    var items = [];
+    for (i = 0; i < value.length; i++) {
+      items.push(innerPad + formatConfigLiteral(value[i], indent + 1));
+    }
+    return '[\n' + items.join(',\n') + '\n' + pad + ']';
+  }
+
+  var keys = Object.keys(value);
+  if (keys.length === 0) return '{}';
+  var lines = [];
+  for (i = 0; i < keys.length; i++) {
+    var key = isPlainConfigKey(keys[i]) ? keys[i] : formatConfigString(keys[i]);
+    lines.push(innerPad + key + ': ' + formatConfigLiteral(value[keys[i]], indent + 1));
+  }
+  return '{\n' + lines.join(',\n') + '\n' + pad + '}';
+}
+
+/**
+ * A config as the property list that goes between `// @CONFIG_START` and `// @CONFIG_END` —
+ * no outer braces, indented to sit where the shipped block sits.
+ *
+ * Comments are not regenerated: a pasted block carries the values, not the explanations the
+ * shipped script ships with. That is the one thing this loses against copying the block by hand.
+ */
+function formatConfigBlock(config) {
+  if (!config || typeof config !== 'object') return '';
+  var keys = Object.keys(config);
+  var lines = [];
+  for (var i = 0; i < keys.length; i++) {
+    var key = isPlainConfigKey(keys[i]) ? keys[i] : formatConfigString(keys[i]);
+    lines.push('  ' + key + ': ' + formatConfigLiteral(config[keys[i]], 1));
+  }
+  return lines.join(',\n');
+}
+
+/** Which script's config block a domain's config belongs in. */
+function foundationDomainScriptName(domain) {
+  if (domain === 'grid') return 'Grid';
+  if (domain === 'spacing') return 'Spacing';
+  if (domain === 'radius') return 'Corner radius';
+  if (domain === 'typography') return 'Typography';
+  return domain;
+}
+
+/**
+ * Build a v1 config from what `readFoundation` found: the registry's viewports, and one entry
+ * per recorded set. `domains` is the convenience view, one entry per domain; when a file holds
+ * two sets of the same domain — "Spacing A" and "Spacing B" — every set is also listed under
+ * `sets`, so nothing is lost to the shape.
+ */
+function toPortableConfig(foundation, options) {
+  var opts = options || {};
+  var out = emptyPortableConfig();
+  var f = foundation || {};
+  var sets = Array.isArray(f.sets) ? f.sets : [];
+  var i;
+
+  var viewports = Array.isArray(f.viewports) ? f.viewports : [];
+  for (i = 0; i < viewports.length; i++) {
+    out.viewports.push({ key: viewports[i].key, label: viewports[i].label, width: viewports[i].width });
+  }
+  if (typeof f.lineGrid === 'number') out.lineGrid = f.lineGrid;
+
+  if (sets.length > 0) {
+    out.collection = opts.collection != null ? opts.collection : sets[0].collection;
+    out.group = opts.group != null ? opts.group : sets[0].group;
+  }
+
+  // Each slice carries its own collection and group, so two domains written to two different
+  // collections do not need a second shape to describe them.
+  var overflow = false;
+  for (i = 0; i < sets.length; i++) {
+    var set = sets[i];
+    var slice = normaliseDomainSlice(set.config);
+    slice.collection = set.collection;
+    slice.group = set.group;
+    if (!out.domains[set.domain]) {
+      out.domains[set.domain] = slice;
+    } else {
+      overflow = true;
+    }
+  }
+
+  // Only a genuine collision needs the set list: two sets of the *same* domain, which is what
+  // "Spacing A" and "Spacing B" in two collections looks like. Nothing is lost to the shape.
+  if (overflow) {
+    out.sets = [];
+    for (i = 0; i < sets.length; i++) {
+      out.sets.push({
+        collection: sets[i].collection,
+        group: sets[i].group,
+        domain: sets[i].domain,
+        config: normaliseDomainSlice(sets[i].config)
+      });
+    }
+    out.note = 'This file holds more than one set of the same kind. `domains` shows the first; `sets` lists them all.';
+  }
+
+  return out;
+}
+
+/**
+ * v1 as JSON, for the machine-readable routes: a manifest, a canvas text layer, the CLI.
+ * Keys that are null carry no information — a reader restores them — so they are left out
+ * rather than filling the file with `"lineGrid": null`.
+ */
+function serialisePortableConfig(config) {
+  return JSON.stringify(config, function (key, value) {
+    return value === null ? undefined : value;
+  }, 2);
+}
+
+/**
+ * Parse a config someone may have hand-edited — in a text layer, or pasted. Never throws, and
+ * locates a syntax error by line, because "Unexpected token } at position 412" is not usable.
+ */
+function parsePortableConfig(text) {
+  var raw = typeof text === 'string' ? text.trim() : '';
+  if (!raw) {
+    return { config: null, translations: [], warnings: [foundationWarning('config-empty', 'There is nothing to read.')] };
+  }
+
+  var parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    var message = (e && e.message) ? e.message : String(e);
+    var match = /position (\d+)/.exec(message);
+    var where = '';
+    if (match) {
+      var position = parseInt(match[1], 10);
+      var before = raw.slice(0, position);
+      var line = before.split('\n').length;
+      var column = position - before.lastIndexOf('\n');
+      var fragment = raw.split('\n')[line - 1] || '';
+      where = ' at line ' + line + ', column ' + column + ': ' + fragment.trim().slice(0, 60);
+    } else {
+      where = ' at line 1';
+    }
+    return {
+      config: null,
+      translations: [],
+      warnings: [foundationWarning('config-unparseable', 'This is not valid JSON' + where + '. Nothing was applied.')]
+    };
+  }
+
+  return normaliseConfig(parsed);
+}
+
+/** One line per translation, for a run's output. */
+function describeConfigTranslations(translations) {
+  var lines = [];
+  for (var i = 0; i < (translations || []).length; i++) {
+    var t = translations[i];
+    lines.push('  ' + t.from + ' → ' + t.to + (t.note ? ' (' + t.note + ')' : ''));
+  }
+  return lines.join('\n');
+}
+
+// ============================================================================
+// CONFIG ON CANVAS, AND ON THE CLIPBOARD
+// ============================================================================
+
+function foundationConfigLayerName(collection) {
+  return 'CodeFig config' + (collection ? ' — ' + collection : '');
+}
+
+/**
+ * A font that can actually be loaded. `createText` then `.characters` throws without one, and
+ * Inter is only the default until it is not — there is no loadFontAsync anywhere in the DSF
+ * scripts today, and this is where that omission would have bitten.
+ */
+async function loadConfigFont() {
+  var candidates = [
+    { family: 'Roboto Mono', style: 'Regular' },
+    { family: 'Inter', style: 'Regular' }
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    try {
+      await figma.loadFontAsync(candidates[i]);
+      return candidates[i];
+    } catch (e) {}
+  }
+  var available = await figma.listAvailableFontsAsync();
+  for (var j = 0; j < available.length; j++) {
+    try {
+      await figma.loadFontAsync(available[j].fontName);
+      return available[j].fontName;
+    } catch (e) {}
+  }
+  return null;
+}
+
+/** Every text node on this page that is one of ours, by stamp first and name second. */
+async function findConfigTextLayers(options) {
+  var opts = options || {};
+  var page = opts.page || figma.currentPage;
+  var found = [];
+  var texts = page.findAllWithCriteria ? page.findAllWithCriteria({ types: ['TEXT'] }) : [];
+  for (var i = 0; i < texts.length; i++) {
+    var node = texts[i];
+    var stamp = '';
+    try {
+      stamp = node.getSharedPluginData(foundationNamespace(), 'config-kind');
+    } catch (e) {}
+    if (stamp === foundationConfigKind() || String(node.name || '').indexOf('CodeFig config') === 0) {
+      found.push(node);
+    }
+  }
+  return found;
+}
+
+/**
+ * Park a config on canvas, in a form the reader can take straight back.
+ * Updates the existing layer for this collection rather than adding a second one.
+ */
+async function writeConfigToTextLayer(config, options) {
+  var opts = options || {};
+  var text = serialisePortableConfig(config);
+  var name = opts.name || foundationConfigLayerName(config && config.collection);
+
+  var font = await loadConfigFont();
+  if (!font) {
+    return { ok: false, node: null, warnings: [foundationWarning('config-no-font', 'No font could be loaded, so the config could not be written to canvas. Copy it to the clipboard instead.')] };
+  }
+
+  var node = null;
+  var existing = await findConfigTextLayers(opts);
+  for (var i = 0; i < existing.length; i++) {
+    if (existing[i].name === name) { node = existing[i]; break; }
+  }
+
+  if (!node) {
+    node = figma.createText();
+    node.name = name;
+    var bounds = figma.viewport.bounds;
+    node.x = Math.round(bounds.x + 40);
+    node.y = Math.round(bounds.y + 40);
+    figma.currentPage.appendChild(node);
+  }
+
+  node.fontName = font;
+  node.characters = text;
+  node.setSharedPluginData(foundationNamespace(), 'config-kind', foundationConfigKind());
+
+  return { ok: true, node: node, warnings: [], bytes: text.length };
+}
+
+/**
+ * Read a config back off canvas: the selection if it is a text node, otherwise the page's
+ * stamped layers. Two candidates is an ambiguity to report, not a coin to toss.
+ */
+async function readConfigFromTextLayer(options) {
+  var opts = options || {};
+  var node = opts.node || null;
+
+  if (!node) {
+    var selection = figma.currentPage.selection || [];
+    for (var i = 0; i < selection.length; i++) {
+      if (selection[i].type === 'TEXT') { node = selection[i]; break; }
+    }
+  }
+  if (!node) {
+    var candidates = await findConfigTextLayers(opts);
+    if (candidates.length === 1) {
+      node = candidates[0];
+    } else if (candidates.length > 1) {
+      var names = candidates.map(function (n) { return n.name; });
+      return {
+        config: null, translations: [], node: null,
+        warnings: [foundationWarning('config-ambiguous', 'This page has ' + candidates.length + ' config layers: ' + names.join(', ') + '. Select the one you mean and run again.', { names: names })]
+      };
+    }
+  }
+  if (!node) {
+    return {
+      config: null, translations: [], node: null,
+      warnings: [foundationWarning('config-not-found', 'No config layer on this page, and nothing selected. Write one first, or select a text layer holding a config.')]
+    };
+  }
+
+  var read = parsePortableConfig(node.characters);
+  return { config: read.config, translations: read.translations, warnings: read.warnings, node: node };
 }

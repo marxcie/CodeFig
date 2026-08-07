@@ -23,6 +23,18 @@ The find/replace scripts were the focus: they now agree on what a pattern means,
 you what they will do before they do it. The Design System Foundations scripts also stopped
 deleting variable modes they did not recognise.
 
+### Added
+
+- **Foundation config** — a new Design System Foundations script that moves a config between
+  files. It reads the viewports and generated sets a file already has and hands you the config
+  **in the shape your scripts already use**: paste it straight between `// @CONFIG_START` and
+  `// @CONFIG_END` in Grid, Spacing, Corner radius or Typography. It can also park the config in
+  a text layer on canvas and read it back, and `check` tells you what a pasted config would mean
+  without writing anything. Older configs load too — `structure.*`, `spacingScaling`,
+  `fontScaling`, `figmaStyles`, `roundUpperValuesTo` — and every translation is listed, so a
+  paste never quietly means something else. It never generates variables: reading a config writes
+  the viewport list and nothing more.
+
 ### Changed
 
 - **Find/replace now means one thing across the library.** Six scripts took a name pattern and
@@ -93,6 +105,15 @@ deleting variable modes they did not recognise.
 
 ### Developer
 
+- **One canonical config shape.** A single v1 shape now covers paste, the per-set manifest and
+  export, with one compat reader in `@Foundation` that accepts every earlier shape and reports
+  what it translated — replacing the four half-overlapping readers the DSF scripts each carried.
+  `toDomainConfig(v1, domain)` converts back to the shape today's scripts read, so a v1 config
+  works with them unchanged; each generator drops its branch of that bridge as it is rewritten.
+  v1 carries **declared inputs only**: a run mutates its config in place, and exporting a
+  derivation would freeze it.
+- `createCopyResult` and `requestClipboardCopy` in `@InfoPanel`, replacing the copy plumbing
+  written twice in `export-import-variables` and `copy-simple-variables-json`.
 - **New `@Foundation` library.** One viewport registry per file, one manifest per generated token
   set, and one copy of the helpers that had been written five times across the Design System
   Foundations scripts. Two collections can hold two sets — "Spacing A" and "Spacing B" — while
