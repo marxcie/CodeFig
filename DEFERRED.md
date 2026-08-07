@@ -170,6 +170,30 @@ nobody has run against a real published library yet.
   relying on.
 - Say the true thing in the refusal: *not published* is evidence, not proof.
 
+
+## `perViewport` and `sets` are two spellings of one thing
+
+**Found:** building parameter sets (plan 17, step 2). Adoption now writes both — `sets`, which a
+person reads and pastes and which is the only one that can say `appliesTo: "*"`, and
+`perViewport`, which every manifest written before this contains and which four specs assert on.
+`toDomainConfig` states the precedence: sets win when both are present.
+
+**Why it was left:** they are written from the same fits in the same breath, so they cannot drift,
+and retiring the older one changes the v1 config format that 16b defined — a format change does
+not belong inside a step about how a scale is described.
+
+**The trigger:** when a manifest version bump is happening anyway, or when a second reader of the
+v1 shape appears. Whichever comes first.
+
+**What retiring it involves:**
+
+- `rampAdoptionSlice` stops emitting `perViewport`; `normaliseDomainSlice` stops defaulting it.
+- `toDomainConfig` reads `sets` only, and its precedence branch goes away with the second spelling.
+- A manifest written by an older build still has `perViewport` and no `sets`, so the reader needs
+  a translation — one set per viewport, the same shape `rampSetsFromConfig` already produces for a
+  legacy `modes[]` — rather than a version check that treats old manifests as unreadable.
+- Four specs assert `manifest.config.perViewport.desktop.*`; they move to `sets`.
+
 ---
 
 ## Habits worth keeping

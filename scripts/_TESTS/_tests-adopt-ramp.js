@@ -19,8 +19,8 @@
 // @DOC_END
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
-@import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-@import { viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, writeManifest, readManifest, writeRegistry, normaliseConfig, toDomainConfig, readStamp, stampToken, foundationNamespace, foundationRegistryKey } from "@Foundation"
+@import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
+@import { viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, writeRegistry, normaliseConfig, toDomainConfig, readStamp, stampToken, foundationNamespace, foundationRegistryKey } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { scaleSequence, recogniseScale, resolveModularRatio } from "@Scale Models"
 @import { spacingRampSpec, radiusRampSpec, adoptRamp, readRampGroup, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"

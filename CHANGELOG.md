@@ -46,6 +46,20 @@ deleting variable modes they did not recognise.
 
 ### Changed
 
+- **A scale can be described once instead of once per breakpoint.** Spacing and Corner radius take
+  a list of parameter sets, each saying which modes it applies to. `appliesTo: "*"` means every
+  mode the collection already has — the common case, which previously had to be written out once
+  per viewport. Add a second set naming one mode and it overrides the wildcard there; the run says
+  which set won for which mode. Two sets naming the same mode outright is a contradiction nobody
+  can resolve from the config, so the run says so and writes **nothing at all** — no collection, no
+  variable, no recorded set — rather than applying part of it. Configs written the old way keep
+  working and are read as one set per mode.
+- **A wildcard never creates a mode; naming one does.** `appliesTo: "*"` describes the modes a
+  collection has, so it cannot add to them — otherwise a collection would gain modes whenever your
+  viewport list grew. Naming a mode is a request, and a named mode missing from the collection is
+  created. A collection that is new, or still has only Figma's default *Mode 1*, is seeded from the
+  file's viewport list, and the run says which of the two happened, because only one of them
+  changes the shape of your collection. With neither, the run says so and points at Grid.
 - **Find/replace now means one thing across the library.** Six scripts took a name pattern and
   no two agreed: contains vs prefix, case-sensitive vs not, wildcards in three of them, three
   separate replace implementations. All six now share one matcher.
@@ -119,6 +133,14 @@ deleting variable modes they did not recognise.
   too. And `merge-variable-collections` removed the source collection unconditionally; it now
   refuses when that collection is published, and no longer falls back to deleting its variables
   one by one.
+- **An array or object value in a script's config form is no longer replaced with text when you
+  edit another field.** A value like `var tags = ["a", "b"];` had no form control of its own, so it
+  was shown as an editable text box holding `a,b` — and because the whole config block is written
+  back whenever any field changes, touching an unrelated control replaced the list with the string
+  `"a,b"`. These values are now shown read-only, with their own formatting kept exactly as you
+  wrote it, until a control exists that can edit them; edit them in the Script tab meanwhile. No
+  script that ships with CodeFig had such a field, so this only ever affected config forms you
+  wrote yourself.
 - **Running a Design System Foundations script no longer deletes variable modes it does not
   recognise.** Previously, because all four scripts share one collection and each carried its own
   list of viewports, running one could remove another's modes — and every value stored in them.

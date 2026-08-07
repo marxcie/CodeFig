@@ -29,8 +29,8 @@
 // on its behalf:
 //
 // ```js
-// @import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, writeManifest, writeRegistry, normaliseConfig } from "@Foundation"
+// @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
+// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, registryViewportLabels, writeManifest, writeRegistry, normaliseConfig } from "@Foundation"
 // @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 // ```
 //
@@ -41,6 +41,7 @@
 // |----------|-----------|
 // | Specs | spacingRampSpec, radiusRampSpec |
 // | Config | ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, resolveRampRoundTo, validateRampScalingType |
+// | Sets | resolveRampSets, rampSetsFromConfig, rampModePlan, rampModeNames, collapseRampSets, describeRampSetPlan |
 // | Scale | buildRampScaleOpts, calculateRampValue, generateRampVariables |
 // | Run | runLinearRamp, describeUndeclaredModes, describeRampModels, describeRampAdjustments |
 // @DOC_END
@@ -98,47 +99,335 @@ function knownRampScalingTypes() {
 // CONFIG
 // ============================================================================
 
+// ============================================================================
+// PARAMETER SETS
+//
+// A scale is usually one scale. `modes[]` made you write it once per breakpoint and left the
+// duplication for the reader to notice as duplication; a set says it once and names which modes
+// it applies to.
+// ============================================================================
+
+/** The modes a set names outright, lowercased. Empty when it is a wildcard. */
+function rampSetTargets(set) {
+  var applies = set && set.appliesTo;
+  if (applies === undefined || applies === null || applies === "*") return [];
+  var list = Array.isArray(applies) ? applies : [applies];
+  return list
+    .filter(function(name) { return typeof name === "string" && name.trim(); })
+    .map(function(name) { return name.trim().toLowerCase(); });
+}
+
+function rampSetLabel(set, index) {
+  if (set && typeof set.name === "string" && set.name) return set.name;
+  return "set " + (index + 1);
+}
+
+/**
+ * Which set governs which mode — decided from the config alone, before Figma is touched.
+ *
+ * **Explicit beats wildcard.** One set for everything plus one override for mobile is the pattern
+ * people write, and `"*"` exists so they do not have to spell out every mode. It is not silent
+ * precedence when the run names which set won where.
+ *
+ * **Equal specificity is a refusal, not a tie-break.** Two sets naming the same mode outright is
+ * a contradiction nobody can resolve from the config, so the whole run stops: writing two modes
+ * and skipping the third would leave a file matching no config anyone wrote, and a manifest
+ * recording that as though it were a decision.
+ *
+ * → { ok, sizes, overrides, conflicts, unclaimed, unusedSets }
+ */
+function resolveRampSets(sets, modeNames, tokens, defaultBaseLevel) {
+  var list = Array.isArray(sets) ? sets : [];
+  var modes = Array.isArray(modeNames) ? modeNames : [];
+  var plan = { ok: true, sizes: {}, overrides: [], conflicts: [], unclaimed: [], unusedSets: [] };
+  var claimedBy = {};
+  var i, m;
+
+  for (m = 0; m < modes.length; m++) {
+    var modeName = modes[m];
+    var key = modeName.toLowerCase();
+    var explicit = [];
+    var wildcard = [];
+
+    for (i = 0; i < list.length; i++) {
+      var targets = rampSetTargets(list[i]);
+      if (targets.length === 0) wildcard.push(i);
+      else if (targets.indexOf(key) !== -1) explicit.push(i);
+    }
+
+    var winners = explicit.length > 0 ? explicit : wildcard;
+    if (winners.length === 0) {
+      plan.unclaimed.push(modeName);
+      continue;
+    }
+    if (winners.length > 1) {
+      plan.ok = false;
+      plan.conflicts.push({
+        mode: modeName,
+        sets: winners.map(function(index) { return rampSetLabel(list[index], index); })
+      });
+      continue;
+    }
+
+    var winner = winners[0];
+    claimedBy[winner] = true;
+    if (explicit.length === 1 && wildcard.length === 1) {
+      plan.overrides.push({
+        mode: modeName,
+        winner: rampSetLabel(list[winner], winner),
+        loser: rampSetLabel(list[wildcard[0]], wildcard[0])
+      });
+    }
+
+    var entry = rampModeToSize(
+      Object.assign({}, list[winner], { name: modeName }),
+      tokens,
+      defaultBaseLevel
+    );
+    if (entry) plan.sizes[modeName] = entry;
+  }
+
+  for (i = 0; i < list.length; i++) {
+    if (!claimedBy[i] && rampSetTargets(list[i]).length > 0) {
+      plan.unusedSets.push(rampSetLabel(list[i], i));
+    }
+  }
+
+  if (!plan.ok) plan.sizes = {};
+  return plan;
+}
+
+/** The plan in words: what won where, what was left out, and why nothing ran. */
+function describeRampSetPlan(plan) {
+  var lines = [];
+  var i;
+  if (!plan) return lines;
+
+  for (i = 0; i < plan.conflicts.length; i++) {
+    var c = plan.conflicts[i];
+    lines.push('Sets "' + c.sets.join('" and "') + '" both claim mode ' + c.mode +
+      '. Nothing was written — one of them needs a different appliesTo.');
+  }
+  for (i = 0; i < plan.overrides.length; i++) {
+    var o = plan.overrides[i];
+    lines.push('  ' + o.mode + ': set "' + o.winner + '" overrides set "' + o.loser + '"');
+  }
+  if (plan.unusedSets.length > 0) {
+    lines.push('  Set(s) that matched no mode in this collection: ' + plan.unusedSets.join(', ') + '.');
+  }
+  return lines;
+}
+
+/**
+ * A config's sets, whichever way it spells them. `modes[]` reads as one set per mode — the same
+ * behaviour, stated rather than assumed — and says it translated.
+ */
+function rampSetsFromConfig(config, spec) {
+  if (config && Array.isArray(config.sets)) {
+    return { sets: config.sets, translated: false };
+  }
+  if (config && Array.isArray(config.modes)) {
+    var sets = config.modes.map(function(mode) {
+      var set = {};
+      for (var k in mode) {
+        if (Object.prototype.hasOwnProperty.call(mode, k) && k !== "name") set[k] = mode[k];
+      }
+      set.name = mode.name;
+      set.appliesTo = mode.name;
+      return set;
+    });
+    return { sets: sets, translated: true };
+  }
+  return { sets: [], translated: false };
+}
+
 /** `min`/`max`/`base` per viewport, out of the config's `modes[]`. */
+function rampDefaultBaseSize(min, max) {
+  var lo = typeof min === 'number' ? min : 0;
+  var hi = typeof max === 'number' ? max : lo;
+  if (hi <= lo) return lo;
+  return Math.max(lo, Math.min(hi, Math.round(Math.sqrt(lo * hi))));
+}
+
+function rampDefaultBaseLevel(tokens, defaultBaseLevel) {
+  if (typeof defaultBaseLevel === 'string' && defaultBaseLevel) return defaultBaseLevel;
+  return (Array.isArray(tokens) && tokens.length) ? tokens[Math.floor(tokens.length / 2)] : 'md';
+}
+
+/** One mode's `min`/`max`/`base` and model parameters, from whichever spelling declared it. */
+function rampModeToSize(m, tokens, defaultBaseLevel) {
+  if (!m || typeof m !== 'object') return null;
+  var baseLevel = rampDefaultBaseLevel(tokens, defaultBaseLevel);
+  var min = typeof m.min === 'number' ? m.min : 0;
+  var derived = typeof m.model === 'string' && m.model && m.model !== 'endpoints';
+  var max = typeof m.max === 'number' ? m.max : (derived ? null : min);
+  var base = m.base && typeof m.base === 'object' ? m.base : {};
+  var level = typeof base.level === 'string' && base.level ? base.level : baseLevel;
+  var size = typeof base.size === 'number' ? base.size : rampDefaultBaseSize(min, max);
+  var entry = { min: min, max: max, base: { level: level, size: size } };
+  var carried = ['model', 'ratio', 'step', 'mod', 'values', 'clamp'];
+  for (var c = 0; c < carried.length; c++) {
+    if (m[carried[c]] !== undefined) entry[carried[c]] = m[carried[c]];
+  }
+  return entry;
+}
+
 function rampModesToSizes(modes, tokens, defaultBaseLevel) {
   var out = {};
   if (!Array.isArray(modes)) return out;
-  var baseLevel = typeof defaultBaseLevel === 'string' && defaultBaseLevel
-    ? defaultBaseLevel
-    : (Array.isArray(tokens) && tokens.length ? tokens[Math.floor(tokens.length / 2)] : 'md');
-
-  function defaultBaseSize(min, max) {
-    var lo = typeof min === 'number' ? min : 0;
-    var hi = typeof max === 'number' ? max : lo;
-    if (hi <= lo) return lo;
-    return Math.max(lo, Math.min(hi, Math.round(Math.sqrt(lo * hi))));
-  }
 
   for (var i = 0; i < modes.length; i++) {
     var m = modes[i];
     if (!m || typeof m !== 'object' || typeof m.name !== 'string' || !m.name) continue;
-    var min = typeof m.min === 'number' ? m.min : 0;
-    // A derived model has no ceiling of its own, and inventing one from `min` would clamp the
-    // monotonic guard to the floor. Endpoints keeps its old fallback.
-    var derived = typeof m.model === 'string' && m.model && m.model !== 'endpoints';
-    var max = typeof m.max === 'number' ? m.max : (derived ? null : min);
-    var base = m.base && typeof m.base === 'object' ? m.base : {};
-    var level = typeof base.level === 'string' && base.level ? base.level : baseLevel;
-    var size = typeof base.size === 'number' ? base.size : defaultBaseSize(min, max);
-    var entry = { min: min, max: max, base: { level: level, size: size } };
-    // The model and whatever it needs. Absent means endpoints, which is what every config
-    // written before plan 19b is.
-    var carried = ['model', 'ratio', 'step', 'mod', 'values', 'clamp'];
-    for (var c = 0; c < carried.length; c++) {
-      if (m[carried[c]] !== undefined) entry[carried[c]] = m[carried[c]];
-    }
-    out[m.name] = entry;
+    var entry = rampModeToSize(m, tokens, defaultBaseLevel);
+    if (entry) out[m.name] = entry;
   }
   return out;
 }
 
-function resolveRampSizes(config, spec) {
-  if (config.modes && Array.isArray(config.modes) && config.modes.length > 0) {
-    return rampModesToSizes(config.modes, config[spec.tokensKey], config.defaultBaseLevel);
+/** Figma's own default, which is the sign of a collection nobody has set up yet. */
+function isDefaultOnlyModes(collectionModes) {
+  return collectionModes.length === 1 && /^mode\s*1$/i.test(String(collectionModes[0] || ''));
+}
+
+/**
+ * Which modes a run writes, and where that list came from.
+ *
+ * **A wildcard never creates a mode; naming one does.** `appliesTo: "*"` is a *description* — it
+ * means whatever this collection already has, which is what makes one config fill three viewports
+ * in one file and five in another. Naming a mode is a *request*, so it is created if missing.
+ * Without that split, a wildcard set on an established collection would silently gain modes
+ * whenever the registry listed more viewports than that collection uses.
+ *
+ * The registry is the right source at exactly one moment: a collection that is new, or still
+ * holds only Figma's default mode, where nothing else can say what should exist.
+ *
+ * → { modes, source, creating, ok, message }
+ */
+function rampModePlan(sets, collectionModes, registryLabels, configModeNames) {
+  var list = Array.isArray(sets) ? sets : [];
+  var existing = Array.isArray(collectionModes) ? collectionModes : [];
+  var registry = Array.isArray(registryLabels) ? registryLabels : [];
+  var override = Array.isArray(configModeNames) ? configModeNames : [];
+
+  var named = [];
+  var hasWildcard = false;
+  var seen = {};
+  var add = function(into, name) {
+    if (typeof name !== 'string' || !name.trim()) return;
+    var key = name.trim().toLowerCase();
+    if (seen[key]) return;
+    seen[key] = true;
+    into.push(name.trim());
+  };
+
+  for (var i = 0; i < list.length; i++) {
+    var applies = list[i] && list[i].appliesTo;
+    if (rampSetTargets(list[i]).length === 0) { hasWildcard = true; continue; }
+    var targets = Array.isArray(applies) ? applies : [applies];
+    for (var t = 0; t < targets.length; t++) add(named, targets[t]);
+  }
+
+  var base = [];
+  var source = 'named';
+  if (hasWildcard) {
+    if (override.length > 0) { base = override; source = 'config'; }
+    else if (existing.length > 0 && !isDefaultOnlyModes(existing)) { base = existing; source = 'collection'; }
+    else if (registry.length > 0) { base = registry; source = 'registry'; }
+    else { base = []; source = 'none'; }
+  } else if (override.length > 0) {
+    base = override;
+    source = 'config';
+  }
+
+  var modes = [];
+  for (var b = 0; b < base.length; b++) {
+    var key = base[b].trim().toLowerCase();
+    if (!seen[key]) { seen[key] = true; modes.push(base[b].trim()); }
+  }
+  modes = modes.concat(named);
+
+  if (modes.length === 0) {
+    return {
+      modes: [],
+      source: 'none',
+      creating: [],
+      ok: false,
+      message: "This config names no modes, and this file's registry has no viewports. " +
+        'Add them in Grid, or name them in the config.'
+    };
+  }
+
+  var have = {};
+  for (var e = 0; e < existing.length; e++) have[existing[e].toLowerCase()] = true;
+  var creating = modes.filter(function(name) { return !have[name.toLowerCase()]; });
+
+  var message;
+  if (source === 'registry') {
+    message = 'Seeded ' + modes.length + " mode(s) from this file's registry: " + modes.join(', ') +
+      '. This changes the shape of the collection.';
+  } else if (source === 'collection') {
+    message = 'Writing ' + modes.length + ' mode(s) from the collection: ' + modes.join(', ') + '.';
+  } else if (source === 'config') {
+    message = 'Writing ' + modes.length + ' mode(s) named in the config: ' + modes.join(', ') + '.';
+  } else {
+    message = 'Writing ' + modes.length + ' mode(s) named by the sets: ' + modes.join(', ') + '.';
+  }
+  if (creating.length > 0 && source !== 'registry') {
+    message += ' Creating: ' + creating.join(', ') + '.';
+  }
+
+  return { modes: modes, source: source, creating: creating, ok: true, message: message };
+}
+
+/**
+ * The modes a config writes.
+ *
+ * Every mode a set names outright, in the order the sets name them. A wildcard set has no modes
+ * of its own — it applies to whatever the run is writing — so `config.modeNames` supplies them:
+ * `runLinearRamp` fills it from the collection, and a caller resolving a config on its own passes
+ * the list it means.
+ */
+function rampModeNames(config, spec) {
+  var named = [];
+  var seen = {};
+  var add = function(name) {
+    if (typeof name !== 'string' || !name.trim()) return;
+    if (seen[name.toLowerCase()]) return;
+    seen[name.toLowerCase()] = true;
+    named.push(name);
+  };
+
+  if (Array.isArray(config.modeNames)) config.modeNames.forEach(add);
+  var declared = rampSetsFromConfig(config, spec).sets;
+  for (var i = 0; i < declared.length; i++) rampSetTargets(declared[i]).forEach(function(target) {
+    // Cased as the set wrote it, since nothing better is known yet.
+    var applies = declared[i].appliesTo;
+    var list = Array.isArray(applies) ? applies : [applies];
+    for (var j = 0; j < list.length; j++) {
+      if (typeof list[j] === 'string' && list[j].trim().toLowerCase() === target) add(list[j].trim());
+    }
+  });
+  return named;
+}
+
+/**
+ * The per-mode parameters this config resolves to, and the plan that produced them.
+ *
+ * A conflict leaves `sizes` empty: half a config applied is worse than none, and this is settled
+ * before Figma is touched.
+ */
+function resolveRampSizes(config, spec, modeNames) {
+  var declared = rampSetsFromConfig(config, spec);
+  if (declared.sets.length > 0) {
+    var plan = resolveRampSets(
+      declared.sets,
+      (Array.isArray(modeNames) && modeNames.length > 0) ? modeNames : rampModeNames(config, spec),
+      config[spec.tokensKey],
+      config.defaultBaseLevel
+    );
+    config.__rampSetPlan = plan;
+    return plan.sizes;
   }
   if (config[spec.sizesKey] && typeof config[spec.sizesKey] === 'object') {
     return config[spec.sizesKey];
@@ -146,9 +435,9 @@ function resolveRampSizes(config, spec) {
   return {};
 }
 
-function materialiseRampSizes(config, spec) {
+function materialiseRampSizes(config, spec, modeNames) {
   if (!config || typeof config !== 'object') return;
-  config[spec.sizesKey] = resolveRampSizes(config, spec);
+  config[spec.sizesKey] = resolveRampSizes(config, spec, modeNames);
 }
 
 function applyRampNameTemplate(template, index, totalSteps) {
@@ -611,13 +900,43 @@ async function runLinearRamp(config, spec) {
   var data = config.config || config;
   ensureCompatRampConfig(data, spec);
   materialiseRampTokens(data, spec);
-  materialiseRampSizes(data, spec);
   validateRampScalingType(data, spec);
 
   var collectionName = resolveCollectionName(config);
   var groupName = resolveGroup(config);
   console.log('=== ' + spec.label.toUpperCase() + ' ===');
   console.log('Processing collection: ' + collectionName + (groupName ? ' (group: ' + groupName + ')' : ' (no group)'));
+
+  // Read-only, and deliberately before `getOrCreateCollection`: a config that cannot be resolved
+  // must not leave a collection behind. A wildcard set describes the modes this collection already
+  // has, so the collection has to be looked at before the config can be read.
+  var declaredSets = rampSetsFromConfig(data, spec).sets;
+  var existing = await getCollection(collectionName);
+  var modePlan = null;
+  if (declaredSets.length > 0) {
+    modePlan = rampModePlan(
+      declaredSets,
+      existing ? existing.modes.map(function(m) { return m.name; }) : [],
+      registryViewportLabels(),
+      data.modeNames
+    );
+    if (!modePlan.ok) {
+      console.error(spec.label + ': ' + modePlan.message);
+      console.error('Nothing was written.');
+      return { collection: null, stats: { created: 0, updated: 0, skipped: 0 }, refused: modePlan };
+    }
+  }
+
+  materialiseRampSizes(data, spec, modePlan ? modePlan.modes : null);
+
+  // Settled from the config alone: two sets claiming one mode is a contradiction, and applying
+  // half of it would leave a file matching no config anyone wrote.
+  var setPlan = data.__rampSetPlan;
+  if (setPlan && !setPlan.ok) {
+    describeRampSetPlan(setPlan).forEach(function(line) { console.error(line); });
+    return { collection: null, stats: { created: 0, updated: 0, skipped: 0 }, refused: setPlan };
+  }
+  if (modePlan) console.log(modePlan.message);
 
   var collection = await getOrCreateCollection(collectionName);
 
@@ -664,6 +983,7 @@ async function runLinearRamp(config, spec) {
   console.log('Collection: ' + collectionName);
   console.log('Scale:');
   describeRampModels(data, spec).forEach(function(line) { console.log(line); });
+  describeRampSetPlan(setPlan).forEach(function(line) { console.log(line); });
   describeRampAdjustments(runReport.adjustments).forEach(function(line) { console.log(line); });
   console.log('Variables created: ' + stats.created);
   console.log('Variables updated: ' + stats.updated);
@@ -814,6 +1134,69 @@ function rampModePayloadFor(recognised, tokenOrder) {
   return payload;
 }
 
+/**
+ * One scale written once, when the modes agree.
+ *
+ * Adoption fits every mode separately, so three breakpoints on the same scale come back as three
+ * identical sets. Collapsing them is honest because it is derived from the parameters being equal,
+ * not from guessing that the author meant them to be — and the numbers a run writes are unchanged
+ * either way, which is the property the tests assert.
+ *
+ * A group becomes `appliesTo: "*"` only when it covers *every* mode. Two of three agreeing is not
+ * "all", and saying so would silently rewrite the third.
+ */
+function collapseRampSets(sets, modeNames) {
+  var list = Array.isArray(sets) ? sets : [];
+  var all = Array.isArray(modeNames) ? modeNames : [];
+  var groups = [];
+
+  for (var i = 0; i < list.length; i++) {
+    var set = list[i];
+    var targets = rampSetTargets(set);
+    if (targets.length === 0) { groups.push({ key: null, members: [set], modes: [] }); continue; }
+
+    var shape = {};
+    for (var k in set) {
+      // `name` labels the set, not the scale, so two sets differing only by name are still one.
+      if (Object.prototype.hasOwnProperty.call(set, k) && k !== 'appliesTo' && k !== 'name') shape[k] = set[k];
+    }
+    var key = JSON.stringify(shape, Object.keys(shape).sort());
+
+    var applies = Array.isArray(set.appliesTo) ? set.appliesTo : [set.appliesTo];
+    var found = null;
+    for (var g = 0; g < groups.length; g++) if (groups[g].key === key) { found = groups[g]; break; }
+    if (!found) { found = { key: key, members: [], modes: [], shape: shape }; groups.push(found); }
+    found.members.push(set);
+    for (var a = 0; a < applies.length; a++) {
+      if (typeof applies[a] === 'string' && applies[a].trim()) found.modes.push(applies[a].trim());
+    }
+  }
+
+  var out = [];
+  for (var n = 0; n < groups.length; n++) {
+    var group = groups[n];
+    if (group.key === null) { out.push(group.members[0]); continue; }
+
+    var coversAll = all.length > 0 && group.modes.length === all.length;
+    if (coversAll) {
+      for (var m = 0; m < all.length; m++) {
+        var present = false;
+        for (var q = 0; q < group.modes.length; q++) {
+          if (group.modes[q].toLowerCase() === all[m].toLowerCase()) { present = true; break; }
+        }
+        if (!present) { coversAll = false; break; }
+      }
+    }
+
+    var collapsed = { name: group.members[0].name, appliesTo: coversAll ? '*' : (group.modes.length === 1 ? group.modes[0] : group.modes) };
+    for (var key2 in group.shape) {
+      if (Object.prototype.hasOwnProperty.call(group.shape, key2)) collapsed[key2] = group.shape[key2];
+    }
+    out.push(collapsed);
+  }
+  return out;
+}
+
 /** The v1 slice a set of per-mode fits describes. */
 function rampAdoptionSlice(fits, tokenOrder, group, collectionName) {
   var perViewport = {};
@@ -829,12 +1212,27 @@ function rampAdoptionSlice(fits, tokenOrder, group, collectionName) {
       scaling.ease = r.options.ease || 'none';
     }
   }
+  // Both spellings, written from the same fits in the same breath, with `toDomainConfig` stating
+  // which wins: `sets` is what a person reads and pastes, `perViewport` is what every manifest
+  // already written contains. Dropping the older one is a format change, and belongs to its own
+  // plan rather than to a step about how a scale is described.
+  var modeNames = Object.keys(fits);
+  var perModeSets = modeNames.map(function(mode) {
+    var set = { name: mode, appliesTo: mode };
+    var payload = perViewport[viewportKeyFromLabel(mode)] || {};
+    for (var k in payload) {
+      if (Object.prototype.hasOwnProperty.call(payload, k)) set[k] = payload[k];
+    }
+    return set;
+  });
+
   return {
     tokens: tokenOrder.slice(),
     nameTemplate: null,
     steps: null,
     scaling: scaling,
     perViewport: perViewport,
+    sets: collapseRampSets(perModeSets, modeNames),
     extra: {},
     collection: collectionName,
     group: group

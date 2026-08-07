@@ -38,3 +38,4 @@ scripts/EXAMPLE_SCRIPTS/*.tmp*
 scripts/EXAMPLE_SCRIPTS/*.old*
 scripts/EXAMPLE_SCRIPTS/_*.*
 figma-console.log
+/artifacts

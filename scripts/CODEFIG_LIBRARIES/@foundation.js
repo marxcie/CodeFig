@@ -63,7 +63,7 @@
 // | Registry shape | normaliseViewport, sortViewports, parseRegistry, serialiseRegistry |
 // | Manifest shape | parseManifest, serialiseManifest |
 // | Reconciliation | reconcileFoundation, describeFoundation |
-// | Figma | readFoundation, writeRegistry, readManifest, writeManifest |
+// | Figma | readFoundation, registryViewportLabels, writeRegistry, readManifest, writeManifest |
 // | Modes | planFoundationModes, applyFoundationModes |
 // | Config | normaliseConfig, toDomainConfig, toPortableConfig, emptyPortableConfig, configDomainOf |
 // | Config text | serialisePortableConfig, parsePortableConfig, describeConfigTranslations |
@@ -597,6 +597,18 @@ function isViewportWidthName(name) {
  * options: { collections: [names] } to limit the scan; otherwise every local collection.
  * Note this walks every variable in scope, which is what makes the manifest check possible.
  */
+/**
+ * The viewport labels in this file's registry, in registry order.
+ *
+ * Cheap next to `readFoundation` — it reads one shared-plugin-data entry and walks no collections —
+ * because it answers one question: what should exist, when a collection cannot say.
+ */
+function registryViewportLabels() {
+  var read = parseRegistry(figma.root.getSharedPluginData(foundationNamespace(), foundationRegistryKey()));
+  if (!read.registry) return [];
+  return read.registry.viewports.map(function(v) { return v.label; });
+}
+
 async function readFoundation(options) {
   var opts = options || {};
   var ns = foundationNamespace();
@@ -1246,6 +1258,7 @@ function normaliseDomainSlice(raw) {
   }
   if (!slice.scaling || typeof slice.scaling !== 'object') slice.scaling = {};
   if (!slice.perViewport || typeof slice.perViewport !== 'object') slice.perViewport = {};
+  if (slice.sets !== undefined && !Array.isArray(slice.sets)) delete slice.sets;
   if (!slice.extra || typeof slice.extra !== 'object') slice.extra = {};
   if (slice.tokens === undefined) slice.tokens = null;
   if (slice.nameTemplate === undefined) slice.nameTemplate = null;
@@ -1338,6 +1351,14 @@ function toDomainConfig(v1, domain, options) {
     modes.push(mode);
   }
   if (modes.length > 0) out.modes = modes;
+
+  // Sets are the newer spelling of the same thing, and they carry `appliesTo`, which `perViewport`
+  // has no way to say. A config holding both is not something we invent a resolution for — the
+  // sets win, because only a writer that knows about sets could have put them there.
+  if (Array.isArray(config.sets) && config.sets.length > 0) {
+    out.sets = foundationClone(config.sets);
+    delete out.modes;
+  }
 
   // Anything the reader kept but did not interpret goes last, so it never displaces a field the
   // script actually reads.

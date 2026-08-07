@@ -23,9 +23,9 @@
 // | generateOverview | Optional boolean (default `false`). When `true`, builds a **Corner radius — overview** frame (token rows × mode columns, variable-bound swatches). Uses `@Foundation overview`. |
 // @DOC_END
 
-@import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
+@import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateCornerRadiusOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, writeManifest, normaliseConfig } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, normaliseConfig } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { radiusRampSpec, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"

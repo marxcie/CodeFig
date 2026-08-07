@@ -125,6 +125,16 @@
       });
       if (!sel2.value && field.options[0]) sel2.value = field.options[0];
       cw.appendChild(sel2);
+    } else if (t === "unsupported") {
+      // No control represents this value, so it is shown as written and **not** given a
+      // `data-field`: getValues collects by that attribute, so leaving it off is what makes
+      // serialize write the original line back untouched. Edit it in the Script tab.
+      var ro = document.createElement("pre");
+      ro.className = "config-ui-readonly";
+      ro.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+      ro.setAttribute("aria-readonly", "true");
+      ro.setAttribute("title", "Edit this one in the Script tab — no form control can hold it");
+      cw.appendChild(ro);
     } else if (t === "textarea") {
       var ta = document.createElement("textarea");
       ta.id = id;

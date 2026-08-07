@@ -450,7 +450,10 @@ function adoptionRoundTrip(ctx, spec, tokens, valuesByMode) {
 
   ctx.ensureCompatRampConfig(config, spec);
   ctx.materialiseRampTokens(config, spec);
-  ctx.materialiseRampSizes(config, spec);
+  // The modes come from the run, as they come from the collection in `runLinearRamp`: adoption
+  // collapses value-identical fits into one `appliesTo: "*"` set, which names no modes itself.
+  // The loop compares the numbers generated, not the shape of the config that generated them.
+  ctx.materialiseRampSizes(config, spec, Object.keys(valuesByMode));
   const generated = ctx.generateRampVariables(config, spec);
 
   const out = {};
@@ -616,4 +619,30 @@ test('a scale the guard never touches reports no adjustments', () => {
   ctx.generateRampVariables(config, spec, report);
   assert.deepEqual(report.adjustments, [], 'the shipped default needs no correcting');
   assert.deepEqual(ctx.describeRampAdjustments([]), [], 'and says nothing about it');
+});
+
+test('adoption records three identical modes as one scale, and regenerates all three', () => {
+  // The collapse, asserted the way 17 requires: three sets in, one out, **the same numbers**. A
+  // config-shape assertion would have to be rewritten every time the shape improves; the numbers
+  // are the thing a file actually gets.
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  const tokens = ['px', 'xs', 'sm', 'md', 'lg', 'xl'];
+  const same = [1, 4, 8, 12, 16, 24];
+
+  const { generated } = adoptionRoundTrip(ctx, spec, tokens, {
+    Desktop: same, Tablet: same, Mobile: same
+  });
+  assert.deepEqual(generated.Desktop, same);
+  assert.deepEqual(generated.Tablet, same);
+  assert.deepEqual(generated.Mobile, same);
+
+  const fits = {};
+  for (const mode of ['Desktop', 'Tablet', 'Mobile']) {
+    fits[mode] = { order: tokens, values: same, recognised: ctx.recogniseScale(same) };
+  }
+  const slice = ctx.rampAdoptionSlice(fits, tokens, 'Spacing', 'C');
+  assert.equal(slice.sets.length, 1, 'one scale, written once');
+  assert.equal(slice.sets[0].appliesTo, '*');
 });
