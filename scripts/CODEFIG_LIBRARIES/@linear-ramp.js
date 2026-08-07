@@ -41,7 +41,7 @@
 // |----------|-----------|
 // | Specs | spacingRampSpec, radiusRampSpec |
 // | Config | ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, resolveRampRoundTo, validateRampScalingType |
-// | Seeing it | rampScaleTable, rampScaleHtml, rampGaps, rampCaptions, rampModelCaption |
+// | Seeing it | rampPreviewHtml, rampScaleTable, rampScaleHtml, rampGaps, rampCaptions, rampModelCaption |
 // | Sets | resolveRampSets, rampSetsFromConfig, rampModePlan, rampModeNames, collapseRampSets, describeRampSetPlan |
 // | Scale | buildRampScaleOpts, calculateRampValue, generateRampVariables |
 // | Run | runLinearRamp, describeUndeclaredModes, describeRampModels, describeRampAdjustments |
@@ -1078,6 +1078,64 @@ function rampCaptions(config, spec) {
     captions[viewportLabel(mode)] = rampModelCaption(sizes[mode], config);
   }
   return captions;
+}
+
+/**
+ * The scale a config *would* generate, without generating it.
+ *
+ * Pure by construction rather than by care: it resolves and generates in memory and renders the
+ * same table the run does. Nothing here can write, which is why the Configuration tab can redraw
+ * it on every keystroke — "run the script with writes disabled" would mean auditing every write
+ * path and trusting the audit, which is the mistake class this repo keeps hitting.
+ *
+ * A wildcard set describes the modes a collection has, and this function cannot see a collection.
+ * Rather than reach for Figma for that one case, it says so.
+ */
+function rampPreviewHtml(config, domain) {
+  var spec = domain === 'radius' ? radiusRampSpec() : spacingRampSpec();
+  if (!config || typeof config !== 'object') {
+    return rampPreviewNote('There is no config to preview yet.');
+  }
+
+  var data = JSON.parse(JSON.stringify(config.config || config));
+  try {
+    ensureCompatRampConfig(data, spec);
+    materialiseRampTokens(data, spec);
+  } catch (e) {
+    return rampPreviewNote('This config could not be read: ' + (e && e.message ? e.message : e));
+  }
+
+  var declared = rampSetsFromConfig(data, spec);
+  var modeNames = rampModeNames(data, spec);
+  if (declared.sets.length > 0 && modeNames.length === 0) {
+    return rampPreviewNote('This config takes its modes from the collection, which a preview ' +
+      'cannot see. Run it to find out which modes it writes.');
+  }
+
+  var setPlan = materialiseRampSizes(data, spec, modeNames);
+  if (setPlan && !setPlan.ok) {
+    return rampPreviewNote(describeRampSetPlan(setPlan).join(' '));
+  }
+
+  var variables;
+  try {
+    variables = generateRampVariables(data, spec);
+  } catch (e) {
+    return rampPreviewNote('This config could not be generated: ' + (e && e.message ? e.message : e));
+  }
+
+  var group = resolveGroup(config) || data.group || '';
+  var table = rampScaleTable(variables, group);
+  if (table.tokens.length === 0 || table.modes.length === 0) {
+    return rampPreviewNote('Nothing to draw yet — this config names no tokens or no modes.');
+  }
+  return rampScaleHtml(table, rampCaptions(data, spec));
+}
+
+/** Why there is no picture, in the place the picture would be. */
+function rampPreviewNote(message) {
+  return '<div style="font-size:11px;line-height:1.5;opacity:0.65;padding:2px 0;">' +
+    rampEscapeHtml(message) + '</div>';
 }
 
 /**

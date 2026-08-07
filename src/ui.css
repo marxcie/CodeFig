@@ -1816,4 +1816,30 @@
         opacity: 0.85;
       }
 
+      /* The live preview in the Configuration tab. Read-only, beside the controls when there is
+         room and under them when there is not. Its own scroll container, so a long scale never
+         pushes the form off screen. */
+      .config-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 12px;
+        border-top: 1px solid rgba(128, 128, 128, 0.22);
+        max-height: 44%;
+        flex: 0 0 auto;
+        overflow: hidden;
+      }
+
+      .config-preview-title {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.55;
+      }
+
+      .config-preview-body {
+        overflow: auto;
+        min-height: 0;
+      }
+
       /* End of styles */

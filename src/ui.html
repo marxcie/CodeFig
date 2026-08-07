@@ -106,6 +106,11 @@
               <div class="config-ui-container" id="configUIContainer" style="display: none;">
                 <!-- Rendered when script uses // @UI_CONFIG_START … // @UI_CONFIG_END -->
               </div>
+              <!-- Rendered when the script declares // @PREVIEW: <function>. Read-only. -->
+              <div class="config-preview" id="configPreview" style="display: none;">
+                <div class="config-preview-title">Preview</div>
+                <div class="config-preview-body" id="configPreviewBody"></div>
+              </div>
             </div>
             <div class="tab-content active" id="tabScript">
               <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
@@ -524,7 +529,7 @@
             configUIContainer.innerHTML = '';
             configUIInstance = window.CodeFigConfigUI.render(schema, {
               container: configUIContainer,
-              onChange: function (values) { syncUIToCode(values); }
+              onChange: function (values) { syncUIToCode(values); scheduleConfigPreview(); }
             });
           } else {
             configUIContainer.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
@@ -1182,6 +1187,8 @@
         infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
         updateInfoPanelButtonVisibility();
         updateInfoPanelOwnership();
+        updateConfigPreviewVisibility();
+        scheduleConfigPreview();
         updateConfigLoadButtonVisibility();
         // Probe on the *annotation*, not on the button being visible: visibility now depends on
         // what the probe finds, so gating the probe on visibility meant it never ran.
@@ -1384,6 +1391,103 @@
         configLoadInFlight = true;
         post('RUN', { code: resolved, silent: true });
         return true;
+      }
+
+      // ======================================================================
+      // LIVE PREVIEW
+      //
+      // The InfoPanel is a results surface: it appears after a run and covers the UI, so it can
+      // say what a run did and cannot say what changing a step to 3 would do. Judging a scale is
+      // iterative, so the Configuration tab draws the same picture as you type.
+      //
+      // The preview runs one declared function rather than the script with writes disabled —
+      // "disabled" would mean auditing every write path and trusting the audit. `rampPreviewHtml`
+      // is pure, and a test asserts it contains no `figma.`.
+      // ======================================================================
+
+      let _previewTimer = null;
+      let _previewSeq = 0;
+      let _previewLastHtml = '';
+
+      /** `// @PREVIEW: rampPreviewHtml` → the function name, or null. */
+      function scriptPreviewFunction(code) {
+        const match = /^[^\S\n]*\/\/[^\S\n]*@PREVIEW:[^\S\n]*([A-Za-z_$][\w$]*)/m.exec(code || '');
+        return match ? match[1] : null;
+      }
+
+      /**
+       * The snippet that renders a preview.
+       *
+       * It reuses the script's own `@import` lines verbatim. `@import` follows calls only within
+       * one source file, so importing the preview function alone would ReferenceError on its first
+       * library call — while the script's import list already covers everything it needs and is
+       * already checked by `validateResolvedCalls`. One list, and it is not this one.
+       */
+      function buildPreviewSnippet(code, fn, config, domain, seq) {
+        const imports = (window.CodeFigImports && typeof window.CodeFigImports.findImports === 'function')
+          ? window.CodeFigImports.findImports(code).map(function (imp) { return imp.statement; })
+          : [];
+        return imports.concat([
+          'window.codefigConfigLoadResult({',
+          '  preview: ' + fn + '(' + JSON.stringify(config) + ', ' + JSON.stringify(domain) + '),',
+          '  previewSeq: ' + seq,
+          '});'
+        ]).join('\n');
+      }
+
+      function configPreviewDomain() {
+        const path = configBlockFromFilePath(currentConfigBlock()) || '';
+        const match = /^domains\.([A-Za-z0-9_$]+)/.exec(path);
+        return match ? match[1] : null;
+      }
+
+      function updateConfigPreviewVisibility() {
+        const region = document.getElementById('configPreview');
+        if (!region) return;
+        const on = !!(currentScript && scriptPreviewFunction(currentScript.code || ''));
+        region.style.display = on ? 'flex' : 'none';
+        if (!on) {
+          _previewLastHtml = '';
+          const body = document.getElementById('configPreviewBody');
+          if (body) body.innerHTML = '';
+        }
+      }
+
+      function renderConfigPreview(html) {
+        const body = document.getElementById('configPreviewBody');
+        if (!body) return;
+        _previewLastHtml = html;
+        body.innerHTML = html;
+      }
+
+      /** Debounced: long enough that typing `12` never renders `1`. */
+      function scheduleConfigPreview() {
+        if (!currentScript || !scriptPreviewFunction(currentScript.code || '')) return;
+        if (_previewTimer) clearTimeout(_previewTimer);
+        _previewTimer = setTimeout(requestConfigPreview, 400);
+      }
+
+      function requestConfigPreview() {
+        _previewTimer = null;
+        if (!currentScript) return;
+        const fn = scriptPreviewFunction(currentScript.code || '');
+        if (!fn) return;
+
+        const readBlock = window.CodeFigConfigUI && window.CodeFigConfigUI.parseConfigBlockObject;
+        const config = readBlock ? readBlock(currentConfigBlock()) : null;
+        if (!config) {
+          // Mid-edit text is unparseable constantly. Holding the last good render beats blinking
+          // the picture out on every keystroke.
+          if (!_previewLastHtml) renderConfigPreview(
+            '<div style="font-size:11px;opacity:0.6;">Waiting for a config this can read.</div>');
+          return;
+        }
+
+        const seq = ++_previewSeq;
+        const started = runSilentSnippet(
+          buildPreviewSnippet(currentScript.code || '', fn, config, configPreviewDomain(), seq));
+        // Busy is not a failure: another silent run is in flight and the next edit will ask again.
+        if (!started && _previewTimer === null) _previewTimer = setTimeout(requestConfigPreview, 400);
       }
 
       /**
@@ -2977,6 +3081,7 @@
         configEditor.on('change', () => {
           updateButtonStates();
           scheduleAutosave();
+          scheduleConfigPreview();
         });
       }
 
@@ -3308,6 +3413,14 @@
               var data = msg.result || {};
               if (data.error) {
                 finishConfigLoad(null, "Could not import this file's config: " + data.error);
+                return;
+              }
+              // A preview shares the silent-run channel rather than adding a second one, and
+              // clears the in-flight flag itself: a debounced preview must never leave the import
+              // button believing something is still running.
+              if (data.preview !== undefined) {
+                configLoadInFlight = false;
+                if (data.previewSeq === _previewSeq) renderConfigPreview(data.preview);
                 return;
               }
               if (data.probe) {

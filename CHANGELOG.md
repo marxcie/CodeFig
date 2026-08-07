@@ -25,6 +25,13 @@ deleting variable modes they did not recognise.
 
 ### Added
 
+- **See the scale before you commit to it.** Spacing and Corner radius draw their scale in the
+  Configuration tab and redraw it as you type — tokens down, modes across, each value as a bar,
+  with the gaps under each column, because `1, 4, 8, 12, 16, 24` reads as regular until you see
+  `3, 4, 4, 4, 8`. Nothing is written while you look: the preview generates in memory and cannot
+  reach your document. The same picture appears in the results panel after a run, as the record of
+  what was made.
+
 - **Adopt a file CodeFig has never touched.** Point **Foundation config** at a group of spacing or
   corner-radius tokens in `adopt` mode and it works out how the scale was built — a base and a
   growing step, a fixed ratio, or a straight ramp — and records it, so the import button and

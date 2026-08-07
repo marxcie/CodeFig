@@ -23,13 +23,17 @@
 // | generateOverview | Optional boolean (default `false`). When `true`, builds a **Corner radius — overview** frame (token rows × mode columns, variable-bound swatches). Uses `@Foundation overview`. |
 // @DOC_END
 
+// The Configuration tab redraws this as you type. Pure: it generates in memory and draws
+// the same table the run does, so it cannot write anything.
+// @PREVIEW: rampPreviewHtml
+
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateCornerRadiusOverview } from "@Foundation overview"
 @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, normaliseConfig } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
-@import { radiusRampSpec, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
+@import { radiusRampSpec, rampPreviewHtml, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
 
 // ========================================
 // CONFIG
