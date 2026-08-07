@@ -157,3 +157,64 @@ test('the summary says where the values live, because they do not persist', () =
   const result = P.applyFileConfig(SCHEMA, CURRENT, { collection: 'Tokens' });
   assert.ok(/editor/.test(result.summary), result.summary);
 });
+
+// ---------------------------------------------------------------------------
+// The import button's state, derived once
+// ---------------------------------------------------------------------------
+
+const CHECKED = { checked: true, hasRegistry: true, domains: { spacing: true } };
+
+test('a script that declares nothing shows no button', () => {
+  const state = P.configImportState('collectionName: "C",\n  group: "Spacing"', CHECKED);
+  assert.equal(state.visible, false);
+  assert.equal(state.dot, false);
+  assert.equal(state.reason, 'no-annotation');
+});
+
+test('a declared domain the file has is available', () => {
+  const state = P.configImportState('// @fromFile: domains.spacing\n  group: "Spacing"', CHECKED);
+  assert.equal(state.domain, 'spacing');
+  assert.equal(state.visible, true);
+  assert.equal(state.dot, true);
+  assert.equal(state.reason, 'available');
+});
+
+test('a declared domain the file does not have shows nothing', () => {
+  // The contradiction this replaced: a dot saying "there is a config" followed by a click
+  // saying "there is no config". Both now ask the same question of the same answer.
+  const state = P.configImportState('// @fromFile: domains.grid', CHECKED);
+  assert.equal(state.visible, false);
+  assert.equal(state.dot, false);
+  assert.equal(state.reason, 'no-config-for-domain');
+});
+
+test('before anything has been read, the answer is "not checked" rather than "no"', () => {
+  const state = P.configImportState('// @fromFile: domains.spacing', { checked: false });
+  assert.equal(state.visible, false);
+  assert.equal(state.reason, 'not-checked');
+});
+
+test('a form with per-field paths asks about the registry, not a domain', () => {
+  const block = 'var collectionName = "C"; // @fromFile: collection';
+  assert.equal(P.configImportState(block, { checked: true, hasRegistry: true }).visible, true);
+  assert.equal(P.configImportState(block, { checked: true, hasRegistry: false }).visible, false);
+  assert.equal(P.configImportState(block, { checked: true, hasRegistry: false }).reason, 'no-foundation');
+});
+
+test('the state is a function of its inputs, with nothing remembered between calls', () => {
+  // The taken-this-session flag is gone: after a CLI run writes a new manifest, "you already
+  // took it" is false, and a cached boolean had no way to know.
+  const block = '// @fromFile: domains.spacing';
+  const before = P.configImportState(block, { checked: true, domains: {} });
+  const after = P.configImportState(block, CHECKED);
+  const again = P.configImportState(block, { checked: true, domains: {} });
+  assert.equal(before.visible, false);
+  assert.equal(after.visible, true);
+  assert.deepEqual(again, before, 'the same inputs give the same answer, always');
+});
+
+test('a malformed probe is treated as nothing known, not as a crash', () => {
+  for (const probe of [null, undefined, {}, { checked: true }]) {
+    assert.doesNotThrow(() => P.configImportState('// @fromFile: domains.spacing', probe));
+  }
+});

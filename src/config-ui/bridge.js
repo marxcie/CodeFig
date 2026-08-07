@@ -21,5 +21,8 @@
     hasFileFields: function (schema) {
       return P.hasFileFields(schema);
     },
+    configImportState: function (configBlock, probe) {
+      return P.configImportState(configBlock, probe);
+    },
   };
 })(typeof self !== "undefined" ? self : this);

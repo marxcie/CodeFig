@@ -143,6 +143,11 @@ deleting variable modes they did not recognise.
   nothing to keep in sync. A config reaches a run as a prepended `var` that each script's existing
   `typeof x !== 'undefined' ? x : {…}` guard picks up, so no script needed changing. The dev
   bridge's `args` field, carried end to end and used by nothing, now carries it.
+- The import button's state is **one derived function** — `configImportState(configBlock, probe)`,
+  pure and covered by Node tests — rather than three cached booleans computed at three different
+  moments. The file is re-read on script open and after every completed run, including runs the
+  CLI started, so a manifest written behind the UI's back cannot leave the button claiming
+  something stale.
 - `@fromFile:` in a config block declares where a field's value comes from, and survives the form
   serializer's `parse → serialize` round trip — an annotation it dropped would silently remove the
   button from the script.
