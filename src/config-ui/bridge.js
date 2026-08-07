@@ -24,5 +24,11 @@
     configImportState: function (configBlock, probe) {
       return P.configImportState(configBlock, probe);
     },
+    fillConfigBlock: function (blockText, payload) {
+      return P.fillConfigBlock(blockText, payload);
+    },
+    parseConfigBlockObject: function (text) {
+      return P.parseConfigBlockObject(text);
+    },
   };
 })(typeof self !== "undefined" ? self : this);

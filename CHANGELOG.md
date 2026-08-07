@@ -131,6 +131,9 @@ deleting variable modes they did not recognise.
 
 ### Fixed
 
+- **The import button works again.** It reported that the config could not be read, on every file,
+  whatever the config said. The text was fine — the button was calling something the UI had no way
+  to reach.
 - **Importing a config keeps your comments.** The import button used to replace the whole config
   block, so every note you had written in it was gone and Cmd-Z was the only way back. It now fills
   values into the block that is already there: anything the file does not have a value for comes

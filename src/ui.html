@@ -1523,8 +1523,12 @@
           const fill = window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock;
           const readBlock = window.CodeFigConfigUI && window.CodeFigConfigUI.parseConfigBlockObject;
           if (!fill || !readBlock) {
-            finishConfigLoad(null, 'This plugin is running a build without the config filler. ' +
-              'Reload the plugin in Figma to pick up the current one. Nothing was changed.');
+            // Not a stale build: `bridge.js` hand-lists what the UI may reach, and the first time
+            // this fired the two new functions were simply not on the list. `tests/config-ui-bridge`
+            // now fails when they are not, so this branch should be unreachable.
+            debugError('CodeFigConfigUI is missing fillConfigBlock/parseConfigBlockObject.');
+            finishConfigLoad(null, 'CodeFig could not reach its config filler — this is a bug, ' +
+              'not something you did. Nothing was changed.');
             return;
           }
           const incoming = readBlock(data.block);
