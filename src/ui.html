@@ -1500,8 +1500,12 @@
 
         const path = configBlockFromFilePath(currentConfigBlock());
 
-        // Object-literal config: replace the block wholesale, keeping the annotation that makes
-        // the button exist at all — losing it would remove the button after one press.
+        // Object-literal config: fill the block that is already open rather than printing a new
+        // one. The block is the human format — its comments and key order are the point — so
+        // import substitutes values in place, inserts an entry the file has and the block does
+        // not, and removes one the file does not have along with the comments written for it.
+        // Every insertion and removal is named, because a silently deleted annotation is a loss
+        // you find a week later.
         if (path && !scriptHasUIConfig) {
           if (!data.block) {
             finishConfigLoad(null, 'This file has no saved config for ' + path + '. The config is unchanged.');
@@ -1511,12 +1515,20 @@
             finishConfigLoad(null, 'The configuration editor is not open, so there is nowhere to load into.');
             return;
           }
-          configEditor.setValue('  // @fromFile: ' + path + '\n' + data.block);
+          const fill = window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock;
+          const readBlock = window.CodeFigConfigUI && window.CodeFigConfigUI.parseConfigBlockObject;
+          const incoming = fill && readBlock ? readBlock(data.block) : null;
+          if (!incoming) {
+            finishConfigLoad(null, 'Could not read the config this file holds, so the block is unchanged.');
+            return;
+          }
+          const filled = fill(currentConfigBlock(), incoming);
+          configEditor.setValue(filled.text);
           mergeConfigIntoMain();
           updateConfigLoadButtonVisibility();
           const blockSource = configSourceLabel(v1, configLoadDomain());
-          finishConfigLoad('Imported' + (blockSource ? ' from ' + blockSource : '') +
-            '. Comments in the config block were replaced — Cmd-Z restores them. The file is unchanged until you run.');
+          finishConfigLoad('Imported' + (blockSource ? ' from ' + blockSource : '') + '. ' +
+            filled.summary + ' The file is unchanged until you run.');
           return;
         }
 

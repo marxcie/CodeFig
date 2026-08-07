@@ -131,6 +131,14 @@ deleting variable modes they did not recognise.
 
 ### Fixed
 
+- **Importing a config keeps your comments.** The import button used to replace the whole config
+  block, so every note you had written in it was gone and Cmd-Z was the only way back. It now fills
+  values into the block that is already there: anything the file does not have a value for comes
+  out byte-identical, including comments, blank lines and the order you put things in. Where the
+  shapes differ it says so — a viewport the file has and your block does not is added in the style
+  of the entry above it, and one your block has and the file does not is removed **along with the
+  comments written for it**, named in the summary so a deleted annotation is something you are told
+  about rather than something you find later.
 - **Your config no longer comes back with CodeFig's working notes in it.** A recorded set carried
   the resolver's own intermediate state — the sizes it worked out, which set overrode which — and
   handed it back as though you had written it. Only fields the config format declares are stored

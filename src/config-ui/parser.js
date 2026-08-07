@@ -685,6 +685,459 @@
     return state;
   }
 
+
+  // ==========================================================================
+  // FILLING A CONFIG BLOCK FROM A FILE
+  //
+  // The block is the human format — comments, key order and nesting are the point. So import does
+  // not print a new block; it fills values into the one the script already ships, and everything
+  // it had no value for comes out byte-identical.
+  //
+  // Values are the easy half. Shape is the hard half, and it has three directions:
+  //
+  //   1. shapes match          → substitute in place
+  //   2. file has more entries → insert one, in the style of the nearest sibling
+  //   3. block has more        → remove it, and the comments attached to it
+  //
+  // Direction 3 is the one to be loud about. A comment was written for the entry it sits above,
+  // so leaving it behind would describe something that is no longer there — and deleting an
+  // annotated `tablet` block because an imported config had two viewports is a loss you find a
+  // week later. Every removal is reported by name with the comment lines that went with it.
+  //
+  // A key the payload never mentions is NOT direction 3. "The file does not say" and "the file
+  // says there are two of these" are different statements; only the second is about shape.
+  // ==========================================================================
+
+  /** Split an object body or array body on commas at its own depth, ignoring strings and comments. */
+  function splitConfigItems(inner) {
+    var items = [];
+    var depth = 0, start = 0, i = 0;
+    var inString = null, inLine = false, inBlock = false;
+
+    while (i < inner.length) {
+      var c = inner.charAt(i), n = inner.charAt(i + 1);
+      if (inLine) { if (c === "\n") inLine = false; i++; continue; }
+      if (inBlock) { if (c === "*" && n === "/") { inBlock = false; i += 2; continue; } i++; continue; }
+      if (inString) {
+        if (c === "\\") { i += 2; continue; }
+        if (c === inString) inString = null;
+        i++; continue;
+      }
+      if (c === "/" && n === "/") { inLine = true; i += 2; continue; }
+      if (c === "/" && n === "*") { inBlock = true; i += 2; continue; }
+      if (c === '"' || c === "'") { inString = c; i++; continue; }
+      if (c === "[" || c === "{" || c === "(") { depth++; i++; continue; }
+      if (c === "]" || c === "}" || c === ")") { depth--; i++; continue; }
+      if (c === "," && depth === 0) { items.push(inner.slice(start, i)); start = i + 1; i++; continue; }
+      i++;
+    }
+
+    var rest = inner.slice(start);
+    // Whitespace and comments after the final comma are the body's, not an item's.
+    var hadTrailingComma = false;
+    if (rest.replace(/\s|\/\/[^\n]*/g, "").length > 0) { items.push(rest); rest = ""; }
+    else if (items.length > 0) hadTrailingComma = true;
+    return { items: items, tail: rest, trailingComma: hadTrailingComma };
+  }
+
+  /**
+   * A comment sitting on the same line as the previous item's comma belongs to that item, not to
+   * the one whose slice it happens to start.
+   */
+  function reattachTrailingComments(items) {
+    for (var i = 1; i < items.length; i++) {
+      var nl = items[i].indexOf("\n");
+      if (nl === -1) continue;
+      var head = items[i].slice(0, nl);
+      if (head.indexOf("//") === -1) continue;
+      items[i - 1] = items[i - 1] + "," + head;
+      items[i] = items[i].slice(nl);
+      // The comma is now inside the previous item, so the joiner must not add a second one.
+      items[i - 1] = { text: items[i - 1], joined: true };
+    }
+    return items.map(function (it) { return typeof it === "string" ? { text: it, joined: false } : it; });
+  }
+
+  /** The comment lines an item owns: the unbroken run of `//` lines at its head. */
+  function itemComments(text) {
+    var lines = text.split("\n");
+    var found = [];
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (t === "") continue;
+      if (t.indexOf("//") === 0) { found.push(t); continue; }
+      break;
+    }
+    return found;
+  }
+
+  /** `  key: value` → the key, unquoted. Null when the item is not a property. */
+  function itemKey(text) {
+    var stripped = text.replace(/^(\s*\/\/[^\n]*\n)+/, "");
+    var m = stripped.match(/^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$]*))\s*:/);
+    if (!m) return null;
+    return m[1] || m[2] || m[3];
+  }
+
+  /** The source offset where an item's value begins, i.e. just after its `key:`. */
+  function itemValueStart(text) {
+    var stripped = text.replace(/^(\s*\/\/[^\n]*\n)+/, "");
+    var offset = text.length - stripped.length;
+    var m = stripped.match(/^\s*(?:"[^"]+"|'[^']+'|[A-Za-z_$][\w$]*)\s*:/);
+    return m ? offset + m[0].length : -1;
+  }
+
+  /** The indentation of the first non-blank, non-comment line of an item. */
+  function itemIndent(text) {
+    var lines = text.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (t === "" || t.indexOf("//") === 0) continue;
+      return lines[i].slice(0, lines[i].length - lines[i].replace(/^\s*/, "").length);
+    }
+    return "";
+  }
+
+  /** A value as a config block writes it: double quotes, no JSON pretty-printer look. */
+  function formatConfigValue(value, indent, multiline) {
+    if (value === null) return "null";
+    if (typeof value === "string") return JSON.stringify(value);
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) {
+      var scalars = value.every(function (v) {
+        return v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+      });
+      if (value.length === 0) return "[]";
+      if (scalars) {
+        if (!multiline) {
+          return "[" + value.map(function (v) { return formatConfigValue(v, indent); }).join(", ") + "]";
+        }
+        return "[\n" + value.map(function (v) {
+          return indent + "  " + formatConfigValue(v, indent + "  ");
+        }).join(",\n") + "\n" + indent + "]";
+      }
+      var entries = value.map(function (v) {
+        return indent + "  " + formatConfigValue(v, indent + "  ");
+      });
+      return "[\n" + entries.join(",\n") + "\n" + indent + "]";
+    }
+    if (value && typeof value === "object") {
+      var keys = Object.keys(value);
+      if (keys.length === 0) return "{}";
+      var props = keys.map(function (k) {
+        return indent + "  " + k + ": " + formatConfigValue(value[k], indent + "  ");
+      });
+      return "{\n" + props.join(",\n") + "\n" + indent + "}";
+    }
+    return "null";
+  }
+
+  /**
+   * A new entry, written the way its nearest sibling is written: the sibling's key order, and its
+   * choice of inline or expanded for each nested object. An insert that looks foreign is a diff
+   * you have to read twice to see is only an addition.
+   */
+  function formatLikeSibling(value, sibling, indent) {
+    if (!sibling || !value || typeof value !== "object" || Array.isArray(value)) {
+      return formatConfigValue(value, indent);
+    }
+    var order = [];
+    var inline = {};
+    var body = sibling.replace(/^\s*\{/, "").replace(/\}\s*$/, "");
+    var parts = splitConfigItems(body).items;
+    for (var i = 0; i < parts.length; i++) {
+      var k = itemKey(parts[i]);
+      if (!k || !Object.prototype.hasOwnProperty.call(value, k) || order.indexOf(k) !== -1) continue;
+      order.push(k);
+      var at = itemValueStart(parts[i]);
+      if (at !== -1) inline[k] = parts[i].slice(at).replace(/\/\/[^\n]*/g, "").indexOf("\n") === -1;
+    }
+    var rest = Object.keys(value).filter(function (k) { return order.indexOf(k) === -1; });
+
+    var keys = order.concat(rest);
+    if (keys.length === 0) return "{}";
+    var props = keys.map(function (k) {
+      var v = value[k];
+      var written = (inline[k] && v && typeof v === "object" && !Array.isArray(v))
+        ? inlineObject(v)
+        : formatConfigValue(v, indent + "  ");
+      return indent + "  " + k + ": " + written;
+    });
+    return "{\n" + props.join(",\n") + "\n" + indent + "}";
+  }
+
+  /** `{ level: "xs", size: 4 }` — one line, because that is how the block next to it is written. */
+  function inlineObject(value) {
+    var keys = Object.keys(value);
+    if (keys.length === 0) return "{}";
+    return "{ " + keys.map(function (k) {
+      return k + ": " + formatConfigValue(value[k], "");
+    }).join(", ") + " }";
+  }
+
+  /** How an entry is recognised across the two shapes: by name if it has one, else by position. */
+  function entryIdentity(value) {
+    if (value && typeof value === "object" && typeof value.name === "string") {
+      return value.name.trim().toLowerCase();
+    }
+    return null;
+  }
+
+  function fillArrayValue(valueText, list, path, report) {
+    var open = valueText.indexOf("[");
+    var close = valueText.lastIndexOf("]");
+    if (open === -1 || close === -1) return valueText;
+
+    var head = valueText.slice(0, open + 1);
+    var tailText = valueText.slice(close);
+    var split = splitConfigItems(valueText.slice(open + 1, close));
+    var items = reattachTrailingComments(split.items);
+
+    // Whatever sits between the last entry and the `]` closes the list. Without a trailing comma
+    // it is part of the last item's text, and leaving it there would strand it mid-list the first
+    // time an entry was appended.
+    var closer = split.tail;
+    if (!closer && items.length > 0) {
+      var last = items[items.length - 1].text;
+      var trimmedLast = last.replace(/\s+$/, "");
+      closer = last.slice(trimmedLast.length);
+      items[items.length - 1] = { text: trimmedLast, joined: items[items.length - 1].joined };
+    }
+    if (!closer) closer = "\n" + (report.blockIndent || "  ");
+
+    var objects = list.every(function (v) { return v && typeof v === "object" && !Array.isArray(v); });
+    if (!objects) {
+      // A list of scalars has no entries to keep, and no comments inside to lose.
+      var before = valueText.slice(open, close + 1);
+      // One per line if that is how it was written: the layout is the author's, not the printer's.
+      var after = formatConfigValue(list, itemIndent(valueText) || "  ", before.indexOf("\n") !== -1);
+      if (before !== after) report.substituted.push(path);
+      return valueText.slice(0, open) + after + valueText.slice(close + 1);
+    }
+
+    var indent = items.length > 0 ? itemIndent(items[0].text) : (report.blockIndent || "  ") + "  ";
+    var sibling = null;
+    for (var s = 0; s < items.length; s++) {
+      var t = items[s].text.replace(/^(\s*\/\/[^\n]*\n)+/, "").trim();
+      if (t.charAt(0) === "{") { sibling = t; break; }
+    }
+
+    var claimed = {};
+    var kept = [];
+
+    for (var i = 0; i < items.length; i++) {
+      var text = items[i].text;
+      var parsed = parseConfigBlockObject("x: " + text.replace(/^(\s*\/\/[^\n]*\n)+/, ""));
+      var id = parsed && parsed.x ? entryIdentity(parsed.x) : null;
+      var match = null;
+
+      if (id !== null) {
+        for (var m = 0; m < list.length; m++) {
+          if (entryIdentity(list[m]) === id && !claimed[m]) { match = m; break; }
+        }
+      } else if (!claimed[i] && i < list.length && entryIdentity(list[i]) === null) {
+        match = i;
+      }
+
+      if (match === null) {
+        report.removed.push({
+          path: path,
+          name: (parsed && parsed.x && parsed.x.name) || "entry " + (i + 1),
+          comments: itemComments(text)
+        });
+        continue;
+      }
+      claimed[match] = true;
+      if (i !== match) report.reordered.push({ path: path, name: list[match].name });
+      kept.push({ text: fillObjectValue(text, list[match], path, report), order: match });
+    }
+
+    for (var n = 0; n < list.length; n++) {
+      if (claimed[n]) continue;
+      var written = formatLikeSibling(list[n], sibling, indent);
+      kept.push({ text: "\n" + indent + written, order: n, added: true });
+      report.inserted.push({ path: path, name: list[n].name || "entry " + (n + 1) });
+    }
+
+    if (kept.length === 0) return valueText.slice(0, open) + "[]" + valueText.slice(close + 1);
+
+    var joined = "";
+    for (var k = 0; k < kept.length; k++) {
+      joined += (k === 0 ? "" : ",") + kept[k].text;
+    }
+    if (split.trailingComma) joined += ",";
+    return head + joined + closer + tailText;
+  }
+
+  function fillObjectValue(itemText, value, path, report) {
+    var open = itemText.indexOf("{");
+    var close = itemText.lastIndexOf("}");
+    if (open === -1 || close === -1) return itemText;
+
+    var split = splitConfigItems(itemText.slice(open + 1, close));
+    var items = reattachTrailingComments(split.items);
+    var out = [];
+
+    for (var i = 0; i < items.length; i++) {
+      var key = itemKey(items[i].text);
+      if (key === null || !Object.prototype.hasOwnProperty.call(value, key)) {
+        out.push(items[i]);
+        continue;
+      }
+      out.push({ text: fillProperty(items[i].text, value[key], path ? path + "." + key : key, report), joined: items[i].joined });
+    }
+
+    var joined = "";
+    for (var j = 0; j < out.length; j++) joined += (j === 0 ? "" : (out[j - 1].joined ? "" : ",")) + out[j].text;
+    if (split.trailingComma) joined += ",";
+    return itemText.slice(0, open + 1) + joined + split.tail + itemText.slice(close);
+  }
+
+  /** One `key: value` item, with the payload's value put into it. */
+  function fillProperty(itemText, value, path, report) {
+    var start = itemValueStart(itemText);
+    if (start === -1) return itemText;
+
+    var valueText = itemText.slice(start);
+    var trimmed = valueText.replace(/^\s*/, "");
+
+    // Already says what the file says. Leave the text exactly as written — this is what keeps a
+    // ten-line `fontScale` array ten lines long, rather than reformatting it to prove a point.
+    var existing = parseConfigBlockObject("x:" + valueText);
+    if (existing && JSON.stringify(existing.x) === JSON.stringify(value)) return itemText;
+
+    if (trimmed.charAt(0) === "[" && Array.isArray(value)) {
+      return itemText.slice(0, start) + fillArrayValue(valueText, value, path, report);
+    }
+    if (trimmed.charAt(0) === "{" && value && typeof value === "object" && !Array.isArray(value)) {
+      return itemText.slice(0, start) + fillObjectValue(valueText, value, path, report);
+    }
+
+    // A scalar. Replace the value text and keep any trailing comment on the line.
+    var lead = valueText.slice(0, valueText.length - trimmed.length);
+    var commentAt = -1;
+    var depth = 0, inString = null;
+    for (var i = 0; i < trimmed.length; i++) {
+      var c = trimmed.charAt(i), n = trimmed.charAt(i + 1);
+      if (inString) {
+        if (c === "\\") { i++; continue; }
+        if (c === inString) inString = null;
+        continue;
+      }
+      if (c === '"' || c === "'") { inString = c; continue; }
+      if (c === "[" || c === "{") depth++;
+      if (c === "]" || c === "}") depth--;
+      if (c === "/" && n === "/" && depth === 0) { commentAt = i; break; }
+    }
+    var body = commentAt === -1 ? trimmed : trimmed.slice(0, commentAt);
+    var after = commentAt === -1 ? "" : trimmed.slice(commentAt);
+    var trailingWs = body.slice(body.replace(/\s+$/, "").length);
+    body = body.replace(/\s+$/, "");
+
+    var written = formatConfigValue(value, itemIndent(itemText));
+    if (written !== body) report.substituted.push(path);
+    return itemText.slice(0, start) + lead + written + trailingWs + after;
+  }
+
+  /** The config block's body as a plain object. Never evaluated — the tolerant reader does it. */
+  function parseConfigBlockObject(text) {
+    try {
+      return JSON.parse(looseJsonToJson("{" + text + "}"));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function fillSummary(report) {
+    var parts = [];
+    if (report.substituted.length > 0) {
+      parts.push("Filled " + report.substituted.length + " value" +
+        (report.substituted.length === 1 ? "" : "s") + ".");
+    }
+    var byPath = function (list) {
+      var groups = {}, order = [];
+      list.forEach(function (e) {
+        if (!groups[e.path]) { groups[e.path] = []; order.push(e.path); }
+        groups[e.path].push(e);
+      });
+      return order.map(function (p) { return { path: p, entries: groups[p] }; });
+    };
+
+    byPath(report.inserted).forEach(function (g) {
+      parts.push("Added " + g.entries.length + (g.entries.length === 1 ? " entry" : " entries") +
+        " to " + g.path + ": " + g.entries.map(function (e) { return e.name; }).join(", ") + ".");
+    });
+
+    byPath(report.removed).forEach(function (g) {
+      var comments = 0;
+      g.entries.forEach(function (e) { comments += e.comments.length; });
+      var line = "Removed " + g.entries.length + (g.entries.length === 1 ? " entry" : " entries") +
+        " from " + g.path + ": " + g.entries.map(function (e) { return e.name; }).join(", ") +
+        " — not in this file.";
+      if (comments > 0) {
+        line += " " + comments + " comment line" + (comments === 1 ? "" : "s") + " went with " +
+          (g.entries.length === 1 ? "it" : "them") + ".";
+      }
+      parts.push(line);
+    });
+
+    if (report.reordered.length > 0) {
+      parts.push("This file lists them in a different order; the block's order was kept, " +
+        "so its comments stay with what they describe.");
+    }
+    if (parts.length === 0) parts.push("Nothing to fill — the block already matches this file.");
+    return parts.join(" ");
+  }
+
+  /**
+   * Fill a config block's values from a payload, preserving everything the payload does not touch.
+   * → { text, substituted, inserted, removed, reordered, skipped, summary }
+   */
+  function fillConfigBlock(blockText, payload) {
+    var report = { substituted: [], inserted: [], removed: [], reordered: [], skipped: [], blockIndent: "  " };
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return {
+        text: blockText, substituted: [], inserted: [], removed: [], reordered: [], skipped: [],
+        summary: "Nothing to fill — this file has no config for this script."
+      };
+    }
+
+    var split = splitConfigItems(blockText);
+    var items = reattachTrailingComments(split.items);
+    var seen = {};
+    var out = [];
+
+    for (var i = 0; i < items.length; i++) {
+      var key = itemKey(items[i].text);
+      if (key !== null) seen[key] = true;
+      if (key === null || !Object.prototype.hasOwnProperty.call(payload, key)) {
+        out.push(items[i]);
+        continue;
+      }
+      out.push({ text: fillProperty(items[i].text, payload[key], key, report), joined: items[i].joined });
+    }
+
+    // A key the file has and the block does not is not inserted: the block declares what this
+    // script reads, so a field it never mentions would be inert. Said, rather than dropped in.
+    for (var k in payload) {
+      if (Object.prototype.hasOwnProperty.call(payload, k) && !seen[k]) report.skipped.push(k);
+    }
+
+    var joined = "";
+    for (var j = 0; j < out.length; j++) joined += (j === 0 ? "" : (out[j - 1].joined ? "" : ",")) + out[j].text;
+    if (split.trailingComma) joined += ",";
+
+    return {
+      text: joined + split.tail,
+      substituted: report.substituted,
+      inserted: report.inserted,
+      removed: report.removed,
+      reordered: report.reordered,
+      skipped: report.skipped,
+      summary: fillSummary(report)
+    };
+  }
+
   /** Does this config block declare any field that can be loaded from the file? */
   function hasFileFields(schema) {
     var rows = rowsOf(schema);
@@ -700,6 +1153,8 @@
     inferType: inferType,
     parseValue: parseValue,
     applyFileConfig: applyFileConfig,
+    fillConfigBlock: fillConfigBlock,
+    parseConfigBlockObject: parseConfigBlockObject,
     hasFileFields: hasFileFields,
     configImportState: configImportState
   };
