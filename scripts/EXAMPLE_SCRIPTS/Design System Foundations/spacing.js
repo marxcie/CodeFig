@@ -25,203 +25,16 @@
 
 @import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, writeManifest, normaliseConfig } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
+@import { spacingRampSpec, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
 
 // ========================================
-// CONFIG HELPERS
-// ========================================
-
-function spacingModesToSpacingSizes(modes, spacings, defaultBaseLevel) {
-  var out = {};
-  if (!Array.isArray(modes)) return out;
-  var baseLevel = typeof defaultBaseLevel === 'string' && defaultBaseLevel
-    ? defaultBaseLevel
-    : (Array.isArray(spacings) && spacings.length ? spacings[Math.floor(spacings.length / 2)] : 'md');
-
-  function defaultBaseSize(min, max) {
-    var lo = typeof min === 'number' ? min : 0;
-    var hi = typeof max === 'number' ? max : lo;
-    if (hi <= lo) return lo;
-    return Math.max(lo, Math.min(hi, Math.round(Math.sqrt(lo * hi))));
-  }
-
-  for (var i = 0; i < modes.length; i++) {
-    var m = modes[i];
-    if (!m || typeof m !== 'object' || typeof m.name !== 'string' || !m.name) continue;
-    var min = typeof m.min === 'number' ? m.min : 0;
-    var max = typeof m.max === 'number' ? m.max : min;
-    var base = m.base && typeof m.base === 'object' ? m.base : {};
-    var level = typeof base.level === 'string' && base.level ? base.level : baseLevel;
-    var size = typeof base.size === 'number' ? base.size : defaultBaseSize(min, max);
-    out[m.name] = {
-      min: min,
-      max: max,
-      base: { level: level, size: size }
-    };
-  }
-  return out;
-}
-
-function resolveSpacingSizes(config) {
-  if (config.modes && Array.isArray(config.modes) && config.modes.length > 0) {
-    return spacingModesToSpacingSizes(config.modes, config.spacings, config.defaultBaseLevel);
-  }
-  if (config.spacingSizes && typeof config.spacingSizes === 'object') {
-    return config.spacingSizes;
-  }
-  return {};
-}
-
-function materializeSpacingSizes(config) {
-  if (!config || typeof config !== 'object') return;
-  config.spacingSizes = resolveSpacingSizes(config);
-}
-
-/**
- * Expands `spacings` from a string template + `steps`, or fills default names when only `steps` is set.
- * Non-empty `spacings` array is left unchanged.
- */
-function applySpacingNameTemplate(template, index, totalSteps) {
-  var s = String(template);
-  var i0 = index;
-  var i1 = index + 1;
-  return s
-    .replace(/\{\$steps\}/g, String(totalSteps))
-    .replace(/\{\$index1\}/g, String(i1))
-    .replace(/\{\$step\}/g, String(i1))
-    .replace(/\{\$index\}/g, String(i0));
-}
-
-function materializeSpacingsFromSteps(config) {
-  if (!config || typeof config !== 'object') return;
-  var raw = config.spacings;
-  if (Array.isArray(raw) && raw.length > 0) {
-    return;
-  }
-  var n = typeof config.steps === 'number' ? config.steps : 0;
-  if (typeof raw === 'string' && raw.trim()) {
-    if (n < 1) {
-      console.warn('Spacing: `steps` (positive integer) is required when `spacings` is a name template string.');
-      config.spacings = [];
-      return;
-    }
-    var tplStr = raw.trim();
-    var outStr = [];
-    var j;
-    for (j = 0; j < n; j++) {
-      outStr.push(applySpacingNameTemplate(tplStr, j, n));
-    }
-    config.spacings = outStr;
-    return;
-  }
-  if (n < 1) {
-    return;
-  }
-  var tplDefault = 'space-{$index}';
-  var out = [];
-  var i;
-  for (i = 0; i < n; i++) {
-    out.push(applySpacingNameTemplate(tplDefault, i, n));
-  }
-  config.spacings = out;
-}
-
-/** Single rounding step: `roundTo` on scaling, or top-level `roundTo`, or legacy `roundUpperValuesTo`. */
-function resolveRoundTo(config) {
-  if (!config || typeof config !== 'object') return 0;
-  if (typeof config.roundTo === 'number' && config.roundTo > 0) return config.roundTo;
-  var s = config.scaling || {};
-  if (typeof s.roundTo === 'number' && s.roundTo > 0) return s.roundTo;
-  if (typeof s.roundUpperValuesTo === 'number' && s.roundUpperValuesTo > 0) return s.roundUpperValuesTo;
-  if (typeof config.roundUpperValuesTo === 'number' && config.roundUpperValuesTo > 0) return config.roundUpperValuesTo;
-  return 0;
-}
-
-/** Merge `spacingScaling` or `fontScaling` → `scaling` + `roundTo`. `spacingScaling` wins if both are set. */
-function ensureCompatSpacingConfig(config) {
-  if (!config || typeof config !== 'object') return;
-  var src = config.spacingScaling && typeof config.spacingScaling === 'object'
-    ? config.spacingScaling
-    : (config.fontScaling && typeof config.fontScaling === 'object' ? config.fontScaling : null);
-  if (src) {
-    config.scaling = {
-      type: src.type,
-      ease: src.ease,
-      easeInExponent: src.easeInExponent,
-      easeOutExponent: src.easeOutExponent
-    };
-    if (src.rangeMode !== undefined) config.scaling.rangeMode = src.rangeMode;
-    if (src.roundTo !== undefined) {
-      config.roundTo = src.roundTo;
-    } else if (src.roundUpperValuesTo !== undefined) {
-      config.roundTo = src.roundUpperValuesTo;
-    }
-  }
-  if (config.scaling && typeof config.scaling === 'object') {
-    var sc = config.scaling;
-    if (sc.roundTo !== undefined && config.roundTo === undefined) config.roundTo = sc.roundTo;
-    if (sc.roundUpperValuesTo !== undefined && config.roundTo === undefined) config.roundTo = sc.roundUpperValuesTo;
-  }
-  if (!config.scaling || typeof config.scaling !== 'object') {
-    config.scaling = { type: 'linear', ease: 'none' };
-  }
-  var rt = resolveRoundTo(config);
-  if (rt > 0) {
-    config.roundTo = rt;
-    if (config.scaling && typeof config.scaling === 'object' && config.scaling.roundTo === undefined) {
-      config.scaling.roundTo = rt;
-    }
-  }
-}
-
-/** Known `scaling.type` values for spacing (case-insensitive, except piecewise names). */
-var KNOWN_SPACING_SCALING_TYPES = {
-  linear: true,
-  sine: true,
-  quad: true,
-  cubic: true,
-  quart: true,
-  quint: true,
-  circ: true,
-  exponential: true,
-  goldenratio: true,
-  expo: true,
-  piecewise: true,
-  piecewise2: true,
-  piecewise4: true
-};
-
-function notifyUnknownSpacingScalingType(rawType) {
-  var label = typeof rawType === 'string' ? rawType : String(rawType);
-  var msg = 'Spacing: scaling.type "' + label + '" is not a recognized curve. Use linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio (aliases: expo, goldenratio), or piecewise / piecewise2 / piecewise4.';
-  console.warn(msg);
-  try {
-    if (typeof figma !== 'undefined' && figma.notify) {
-      figma.notify(msg, { error: true, timeout: 10000 });
-    }
-  } catch (e) {}
-}
-
-function validateSpacingScalingTypeConfig(config) {
-  if (!config || typeof config !== 'object') return;
-  var scaling = config.scaling || {};
-  var raw = scaling.type;
-  if (raw === undefined || raw === null || raw === '') return;
-  if (typeof raw !== 'string') {
-    notifyUnknownSpacingScalingType(raw);
-    return;
-  }
-  var t = raw.trim();
-  if (!t) return;
-  if (isPiecewiseScaleType(t)) return;
-  var k = t.toLowerCase();
-  if (KNOWN_SPACING_SCALING_TYPES[k]) return;
-  notifyUnknownSpacingScalingType(raw);
-}
-
-// ========================================
-// DEFAULT CONFIG
+// CONFIG
+//
+// The generator lives in `@Linear Ramp`; this file is the config and the overview call. Paste a
+// config into the block below exactly as before — it is still the only thing that decides what a
+// run produces.
 // ========================================
 
 var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfigData : {
@@ -267,123 +80,11 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
   // @CONFIG_END
 };
 
-ensureCompatSpacingConfig(spacingConfigData);
-materializeSpacingsFromSteps(spacingConfigData);
-materializeSpacingSizes(spacingConfigData);
-validateSpacingScalingTypeConfig(spacingConfigData);
-
-/** One grid for all spacing steps (see `roundTo` / `resolveRoundTo`). */
-function getSpacingRoundGrid(config) {
-  return resolveRoundTo(config);
-}
-
-/**
- * Single ramp min→max across all token indices (even t in index space).
- * Omitted `rangeMode` defaults to full ramp for all curve types.
- * Set `scaling.rangeMode: 'twoSegment'` for min→base→max (easing per segment).
- */
-function useFullRangeRamp(config) {
-  var scaling = config.scaling || {};
-  var rm = String(config.rangeMode || scaling.rangeMode || '').toLowerCase();
-  if (rm === 'full') return true;
-  if (rm === 'twosegment' || rm === 'two_segment' || rm === 'segment' || rm === 'anchor') return false;
-  return true;
-}
-
-function buildSpacingScaleOpts(totalSteps, viewport, config) {
-  var sizes = config.spacingSizes[viewport];
-  if (!sizes || !sizes.base) {
-    return null;
-  }
-  var baseIndex = config.spacings.indexOf(sizes.base.level);
-  if (baseIndex < 0) {
-    console.warn('base.level not found in spacings, using middle step');
-    baseIndex = Math.max(0, Math.floor((totalSteps - 1) / 2));
-  }
-  var scaling = config.scaling || {};
-  return {
-    steps: totalSteps,
-    min: sizes.min,
-    max: sizes.max,
-    type: scaling.type || 'linear',
-    ease: scaling.ease,
-    rangeMode: useFullRangeRamp(config) ? 'full' : 'twoSegment',
-    baseIndex: baseIndex,
-    baseValue: sizes.base.size,
-    roundTo: getSpacingRoundGrid(config),
-    easeInExponent: scaling.easeInExponent,
-    easeOutExponent: scaling.easeOutExponent,
-    defaultRangeMode: 'full'
-  };
-}
-
-/** Range curve or piecewise ramp via shared `generateScale`. */
-function calculateFluidSpacing(scaleIndex, totalSteps, viewport, config) {
-  var opts = buildSpacingScaleOpts(totalSteps, viewport, config);
-  if (!opts) return 0;
-  var scale = generateScale(opts);
-  var v = scale[scaleIndex];
-  if (typeof v !== 'number' || isNaN(v)) return opts.min;
-  return Math.max(opts.min, Math.min(opts.max, v));
-}
-
-function generateSpacingVariables(config) {
-  var variables = {};
-  var prefix = namePrefix(resolveGroup({ config: config }));
-  var viewportNames = Object.keys(config.spacingSizes || {});
-  if (viewportNames.length === 0 || !Array.isArray(config.spacings) || config.spacings.length === 0) {
-    return variables;
-  }
-
-  var lastSpacingPerViewport = {};
-  viewportNames.forEach(function(viewport) {
-    var viewportKey = viewportLabel(viewport);
-    lastSpacingPerViewport[viewportKey] = -1;
-  });
-
-  var gridSize = getSpacingRoundGrid(config);
-
-  config.spacings.forEach(function(scaleName, index) {
-    var values = {};
-
-    viewportNames.forEach(function(viewport) {
-      var viewportKey = viewportLabel(viewport);
-      var minSize = config.spacingSizes[viewport].min;
-      var maxSize = config.spacingSizes[viewport].max;
-      var spacingVal = calculateFluidSpacing(index, config.spacings.length, viewport, config);
-      var previous = lastSpacingPerViewport[viewportKey];
-      var step = gridSize > 0 ? gridSize : 1;
-      var guard = 0;
-      while (index > 0 && spacingVal <= previous && previous >= 0 && guard++ < 32) {
-        var nextRaw = Math.min(maxSize, previous + step);
-        if (nextRaw <= previous) {
-          break;
-        }
-        spacingVal = nextRaw;
-        if (gridSize > 0) {
-          spacingVal = snapScaleGrid(spacingVal, gridSize);
-        }
-        spacingVal = Math.max(minSize, Math.min(maxSize, spacingVal));
-      }
-      lastSpacingPerViewport[viewportKey] = spacingVal;
-      values[viewportKey] = spacingVal;
-    });
-
-    variables[prefix + scaleName] = {
-      type: "FLOAT",
-      scopes: ["WIDTH_HEIGHT", "GAP"],
-      values: values
-    };
-  });
-
-  return variables;
-}
 
 var spacingConfig = typeof spacingConfig !== 'undefined' ? spacingConfig : {
   collectionName: resolveCollectionName(spacingConfigData),
   group: resolveGroup(spacingConfigData),
-  config: spacingConfigData,
-  variables: generateSpacingVariables(spacingConfigData)
+  config: spacingConfigData
 };
 
 function resolveSpacingGenerateOverview(config) {
@@ -395,60 +96,18 @@ function resolveSpacingGenerateOverview(config) {
 }
 
 // ========================================
-// CORE
-// ========================================
-
-async function createOrUpdateCollection(config) {
-  var data = config.config || config;
-  ensureCompatSpacingConfig(data);
-  materializeSpacingsFromSteps(data);
-  materializeSpacingSizes(data);
-  validateSpacingScalingTypeConfig(data);
-
-  console.log('=== SPACING SYSTEM MANAGER ===');
-  var collectionName = resolveCollectionName(config);
-  var groupName = resolveGroup(config);
-  console.log('Processing collection: ' + collectionName + (groupName ? ' (group: ' + groupName + ')' : ' (no group)'));
-
-  var collection = await getOrCreateCollection(collectionName);
-
-  var modes = Object.keys(data.spacingSizes || {}).map(function(k) {
-    return viewportLabel(k);
-  });
-  if (modes.length === 0) {
-    modes = extractModes({ variables: config.variables });
-  }
-  console.log('Detected modes (config order): ' + modes.join(', '));
-
-  setupModes(collection, modes);
-
-  var variables = generateSpacingVariables(data);
-  var stats = await processVariables(collection, variables, data, modes);
-
-  console.log('=== SPACING SYSTEM SUMMARY ===');
-  console.log('Collection: ' + collectionName);
-  console.log('Variables created: ' + stats.created);
-  console.log('Variables updated: ' + stats.updated);
-  console.log('Variables skipped: ' + stats.skipped);
-
-  return { collection: collection, stats: stats };
-}
-
-// ========================================
 // EXECUTION
 // ========================================
 
-createOrUpdateCollection(spacingConfig)
+runLinearRamp(spacingConfig, spacingRampSpec())
   .then(async function (result) {
     var showOverview = resolveSpacingGenerateOverview(spacingConfig);
     if (showOverview) {
       await foundationCreateSpacingOverview(result.collection, spacingConfig.config || spacingConfigData);
     }
-    var msg =
-      '✅ Spacing: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' updated';
-    if (showOverview) {
-      msg += '; overview frame';
-    }
+    var msg = '✅ Spacing: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' updated';
+    if (showOverview) msg += '; overview frame';
+    if (result.manifest && result.manifest.ok) msg += '; set recorded';
     figma.notify(msg);
   })
   .catch(function (error) {

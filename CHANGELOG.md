@@ -64,6 +64,10 @@ deleting variable modes they did not recognise.
   `replace-style-variable-bindings` now support `*` wildcards.
 - Figma's default `Mode 1` on a newly created collection is now renamed to your first viewport
   rather than deleted and replaced, which uses one fewer mode from your plan's budget.
+- **Spacing and Corner radius record what they generated**, so the import button and
+  `figma:run --from-file` can offer it back. Nothing about the variables they produce changes —
+  the two scripts now share one generator, and a test proves the collapse value for value against
+  frozen copies of the code it replaced.
 - Grid now honours a nested `{ config: { collectionName, group } }` config the way Spacing,
   Corner radius and Typography always have. Previously it read only the top level, so a pasted
   config quietly wrote to `Responsive System`.
@@ -122,6 +126,11 @@ deleting variable modes they did not recognise.
   works with them unchanged; each generator drops its branch of that bridge as it is rewritten.
   v1 carries **declared inputs only**: a run mutates its config in place, and exporting a
   derivation would freeze it.
+- **`@Linear Ramp`**: one generator behind Spacing and Corner radius, which were ~30 near-identical
+  functions apart — 88 differing lines out of 916 once the domain words were normalised away, and
+  seven values that genuinely differed. Both are now thin wrappers parameterised by tokens, name
+  template, scopes and domain, so a fix to the scale maths lands in both. 916 lines became 232 plus
+  a 455-line library.
 - `createCopyResult` and `requestClipboardCopy` in `@InfoPanel`, replacing the copy plumbing
   written twice in `export-import-variables` and `copy-simple-variables-json`.
 - **`npm run figma:run -- <script>` refuses a file that is not a `codefig-test` file**, and prints

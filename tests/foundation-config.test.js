@@ -53,7 +53,9 @@ function loadContext() {
   vm.createContext(ctx);
   loadAll(ctx, 'CODEFIG_LIBRARIES/@foundation.js');
   loadAll(ctx, 'CODEFIG_LIBRARIES/@math-helpers.js');
-  loadAll(ctx, 'EXAMPLE_SCRIPTS/Design System Foundations/spacing.js');
+  // The generator behind Spacing since plan 19. The property under test is about the *current*
+  // generator, so this follows the collapse rather than pinning the shape it had before it.
+  loadAll(ctx, 'CODEFIG_LIBRARIES/@linear-ramp.js');
   return ctx;
 }
 
@@ -63,14 +65,15 @@ const {
   emptyPortableConfig, configDomainOf
 } = lib;
 
-/** spacing.js's own pipeline, exactly as the script runs it (spacing.js:296-300). */
+/** The spacing pipeline, exactly as `runLinearRamp` runs it. */
 function runSpacingPipeline(config) {
+  const spec = lib.spacingRampSpec();
   const data = JSON.parse(JSON.stringify(config));
-  lib.ensureCompatSpacingConfig(data);
-  lib.materializeSpacingsFromSteps(data);
-  lib.materializeSpacingSizes(data);
-  lib.validateSpacingScalingTypeConfig(data);
-  return { data: data, variables: lib.generateSpacingVariables(data) };
+  lib.ensureCompatRampConfig(data, spec);
+  lib.materialiseRampTokens(data, spec);
+  lib.materialiseRampSizes(data, spec);
+  lib.validateRampScalingType(data, spec);
+  return { data: data, variables: lib.generateRampVariables(data, spec) };
 }
 
 const codes = (result) => result.warnings.map((w) => w.code);
@@ -109,7 +112,7 @@ test('a legacy blob and its v1 translation generate identical variables', () => 
   assert.deepEqual(fromV1.variables, fromLegacy.variables);
   assert.ok(Object.keys(fromLegacy.variables).length >= 6, 'the fixture really did generate something');
   assert.deepEqual(fromV1.data.spacingSizes, fromLegacy.data.spacingSizes);
-  assert.equal(lib.getSpacingRoundGrid(fromV1.data), lib.getSpacingRoundGrid(fromLegacy.data));
+  assert.equal(lib.getRampRoundGrid(fromV1.data), lib.getRampRoundGrid(fromLegacy.data));
 });
 
 test('the same holds for the legacy spellings, not just the current one', () => {
