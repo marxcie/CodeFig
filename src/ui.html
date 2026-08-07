@@ -1181,6 +1181,7 @@
         // Check if this script uses @InfoPanel
         infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
         updateInfoPanelButtonVisibility();
+        updateInfoPanelOwnership();
         updateConfigLoadButtonVisibility();
         // Probe on the *annotation*, not on the button being visible: visibility now depends on
         // what the probe finds, so gating the probe on visibility meant it never ran.
@@ -1625,6 +1626,31 @@
       // Make selectNodes available globally for onclick handlers
       window.selectNodes = selectNodes;
 
+      /** The script whose run filled the InfoPanel, or null if nothing has. */
+      let _infoPanelScript = null;
+
+      /**
+       * Say when the panel is showing someone else's results.
+       *
+       * Clearing on every script switch is the other option, and it is worse: results you were
+       * comparing against vanish because you looked at another script. Naming the source keeps
+       * them and removes the ambiguity, which is the actual complaint.
+       */
+      function updateInfoPanelOwnership() {
+        const existing = document.getElementById('info-stale-note');
+        if (existing) existing.remove();
+        if (!_infoPanelScript || !currentScript) return;
+        if (_infoPanelScript === currentScript.name) return;
+        if (!infoContent || !infoContent.firstChild) return;
+
+        const note = document.createElement('div');
+        note.id = 'info-stale-note';
+        note.className = 'info-stale-note';
+        note.textContent = 'Showing results from ' + _infoPanelScript +
+          '. You are now on ' + currentScript.name + ' — run it to replace these.';
+        infoContent.insertBefore(note, infoContent.firstChild);
+      }
+
       function displayInfoResults(data) {
         console.log('UI: displayInfoResults called with:', data);
         console.log('UI: Results array length:', data.results ? data.results.length : 'no results');
@@ -1643,6 +1669,10 @@
           infoTitle.textContent = title;
         }
         
+        // Whose results these are. The panel outlives the script that filled it, so without this
+        // switching scripts leaves you reading the last one's output under the new one's name.
+        _infoPanelScript = currentScript ? currentScript.name : null;
+
         // Clear previous content
         infoContent.innerHTML = '';
 

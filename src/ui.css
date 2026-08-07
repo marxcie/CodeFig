@@ -1801,6 +1801,19 @@
       .codefig-console-line--error {
         color: #8a1f2b;
       }
-      
-      
+
+      /* The InfoPanel outlives the run that filled it, so it says whose results these are when
+         you have moved on to another script. Appended, not inserted: this file is order- and
+         specificity-dependent. */
+      .info-stale-note {
+        margin: 0 0 10px;
+        padding: 8px 10px;
+        border-radius: 4px;
+        border: 1px solid rgba(128, 128, 128, 0.28);
+        background: rgba(128, 128, 128, 0.08);
+        font-size: 11px;
+        line-height: 1.45;
+        opacity: 0.85;
+      }
+
       /* End of styles */

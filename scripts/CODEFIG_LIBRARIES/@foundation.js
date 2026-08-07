@@ -1375,9 +1375,15 @@ function toDomainConfig(v1, domain, options) {
     // live — which is how `scaling: { type: "sine", ease: "in" }` came to sit above sets that all
     // said `model: "metric"`.
     var scaling = {};
+    var curveIsRead = sliceUsesEndpoints(config);
     for (var sk in config.scaling) {
       if (!Object.prototype.hasOwnProperty.call(config.scaling, sk)) continue;
       if (sk === 'roundTo' || sk === 'roundUpperValuesTo') continue;
+      // The same rule the writer applies, applied on the way out too. A manifest recorded before
+      // that rule existed still carries the inert curve, and handing it back would put
+      // `type: "sine"` into a block whose every set says `model: "metric"` — the exact thing the
+      // rule exists to stop, arriving by age rather than by a bug.
+      if (!curveIsRead && curveKeys().indexOf(sk) !== -1) continue;
       scaling[sk] = foundationClone(config.scaling[sk]);
     }
     if (Object.keys(scaling).length > 0) out.scaling = scaling;
@@ -1386,7 +1392,14 @@ function toDomainConfig(v1, domain, options) {
   if (config.generateOverview !== undefined) out.generateOverview = config.generateOverview;
   if (config.styles !== undefined) out.styles = foundationClone(config.styles);
   if (config.fontWeights !== undefined) out.fontWeights = foundationClone(config.fontWeights);
+  // Promoted on the way out as well as on the way in: an old manifest keeps `roundTo` inside
+  // `scaling`, and that is where the reader has just stopped looking.
   if (config.roundTo !== undefined) out.roundTo = config.roundTo;
+  else if (config.scaling && typeof config.scaling.roundTo === 'number' && config.scaling.roundTo > 0) {
+    out.roundTo = config.scaling.roundTo;
+  } else if (config.scaling && typeof config.scaling.roundUpperValuesTo === 'number' && config.scaling.roundUpperValuesTo > 0) {
+    out.roundTo = config.scaling.roundUpperValuesTo;
+  }
   if (config.roundLowerValuesTo !== undefined) out.roundLowerValuesTo = config.roundLowerValuesTo;
   if (config.fontFamily !== undefined) out.fontFamily = foundationClone(config.fontFamily);
   if (config.light !== undefined) out.light = foundationClone(config.light);
@@ -1439,6 +1452,36 @@ function toDomainConfig(v1, domain, options) {
 // thing this whole plan exists to avoid. So the clipboard gets the shape the block already has:
 // unquoted keys, two-space indent, objects in arrays expanded.
 // ============================================================================
+
+/**
+ * Fields that shape a curve, which only the `endpoints` model reads. A function, not a constant,
+ * because `@import` extracts only top-level function declarations — see the note at the top.
+ */
+function curveKeys() {
+  return ['type', 'ease', 'easeInExponent', 'easeOutExponent'];
+}
+
+/**
+ * Does any set or viewport in this slice generate with the endpoints model?
+ *
+ * Absent means endpoints, which is the older default — so a slice that says nothing keeps its
+ * curve. Dropping one someone declared is worse than keeping one nothing reads.
+ */
+function sliceUsesEndpoints(slice) {
+  var payloads = [];
+  if (Array.isArray(slice.sets)) payloads = payloads.concat(slice.sets);
+  if (slice.perViewport && typeof slice.perViewport === 'object') {
+    for (var key in slice.perViewport) {
+      if (Object.prototype.hasOwnProperty.call(slice.perViewport, key)) payloads.push(slice.perViewport[key]);
+    }
+  }
+  if (payloads.length === 0) return true;
+  for (var i = 0; i < payloads.length; i++) {
+    var model = payloads[i] && payloads[i].model;
+    if (!model || model === 'endpoints') return true;
+  }
+  return false;
+}
 
 /** Can this key be written without quotes in a JS object literal? */
 function isPlainConfigKey(key) {

@@ -653,3 +653,46 @@ test('an empty foundation gives an empty config rather than nothing', () => {
   assert.equal(config.v, 1);
   assert.deepEqual(config.domains, {});
 });
+
+test('a manifest recorded before the curve rule does not hand the curve back', () => {
+  // Found in a real file: corner radius still exported `scaling: { type: "sine", ease: "in" }`
+  // after the rule that removes it, because its manifest predated the rule by four hours. The
+  // writer strips it; so must the reader, or the problem simply waits for an old file.
+  const stale = {
+    v: 1, collection: 'RS', group: 'Corner radius', viewports: [{ key: 'desktop', label: 'Desktop', width: null }],
+    domains: {
+      radius: {
+        tokens: ['none', 'xs'],
+        scaling: { type: 'sine', ease: 'in', roundTo: 2 },
+        perViewport: { desktop: { model: 'metric', min: 0, base: { level: 'xs', size: 4 }, step: 4, mod: 3 } },
+        extra: {}
+      }
+    }
+  };
+  const back = toDomainConfig(stale, 'radius');
+  assert.equal((back.scaling || {}).type, undefined);
+  assert.equal((back.scaling || {}).ease, undefined);
+  assert.equal(back.roundTo, 2, 'the rounding it really does declare survives');
+});
+
+test('an endpoints manifest keeps its curve, whenever it was written', () => {
+  const endpoints = {
+    v: 1, collection: 'RS', group: 'Spacing', viewports: [{ key: 'desktop', label: 'Desktop', width: null }],
+    domains: {
+      spacing: {
+        tokens: ['xs', 'sm'], scaling: { type: 'sine', ease: 'in' },
+        perViewport: { desktop: { model: 'endpoints', min: 4, max: 64 } }, extra: {}
+      }
+    }
+  };
+  assert.equal(toDomainConfig(endpoints, 'spacing').scaling.type, 'sine');
+});
+
+test('a slice that names no model keeps its curve', () => {
+  // Absent means endpoints, the older default. Silence is not permission to drop something.
+  const quiet = {
+    v: 1, collection: 'RS', group: 'Spacing', viewports: [],
+    domains: { spacing: { tokens: ['xs'], scaling: { type: 'quad' }, perViewport: {}, extra: {} } }
+  };
+  assert.equal(toDomainConfig(quiet, 'spacing').scaling.type, 'quad');
+});
