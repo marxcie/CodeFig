@@ -51,15 +51,9 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
   // Array ["s", "m", "l"] or string template "spacings-{$step}".
   // steps: 10, // If string template is selected, steps is required.
 
-  scaling: {
-    type: "sine", 
-    // Range curve: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. 
-    // Piecewise: `piecewise`, `piecewise2`, `piecewise4
-    ease: "in", 
-    // none, in, out, inout, outin. Only used for range curves. Ignored for piecewise types.
-    roundTo: 2,
-    // Snap all spacing values to multiples of this number (e.g. `2` → 2, 4, 6, …). Omit or `0` for no snapping.
-  },
+  // Snap every value to a multiple of this (e.g. `2` → 2, 4, 6, …). Omit or `0` for none.
+  // Applies to every model, which is why it is a field of the config and not of a curve.
+  roundTo: 2,
 
   // How each viewport's scale is generated. `metric` is a base plus a step that grows every
   // `mod` tokens — the way a spacing scale is usually written down (4, 8, 12, 16, 24, 32).

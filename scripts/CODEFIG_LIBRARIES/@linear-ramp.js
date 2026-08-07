@@ -526,16 +526,15 @@ function ensureCompatRampConfig(config, spec) {
     if (sc.roundTo !== undefined && config.roundTo === undefined) config.roundTo = sc.roundTo;
     if (sc.roundUpperValuesTo !== undefined && config.roundTo === undefined) config.roundTo = sc.roundUpperValuesTo;
   }
-  if (!config.scaling || typeof config.scaling !== 'object') {
-    config.scaling = { type: 'linear', ease: 'none' };
-  }
+  // Not `{ type: 'linear', ease: 'none' }`: inventing a curve here put a description of a straight
+  // ramp into every config, including the metric and modular ones where nothing reads it. The
+  // generator already falls back to linear, so the default was never load-bearing — only visible.
+  if (!config.scaling || typeof config.scaling !== 'object') config.scaling = {};
+
+  // `roundTo` applies to every model, so it lives on the config, not inside the curve. It was
+  // being written to both, which is two homes for one setting and no rule about which wins.
   var rt = resolveRampRoundTo(config);
-  if (rt > 0) {
-    config.roundTo = rt;
-    if (config.scaling && typeof config.scaling === 'object' && config.scaling.roundTo === undefined) {
-      config.scaling.roundTo = rt;
-    }
-  }
+  if (rt > 0) config.roundTo = rt;
 
   // A ratio name in `scaling.type` produces a modular *curve between min and max* — which under
   // the model taxonomy is `endpoints`, not `modular`. Say so, so the two never mean one thing.
@@ -891,7 +890,40 @@ function describeUndeclaredModes(spec, declaredLabels, collectionModeNames) {
 function rampManifestSlice(resolvedConfig, spec) {
   var normalised = normaliseConfig(resolvedConfig);
   var slice = normalised.config.domains[spec.domain];
-  return slice || normalised.config.domains.unknown || null;
+  slice = slice || normalised.config.domains.unknown || null;
+
+  // A curve belongs to the endpoints model, which is the only one that reads it. Recording
+  // `type: "sine", ease: "in"` beside sets that all say `model: "metric"` is two descriptions of
+  // the scale where only one is live, and the reader has no way to tell which.
+  if (slice && slice.scaling && typeof slice.scaling === 'object') {
+    // `roundTo` was written to both the config and the curve; `ensureCompatRampConfig` has already
+    // promoted it, so the copy inside `scaling` is the one to lose.
+    if (slice.scaling.roundTo !== undefined && slice.roundTo === undefined) slice.roundTo = slice.scaling.roundTo;
+    delete slice.scaling.roundTo;
+    delete slice.scaling.roundUpperValuesTo;
+
+    if (!rampUsesEndpoints(resolvedConfig, spec)) {
+      var curve = ['type', 'ease', 'easeInExponent', 'easeOutExponent'];
+      for (var i = 0; i < curve.length; i++) delete slice.scaling[curve[i]];
+    }
+  }
+  return slice;
+}
+
+/** Does any set or mode in this config generate with the endpoints model? */
+function rampUsesEndpoints(config, spec) {
+  var sizes = config[spec.sizesKey];
+  if (sizes && typeof sizes === 'object') {
+    for (var mode in sizes) {
+      if (!Object.prototype.hasOwnProperty.call(sizes, mode)) continue;
+      var model = sizes[mode] && sizes[mode].model;
+      if (!model || model === 'endpoints') return true;
+    }
+    return false;
+  }
+  // No resolved sizes to read: assume it does, because dropping a curve someone declared is worse
+  // than keeping one nothing reads.
+  return true;
 }
 
 /**

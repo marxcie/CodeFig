@@ -711,7 +711,7 @@ function writeManifest(collection, set) {
     tokens: s.tokens != null ? s.tokens : existing.tokens,
     // Normalised on the way in, so a manifest can never hold a shape the reader would refuse —
     // and so a run's derived fields (spacingSizes and friends) never reach the file at all.
-    config: normaliseDomainSlice(s.config != null ? s.config : existing.config)
+    config: normaliseDomainSlice(s.config != null ? s.config : existing.config, s.domain || existing.domain)
   };
   var text = serialiseManifest(merged);
   if (text.length > foundationEntrySizeLimit()) {
@@ -891,13 +891,19 @@ function foundationStructuralKeys() {
  * being applied to domain slices too. Two different things with one name, and only the whitelist
  * makes the difference visible.
  */
-function foundationSliceKeys() {
-  return [
+function foundationSliceKeys(domain) {
+  var keys = [
     'tokens', 'nameTemplate', 'steps', 'scaling', 'perViewport', 'sets', 'viewportOrder',
     'modeNames', 'extra',
     'defaultBaseLevel', 'generateOverview', 'roundTo', 'roundLowerValuesTo',
     'styles', 'fontWeights', 'distributeToMaxColumns', 'extensionColumns'
   ];
+  // A field in a shipped default block is declared by definition. Leaving these to `extra` meant
+  // an untouched config warned about itself the first time anyone ran the script it came with,
+  // which is how people learn that warnings are noise.
+  if (domain === 'typography') return keys.concat(['fontFamily']);
+  if (domain === 'colors') return keys.concat(['light', 'dark']);
+  return keys;
 }
 
 /** Keys each domain understands, so anything else can be preserved as `extra`. */
@@ -910,6 +916,7 @@ function foundationDomainKeys(domain) {
   if (domain === 'radius') return common.concat(['radii']);
   if (domain === 'typography') return common.concat(['fontScale', 'fontWeights', 'styles', 'figmaStyles']);
   if (domain === 'grid') return common.concat(['distributeToMaxColumns', 'extensionColumns']);
+  if (domain === 'colors') return common.concat(['light', 'dark']);
   return common;
 }
 
@@ -940,6 +947,8 @@ function configDomainOf(inner) {
   if (inner.radii !== undefined || inner.radiusSizes !== undefined) return 'radius';
   if (inner.fontScale !== undefined || inner.fontSizes !== undefined || inner.fontWeights !== undefined ||
       inner.fontScaling !== undefined || inner.figmaStyles !== undefined || inner.styles !== undefined) return 'typography';
+
+  if (inner.light !== undefined || inner.dark !== undefined) return 'colors';
 
   var modes = Array.isArray(inner.modes) ? inner.modes : [];
   for (var i = 0; i < modes.length; i++) {
@@ -1147,7 +1156,13 @@ function buildDomainSlice(inner, domain, translations, warnings) {
     }
   }
   if (inner.rangeMode !== undefined && slice.scaling.rangeMode === undefined) slice.scaling.rangeMode = inner.rangeMode;
-  slice.scaling.roundTo = foundationResolveRoundTo(inner, scalingIsAlias ? scalingSource : null);
+  // One home. `roundTo` applies to every model, so it sits on the config beside them rather than
+  // inside a curve only the endpoints model reads — and writing it to both left no rule saying
+  // which one a reader should believe.
+  var resolvedRoundTo = foundationResolveRoundTo(inner, scalingIsAlias ? scalingSource : null);
+  if (resolvedRoundTo > 0) slice.roundTo = resolvedRoundTo;
+  delete slice.scaling.roundTo;
+  delete slice.scaling.roundUpperValuesTo;
   if (inner.roundUpperValuesTo !== undefined ||
       (inner.scaling && inner.scaling.roundUpperValuesTo !== undefined) ||
       (scalingIsAlias && scalingSource.roundUpperValuesTo !== undefined)) {
@@ -1181,6 +1196,9 @@ function buildDomainSlice(inner, domain, translations, warnings) {
 
   // Passthroughs each domain reads.
   if (typeof inner.defaultBaseLevel === 'string') slice.defaultBaseLevel = inner.defaultBaseLevel;
+  // Rounding applies to every model, so it is a field of the config rather than of the curve.
+  if (typeof inner.roundTo === 'number') slice.roundTo = inner.roundTo;
+  if (typeof inner.roundLowerValuesTo === 'number') slice.roundLowerValuesTo = inner.roundLowerValuesTo;
   if (inner.generateOverview !== undefined) slice.generateOverview = !!inner.generateOverview;
   if (domain === 'typography') {
     if (inner.figmaStyles !== undefined) {
@@ -1192,6 +1210,11 @@ function buildDomainSlice(inner, domain, translations, warnings) {
     if (Array.isArray(inner.fontWeights) || (inner.fontWeights && typeof inner.fontWeights === 'object')) {
       slice.fontWeights = foundationClone(inner.fontWeights);
     }
+    if (inner.fontFamily !== undefined) slice.fontFamily = foundationClone(inner.fontFamily);
+  }
+  if (domain === 'colors') {
+    if (inner.light !== undefined) slice.light = foundationClone(inner.light);
+    if (inner.dark !== undefined) slice.dark = foundationClone(inner.dark);
   }
   if (domain === 'grid') {
     if (inner.distributeToMaxColumns !== undefined) slice.distributeToMaxColumns = !!inner.distributeToMaxColumns;
@@ -1217,7 +1240,7 @@ function buildDomainSlice(inner, domain, translations, warnings) {
     if (!Object.prototype.hasOwnProperty.call(inner, extraKey)) continue;
     if (foundationStructuralKeys().indexOf(extraKey) !== -1) continue;
     if (foundationDomainKeys(domain).indexOf(extraKey) !== -1) continue;
-    if (foundationSliceKeys().indexOf(extraKey) !== -1) continue;
+    if (foundationSliceKeys(domain).indexOf(extraKey) !== -1) continue;
     if (seen[viewportKeyFromLabel(extraKey)] && isViewportPayload(inner[extraKey])) continue;
     // Working state the pipeline hung on the config on its way through. Not the author's, so not
     // theirs to get back — and dropped rather than parked in `extra`, which is exported.
@@ -1252,7 +1275,7 @@ function normaliseV1Config(raw) {
 
   for (var domain in raw.domains) {
     if (!Object.prototype.hasOwnProperty.call(raw.domains, domain)) continue;
-    out.domains[domain] = normaliseDomainSlice(raw.domains[domain]);
+    out.domains[domain] = normaliseDomainSlice(raw.domains[domain], domain);
   }
   if (Array.isArray(raw.sets) && raw.sets.length > 0) {
     out.sets = [];
@@ -1262,7 +1285,7 @@ function normaliseV1Config(raw) {
         collection: set.collection != null ? set.collection : out.collection,
         group: set.group != null ? set.group : out.group,
         domain: String(set.domain || ''),
-        config: normaliseDomainSlice(set.config)
+        config: normaliseDomainSlice(set.config, set.domain)
       });
     }
   }
@@ -1271,7 +1294,7 @@ function normaliseV1Config(raw) {
 }
 
 /** One domain slice, with the derived fields stripped wherever it came from. */
-function normaliseDomainSlice(raw) {
+function normaliseDomainSlice(raw, domain) {
   var slice = {
     tokens: null,
     nameTemplate: null,
@@ -1282,7 +1305,7 @@ function normaliseDomainSlice(raw) {
   };
   if (!raw || typeof raw !== 'object') return slice;
 
-  var allowed = foundationSliceKeys();
+  var allowed = foundationSliceKeys(domain);
   for (var key in raw) {
     if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
     if (allowed.indexOf(key) === -1) continue;
@@ -1347,22 +1370,27 @@ function toDomainConfig(v1, domain, options) {
   if (config.scaling && typeof config.scaling === 'object') {
     // `roundTo: 0` is v1's way of saying "no rounding", which is worth being explicit about in
     // the stored shape and is noise in a pasted block — Grid does not read `scaling` at all.
+    // Only what shapes a curve. `roundTo` is emitted at the top level instead: it applies whatever
+    // the model is, and a config carrying both spellings gave a reader no way to tell which was
+    // live — which is how `scaling: { type: "sine", ease: "in" }` came to sit above sets that all
+    // said `model: "metric"`.
     var scaling = {};
     for (var sk in config.scaling) {
       if (!Object.prototype.hasOwnProperty.call(config.scaling, sk)) continue;
-      if (sk === 'roundTo' && !(config.scaling[sk] > 0)) continue;
+      if (sk === 'roundTo' || sk === 'roundUpperValuesTo') continue;
       scaling[sk] = foundationClone(config.scaling[sk]);
     }
-    // `scaling.roundTo` only. Emitting a top-level `roundTo` as well would put two spellings of
-    // one setting in the user's editor, and the scripts' own compat step copies it down anyway
-    // (`resolveRoundTo` reads `scaling.roundTo` second, and `ensureCompat*` promotes it first).
     if (Object.keys(scaling).length > 0) out.scaling = scaling;
   }
   if (config.defaultBaseLevel !== undefined) out.defaultBaseLevel = config.defaultBaseLevel;
   if (config.generateOverview !== undefined) out.generateOverview = config.generateOverview;
   if (config.styles !== undefined) out.styles = foundationClone(config.styles);
   if (config.fontWeights !== undefined) out.fontWeights = foundationClone(config.fontWeights);
+  if (config.roundTo !== undefined) out.roundTo = config.roundTo;
   if (config.roundLowerValuesTo !== undefined) out.roundLowerValuesTo = config.roundLowerValuesTo;
+  if (config.fontFamily !== undefined) out.fontFamily = foundationClone(config.fontFamily);
+  if (config.light !== undefined) out.light = foundationClone(config.light);
+  if (config.dark !== undefined) out.dark = foundationClone(config.dark);
   if (config.distributeToMaxColumns !== undefined) out.distributeToMaxColumns = config.distributeToMaxColumns;
   if (config.extensionColumns !== undefined) out.extensionColumns = config.extensionColumns;
   if (typeof v1.lineGrid === 'number') out.lineGrid = v1.lineGrid;
@@ -1515,7 +1543,7 @@ function toPortableConfig(foundation, options) {
   var overflow = false;
   for (i = 0; i < sets.length; i++) {
     var set = sets[i];
-    var slice = normaliseDomainSlice(set.config);
+    var slice = normaliseDomainSlice(set.config, set.domain);
     slice.collection = set.collection;
     slice.group = set.group;
     if (!out.domains[set.domain]) {
@@ -1534,7 +1562,7 @@ function toPortableConfig(foundation, options) {
         collection: sets[i].collection,
         group: sets[i].group,
         domain: sets[i].domain,
-        config: normaliseDomainSlice(sets[i].config)
+        config: normaliseDomainSlice(sets[i].config, sets[i].domain)
       });
     }
     out.note = 'This file holds more than one set of the same kind. `domains` shows the first; `sets` lists them all.';

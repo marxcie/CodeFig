@@ -46,6 +46,14 @@ deleting variable modes they did not recognise.
 
 ### Changed
 
+- **Rounding is spelled one way.** `roundTo` sits beside the other settings instead of inside
+  `scaling`, because it applies whatever model a scale uses, while `scaling` describes a curve that
+  only the `endpoints` model reads. Spacing and Corner radius shipped with
+  `scaling: { type: "sine", ease: "in", roundTo: 2 }` above sets that all said `model: "metric"` —
+  two descriptions of one scale, two of the three fields inert, and nothing to tell you which was
+  live. Every old spelling still works and is promoted for you: `scaling.roundTo`,
+  `roundUpperValuesTo` and the `fontScaling` alias all mean the same thing. A curve is only
+  recorded when something reads it.
 - **A scale can be described once instead of once per breakpoint.** Spacing and Corner radius take
   a list of parameter sets, each saying which modes it applies to. `appliesTo: "*"` means every
   mode the collection already has — the common case, which previously had to be written out once
@@ -122,6 +130,14 @@ deleting variable modes they did not recognise.
   run prints which of the three it used.
 
 ### Fixed
+
+- **Your config no longer comes back with CodeFig's working notes in it.** A recorded set carried
+  the resolver's own intermediate state — the sizes it worked out, which set overrode which — and
+  handed it back as though you had written it. Only fields the config format declares are stored
+  now. The same fix restored two things that were being quietly lost: parameter sets vanished from
+  a recorded set entirely (so importing one fell back to the older per-viewport form), and
+  Typography's `fontFamily` and Colors' themes were being kept in a bucket for unrecognised
+  settings, which meant an untouched default config warned about itself the first time you ran it.
 
 - **CodeFig no longer suggests deleting a variable collection, and will not delete a published
   one.** A variable's id and its published key are created with the variable: delete and recreate

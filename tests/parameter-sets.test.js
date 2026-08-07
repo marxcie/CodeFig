@@ -348,3 +348,50 @@ test('a partial match does not become a wildcard', () => {
   assert.equal(sets.length, 1);
   assert.deepEqual(sets[0].appliesTo, ['Desktop', 'Tablet'], 'named, not "*"');
 });
+
+// ---------------------------------------------------------------------------
+// One description of the scale, not two
+// ---------------------------------------------------------------------------
+
+test('a metric config records no curve, because nothing reads one', () => {
+  // `scaling: { type: "sine", ease: "in" }` beside sets that all say `model: "metric"` is two
+  // descriptions of the same scale where only one is live, and nothing in the recorded config
+  // says which. The curve belongs to the endpoints model.
+  const config = {
+    collectionName: 'C', group: 'Spacing', spacings: TOKENS, modeNames: MODES,
+    scaling: { type: 'sine', ease: 'in', roundTo: 2 },
+    sets: [metric({ name: 'all', appliesTo: '*' })]
+  };
+  lib.ensureCompatRampConfig(config, spec);
+  lib.materialiseRampTokens(config, spec);
+  lib.materialiseRampSizes(config, spec, MODES);
+  const slice = lib.rampManifestSlice(config, spec);
+
+  assert.equal(slice.scaling.type, undefined);
+  assert.equal(slice.scaling.ease, undefined);
+  assert.equal(slice.roundTo, 2, 'roundTo applies to every model, so it keeps its own home');
+  assert.equal(slice.scaling.roundTo, undefined, 'and only one home');
+});
+
+test('an endpoints config keeps its curve', () => {
+  const config = {
+    collectionName: 'C', group: 'Spacing', spacings: TOKENS,
+    scaling: { type: 'sine', ease: 'in' },
+    sets: [{ name: 'all', appliesTo: 'Desktop', model: 'endpoints', min: 4, max: 64 }]
+  };
+  lib.ensureCompatRampConfig(config, spec);
+  lib.materialiseRampTokens(config, spec);
+  lib.materialiseRampSizes(config, spec, ['Desktop']);
+  const slice = lib.rampManifestSlice(config, spec);
+
+  assert.equal(slice.scaling.type, 'sine');
+  assert.equal(slice.scaling.ease, 'in');
+});
+
+test('a config with no scale resolved keeps whatever curve it declared', () => {
+  // Dropping a curve someone wrote is worse than keeping one nothing reads.
+  const config = { collectionName: 'C', group: 'Spacing', spacings: TOKENS, scaling: { type: 'quad' } };
+  lib.ensureCompatRampConfig(config, spec);
+  lib.materialiseRampTokens(config, spec);
+  assert.equal(lib.rampManifestSlice(config, spec).scaling.type, 'quad');
+});

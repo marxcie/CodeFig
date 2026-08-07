@@ -55,6 +55,13 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 
 **`src/import-resolver.js` is the single implementation**, consumed by the UI at run time and by `validate-scripts.js` at build time — there is no second copy to keep in sync. `build-import-resolver.js` inlines it into the `<script id="import-resolver-js">` block of `dist/ui.html` (a one-line stub in `src/ui.html`, never written back to source, same pattern as config-ui) and it must stay ahead of the main app script; `processRuntimeImports` throws if the `CodeFigImports` global is missing rather than letting every import silently degrade. Behaviour is pinned by `tests/import-resolver.test.js`, including the extraction limits above and a per-script check that shipped imports resolve to real injected source.
 
+**Two config formats, and the conversion lives in the UI.** A foundation config exists in two shapes, and mixing them up is the source of most of the churn in this area:
+
+- **v1 JSON is the storage format.** Manifests on collections, the registry on `figma.root`, anything written through `setSharedPluginData`. It is versioned, whitelisted (`foundationSliceKeys`) and never shown to anyone.
+- **The script's `@CONFIG_START` block is the human format.** Comments, key order and nesting are the point, not incidental — it is the thing a person reads, edits and pastes between files.
+
+Neither is derived from a printer that renders the other. **The block is the format**: importing a config fills values into the pristine block the UI already holds, so comments and key order survive by construction rather than by a round-trip test. That conversion is UI-side, because the UI is the only context with every script's source embedded — the sandbox runs user scripts through `new Function` and cannot reach another script's text.
+
 **`src/config-ui/`** (`parser.js`, `renderer.js`, `controller.js`, `bridge.js`) turns a script's config comment block into a rendered form. `build-config-ui.js` exports `inlineConfigUI(html)`, a pure string transform that concatenates these four files into the `<script id="config-ui-js">` block on the way to `dist/ui.html`. In `src/ui.html` that block is a one-line stub and stays that way — the bundle is never written back to source.
 
 **`bundle-ui.js`** inlines vendors (CodeMirror, marked) into `dist/ui.html`, and `__CODEFIG_BUILD_IS_DEV__` is substituted with `true`/`false` so the production UI never reaches for localhost.

@@ -190,6 +190,35 @@ test('the export is a whitelist: a key the shape does not declare does not survi
   assert.ok(result.warnings.some((w) => w.message.indexOf('junkKey') !== -1), 'and it said so');
 });
 
+test('no shipped default block warns about itself', () => {
+  // A default that complains about itself is how people learn to ignore warnings — the same
+  // failure as 19b's metric configs warning about a `max` they never declared. `fontFamily`,
+  // `light` and `dark` are in shipped blocks, so they are declared fields by definition, and
+  // colors is a domain because it has a script.
+  const dir = path.join(SCRIPTS, 'EXAMPLE_SCRIPTS', 'Design System Foundations');
+  const checked = [];
+
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+    // Foundation config is not a foundation config; it configures the mover.
+    if (file === 'config.js') continue;
+    const source = fs.readFileSync(path.join(dir, file), 'utf8');
+    const start = source.indexOf('// @CONFIG_START');
+    const end = source.indexOf('// @CONFIG_END');
+    if (start === -1 || end === -1) continue;
+
+    const block = vm.runInNewContext('({' + source.slice(start + '// @CONFIG_START'.length, end) + '})');
+    const result = normaliseConfig(block);
+    assert.deepEqual(
+      result.warnings.map((w) => w.message), [],
+      file + ' warns about its own default config'
+    );
+    assert.notEqual(Object.keys(result.config.domains)[0], 'unknown', file + ' is not recognised');
+    checked.push(file);
+  }
+
+  assert.ok(checked.length >= 5, 'expected every shipped block, found ' + checked.join(', '));
+});
+
 test('the pipeline writes nothing onto the config it was handed', () => {
   // The root cause behind the export leak: `resolveRampSizes` hung its plan on the config, so it
   // reached the manifest by riding the object rather than by any decision to export it. A
@@ -297,12 +326,13 @@ test('spacingScaling and fontScaling fold into scaling, spacingScaling winning',
 });
 
 test('roundTo precedence matches resolveRoundTo, all four spellings', () => {
-  const of = (raw) => normaliseConfig(Object.assign({ spacings: ['a'] }, raw)).config.domains.spacing.scaling.roundTo;
+  // All four still resolve the same way; they now land in one place instead of inside the curve.
+  const of = (raw) => normaliseConfig(Object.assign({ spacings: ['a'] }, raw)).config.domains.spacing.roundTo;
   assert.equal(of({ roundTo: 2, scaling: { roundTo: 4 } }), 2, 'top level wins');
   assert.equal(of({ scaling: { roundTo: 4 } }), 4);
   assert.equal(of({ scaling: { roundUpperValuesTo: 8 } }), 8);
   assert.equal(of({ roundUpperValuesTo: 16 }), 16);
-  assert.equal(of({}), 0);
+  assert.equal(of({}), undefined, 'no rounding is the absence of the field, not a zero');
 });
 
 test('typography keeps roundLowerValuesTo, and figmaStyles becomes styles', () => {
@@ -496,7 +526,9 @@ test('every field a shipped config declares survives the round trip', () => {
       );
     }
 
-    const allowedExtra = Object.values(renames).concat(['roundLowerValuesTo']);
+    // `roundTo` is promoted out of `scaling`/`fontScaling` wherever a block still writes it there:
+    // it applies to every model, so it is a field of the config, not of a curve.
+    const allowedExtra = Object.values(renames).concat(['roundLowerValuesTo', 'roundTo']);
     for (const key of Object.keys(back)) {
       if (Object.prototype.hasOwnProperty.call(declared, key)) continue;
       assert.ok(allowedExtra.includes(key), `${file}: invented "${key}", which the block never declared`);
@@ -514,11 +546,14 @@ test('generateOverview survives even when it is false', () => {
 });
 
 test('a rounding step is spelled one way, not two', () => {
-  // Both `scaling.roundTo` and a top-level `roundTo` in one config means one of them is a lie
-  // in the editor. The scripts read either; the shipped blocks put it inside `scaling`.
+  // Both `scaling.roundTo` and a top-level `roundTo` in one config means one of them is a lie in
+  // the editor. **Which one is the truth changed**: rounding applies to every model, while
+  // `scaling` describes a curve only the endpoints model reads — so a metric config was carrying
+  // `scaling: { type: "sine", ease: "in", roundTo: 2 }` where two of the three fields were inert.
+  // The top level is the home now, and every spelling promotes into it.
   const back = toDomainConfig(normaliseConfig(legacySpacingConfig()).config, 'spacing');
-  assert.equal(back.scaling.roundTo, 2);
-  assert.equal(back.roundTo, undefined);
+  assert.equal(back.roundTo, 2);
+  assert.equal((back.scaling || {}).roundTo, undefined);
   assert.equal(back.roundUpperValuesTo, undefined);
 });
 

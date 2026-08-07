@@ -51,15 +51,9 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
   // Array ["s", "m", "l"] or string template "radius-{$step}".
   // steps: 10, // If string template is selected, steps is required.
 
-  scaling: {
-    type: "sine",
-    // Range curve: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio.
-    // Piecewise: `piecewise`, `piecewise2`, `piecewise4`
-    ease: "in",
-    // none, in, out, inout, outin. Only used for range curves. Ignored for piecewise types.
-    roundTo: 2,
-    // Snap all radius values to multiples of this number (e.g. `2` → 0, 2, 4, …). Omit or `0` for no snapping.
-  },
+  // Snap every value to a multiple of this (e.g. `2` → 0, 2, 4, …). Omit or `0` for none.
+  // Applies to every model, which is why it is a field of the config and not of a curve.
+  roundTo: 2,
 
   // See Spacing for the model list. `metric` here means: `none` is 0, then a step that grows
   // every `mod` tokens.
