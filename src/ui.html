@@ -1515,20 +1515,33 @@
             finishConfigLoad(null, 'The configuration editor is not open, so there is nowhere to load into.');
             return;
           }
+          const blockSourceName = configSourceLabel(v1, configLoadDomain());
+          const from = blockSourceName ? ' from ' + blockSourceName : '';
+
+          // Two different failures used to share one message, which is why the first report of it
+          // could not say whether the text was bad or the code to read it was missing.
           const fill = window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock;
           const readBlock = window.CodeFigConfigUI && window.CodeFigConfigUI.parseConfigBlockObject;
-          const incoming = fill && readBlock ? readBlock(data.block) : null;
+          if (!fill || !readBlock) {
+            finishConfigLoad(null, 'This plugin is running a build without the config filler. ' +
+              'Reload the plugin in Figma to pick up the current one. Nothing was changed.');
+            return;
+          }
+          const incoming = readBlock(data.block);
           if (!incoming) {
-            finishConfigLoad(null, 'Could not read the config this file holds, so the block is unchanged.');
+            // In the console rather than the toast: it is the thing that makes this diagnosable,
+            // and a toast is the wrong shape for forty lines of config.
+            debugError('Could not parse the config' + from + '. The text was:\n' + data.block);
+            finishConfigLoad(null, 'Could not parse the config' + from +
+              '. The block is unchanged — the text CodeFig could not read is in the console.');
             return;
           }
           const filled = fill(currentConfigBlock(), incoming);
           configEditor.setValue(filled.text);
           mergeConfigIntoMain();
           updateConfigLoadButtonVisibility();
-          const blockSource = configSourceLabel(v1, configLoadDomain());
-          finishConfigLoad('Imported' + (blockSource ? ' from ' + blockSource : '') + '. ' +
-            filled.summary + ' The file is unchanged until you run.');
+          finishConfigLoad('Imported' + from + '. ' + filled.summary +
+            ' The file is unchanged until you run.');
           return;
         }
 

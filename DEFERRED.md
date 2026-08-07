@@ -220,6 +220,22 @@ it survives, it survives as that, with none of the four modes.
 
 ---
 
+## The import button appears a beat late
+
+**Found:** walking the DSF flow (Aug 2026). On a file that had just been written to, the button
+only appeared after switching to another script and back.
+
+**Why it was left:** it is a refresh-timing question, not a correctness one — `configImportState`
+derives the right answer, but nothing asks it again after a run writes a manifest. The fix is
+choosing the moments to re-probe, which is UI work better done alongside the rest of the import
+UX than wedged in next to a parser fix.
+
+**What fixing it involves:** re-evaluate `configImportState` after a run completes, not only on
+script switch. Watch for the opposite failure — probing on every run makes a Figma round trip per
+run for a button most runs do not change.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.
