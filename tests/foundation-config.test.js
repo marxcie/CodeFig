@@ -167,6 +167,52 @@ test('v1 carries declared inputs only — never a run derivation', () => {
   );
 });
 
+test('the export is a whitelist: a key the shape does not declare does not survive', () => {
+  // The rule this replaced named the derived keys it knew about, so it exported every one it did
+  // not — `__rampSetPlan`, the resolver's own working state, went into the manifest and came back
+  // out as though the author had written it. Naming what is allowed cannot fail that way. This
+  // test exists to fail when the pipeline grows a field and nobody declares it.
+  const result = normaliseConfig(Object.assign(legacySpacingConfig(), {
+    __rampSetPlan: { sizes: {}, conflicts: [{ mode: 'Mobile', sets: ['a', 'b'] }], unclaimed: ['Wide'] },
+    junkKey: 'should not survive'
+  }));
+
+  const json = JSON.stringify(result.config);
+  assert.equal(json.indexOf('__rampSetPlan'), -1, 'internal resolution state is not config');
+  assert.equal(json.indexOf('unclaimed'), -1, 'nor any of its fields, under any name');
+  assert.equal(json.indexOf('conflicts'), -1);
+
+  // A key the *author* wrote and this reader does not interpret still survives, in `extra` and
+  // named in a warning — that is how typography keeps `fontFamily` and colors keep their themes.
+  // The line between the two is not a naming convention: it is that nothing in the pipeline may
+  // write to a config object, so the only keys present are ones a person put there.
+  assert.equal(result.config.domains.spacing.extra.junkKey, 'should not survive');
+  assert.ok(result.warnings.some((w) => w.message.indexOf('junkKey') !== -1), 'and it said so');
+});
+
+test('the pipeline writes nothing onto the config it was handed', () => {
+  // The root cause behind the export leak: `resolveRampSizes` hung its plan on the config, so it
+  // reached the manifest by riding the object rather than by any decision to export it. A
+  // whitelist catches that at the border; this catches it at the source.
+  const { data } = runSpacingPipeline(legacySpacingConfig());
+  const added = Object.keys(data).filter((k) => k.indexOf('__') === 0);
+  assert.deepEqual(added, [], 'no working state left behind: ' + added.join(', '));
+});
+
+test('parameter sets survive the manifest, despite sharing a name with v1 sets', () => {
+  // The outer v1 config also has `sets` — the generated sets a file contains — and the skip for
+  // that one was being applied to domain slices, so a config's parameter sets vanished on the way
+  // in and the file silently fell back to `perViewport`.
+  const result = normaliseConfig({
+    collectionName: 'C', group: 'Spacing', spacings: ['xs', 'sm'],
+    sets: [{ name: 'all', appliesTo: '*', model: 'metric', min: 1, base: { level: 'xs', size: 4 }, step: 4 }]
+  });
+  const slice = result.config.domains.spacing;
+  assert.equal(slice.sets.length, 1);
+  assert.equal(slice.sets[0].appliesTo, '*');
+  assert.equal(toDomainConfig(result.config, 'spacing').sets.length, 1, 'and come back out');
+});
+
 test('an expanded token list is kept as tokens, and the spent steps is dropped', () => {
   // `spacings` as an array always wins over `steps` at run time (materializeSpacingsFromSteps
   // returns early), so keeping the list and dropping the count is behaviour-preserving. The

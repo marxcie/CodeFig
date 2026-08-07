@@ -877,6 +877,29 @@ function foundationStructuralKeys() {
   ];
 }
 
+/**
+ * Every key a v1 domain slice may contain. Anything else is dropped on export.
+ *
+ * A **whitelist**, because the denylist this replaced named the derived keys it knew about and
+ * therefore exported every one it did not: `__rampSetPlan` — the resolver's own working state,
+ * with its conflicts and overrides — travelled into the manifest and back out as though it were
+ * something the author had written. A list of what is allowed cannot fail that way; a list of what
+ * is forbidden fails every time the pipeline grows a field.
+ *
+ * `sets` is here for the same reason it was previously lost: the *outer* v1 config also has a
+ * `sets` key, meaning the generated sets a file contains, and the structural skip for that one was
+ * being applied to domain slices too. Two different things with one name, and only the whitelist
+ * makes the difference visible.
+ */
+function foundationSliceKeys() {
+  return [
+    'tokens', 'nameTemplate', 'steps', 'scaling', 'perViewport', 'sets', 'viewportOrder',
+    'modeNames', 'extra',
+    'defaultBaseLevel', 'generateOverview', 'roundTo', 'roundLowerValuesTo',
+    'styles', 'fontWeights', 'distributeToMaxColumns', 'extensionColumns'
+  ];
+}
+
 /** Keys each domain understands, so anything else can be preserved as `extra`. */
 function foundationDomainKeys(domain) {
   var common = [
@@ -1185,11 +1208,20 @@ function buildDomainSlice(inner, domain, translations, warnings) {
 
   // Anything left is someone's field this table has not met. Keep it.
   var unknown = [];
+  // Parameter sets are a declared field of the slice, not an unknown key — and not the outer v1
+  // `sets`, which is a different list with the same name.
+  if (Array.isArray(inner.sets)) slice.sets = foundationClone(inner.sets);
+  if (Array.isArray(inner.modeNames)) slice.modeNames = foundationClone(inner.modeNames);
+
   for (var extraKey in inner) {
     if (!Object.prototype.hasOwnProperty.call(inner, extraKey)) continue;
     if (foundationStructuralKeys().indexOf(extraKey) !== -1) continue;
     if (foundationDomainKeys(domain).indexOf(extraKey) !== -1) continue;
+    if (foundationSliceKeys().indexOf(extraKey) !== -1) continue;
     if (seen[viewportKeyFromLabel(extraKey)] && isViewportPayload(inner[extraKey])) continue;
+    // Working state the pipeline hung on the config on its way through. Not the author's, so not
+    // theirs to get back — and dropped rather than parked in `extra`, which is exported.
+    if (extraKey.indexOf('__') === 0) continue;
     slice.extra[extraKey] = foundationClone(inner[extraKey]);
     unknown.push(extraKey);
   }
@@ -1250,10 +1282,10 @@ function normaliseDomainSlice(raw) {
   };
   if (!raw || typeof raw !== 'object') return slice;
 
-  var derived = foundationDerivedKeys();
+  var allowed = foundationSliceKeys();
   for (var key in raw) {
     if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
-    if (derived.indexOf(key) !== -1) continue;
+    if (allowed.indexOf(key) === -1) continue;
     slice[key] = foundationClone(raw[key]);
   }
   if (!slice.scaling || typeof slice.scaling !== 'object') slice.scaling = {};

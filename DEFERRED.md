@@ -196,6 +196,30 @@ v1 shape appears. Whichever comes first.
 
 ---
 
+## Foundation config is scaffolding, and gets retired
+
+**Found:** walking through the whole DSF flow on one file (Aug 2026). The script exists because
+16b needed a runnable round trip before any generator wrote a manifest. Generators write manifests
+now, and once the portable config *is* the script's own `@CONFIG_START` block, `copy`, `to-canvas`,
+`from-canvas` and `check` are all ways of doing something you can do by selecting the block and
+pressing Cmd-C.
+
+**The trigger:** both of these true — `adopt` has moved into the domain scripts, and the printed
+config is the script's block rather than a rendering of an object.
+
+**What moving `adopt` involves:** adopting a spacing scale is a spacing operation, and it pairs
+with the import button — the button reads the manifest, `adopt` reads the tokens, both from the
+script you are already in. So it becomes a mode of Spacing and Corner radius rather than a
+destination you navigate to. Plan it with 18/19-era work; it should not be left stranded in a
+script being retired.
+
+**The one part that may deserve to survive:** a read-only *what does this file's foundation
+contain* diagnostic — viewports, collections, sets, what has a manifest and what does not. That is
+a different tool from a config mover, and the case for it does not depend on any of the above. If
+it survives, it survives as that, with none of the four modes.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.

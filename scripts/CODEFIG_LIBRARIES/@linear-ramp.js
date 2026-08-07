@@ -417,7 +417,7 @@ function rampModeNames(config, spec) {
  * A conflict leaves `sizes` empty: half a config applied is worse than none, and this is settled
  * before Figma is touched.
  */
-function resolveRampSizes(config, spec, modeNames) {
+function resolveRampSizes(config, spec, modeNames, report) {
   var declared = rampSetsFromConfig(config, spec);
   if (declared.sets.length > 0) {
     var plan = resolveRampSets(
@@ -426,7 +426,9 @@ function resolveRampSizes(config, spec, modeNames) {
       config[spec.tokensKey],
       config.defaultBaseLevel
     );
-    config.__rampSetPlan = plan;
+    // Handed back, not hung on the config: working state left on a config object travels into the
+    // manifest and comes back out looking like something the author wrote.
+    if (report) report.setPlan = plan;
     return plan.sizes;
   }
   if (config[spec.sizesKey] && typeof config[spec.sizesKey] === 'object') {
@@ -435,9 +437,11 @@ function resolveRampSizes(config, spec, modeNames) {
   return {};
 }
 
-function materialiseRampSizes(config, spec, modeNames) {
-  if (!config || typeof config !== 'object') return;
-  config[spec.sizesKey] = resolveRampSizes(config, spec, modeNames);
+function materialiseRampSizes(config, spec, modeNames, report) {
+  if (!config || typeof config !== 'object') return null;
+  var out = report || {};
+  config[spec.sizesKey] = resolveRampSizes(config, spec, modeNames, out);
+  return out.setPlan || null;
 }
 
 function applyRampNameTemplate(template, index, totalSteps) {
@@ -927,11 +931,10 @@ async function runLinearRamp(config, spec) {
     }
   }
 
-  materialiseRampSizes(data, spec, modePlan ? modePlan.modes : null);
+  var setPlan = materialiseRampSizes(data, spec, modePlan ? modePlan.modes : null);
 
   // Settled from the config alone: two sets claiming one mode is a contradiction, and applying
   // half of it would leave a file matching no config anyone wrote.
-  var setPlan = data.__rampSetPlan;
   if (setPlan && !setPlan.ok) {
     describeRampSetPlan(setPlan).forEach(function(line) { console.error(line); });
     return { collection: null, stats: { created: 0, updated: 0, skipped: 0 }, refused: setPlan };
