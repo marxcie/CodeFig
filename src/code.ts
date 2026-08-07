@@ -28,6 +28,25 @@ function debugError(message: string, ...args: any[]) {
   forwardToConsoleBridge('error', [message, ...args]);
 }
 
+/**
+ * A script's own console output, mirrored to the plugin console only.
+ *
+ * The bridge forward is the caller's job, so it happens once, at the right level, and honours a
+ * silent run. Routing a script's `console.warn` through `debugError` — which is what this
+ * replaced — emitted it twice: once as `[WARN]` and once as `[ERROR]`, and the CLI's failure
+ * detection keys on `[ERROR]`. Every run that warned about anything exited non-zero while having
+ * done exactly what it was asked. A warning must never fail a run.
+ */
+function debugScriptWarn(message: string, ...args: any[]) {
+  const warn = console.warn.bind(console);
+  setTimeout(() => warn('%cCodeFig: ' + message, 'color: #b26a00; font-weight: bold;', ...args), 0);
+}
+
+function debugScriptError(message: string, ...args: any[]) {
+  const error = console.error.bind(console);
+  setTimeout(() => error('%cCodeFig: ' + message, 'color: #cc0000; font-weight: bold;', ...args), 0);
+}
+
 // Show the UI
 figma.showUI(__html__, { 
   width: 1000, 
@@ -474,7 +493,7 @@ figma.ui.onmessage = (msg) => {
             }
             return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
           }).join(' ');
-          debugError('Script:', message);
+          debugScriptError('Script:', message);
           if (!silentRun) forwardToConsoleBridge('error', ['[Script]', ...args]);
         },
         warn: (...args: any[]) => {
@@ -484,7 +503,7 @@ figma.ui.onmessage = (msg) => {
             }
             return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
           }).join(' ');
-          debugError('Script Warning:', message);
+          debugScriptWarn('Script Warning:', message);
           if (!silentRun) forwardToConsoleBridge('warn', ['[Script]', ...args]);
         }
       };

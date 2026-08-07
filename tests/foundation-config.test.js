@@ -53,6 +53,7 @@ function loadContext() {
   vm.createContext(ctx);
   loadAll(ctx, 'CODEFIG_LIBRARIES/@foundation.js');
   loadAll(ctx, 'CODEFIG_LIBRARIES/@math-helpers.js');
+  loadAll(ctx, 'CODEFIG_LIBRARIES/@scale-models.js');
   // The generator behind Spacing since plan 19. The property under test is about the *current*
   // generator, so this follows the collapse rather than pinning the shape it had before it.
   loadAll(ctx, 'CODEFIG_LIBRARIES/@linear-ramp.js');

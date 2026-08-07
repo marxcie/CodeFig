@@ -55,6 +55,25 @@ a day fixing, one level down. Nothing shipped depends on those copies agreeing t
 import contract), or have those libraries call `nameMatches` and require consumers to import it —
 which is what the new `validateResolvedCalls` check would then enforce.
 
+### 3b. Two copies of the modular ratio table
+
+**What.** `@Scale Models` (plan 19b) carries `modularRatios()`, and `@Math Helpers` carries
+`getModularScaleRatio` — the same eight numbers, because `generateScale` reads its own copy and
+the `endpoints` model delegates to `generateScale` wholesale.
+
+**Same root cause as item 3**: extraction follows calls only within one source script, so a
+library that calls another library's helper works only if every consumer imports both. Grouped
+here so the count of these is visible in one place rather than found one at a time.
+
+**Current protection.** `tests/scale-models.test.js` asserts the two tables agree name by name, so
+they cannot drift silently — only deliberately, and only with a failing test in the way.
+
+**Trigger: they collapse in plan 20**, when typography becomes the second real caller of
+`@Scale Models` and the companion-import change has to be made for it anyway. `@Scale Models` owns
+the table, `@Math Helpers` reads it, and every consumer imports both. Doing it before then means
+changing the import contract of every existing consumer to remove a duplication no one can
+currently trip over.
+
 ---
 
 ## 4. `variable-inspector.js` declares a function in an unimportable form

@@ -27,6 +27,7 @@
 @import { foundationCreateCornerRadiusOverview } from "@Foundation overview"
 @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, writeManifest, normaliseConfig } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
+@import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { radiusRampSpec, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
 
 // ========================================
@@ -60,21 +61,32 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
     // Snap all radius values to multiples of this number (e.g. `2` → 0, 2, 4, …). Omit or `0` for no snapping.
   },
 
+  // See Spacing for the model list. `metric` here means: `none` is 0, then a step that grows
+  // every `mod` tokens.
   modes: [
     {
       name: "desktop",
+      model: "metric",
       min: 0,
-      max: 48
+      base: { level: "xs", size: 4 },
+      step: 4,
+      mod: 3
     },
     {
       name: "tablet",
+      model: "metric",
       min: 0,
-      max: 32
+      base: { level: "xs", size: 3 },
+      step: 3,
+      mod: 3
     },
     {
       name: "mobile",
+      model: "metric",
       min: 0,
-      max: 24
+      base: { level: "xs", size: 2 },
+      step: 2,
+      mod: 3
     }
   ]
   // @CONFIG_END

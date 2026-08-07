@@ -42,7 +42,7 @@
 // | Specs | spacingRampSpec, radiusRampSpec |
 // | Config | ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, resolveRampRoundTo, validateRampScalingType |
 // | Scale | buildRampScaleOpts, calculateRampValue, generateRampVariables |
-// | Run | runLinearRamp, describeUndeclaredModes |
+// | Run | runLinearRamp, describeUndeclaredModes, describeRampModels |
 // @DOC_END
 
 // ============================================================================
@@ -117,11 +117,21 @@ function rampModesToSizes(modes, tokens, defaultBaseLevel) {
     var m = modes[i];
     if (!m || typeof m !== 'object' || typeof m.name !== 'string' || !m.name) continue;
     var min = typeof m.min === 'number' ? m.min : 0;
-    var max = typeof m.max === 'number' ? m.max : min;
+    // A derived model has no ceiling of its own, and inventing one from `min` would clamp the
+    // monotonic guard to the floor. Endpoints keeps its old fallback.
+    var derived = typeof m.model === 'string' && m.model && m.model !== 'endpoints';
+    var max = typeof m.max === 'number' ? m.max : (derived ? null : min);
     var base = m.base && typeof m.base === 'object' ? m.base : {};
     var level = typeof base.level === 'string' && base.level ? base.level : baseLevel;
     var size = typeof base.size === 'number' ? base.size : defaultBaseSize(min, max);
-    out[m.name] = { min: min, max: max, base: { level: level, size: size } };
+    var entry = { min: min, max: max, base: { level: level, size: size } };
+    // The model and whatever it needs. Absent means endpoints, which is what every config
+    // written before plan 19b is.
+    var carried = ['model', 'ratio', 'step', 'mod', 'values', 'clamp'];
+    for (var c = 0; c < carried.length; c++) {
+      if (m[carried[c]] !== undefined) entry[carried[c]] = m[carried[c]];
+    }
+    out[m.name] = entry;
   }
   return out;
 }
@@ -233,6 +243,14 @@ function ensureCompatRampConfig(config, spec) {
       config.scaling.roundTo = rt;
     }
   }
+
+  // A ratio name in `scaling.type` produces a modular *curve between min and max* — which under
+  // the model taxonomy is `endpoints`, not `modular`. Say so, so the two never mean one thing.
+  var typeName = config.scaling && typeof config.scaling.type === 'string' ? config.scaling.type.trim() : '';
+  if (typeName && resolveModularRatio(typeName) !== null) {
+    console.log('scaling.type "' + typeName + '" → model: endpoints (a modular curve between min and max). ' +
+      'For an unclamped modular scale whose top comes from the ratio, set model: "modular" on a viewport.');
+  }
 }
 
 function notifyUnknownRampScalingType(rawType, spec) {
@@ -258,6 +276,10 @@ function validateRampScalingType(config, spec) {
   if (!t) return;
   if (isPiecewiseScaleType(t)) return;
   if (knownRampScalingTypes()[t.toLowerCase()]) return;
+  // Ratio names have always worked here — `generateScale` has handled them since it was written
+  // — while this warned they were "not a recognized curve". They are an endpoints curve, not the
+  // modular model; ensureCompatRampConfig says so.
+  if (resolveModularRatio(t) !== null) return;
   notifyUnknownRampScalingType(raw, spec);
 }
 
@@ -293,9 +315,12 @@ function buildRampScaleOpts(totalSteps, viewport, config, spec) {
   }
   var scaling = config.scaling || {};
   return {
+    model: typeof sizes.model === 'string' && sizes.model ? sizes.model : 'endpoints',
     steps: totalSteps,
     min: sizes.min,
     max: sizes.max,
+    tokens: tokens,
+    // endpoints
     type: scaling.type || 'linear',
     ease: scaling.ease,
     rangeMode: useFullRangeRamp(config) ? 'full' : 'twoSegment',
@@ -304,8 +329,56 @@ function buildRampScaleOpts(totalSteps, viewport, config, spec) {
     roundTo: getRampRoundGrid(config),
     easeInExponent: scaling.easeInExponent,
     easeOutExponent: scaling.easeOutExponent,
-    defaultRangeMode: 'full'
+    defaultRangeMode: 'full',
+    // modular, metric, explicit
+    base: sizes.base.size,
+    ratio: sizes.ratio,
+    step: sizes.step,
+    mod: sizes.mod,
+    values: sizes.values,
+    clamp: sizes.clamp
   };
+}
+
+/**
+ * One viewport's whole sequence, computed once.
+ *
+ * The old code called `generateScale` per token per viewport and threw away every value but one —
+ * harmless for a pure function, wasteful, and impossible for a model whose steps depend on each
+ * other. Now the sequence is generated once and indexed into.
+ */
+function rampSequenceFor(viewport, config, spec) {
+  var opts = buildRampScaleOpts((config[spec.tokensKey] || []).length, viewport, config, spec);
+  if (!opts) return { opts: null, values: [], warnings: [] };
+  var built = scaleSequence(opts.model, opts);
+  return { opts: opts, values: built.values, warnings: built.warnings };
+}
+
+/**
+ * One value out of a sequence, with the endpoints model's own bounds applied.
+ *
+ * Only endpoints clamps to `max`: in modular and metric the top comes out of the model, and
+ * squashing it to a `max` would change the ratio or the step the user asked for.
+ */
+function rampValueAt(sequence, index, opts) {
+  var v = sequence[index];
+  if (typeof v !== 'number' || isNaN(v)) return opts.min;
+  if (opts.model === 'endpoints') return Math.max(opts.min, Math.min(opts.max, v));
+  return v;
+}
+
+/**
+ * Why two steps landed on the same number. The guard bumps them apart — a scale that goes
+ * backwards is worse — but it has done so silently since it was written, which hands you a step
+ * you did not choose.
+ */
+function describeRampCollision(previousToken, token, value, opts, gridSize) {
+  var cause;
+  if (opts.model === 'modular') cause = 'ratio ' + opts.ratio;
+  else if (opts.model === 'metric') cause = 'a step of ' + opts.step;
+  else cause = 'this range';
+  return previousToken + ' and ' + token + ' both round to ' + value + ' — ' + cause +
+    ' with a grid of ' + gridSize + " can't separate them.";
 }
 
 /** Range curve or piecewise ramp, via the shared `generateScale`. */
@@ -337,8 +410,18 @@ function generateRampVariables(config, spec) {
   }
 
   var lastPerViewport = {};
+  var sequences = {};
+  var collisions = [];
   viewportNames.forEach(function(viewport) {
     lastPerViewport[viewportLabel(viewport)] = -1;
+    // Once per viewport, not once per token.
+    sequences[viewport] = rampSequenceFor(viewport, config, spec);
+    sequences[viewport].warnings.forEach(function(w) {
+      // A value doing what the config declares is not a surprise: it belongs in the summary,
+      // beside the model that produced it.
+      if (w.code === 'scale-floor-held') return;
+      console.warn(spec.label + ' · ' + viewportLabel(viewport) + ': ' + w.message);
+    });
   });
 
   var gridSize = getRampRoundGrid(config);
@@ -349,11 +432,14 @@ function generateRampVariables(config, spec) {
     viewportNames.forEach(function(viewport) {
       var viewportKey = viewportLabel(viewport);
       var minSize = sizes[viewport].min;
-      var maxSize = sizes[viewport].max;
-      var value = calculateRampValue(index, tokens.length, viewport, config, spec);
+      var maxSize = typeof sizes[viewport].max === 'number' ? sizes[viewport].max : Infinity;
+      var sequence = sequences[viewport];
+      if (!sequence.opts) return;
+      var value = rampValueAt(sequence.values, index, sequence.opts);
       var previous = lastPerViewport[viewportKey];
       var step = gridSize > 0 ? gridSize : 1;
       var guard = 0;
+      var collided = index > 0 && value <= previous && previous >= 0;
 
       while (index > 0 && value <= previous && previous >= 0 && guard++ < 32) {
         var nextRaw = Math.min(maxSize, previous + step);
@@ -361,6 +447,10 @@ function generateRampVariables(config, spec) {
         value = nextRaw;
         if (gridSize > 0) value = snapScaleGrid(value, gridSize);
         value = Math.max(minSize, Math.min(maxSize, value));
+      }
+
+      if (collided && value !== previous) {
+        collisions.push(describeRampCollision(tokens[index - 1], tokenName, previous, sequence.opts, gridSize));
       }
 
       lastPerViewport[viewportKey] = value;
@@ -374,12 +464,56 @@ function generateRampVariables(config, spec) {
     };
   });
 
+  // Reported once per distinct collision: the same cause across three viewports is one problem.
+  var said = {};
+  collisions.forEach(function(line) {
+    if (said[line]) return;
+    said[line] = true;
+    console.warn(line);
+  });
+
   return variables;
 }
 
 // ============================================================================
 // RUN
 // ============================================================================
+
+/**
+ * The model and its parameters, per viewport, for the run summary.
+ *
+ * In the summary block rather than a debug line, and deliberately: the shipped defaults changed
+ * to metric in plan 19b, and prebuilt scripts reload from the embedded source — so someone who
+ * has been pressing Run on the shipped block gets different numbers after an upgrade. If the
+ * numbers move, the reason belongs in the output that reports the move.
+ */
+function describeRampModels(config, spec) {
+  var sizes = config[spec.sizesKey] || {};
+  var lines = [];
+  for (var viewport in sizes) {
+    if (!Object.prototype.hasOwnProperty.call(sizes, viewport)) continue;
+    var v = sizes[viewport];
+    var model = typeof v.model === 'string' && v.model ? v.model : 'endpoints';
+    var parts = [model];
+    if (model === 'metric') {
+      parts.push('base ' + v.base.size, 'step ' + v.step, 'mod ' + (v.mod === undefined ? 1 : v.mod));
+    } else if (model === 'modular') {
+      parts.push('base ' + v.base.size, 'ratio ' + v.ratio);
+    } else if (model === 'explicit') {
+      parts.push((v.values || []).length + ' values');
+    } else {
+      parts.push('min ' + v.min, 'max ' + v.max, (config.scaling || {}).type || 'linear');
+    }
+    lines.push('  ' + viewportLabel(viewport) + ': ' + parts.join(', '));
+
+    // Anything the model reported that is expected rather than wrong reads here, in context.
+    var built = rampSequenceFor(viewport, config, spec);
+    built.warnings.forEach(function(w) {
+      if (w.code === 'scale-floor-held') lines.push('    ' + w.message);
+    });
+  }
+  return lines;
+}
 
 /**
  * What this run left alone, said out loud.
@@ -475,6 +609,8 @@ async function runLinearRamp(config, spec) {
 
   console.log('=== ' + spec.label.toUpperCase() + ' SUMMARY ===');
   console.log('Collection: ' + collectionName);
+  console.log('Scale:');
+  describeRampModels(data, spec).forEach(function(line) { console.log(line); });
   console.log('Variables created: ' + stats.created);
   console.log('Variables updated: ' + stats.updated);
   console.log('Variables skipped: ' + stats.skipped);

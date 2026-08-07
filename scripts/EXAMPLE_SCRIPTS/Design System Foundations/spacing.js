@@ -27,6 +27,7 @@
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
 @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, writeManifest, normaliseConfig } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
+@import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { spacingRampSpec, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
 
 // ========================================
@@ -60,21 +61,34 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
     // Snap all spacing values to multiples of this number (e.g. `2` → 2, 4, 6, …). Omit or `0` for no snapping.
   },
 
+  // How each viewport's scale is generated. `metric` is a base plus a step that grows every
+  // `mod` tokens — the way a spacing scale is usually written down (4, 8, 12, 16, 24, 32).
+  // Other models: `endpoints` (min → max along scaling.type, what configs before this used),
+  // `modular` (each step a fixed ratio above the last), `explicit` (your own `values` array).
   modes: [
     {
       name: "desktop",
+      model: "metric",
       min: 1,
-      max: 200
+      base: { level: "xs", size: 4 },
+      step: 4,
+      mod: 3
     },
     {
       name: "tablet",
+      model: "metric",
       min: 1,
-      max: 120
+      base: { level: "xs", size: 3 },
+      step: 3,
+      mod: 3
     },
     {
       name: "mobile",
+      model: "metric",
       min: 1,
-      max: 80
+      base: { level: "xs", size: 2 },
+      step: 2,
+      mod: 3
     }
   ]
   // @CONFIG_END

@@ -64,6 +64,22 @@ deleting variable modes they did not recognise.
   `replace-style-variable-bindings` now support `*` wildcards.
 - Figma's default `Mode 1` on a newly created collection is now renamed to your first viewport
   rather than deleted and replaced, which uses one fewer mode from your plan's budget.
+- **The shipped Spacing and Corner radius defaults now generate a metric scale, not an endpoint
+  range.** A metric scale is a base plus a step that grows every few tokens — 4, 8, 12, 16, 24, 32
+  — which is how a spacing scale is normally written down. The previous default ran a curve
+  between a minimum and a maximum, which meant working backwards from the numbers you wanted to a
+  curve that happened to pass through them.
+
+  **Your own configs are untouched.** A config with no `model` is read as `endpoints`, so anything
+  you have configured produces exactly what it always did. What changes is the *starting point* in
+  the shipped script — and because prebuilt scripts reload from the embedded source, that reaches
+  you on upgrade if you have been running the shipped block as-is.
+
+  Two things make that visible and reversible. Every run now prints the model and its parameters
+  next to the created/updated counts — *"Desktop: metric, base 4, step 4, mod 3"* — so if the
+  numbers move, the reason is in the output that reports the move. And if the file already has a
+  recorded set, the **import button** hands your previous config straight back into the config
+  block: that only works because the config shape and the import landed first.
 - **Spacing and Corner radius record what they generated**, so the import button and
   `figma:run --from-file` can offer it back. Nothing about the variables they produce changes —
   the two scripts now share one generator, and a test proves the collapse value for value against
@@ -136,6 +152,13 @@ deleting variable modes they did not recognise.
   works with them unchanged; each generator drops its branch of that bridge as it is rewritten.
   v1 carries **declared inputs only**: a run mutates its config in place, and exporting a
   derivation would freeze it.
+- **`@Scale Models`**: four ways to describe a scale — `endpoints` (a curve between a minimum and
+  a maximum, what every earlier config is), `modular` (a fixed ratio per step), `metric` (a base
+  plus a growing step) and `explicit` (your own numbers). Size sequences only: rounding, the
+  monotonic guard, line height and letter spacing all stay with their callers. `max` is a limit
+  only in `endpoints` — elsewhere the top comes out of the model, so a `max` beside it is ignored
+  and an optional `clamp` warns rather than squashing. The ratio names keep their shipped values;
+  a plain number is accepted for an exact one.
 - **`@Linear Ramp`**: one generator behind Spacing and Corner radius, which were ~30 near-identical
   functions apart — 88 differing lines out of 916 once the domain words were normalised away, and
   seven values that genuinely differed. Both are now thin wrappers parameterised by tokens, name

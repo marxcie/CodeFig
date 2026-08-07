@@ -43,6 +43,7 @@ function baseContext() {
   vm.createContext(ctx);
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@foundation.js'), 'utf8'));
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@math-helpers.js'), 'utf8'));
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@scale-models.js'), 'utf8'));
   return ctx;
 }
 
@@ -89,12 +90,27 @@ const RADIUS_BEFORE = {
   generate: 'generateCornerRadiusVariables'
 };
 
-/** The `@CONFIG_START` block of a shipped script, evaluated as the object it is. */
-function shippedConfigBlock(file) {
-  const source = fs.readFileSync(path.join(SCRIPTS, 'EXAMPLE_SCRIPTS', 'Design System Foundations', file), 'utf8');
+/** A `@CONFIG_START` block, evaluated as the object it is. */
+function configBlockOf(source) {
   const start = source.indexOf('// @CONFIG_START');
   const end = source.indexOf('// @CONFIG_END');
   return vm.runInNewContext('({' + source.slice(start + '// @CONFIG_START'.length, end) + '})');
+}
+
+/**
+ * The block as it was **before** plan 19b changed the shipped default to metric.
+ *
+ * The property under test is "an existing config does not move", and the frozen block is what an
+ * existing config looks like. Reading the live block instead would quietly become a comparison of
+ * the new default against itself the moment a default changes.
+ */
+function frozenConfigBlock(fixture) {
+  return configBlockOf(fs.readFileSync(path.join(FIXTURES, fixture), 'utf8'));
+}
+
+/** The block as it ships today. */
+function shippedConfigBlock(file) {
+  return configBlockOf(fs.readFileSync(path.join(SCRIPTS, 'EXAMPLE_SCRIPTS', 'Design System Foundations', file), 'utf8'));
 }
 
 const DOMAINS = [
@@ -129,14 +145,14 @@ for (const domain of DOMAINS) {
   const after = () => rampGenerator(domain.spec);
 
   test(`${domain.label}: the shipped config generates identical variables`, () => {
-    const config = shippedConfigBlock(domain.block);
+    const config = frozenConfigBlock(domain.fixture);
     const old = before()(config);
     assert.ok(Object.keys(old).length > 0, 'the fixture really generated something');
     assert.deepEqual(after()(config), old);
   });
 
   test(`${domain.label}: a template plus steps generates identically`, () => {
-    const config = Object.assign(shippedConfigBlock(domain.block), {
+    const config = Object.assign(frozenConfigBlock(domain.fixture), {
       [domain.tokensKey]: domain.template,
       steps: 5
     });
@@ -145,7 +161,7 @@ for (const domain of DOMAINS) {
 
   test(`${domain.label}: every scaling alias it accepts still means the same`, () => {
     for (const alias of domain.aliases) {
-      const config = shippedConfigBlock(domain.block);
+      const config = frozenConfigBlock(domain.fixture);
       delete config.scaling;
       config[alias] = { type: 'quad', ease: 'out', roundUpperValuesTo: 4 };
       assert.deepEqual(after()(config), before()(config), alias);
@@ -156,7 +172,7 @@ for (const domain of DOMAINS) {
     test(`${domain.label}: an alias it never accepted is still ignored`, () => {
       // The two have already drifted — radius takes `cornerRadiusScaling` and spacing does not.
       // Collapsing them must not quietly grant spacing a new alias.
-      const config = shippedConfigBlock(domain.block);
+      const config = frozenConfigBlock(domain.fixture);
       config[domain.notMyAlias] = { type: 'quad', ease: 'out' };
       assert.deepEqual(after()(config), before()(config));
     });
@@ -170,13 +186,13 @@ for (const domain of DOMAINS) {
       { roundUpperValuesTo: 10 }
     ];
     for (const rounding of roundings) {
-      const config = Object.assign(shippedConfigBlock(domain.block), rounding);
+      const config = Object.assign(frozenConfigBlock(domain.fixture), rounding);
       assert.deepEqual(after()(config), before()(config), JSON.stringify(rounding));
     }
   });
 
   test(`${domain.label}: variables carry this domain's scopes`, () => {
-    const generated = after()(shippedConfigBlock(domain.block));
+    const generated = after()(frozenConfigBlock(domain.fixture));
     for (const name of Object.keys(generated)) {
       assert.deepEqual(generated[name].scopes, domain.scopes, name);
       assert.equal(generated[name].type, 'FLOAT', name);
@@ -184,7 +200,7 @@ for (const domain of DOMAINS) {
   });
 
   test(`${domain.label}: a token of 0 is generated, not skipped`, () => {
-    const config = Object.assign(shippedConfigBlock(domain.block), {
+    const config = Object.assign(frozenConfigBlock(domain.fixture), {
       modes: [{ name: 'mobile', min: 0, max: 0 }]
     });
     const generated = after()(config);
@@ -195,7 +211,7 @@ for (const domain of DOMAINS) {
 
   test(`${domain.label}: a monotonic bump still bumps`, () => {
     // A flat min/max range makes every step collide, which is what the guard exists for.
-    const config = Object.assign(shippedConfigBlock(domain.block), {
+    const config = Object.assign(frozenConfigBlock(domain.fixture), {
       scaling: { type: 'linear', ease: 'none', roundTo: 4 },
       modes: [{ name: 'mobile', min: 4, max: 12 }]
     });
@@ -320,4 +336,81 @@ test('a run that covers every mode says nothing about it', () => {
   const spacing = ctx.spacingRampSpec();
   assert.equal(ctx.describeUndeclaredModes(spacing, ['Mobile', 'Desktop'], ['Mobile', 'Desktop']), null);
   assert.equal(ctx.describeUndeclaredModes(spacing, [], []), null);
+});
+
+// ---------------------------------------------------------------------------
+// The shipped defaults, which changed in 19b
+// ---------------------------------------------------------------------------
+
+test('the shipped defaults generate the metric sequence a design system doc describes', () => {
+  // 4, 8, 12, 16, 24, 32 on desktop — a base of 4 stepping every third token, with `px` held at
+  // the minimum of 1 because the model would put it at 0.
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  const config = shippedConfigBlock('spacing.js');
+
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+  const generated = ctx.generateRampVariables(config, spec);
+
+  const desktop = Object.keys(generated).map((name) => generated[name].values.Desktop);
+  assert.deepEqual(desktop, [1, 4, 8, 12, 16, 24]);
+  assert.deepEqual(Object.keys(generated), [
+    'Spacing/px', 'Spacing/xs', 'Spacing/sm', 'Spacing/md', 'Spacing/lg', 'Spacing/xl'
+  ], 'the token names did not change — only how their values are described');
+});
+
+test('the shipped radius defaults start at zero and step up', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.radiusRampSpec();
+  const config = shippedConfigBlock('corner-radius.js');
+
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+  const generated = ctx.generateRampVariables(config, spec);
+
+  // The base sits at `xs`, so `none` is one step below it at 0 and the growth starts from there.
+  assert.deepEqual(Object.keys(generated).map((n) => generated[n].values.Desktop), [0, 4, 8, 12, 16, 24]);
+});
+
+test('a run says which model produced its numbers', () => {
+  // The shipped defaults changed, and prebuilt scripts reload from the embedded source — so the
+  // reason the numbers moved has to be in the same block that reports the move.
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  const config = shippedConfigBlock('spacing.js');
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+
+  const lines = ctx.describeRampModels(config, spec);
+  assert.match(lines[0], /Desktop: metric, base 4, step 4, mod 3/);
+  // And the expected consequence of that base, in context rather than as an interruption.
+  assert.match(lines[1], /px held at the minimum of 1\./);
+  assert.equal(lines.filter((l) => /metric, base/.test(l)).length, 3, 'one per viewport');
+
+  // An unconfigured (endpoints) config says so too, with the numbers that shaped it.
+  const frozen = frozenConfigBlock('spacing-before-19.js');
+  ctx.ensureCompatRampConfig(frozen, spec);
+  ctx.materialiseRampSizes(frozen, spec);
+  assert.match(ctx.describeRampModels(frozen, spec)[0], /endpoints, min 1, max 200, sine/);
+});
+
+test('two steps that round onto the same number are named, not silently bumped', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  assert.equal(
+    ctx.describeRampCollision('sm', 'md', 8, { model: 'modular', ratio: 1.06 }, 2),
+    "sm and md both round to 8 — ratio 1.06 with a grid of 2 can't separate them."
+  );
+  assert.match(
+    ctx.describeRampCollision('sm', 'md', 8, { model: 'metric', step: 1 }, 4),
+    /a step of 1 with a grid of 4/
+  );
 });
