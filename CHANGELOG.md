@@ -67,6 +67,16 @@ deleting variable modes they did not recognise.
 - Grid now honours a nested `{ config: { collectionName, group } }` config the way Spacing,
   Corner radius and Typography always have. Previously it read only the top level, so a pasted
   config quietly wrote to `Responsive System`.
+- **Import this file's config into a Design System Foundations script.** A button beside the
+  results button fills the config block from what this file already has, in one click, and names
+  where it came from — *imported from Responsive System · Spacing*. It appears only when this file
+  actually has a config for that script. **Nothing is read from your file until you press it**, so
+  a config you paste into the editor is always the config that runs, and Cmd-Z undoes an import.
+  The imported values live in the editor, not in the script: switching scripts and back brings the
+  shipped defaults again, and one click brings your file's settings back.
+- `npm run figma:run -- <script>` still runs the script's own config. `--from-file` imports this
+  file's config first, the way the button does; `--config <path>` supplies one explicitly. Every
+  run prints which of the three it used.
 
 ### Fixed
 
@@ -114,6 +124,14 @@ deleting variable modes they did not recognise.
   derivation would freeze it.
 - `createCopyResult` and `requestClipboardCopy` in `@InfoPanel`, replacing the copy plumbing
   written twice in `export-import-variables` and `copy-simple-variables-json`.
+- Importing a config is a **script run flagged silent**, not a backend feature: the button, the
+  run and the CLI all read the file through `readFoundation`, so there is one implementation and
+  nothing to keep in sync. A config reaches a run as a prepended `var` that each script's existing
+  `typeof x !== 'undefined' ? x : {…}` guard picks up, so no script needed changing. The dev
+  bridge's `args` field, carried end to end and used by nothing, now carries it.
+- `@fromFile:` in a config block declares where a field's value comes from, and survives the form
+  serializer's `parse → serialize` round trip — an annotation it dropped would silently remove the
+  button from the script.
 - **New `@Foundation` library.** One viewport registry per file, one manifest per generated token
   set, and one copy of the helpers that had been written five times across the Design System
   Foundations scripts. Two collections can hold two sets — "Spacing A" and "Spacing B" — while

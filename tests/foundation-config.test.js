@@ -411,6 +411,68 @@ test('a portable config carries no derived fields, whatever the manifest held', 
 });
 
 // ---------------------------------------------------------------------------
+// Nothing declared may fall through the round trip
+// ---------------------------------------------------------------------------
+
+/** The `@CONFIG_START` block of a shipped script, evaluated as the object it is. */
+function shippedConfigBlock(file) {
+  const source = fs.readFileSync(path.join(SCRIPTS, 'EXAMPLE_SCRIPTS', 'Design System Foundations', file), 'utf8');
+  const start = source.indexOf('// @CONFIG_START');
+  const end = source.indexOf('// @CONFIG_END');
+  assert.ok(start !== -1 && end > start, file + ' has a config block');
+  return vm.runInNewContext('({' + source.slice(start + '// @CONFIG_START'.length, end) + '})');
+}
+
+test('every field a shipped config declares survives the round trip', () => {
+  // A declared field is an input, whatever else it is — `generateOverview` is a user-facing
+  // toggle, not a derivation, and dropping it on import would quietly change what a run does.
+  // Renames are allowed and listed; anything else lost or invented is a bug.
+  const cases = [
+    { file: 'grid.js', domain: 'grid', renames: {} },
+    { file: 'spacing.js', domain: 'spacing', renames: {} },
+    { file: 'corner-radius.js', domain: 'radius', renames: {} },
+    { file: 'typography.js', domain: 'typography', renames: { figmaStyles: 'styles', fontScaling: 'scaling' } }
+  ];
+
+  for (const { file, domain, renames } of cases) {
+    const declared = shippedConfigBlock(file);
+    const back = toDomainConfig(normaliseConfig(declared).config, domain) || {};
+
+    for (const key of Object.keys(declared)) {
+      const landsAs = renames[key] || key;
+      assert.ok(
+        Object.prototype.hasOwnProperty.call(back, landsAs),
+        `${file}: "${key}" did not survive (expected as "${landsAs}"). Kept: ${Object.keys(back).join(', ')}`
+      );
+    }
+
+    const allowedExtra = Object.values(renames).concat(['roundLowerValuesTo']);
+    for (const key of Object.keys(back)) {
+      if (Object.prototype.hasOwnProperty.call(declared, key)) continue;
+      assert.ok(allowedExtra.includes(key), `${file}: invented "${key}", which the block never declared`);
+    }
+  }
+});
+
+test('generateOverview survives even when it is false', () => {
+  // The falsy trap that cost us a whole plan on values of 0.
+  const back = toDomainConfig(normaliseConfig({
+    collectionName: 'C', group: 'Spacing', spacings: ['xs'], generateOverview: false,
+    modes: [{ name: 'mobile', min: 1, max: 8 }]
+  }).config, 'spacing');
+  assert.strictEqual(back.generateOverview, false);
+});
+
+test('a rounding step is spelled one way, not two', () => {
+  // Both `scaling.roundTo` and a top-level `roundTo` in one config means one of them is a lie
+  // in the editor. The scripts read either; the shipped blocks put it inside `scaling`.
+  const back = toDomainConfig(normaliseConfig(legacySpacingConfig()).config, 'spacing');
+  assert.equal(back.scaling.roundTo, 2);
+  assert.equal(back.roundTo, undefined);
+  assert.equal(back.roundUpperValuesTo, undefined);
+});
+
+// ---------------------------------------------------------------------------
 // Printing a config back into a config block — what the clipboard actually carries
 // ---------------------------------------------------------------------------
 

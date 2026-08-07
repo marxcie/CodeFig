@@ -450,6 +450,10 @@ figma.ui.onmessage = (msg) => {
     // Execute the script code with memory management
     const codeToExecute = msg.code;
     let jsCode: string = codeToExecute;
+    // A silent run is one the user did not start: the sync button reading this file's config.
+    // It must leave no trace — nothing in figma-console.log, no toast — or opening a script
+    // would narrate itself.
+    const silentRun = msg.silent === true;
     
     try {
       // Pure JavaScript execution - no TypeScript conversion
@@ -461,7 +465,7 @@ figma.ui.onmessage = (msg) => {
             typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
           ).join(' ');
           debugLog('Script:', message);
-          forwardToConsoleBridge('log', ['[Script]', ...args]);
+          if (!silentRun) forwardToConsoleBridge('log', ['[Script]', ...args]);
         },
         error: (...args: any[]) => {
           const message = args.map(arg => {
@@ -471,7 +475,7 @@ figma.ui.onmessage = (msg) => {
             return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
           }).join(' ');
           debugError('Script:', message);
-          forwardToConsoleBridge('error', ['[Script]', ...args]);
+          if (!silentRun) forwardToConsoleBridge('error', ['[Script]', ...args]);
         },
         warn: (...args: any[]) => {
           const message = args.map(arg => {
@@ -481,7 +485,7 @@ figma.ui.onmessage = (msg) => {
             return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
           }).join(' ');
           debugError('Script Warning:', message);
-          forwardToConsoleBridge('warn', ['[Script]', ...args]);
+          if (!silentRun) forwardToConsoleBridge('warn', ['[Script]', ...args]);
         }
       };
 
@@ -515,6 +519,7 @@ figma.ui.onmessage = (msg) => {
         _codefigRunCompleteSent: boolean;
         _codefigLastProgressAt: number;
         codefigRunComplete: (opts?: { message?: string }) => void;
+        codefigConfigLoadResult: (result: any) => void;
         _codefigRunOpEnd: () => void;
       } = {
         _codefigDeterminateProgress: false,
@@ -545,6 +550,11 @@ figma.ui.onmessage = (msg) => {
             type: 'CODEFIG_RUN_COMPLETE',
             message: opts && opts.message ? opts.message : undefined
           });
+        },
+        // How a silent run hands its answer back: straight to the UI, never through the console.
+        codefigConfigLoadResult: (result: any) => {
+          figma.ui.postMessage({ type: 'CONFIG_LOAD_RESULT', result: result });
+          mockWindow.codefigRunComplete();
         },
         _codefigRunOpEnd: () => {
           mockWindow._codefigPendingOps = Math.max(0, mockWindow._codefigPendingOps - 1);
@@ -586,7 +596,11 @@ figma.ui.onmessage = (msg) => {
     } catch (error) {
       figma.ui.postMessage({ type: 'CODEFIG_RUN_COMPLETE' });
       const errorMessage = error instanceof Error ? error.message : String(error);
-      figma.notify(`Script error: ${errorMessage} 😳`, { error: true });
+      if (silentRun) {
+        figma.ui.postMessage({ type: 'CONFIG_LOAD_RESULT', result: { error: errorMessage } });
+      } else {
+        figma.notify(`Script error: ${errorMessage} 😳`, { error: true });
+      }
       debugError('Backend: Script execution error:', error);
       debugError('Backend: Error message:', errorMessage);
       if (error instanceof Error && error.stack) {

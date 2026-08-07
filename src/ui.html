@@ -68,6 +68,13 @@
             </div>
             <div class="header-right">
               <div class="button-group">
+                <button class="icon-btn" id="configLoadBtn" title="Import this file's config" style="display: none;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 3v11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <polyline points="7 9 12 14 17 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
                 <button class="icon-btn" id="infoPanelBtn" title="Results & Information">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1174,6 +1181,10 @@
         // Check if this script uses @InfoPanel
         infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
         updateInfoPanelButtonVisibility();
+        updateConfigLoadButtonVisibility();
+        // Probe on the *annotation*, not on the button being visible: visibility now depends on
+        // what the probe finds, so gating the probe on visibility meant it never ran.
+        if (scriptHasFileFields(script.code || '')) probeFoundationOnce();
         
         // The script name already contains the group info if it exists (Group / Script Name)
         scriptTitle.textContent = script.name;
@@ -1279,6 +1290,268 @@
         return imports.findImports(scriptCode || '').some(function (imp) {
           return imp.scriptName.indexOf('InfoPanel') !== -1;
         });
+      }
+
+      // ---------------------------------------------------------------------
+      // Load this file's config, on request
+      //
+      // The form never fills itself. Nothing here reads the document until the button is
+      // pressed, which is what keeps a config you pasted being the config that runs — a
+      // property of the design rather than a rule the code has to get right.
+      // ---------------------------------------------------------------------
+
+      const configLoadBtn = document.getElementById('configLoadBtn');
+      let configLoadInFlight = false;
+      let configLoadTimer = null;
+      // What the file actually holds, so the badge answers the same question the click does.
+      // Runs once per plugin session — and a session is a file, since opening CodeFig is
+      // per-document. Re-armed after a run, which may have written a config.
+      let foundationProbe = { done: false, hasRegistry: false, domains: {}, checkedAt: null };
+      // Domains imported in this session, so the badge stops nagging once you have taken it.
+      const configImported = {};
+
+      /**
+       * Does the open script declare fields that can be loaded from the file? Cheap parse only,
+       * never resolveImports — this runs on every keystroke, same rule as the InfoPanel button.
+       */
+      function currentConfigBlock() {
+        if (!scriptHasConfig || !parsedSections || !code || !code.getValue) return '';
+        try {
+          return extractConfigSection(code.getValue(), !!parsedSections.hasUIConfig) || '';
+        } catch (e) {
+          return '';
+        }
+      }
+
+      /** The `@fromFile:` path an object-literal config block declares, or null. */
+      function configBlockFromFilePath(content) {
+        var match = /@fromFile:\s*([A-Za-z0-9_$.]+)/.exec(content || '');
+        return match ? match[1] : null;
+      }
+
+      /**
+       * Does the open script declare anything loadable? Two spellings: a form field carrying
+       * `@fromFile:`, or an object-literal block carrying one for the whole block — which is what
+       * all five Design System Foundations scripts use today.
+       *
+       * Cheap parse only, never resolveImports: this runs on every keystroke, same rule as the
+       * InfoPanel button.
+       */
+      function scriptHasFileFields(scriptCode) {
+        if (!scriptHasConfig || !parsedSections) return false;
+        var content = currentConfigBlock();
+        return !!content && content.indexOf('@fromFile:') !== -1;
+      }
+
+      /** `domains.spacing` → `spacing`, for a config block that declares one. */
+      function configLoadDomain() {
+        const match = /^domains\.([A-Za-z0-9_$]+)/.exec(configBlockFromFilePath(currentConfigBlock()) || '');
+        return match ? match[1] : null;
+      }
+
+      /**
+       * Is there something to import for the open script?
+       *
+       * The badge and the button have to answer the same question, or the answer is a
+       * contradiction: a dot that says "this file has a config" followed by "this file has no
+       * config" is worse than no dot. So both ask about *this script's* domain, not about the
+       * registry — a file can have viewports and no generated set.
+       */
+      function configImportAvailable() {
+        if (!scriptHasFileFields(code && code.getValue ? code.getValue() : '')) return false;
+        const domain = configLoadDomain();
+        if (domain) return !!foundationProbe.domains[domain];
+        // A form with per-field @fromFile paths reads top-level v1 fields, which the registry
+        // alone can satisfy.
+        return !!foundationProbe.hasRegistry;
+      }
+
+      function updateConfigLoadButtonVisibility() {
+        if (!configLoadBtn) return;
+        // Shown only when there is something to import — never as a button that exists to tell
+        // you it has nothing to do.
+        const available = configImportAvailable();
+        configLoadBtn.style.display = available ? 'flex' : 'none';
+        if (!available) return;
+        const domain = configLoadDomain() || 'config';
+        const taken = !!configImported[domain];
+        configLoadBtn.classList.toggle('has-update', !taken);
+        configLoadBtn.title = (taken ? 'Import this file\'s config again' : 'Import this file\'s config') +
+          (foundationProbe.checkedAt ? ' (found ' + foundationProbe.checkedAt + ')' : '') +
+          '. Imports into the editor; the file is unchanged until you run.';
+      }
+
+      /** A run nobody sees: no console bridge, no notify, no InfoPanel. */
+      function runSilentSnippet(snippet) {
+        if (!window.CodeFigImports || typeof window.CodeFigImports.resolveImports !== 'function') return false;
+        if (codefigJob.active || codefigRunSession.active || configLoadInFlight) return false;
+        let resolved;
+        try {
+          resolved = processRuntimeImports(snippet);
+        } catch (e) {
+          return false;
+        }
+        configLoadInFlight = true;
+        post('RUN', { code: resolved, silent: true });
+        return true;
+      }
+
+      /**
+       * What this file has, cheaply: the registry entry, and which domains carry a set manifest.
+       * Manifest keys come off each collection's shared plugin data — no variable is read, so
+       * this is nothing like the full readFoundation walk the import itself does.
+       */
+      function probeFoundationOnce() {
+        if (foundationProbe.done) return;
+        foundationProbe.done = true;
+        runSilentSnippet([
+          '@import { parseRegistry, foundationNamespace, foundationRegistryKey } from "@Foundation"',
+          '(async function () {',
+          '  var ns = foundationNamespace();',
+          '  var read = parseRegistry(figma.root.getSharedPluginData(ns, foundationRegistryKey()));',
+          '  var collections = await figma.variables.getLocalVariableCollectionsAsync();',
+          '  var domains = {};',
+          '  for (var i = 0; i < collections.length; i++) {',
+          '    var keys = collections[i].getSharedPluginDataKeys(ns) || [];',
+          '    for (var k = 0; k < keys.length; k++) {',
+          '      var parts = keys[k].split(":");',
+          '      if (parts[0] === "set" && parts[1]) domains[parts[1]] = true;',
+          '    }',
+          '  }',
+          '  window.codefigConfigLoadResult({',
+          '    probe: true,',
+          '    hasRegistry: !!(read.registry && read.registry.viewports.length),',
+          '    domains: domains',
+          '  });',
+          '})();'
+        ].join('\n'));
+      }
+
+      /** The one channel this UI has for saying something to the user. */
+      function configLoadStatus(message) {
+        try { post('NOTIFY', { message: message }); } catch (e) {}
+      }
+
+      function requestConfigLoad() {
+        if (configLoadInFlight) return;
+        // The path the block declares tells the sandbox which domain to bridge back into the
+        // shape this script reads. No path means the form's own `@fromFile:` rows decide.
+        const path = configBlockFromFilePath(currentConfigBlock());
+        const domainMatch = /^domains\.([A-Za-z0-9_$]+)/.exec(path || '');
+        const domain = domainMatch ? JSON.stringify(domainMatch[1]) : 'null';
+        const started = runSilentSnippet([
+          '@import { foundationConfigPayload, formatConfigBlock } from "@Foundation"',
+          '(async function () {',
+          '  var payload = await foundationConfigPayload(' + domain + ');',
+          '  window.codefigConfigLoadResult({',
+          '    payload: payload,',
+          '    block: payload.config ? formatConfigBlock(payload.config) : null',
+          '  });',
+          '})();'
+        ].join('\n'));
+        if (!started) {
+          configLoadStatus('CodeFig is busy running something — try again in a moment.');
+          return;
+        }
+        configLoadBtn.classList.add('working');
+        scriptStatus.textContent = "Importing this file's config…";
+        configLoadTimer = setTimeout(function () {
+          finishConfigLoad(null, 'Timed out reading this file. Nothing was imported.');
+        }, 4000);
+      }
+
+      function finishConfigLoad(message, error) {
+        configLoadInFlight = false;
+        if (configLoadTimer) { clearTimeout(configLoadTimer); configLoadTimer = null; }
+        if (configLoadBtn) configLoadBtn.classList.remove('working');
+        if (error) {
+          if (configLoadBtn) {
+            configLoadBtn.classList.add('failed');
+            configLoadBtn.classList.remove('has-update');
+          }
+          scriptStatus.textContent = 'Ready';
+          configLoadStatus(error);
+          return;
+        }
+        if (configLoadBtn) configLoadBtn.classList.remove('failed');
+        scriptStatus.textContent = 'Ready';
+        if (message) configLoadStatus(message);
+      }
+
+      /**
+       * Apply a loaded config. One click, applied immediately; Cmd-Z takes it back.
+       *
+       * Two shapes to land in. A form (`var` rows with `@fromFile:`) takes values field by
+       * field. An object-literal block takes the whole block, because there is nothing finer
+       * to address — which also replaces the comments in it, so the summary says so.
+       */
+      /**
+       * Which set an import came from — "Responsive System · Spacing".
+       *
+       * Named every time, not only when there is a choice: import behaviour does not change
+       * shape with how many configs a file holds. A source is always chosen; with one it is
+       * simply preselected. The selector that makes the choice visible belongs to phase 2.
+       */
+      function configSourceLabel(v1, domain) {
+        const slice = (v1 && v1.domains && domain) ? v1.domains[domain] : null;
+        const collection = (slice && slice.collection) || (v1 && v1.collection) || null;
+        const group = (slice && slice.group) || (v1 && v1.group) || null;
+        if (!collection) return null;
+        return collection + (group ? ' · ' + group : '');
+      }
+
+      function applyLoadedConfig(data) {
+        const payload = data && data.payload;
+        const v1 = payload && payload.v1 ? payload.v1 : null;
+
+        if (!v1) {
+          finishConfigLoad(null, 'This file has no saved config to load. The form is unchanged.');
+          return;
+        }
+
+        const path = configBlockFromFilePath(currentConfigBlock());
+
+        // Object-literal config: replace the block wholesale, keeping the annotation that makes
+        // the button exist at all — losing it would remove the button after one press.
+        if (path && !scriptHasUIConfig) {
+          if (!data.block) {
+            finishConfigLoad(null, 'This file has no saved config for ' + path + '. The config is unchanged.');
+            return;
+          }
+          if (!configEditor) {
+            finishConfigLoad(null, 'The configuration editor is not open, so there is nowhere to load into.');
+            return;
+          }
+          configEditor.setValue('  // @fromFile: ' + path + '\n' + data.block);
+          mergeConfigIntoMain();
+          configImported[configLoadDomain() || 'config'] = true;
+          updateConfigLoadButtonVisibility();
+          const blockSource = configSourceLabel(v1, configLoadDomain());
+          finishConfigLoad('Imported' + (blockSource ? ' from ' + blockSource : '') +
+            '. Comments in the config block were replaced — Cmd-Z restores them. The file is unchanged until you run.');
+          return;
+        }
+
+        if (!configUIInstance || !window.CodeFigConfigUI || typeof window.CodeFigConfigUI.applyFileConfig !== 'function') {
+          finishConfigLoad(null, 'The configuration form is not open, so there is nowhere to load into.');
+          return;
+        }
+        let schema;
+        try {
+          schema = window.CodeFigConfigUI.parse(currentConfigBlock());
+        } catch (e) {
+          finishConfigLoad(null, 'Could not read this script\'s config block.');
+          return;
+        }
+        const result = window.CodeFigConfigUI.applyFileConfig(schema, configUIInstance.getValues(), v1);
+        if (result.changes.length > 0) {
+          configUIInstance.setValues(result.values);
+          syncUIToCode(result.values);
+        }
+        configImported[configLoadDomain() || 'config'] = true;
+        updateConfigLoadButtonVisibility();
+        const source = configSourceLabel(v1, configLoadDomain());
+        finishConfigLoad((source ? 'Imported from ' + source + '. ' : '') + result.summary);
       }
 
       function updateInfoPanelButtonVisibility() {
@@ -2611,6 +2884,7 @@
       exportBtn.addEventListener('click', exportCurrentScript);
       importBtn.addEventListener('click', importScript);
       infoPanelBtn.addEventListener('click', toggleInfoPanel);
+      if (configLoadBtn) configLoadBtn.addEventListener('click', requestConfigLoad);
       exportAllBtn.addEventListener('click', exportAllUserScripts);
 
       // Editor tab clicks
@@ -2971,8 +3245,29 @@
             break;
 
           case 'CODEFIG_RUN_COMPLETE':
+            // A run can write a manifest, so what the file holds may have changed.
+            if (!configLoadInFlight) foundationProbe.done = false;
             hideProgress();
             _codefigQueueFinishIfActive();
+            break;
+
+          case 'CONFIG_LOAD_RESULT':
+            (function () {
+              var data = msg.result || {};
+              if (data.error) {
+                finishConfigLoad(null, "Could not import this file's config: " + data.error);
+                return;
+              }
+              if (data.probe) {
+                foundationProbe.hasRegistry = !!data.hasRegistry;
+                foundationProbe.domains = data.domains || {};
+                foundationProbe.checkedAt = new Date().toLocaleTimeString();
+                configLoadInFlight = false;
+                updateConfigLoadButtonVisibility();
+                return;
+              }
+              applyLoadedConfig(data);
+            })();
             break;
 
           case 'COPY_TO_CLIPBOARD':
@@ -3197,6 +3492,13 @@
             return;
           }
           code = resolved.script.code;
+        }
+
+        // `--from-file` and `--config` arrive as a prelude: a `var` that the script's own
+        // `typeof x !== 'undefined' ? x : {…}` guard picks up, so the literal below is
+        // unreachable. With no flag there is no prelude and the source runs as written.
+        if (job.args && typeof job.args.prelude === 'string' && job.args.prelude) {
+          code = job.args.prelude + '\n' + code;
         }
 
         try {

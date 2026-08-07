@@ -228,6 +228,7 @@ function validateRadiusScalingTypeConfig(config) {
 
 var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cornerRadiusConfigData : {
   // @CONFIG_START
+  // @fromFile: domains.radius
   collectionName: "Responsive System",
   group: "Corner radius",
 

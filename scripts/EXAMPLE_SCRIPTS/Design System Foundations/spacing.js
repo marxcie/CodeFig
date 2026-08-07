@@ -226,6 +226,7 @@ function validateSpacingScalingTypeConfig(config) {
 
 var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfigData : {
   // @CONFIG_START
+  // @fromFile: domains.spacing
   collectionName: "Responsive System",
   group: "Spacing",
 

@@ -150,6 +150,7 @@ function validateTypographyScalingTypeConfig(config) {
 
 var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typographyConfigData : {
   // @CONFIG_START
+  // @fromFile: domains.typography
   collectionName: "Responsive System",
   group: "Typography",
 

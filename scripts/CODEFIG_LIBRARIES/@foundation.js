@@ -1298,10 +1298,10 @@ function toDomainConfig(v1, domain, options) {
       if (sk === 'roundTo' && !(config.scaling[sk] > 0)) continue;
       scaling[sk] = foundationClone(config.scaling[sk]);
     }
-    if (Object.keys(scaling).length > 0) {
-      out.scaling = scaling;
-      if (typeof scaling.roundTo === 'number' && scaling.roundTo > 0) out.roundTo = scaling.roundTo;
-    }
+    // `scaling.roundTo` only. Emitting a top-level `roundTo` as well would put two spellings of
+    // one setting in the user's editor, and the scripts' own compat step copies it down anyway
+    // (`resolveRoundTo` reads `scaling.roundTo` second, and `ensureCompat*` promotes it first).
+    if (Object.keys(scaling).length > 0) out.scaling = scaling;
   }
   if (config.defaultBaseLevel !== undefined) out.defaultBaseLevel = config.defaultBaseLevel;
   if (config.generateOverview !== undefined) out.generateOverview = config.generateOverview;
@@ -1662,4 +1662,31 @@ async function readConfigFromTextLayer(options) {
 
   var read = parsePortableConfig(node.characters);
   return { config: read.config, translations: read.translations, warnings: read.warnings, node: node };
+}
+
+// ============================================================================
+// LOADING A CONFIG FROM THE FILE
+//
+// The one implementation of "read this file's config", shared by the sync button, a run and the
+// CLI. It lives here rather than in src/code.ts because the backend cannot reach a script
+// library: @foundation.js is embedded in ui.html and resolved at run time, and dist/code.js is a
+// separate bundle. A second copy in TypeScript is exactly the duplication 16a removed.
+// ============================================================================
+
+/**
+ * Everything a form or a CLI needs to fill a config from the file: the v1 config, and — when a
+ * domain is named — that domain in the shape today's scripts read.
+ *
+ * Reads only. Nothing here writes a variable, a mode, a manifest or the registry.
+ */
+async function foundationConfigPayload(domain, options) {
+  var foundation = await readFoundation(options || {});
+  var v1 = toPortableConfig(foundation);
+  var payload = {
+    v1: v1,
+    domain: domain || null,
+    config: domain ? toDomainConfig(v1, domain) : null,
+    warnings: foundation.warnings || []
+  };
+  return payload;
 }

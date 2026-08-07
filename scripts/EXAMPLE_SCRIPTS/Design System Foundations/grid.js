@@ -127,6 +127,7 @@ function resolveColVariableValue(colSlot, viewportConfig, maxCols, distribute) {
 
 var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfig : {
   // @CONFIG_START
+  // @fromFile: domains.grid
   // Use existing config if already defined, otherwise use default
   collectionName: "Responsive System",
   group: "Grid",

@@ -15,5 +15,11 @@
       if (!c) throw new Error("CodeFigConfigUI.render: options.container is required");
       return C.createForm(c, schema, opts);
     },
+    applyFileConfig: function (schema, values, payload) {
+      return P.applyFileConfig(schema, values, payload);
+    },
+    hasFileFields: function (schema) {
+      return P.hasFileFields(schema);
+    },
   };
 })(typeof self !== "undefined" ? self : this);

@@ -180,6 +180,10 @@
           inputType: inputType,
         };
         if (phMatch) f.placeholder = phMatch[1];
+        // Where this field's value comes from when the user presses sync — a path into the
+        // foundation's v1 config. Nothing reads the file unless that button is pressed.
+        var fromFileMatch = tip.match(/@fromFile:\s*([A-Za-z0-9_$.]+)/);
+        if (fromFileMatch) f.fromFile = fromFileMatch[1];
         if (optsMatch) {
           var optsVal = optsMatch[1]
             .trim()
@@ -280,6 +284,9 @@
         if (r.inputType === "radio") parts.push("@radio");
         if (r.inputType === "multiselect") parts.push("@multi");
         if (r.inputType === "textarea") parts.push("@textarea");
+        // Emitted before @label so the annotation order stays stable across a round trip; a
+        // dropped @fromFile would silently remove the sync button from the script.
+        if (r.fromFile) parts.push("@fromFile: " + r.fromFile);
         if (r.label && r.label !== labelFromName(r.name)) parts.push("@label: " + r.label);
         var sr = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
         if (sr && sr.length)
@@ -299,5 +306,141 @@
     return out.join("\n").trim();
   }
 
-  return { parse: parse, serialize: serialize, inferType: inferType, parseValue: parseValue };
+  // ---------------------------------------------------------------------------
+  // Loading the file's config into a form — what one press of the sync button changes.
+  //
+  // No precedence and no dirty tracking: the form never fills itself, so a click is the only
+  // way the file is ever read and there is nothing to arbitrate. The whole job is to say, field
+  // by field, what changed — a button that silently rewrites six fields is a surprise in a
+  // different costume.
+  // ---------------------------------------------------------------------------
+
+  function rowsOf(schema) {
+    if (Array.isArray(schema)) return schema;
+    return (schema && Array.isArray(schema.rows)) ? schema.rows : [];
+  }
+
+  /** `domains.spacing.tokens` against the payload, or undefined if any step is missing. */
+  function valueAtPath(payload, path) {
+    var parts = String(path || "").split(".");
+    var cursor = payload;
+    for (var i = 0; i < parts.length; i++) {
+      if (cursor === null || typeof cursor !== "object") return undefined;
+      if (!Object.prototype.hasOwnProperty.call(cursor, parts[i])) return undefined;
+      cursor = cursor[parts[i]];
+    }
+    return cursor;
+  }
+
+  /**
+   * Coerce a value from the file into what this control can hold, or return undefined to refuse.
+   * Refusing is reported; guessing would put a shape into a control that cannot show it.
+   */
+  function valueForControl(field, value) {
+    var t = field.inputType;
+    if (value === undefined || value === null) return undefined;
+    if (t === "boolean") return typeof value === "boolean" ? value : undefined;
+    if (t === "number") return typeof value === "number" ? value : undefined;
+    if (t === "multiselect") return Array.isArray(value) ? value.map(String) : undefined;
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    // A list or an object reaching a text control is how a token list arrives: show it as the
+    // JSON the control already holds for that kind of field.
+    if (typeof value === "object") {
+      var current = field.value;
+      var currentLooksJson = typeof current === "string" && /^[\[{]/.test(current.trim());
+      if (currentLooksJson || Array.isArray(value)) return JSON.stringify(value);
+      return undefined;
+    }
+    return undefined;
+  }
+
+  function loadSummary(changes, unchanged, mismatches) {
+    var parts = [];
+    if (changes.length === 0) {
+      parts.push("Nothing to load — this file matches the form already.");
+    } else {
+      parts.push("Loaded " + changes.length + " field" + (changes.length === 1 ? "" : "s") +
+        ": " + changes.map(function (c) { return c.name; }).join(", ") + ".");
+    }
+    if (unchanged.length > 0) {
+      parts.push(unchanged.length + " unchanged.");
+    }
+    if (mismatches.length > 0) {
+      parts.push(mismatches.length + " could not be read: " +
+        mismatches.map(function (m) { return m.name; }).join(", ") + ".");
+    }
+    if (changes.length > 0) {
+      parts.push("These values are in the editor only — the file stays as it is until you run the script.");
+    }
+    return parts.join(" ");
+  }
+
+  /**
+   * Apply a v1 config payload to a form's values.
+   * → { values, changes: [{name, from, to}], unchanged: [{name, reason}], mismatches, summary }
+   */
+  function applyFileConfig(schema, currentValues, payload) {
+    var rows = rowsOf(schema);
+    var values = {};
+    var key;
+    for (key in currentValues || {}) {
+      if (Object.prototype.hasOwnProperty.call(currentValues, key)) values[key] = currentValues[key];
+    }
+
+    var changes = [];
+    var unchanged = [];
+    var mismatches = [];
+    var usable = payload && typeof payload === "object" && !Array.isArray(payload);
+
+    for (var i = 0; i < rows.length; i++) {
+      var field = rows[i];
+      if (field.type !== "field" || !field.fromFile) continue;
+
+      var raw = usable ? valueAtPath(payload, field.fromFile) : undefined;
+      if (raw === undefined) {
+        unchanged.push({ name: field.name, reason: "not in this file" });
+        continue;
+      }
+      var next = valueForControl(field, raw);
+      if (next === undefined) {
+        mismatches.push({ name: field.name, path: field.fromFile });
+        continue;
+      }
+      var before = values[field.name] !== undefined ? values[field.name] : field.value;
+      if (JSON.stringify(before) === JSON.stringify(next)) {
+        unchanged.push({ name: field.name, reason: "same as the form" });
+        continue;
+      }
+      values[field.name] = next;
+      changes.push({ name: field.name, from: before, to: next, path: field.fromFile });
+    }
+
+    return {
+      values: values,
+      changes: changes,
+      unchanged: unchanged,
+      mismatches: mismatches,
+      summary: loadSummary(changes, unchanged, mismatches)
+    };
+  }
+
+  /** Does this config block declare any field that can be loaded from the file? */
+  function hasFileFields(schema) {
+    var rows = rowsOf(schema);
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].type === "field" && rows[i].fromFile) return true;
+    }
+    return false;
+  }
+
+  return {
+    parse: parse,
+    serialize: serialize,
+    inferType: inferType,
+    parseValue: parseValue,
+    applyFileConfig: applyFileConfig,
+    hasFileFields: hasFileFields
+  };
 });
