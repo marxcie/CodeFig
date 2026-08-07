@@ -118,6 +118,16 @@ function configSummaryOf(config) {
  * The JSON shape is for the manifest, the canvas layer and the CLI; asking you to translate
  * between two formats by hand is the problem this is supposed to remove.
  */
+/** Where a domain's config came from: the collection and group whose set recorded it. */
+function configSourceOf(config, domain) {
+  var sets = (config && config.sets) || [];
+  for (var i = 0; i < sets.length; i++) {
+    if (sets[i].domain !== domain) continue;
+    return sets[i].collection + (sets[i].group ? ' \u00b7 ' + sets[i].group : '');
+  }
+  return null;
+}
+
 function foundationConfigBlockResults(config) {
   var domains = Object.keys(config.domains || {});
   var results = [];
@@ -125,13 +135,49 @@ function foundationConfigBlockResults(config) {
     var domain = domains[i];
     var block = formatConfigBlock(toDomainConfig(config, domain));
     if (!block) continue;
+    // Which collection this came from, said out loud. Copy scans every collection in the file,
+    // so a config can arrive from somewhere other than the one named in the settings above —
+    // technically correct and genuinely confusing until the source is on the result.
+    var source = configSourceOf(config, domain);
     results.push(createCopyResult(
-      foundationDomainScriptName(domain) + ' config',
+      foundationDomainScriptName(domain) + ' config' + (source ? ' \u2014 from ' + source : ''),
       block,
       'Paste between // @CONFIG_START and // @CONFIG_END in ' + foundationDomainScriptName(domain) + '.'
     ));
   }
   return results;
+}
+
+/**
+ * The settings this mode did not read.
+ *
+ * The block is a code editor, so there is nothing to hide — a setting cannot be conditionally
+ * shown the way a form field can. Saying which ones were ignored is the honest substitute: the
+ * `adopt` block naming a collection while `copy` scanned every collection in the file is
+ * technically correct and reads like a contradiction.
+ */
+function configIgnoredSettings(options, mode) {
+  var byMode = {
+    'copy': ['pastedConfig', 'adopt'],
+    'to-canvas': ['pastedConfig', 'adopt'],
+    'from-canvas': ['pastedConfig', 'collections', 'adopt'],
+    'check': ['collections', 'adopt'],
+    'adopt': ['pastedConfig', 'collections']
+  };
+  var candidates = byMode[mode] || [];
+  var ignored = [];
+  for (var i = 0; i < candidates.length; i++) {
+    var value = options ? options[candidates[i]] : undefined;
+    var isEmpty = value === undefined || value === null || value === '' ||
+      (Array.isArray(value) && value.length === 0);
+    if (!isEmpty) ignored.push(candidates[i]);
+  }
+  if (ignored.length === 0) return null;
+  return createResult(
+    'Settings this mode did not read: ' + ignored.join(', '),
+    'Mode is "' + mode + '". Those settings belong to the other modes and had no effect on this run.',
+    'info'
+  );
 }
 
 async function foundationConfigCopy(options) {
@@ -146,7 +192,20 @@ async function foundationConfigCopy(options) {
     requestClipboardCopy(json, 'Foundation config copied to clipboard');
   }
 
-  var results = [createResult('Read ' + configSummaryOf(config), 'From ' + (foundation.collections || []).length + ' collection(s) in this file.', 'success')];
+  var sources = [];
+  for (var b = 0; b < blocks.length; b++) {
+    var name = blocks[b].message || '';
+    var at = name.indexOf('\u2014 from ');
+    if (at !== -1) sources.push(name.slice(at + 8));
+  }
+  var results = [createResult(
+    'Read ' + configSummaryOf(config),
+    'Scanned ' + (foundation.collections || []).length + ' collection(s) in this file' +
+      (sources.length > 0 ? '. Copied from ' + sources.join(', ') : '') + '.',
+    'success'
+  )];
+  var ignoredCopy = configIgnoredSettings(options, 'copy');
+  if (ignoredCopy) results.push(ignoredCopy);
 
   if (blocks.length === 0) {
     results.push(createResult(

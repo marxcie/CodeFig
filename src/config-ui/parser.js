@@ -1147,11 +1147,13 @@
     return false;
   }
 
+  // The public API. `bridge.js` copies this object onto `window.CodeFigConfigUI`, so this list is
+  // the only place that decides what the UI may call — leaving a function out is how you say it is
+  // internal. `inferType` and `parseValue` were exported and never called from outside; they are
+  // module-private now, which is a statement rather than an omission.
   return {
     parse: parse,
     serialize: serialize,
-    inferType: inferType,
-    parseValue: parseValue,
     applyFileConfig: applyFileConfig,
     fillConfigBlock: fillConfigBlock,
     parseConfigBlockObject: parseConfigBlockObject,
