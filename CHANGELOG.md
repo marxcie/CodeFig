@@ -124,6 +124,11 @@ deleting variable modes they did not recognise.
   derivation would freeze it.
 - `createCopyResult` and `requestClipboardCopy` in `@InfoPanel`, replacing the copy plumbing
   written twice in `export-import-variables` and `copy-simple-variables-json`.
+- **`npm run figma:run -- <script>` refuses a file that is not a `codefig-test` file**, and prints
+  which file it is about to write to. Running a bundled script writes variables into whatever
+  document happens to be open — a two-word command with a document-wide effect, and one that has
+  already put six variables into a real brand file. `--force` overrides. Snippets through `--code`
+  and `--file` are not gated; their author can see what they do.
 - Importing a config is a **script run flagged silent**, not a backend feature: the button, the
   run and the CLI all read the file through `readFoundation`, so there is one implementation and
   nothing to keep in sync. A config reaches a run as a prepended `var` that each script's existing
