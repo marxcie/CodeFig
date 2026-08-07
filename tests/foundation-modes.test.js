@@ -26,7 +26,7 @@ function loadModeFunctions() {
   const ctx = { console: { log() {}, warn() {}, error() {} }, Math, String, Array, Object, JSON };
   vm.createContext(ctx);
   const map = resolver.extractFunctionMap(fs.readFileSync(VARIABLES, 'utf8'));
-  for (const name of ['planModes', 'setupModes', 'removeModes']) {
+  for (const name of ['planModes', 'setupModes', 'removeModes', 'modeOrderWarning', 'reportPublishedCost']) {
     const code = map.get(name);
     assert.ok(code, `${name} is not extractable from @variables.js`);
     vm.runInContext(code, ctx);
@@ -34,7 +34,8 @@ function loadModeFunctions() {
   return ctx;
 }
 
-const { planModes, setupModes, removeModes } = loadModeFunctions();
+const lib = loadModeFunctions();
+const { planModes, setupModes, removeModes } = lib;
 
 /** The shape planModes reads: what a live collection looks like, flattened. */
 function state(modeNames, hasVariables, name) {
@@ -227,4 +228,22 @@ test('removeModes reports a mode that is not there rather than failing', () => {
   assert.equal(result.skipped[0].name, 'Wide');
   assert.match(result.skipped[0].reason, /not found/i);
   assert.deepEqual(names(collection), ['Mobile', 'Tablet']);
+});
+
+// ---------------------------------------------------------------------------
+// The advice a mode-order mismatch gives
+// ---------------------------------------------------------------------------
+
+test('the mode-order warning does not tell you to delete the collection', () => {
+  // It used to say "Delete this collection in the Variables panel and re-run" — which trades
+  // every binding in every consuming file for the column order in one panel. Variable ids and
+  // published keys are minted at creation; recreating them is unrecoverable for subscribers.
+  const message = lib.modeOrderWarning('Responsive System');
+
+  assert.match(message, /Responsive System/);
+  assert.ok(!/[Dd]elete this collection/.test(message), message);
+  assert.match(message, /Recommended: live with the order/);
+  assert.match(message, /Do NOT delete and recreate/);
+  assert.match(message, /cannot relink/, 'it says what actually breaks');
+  assert.match(message, /Renaming is safe/, 'and what is safe instead');
 });

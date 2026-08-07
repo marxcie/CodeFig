@@ -10,9 +10,16 @@
 // | Category | Functions |
 // |----------|-----------|
 // | Collections | getAllCollections, getCollection, getOrCreateCollection |
-// | Modes | planModes, setupModes, removeModes |
+// | Modes | planModes, setupModes, removeModes, modeOrderWarning |
 // | Variables | getVariable, getCollectionVariables, getVariableValue, setVariableValue, createOrUpdateVariable |
 // | Batch | extractModes, resolveModeValues, processVariables |
+//
+// ## Never delete a variable or a collection
+// A variable's id and its published key are minted at creation. Delete and recreate, and every
+// node bound to it loses its binding and every file subscribing to the published library gets a
+// "missing variable" it cannot relink. **Rename is safe** — id and key survive it — so
+// update-in-place is the only regeneration strategy that keeps a library alive. Nothing here
+// removes a variable or a collection, and nothing added here should.
 //
 // ## Modes are only ever added
 // `setupModes` adds what is missing and reports anything else the collection has. It never
@@ -464,6 +471,42 @@ async function getOrCreateCollection(name) {
 }
 
 /**
+ * What to say when a collection's modes are right but their order is not.
+ *
+ * The old wording told you to delete the collection and re-run. That trades **every binding in
+ * every file** for cosmetic column order: a variable's id and its published key are minted at
+ * creation, so deleting and recreating gives you new ones. Every node bound to the old variable
+ * loses its binding, and any file subscribing to this as a library gets a "missing variable" it
+ * cannot relink. Renaming is safe — id and key survive a rename — and update-in-place is the only
+ * regeneration strategy that keeps a library alive.
+ *
+ * Pure, so the advice itself is testable.
+ */
+function modeOrderWarning(collectionName) {
+  return 'Variable collection "' + collectionName + '": modes match your config but their order ' +
+    'differs. Figma cannot reorder modes once a collection has variables.\n' +
+    '  Recommended: live with the order. It is the column order in the Variables panel and ' +
+    'nothing else — no value, binding or name depends on it.\n' +
+    '  Do NOT delete and recreate the collection to fix it. Variable ids and published keys are ' +
+    'minted at creation, so recreating breaks every binding in this file and leaves any file ' +
+    'subscribing to this library with missing variables it cannot relink. Renaming is safe; ' +
+    'deleting is not.';
+}
+
+/** Says so when the cost above would land in other files too. Fire and forget: advice, not flow. */
+function reportPublishedCost(collection) {
+  try {
+    if (!collection || typeof collection.getPublishStatusAsync !== 'function') return;
+    collection.getPublishStatusAsync().then(function(status) {
+      if (status && status !== 'UNPUBLISHED') {
+        console.warn('  "' + collection.name + '" is published (' + status + '), so deleting it ' +
+          'would break subscribing files, not just this one.');
+      }
+    }).catch(function() {});
+  } catch (e) {}
+}
+
+/**
  * Plan the mode changes for a collection, without making any.
  *
  * Pure — no Figma calls — so the rules are testable in Node (tests/foundation-modes.test.js).
@@ -588,7 +631,8 @@ function setupModes(collection, modeNames) {
   } else if (!plan.reorder && !plan.rename && plan.add.length === 0 && plan.extra.length === 0 &&
              wanted.length === state.modes.length &&
              !wanted.every(function(n, idx) { return state.modes[idx].name === n; })) {
-    console.warn('Variable collection "' + collection.name + '": modes match your config but order differs. Figma cannot reorder modes when the collection already has variables. Delete this collection in the Variables panel and re-run the script to apply config order.');
+    console.warn(modeOrderWarning(collection.name));
+    reportPublishedCost(collection);
   }
 
   if (plan.extra.length > 0) {

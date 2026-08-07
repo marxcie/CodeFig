@@ -15,6 +15,16 @@
 // tooling and through the REST API rather than being locked to this plugin's id. Every entry is
 // capped at 100 kB by Figma; writes that would exceed it are reported, not thrown.
 //
+// ## Nothing here deletes
+// There is no collection- or variable-removal helper in this library, and adding one has a price
+// of entry. A variable's id and published key are minted at creation, so removing and recreating
+// breaks every binding in this file and leaves subscribing files with missing variables they
+// cannot relink. Renaming is safe; deleting is not.
+//
+// If a removal helper is ever needed here, it **refuses** when the collection is published
+// (`getPublishStatusAsync() !== 'UNPUBLISHED'`) or when its variables have consumers, and it takes
+// an explicit `force`. Test scratch passes on its own merits: unpublished, unconsumed.
+//
 // ## The manifest is a cache. The file wins.
 // `readFoundation` reads the registry, the collections' modes and the `viewport-width` variables,
 // and reconciles them. Where they disagree the file is believed and the disagreement is reported;

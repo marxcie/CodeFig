@@ -494,26 +494,34 @@ async function mergeCollections(sourceCol, targetCol, preserveModesStr) {
   var rebindStats = await rebindDocument(oldIdToNew);
   var styleBindings = await rebindMergeStyles(oldIdToNew);
 
+  // A variable's id and its published key are minted at creation, so removing the source is
+  // unrecoverable for anyone consuming it: bindings in *this* file were rebound above, but a file
+  // subscribing to this as a library gets a "missing variable" it cannot relink. Refuse when the
+  // collection is published — the merge itself has already happened and is not undone by keeping
+  // the source, so the safe outcome is a leftover collection you can delete yourself.
+  var publishStatus = 'UNPUBLISHED';
+  try {
+    if (typeof sourceCol.getPublishStatusAsync === 'function') {
+      publishStatus = await sourceCol.getPublishStatusAsync();
+    }
+  } catch (e) {
+    publishStatus = 'UNKNOWN';
+  }
+
   var collectionRemoved = false;
-  if (typeof sourceCol.remove === 'function') {
+  if (publishStatus !== 'UNPUBLISHED') {
+    console.warn(
+      'Merge: "' + sourceCol.name + '" is published (' + publishStatus + '), so it was NOT removed.\n' +
+      '  Its variables were copied and this file was rebound, but other files subscribe to these ' +
+      'variables by key. Deleting it would leave them with missing variables they cannot relink.\n' +
+      '  Delete it yourself in the Variables panel once you know nothing depends on it.'
+    );
+  } else if (typeof sourceCol.remove === 'function') {
     try {
       sourceCol.remove();
       collectionRemoved = true;
     } catch (e) {
-      console.warn('Merge: collection.remove failed, removing variables individually:', e && e.message);
-    }
-  }
-  if (!collectionRemoved) {
-    var idsFallback = sourceCol.variableIds ? sourceCol.variableIds.slice() : [];
-    for (var ri = 0; ri < idsFallback.length; ri++) {
-      var rv = await figma.variables.getVariableByIdAsync(idsFallback[ri]);
-      if (rv) {
-        try {
-          rv.remove();
-        } catch (e2) {
-          console.warn('Could not remove variable:', rv.name, e2 && e2.message);
-        }
-      }
+      console.warn('Merge: collection.remove failed, leaving the source in place:', e && e.message);
     }
   }
 
@@ -561,7 +569,9 @@ async function mergeCollections(sourceCol, targetCol, preserveModesStr) {
     figma.notify(
       'Merged into "' + tgtName + '": +' + stats.created + ' vars. ' +
       stats.rebindReplaced + ' layer + ' + stats.styleBindings + ' style bindings. ' +
-      (stats.collectionRemoved ? 'Source collection removed.' : 'Source collection removal incomplete — see console.')
+      (stats.collectionRemoved
+        ? 'Source collection removed.'
+        : 'Source collection kept — see console for why. Delete it yourself once nothing depends on it.')
     );
   } catch (err) {
     var msg = err instanceof Error ? err.message : String(err);

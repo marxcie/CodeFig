@@ -93,6 +93,16 @@ Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `pr
 
 ## Gotchas
 
+- **Never delete a variable, a collection or a style.** A variable's id and its published key are
+  minted at creation. Delete and recreate and every node bound to it in this file loses its
+  binding, and every file subscribing to the published library gets a "missing variable" it cannot
+  relink. **Rename is safe** — id and key survive it — so **update-in-place is the only
+  regeneration strategy that keeps a library alive**. Applies to generators, to adoption, to
+  cleanup passes and to anything that "tidies". Orphaned tokens are *reported*, never removed
+  unless the user asks, and the wording tells them what breaks. `merge-variable-collections` is the
+  one script that removes a collection, by design, and it refuses when the collection is published
+  (`getPublishStatusAsync`). Test scratch under `__codefig-test__/` is exempt: it is neither
+  published nor consumed.
 - **Builds write only to `dist/`.** No tracked file changes as a result of any build, so `git status` stays clean after `dev`/`build:dev` and you never need a production build before committing. If a build ever dirties the tree again, that is a bug — fix the build, don't add a warning here.
 - **The two zip paths must change together.** `pack-plugin.js` and the zip step in `.github/workflows/release.yml` produce what is supposed to be the same archive by separate code, and CI's is the one users download.
 - **The dev bridge does two things.** `figma-console-server.js` serves the console log *and* a job queue (`POST /jobs`, `GET /jobs/next`, `POST /jobs/:id/result`), which is the only way to start a real in-Figma run from outside Figma — the plugin polls, runs, and reports back. In-memory, no auth, **dev builds only**: every request goes through `_codefigBridgeFetch` in `src/ui.html`, the single guarded place the UI touches localhost. `tests/ui-dev-guard.test.js` fails if an ungated path appears, so add new bridge calls through that helper rather than calling `fetch` directly.
