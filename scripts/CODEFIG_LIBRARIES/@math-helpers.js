@@ -418,27 +418,65 @@ function mapSpineValueToRange(spineValue, min, max) {
  * Ensures strictly non-decreasing scale values between min and max.
  * minStep is the minimum increment between adjacent steps (typically roundTo).
  */
-function enforceMonotonicScale(values, min, max, minStep) {
+/**
+ * Keep a scale ascending, and **say what that cost**.
+ *
+ * This is where a generated scale's numbers actually get edited: collisions are pushed apart, and
+ * the first and last values are pinned to `min` and `max` whatever the curve produced. All of it
+ * silent until now — which has caused three bugs, each found only because something downstream
+ * disagreed about a number nobody had been told was changed.
+ *
+ * `report` is optional: pass `{}` and it comes back with `adjustments`, one entry per value moved,
+ * saying what it was, what it became and why. Callers that pass nothing behave exactly as before.
+ */
+function enforceMonotonicScale(values, min, max, minStep, report) {
   if (!values || values.length === 0) return [];
   var step = typeof minStep === 'number' && minStep > 0 ? minStep : 1;
+  var before = values.slice();
   var out = values.slice();
+  var reasons = {};
+  var i;
+
   out[0] = min;
   out[out.length - 1] = max;
-  var i;
+  reasons[0] = 'pinned to the minimum of ' + min;
+  reasons[out.length - 1] = 'pinned to the maximum of ' + max;
+
   for (i = 1; i < out.length; i++) {
     var floorVal = out[i - 1] + step;
     if (out[i] < floorVal) {
       out[i] = Math.min(max, floorVal);
+      if (!reasons[i]) reasons[i] = 'raised to stay above the step before it';
     }
-    out[i] = Math.max(min, Math.min(max, out[i]));
+    var bounded = Math.max(min, Math.min(max, out[i]));
+    if (bounded !== out[i]) {
+      out[i] = bounded;
+      if (!reasons[i]) reasons[i] = 'held inside ' + min + '–' + max;
+    }
   }
   for (i = out.length - 2; i >= 0; i--) {
     if (out[i] > out[i + 1]) {
       out[i] = out[i + 1];
+      if (!reasons[i]) reasons[i] = 'lowered to stay below the step after it';
     }
   }
   out[0] = min;
   out[out.length - 1] = max;
+
+  if (report && typeof report === 'object') {
+    var adjustments = [];
+    for (i = 0; i < out.length; i++) {
+      if (Math.round(before[i] * 1e6) !== Math.round(out[i] * 1e6)) {
+        adjustments.push({
+          index: i,
+          from: Math.round(before[i] * 1e6) / 1e6,
+          to: out[i],
+          why: reasons[i] || 'adjusted to keep the scale ascending'
+        });
+      }
+    }
+    report.adjustments = (report.adjustments || []).concat(adjustments);
+  }
   return out;
 }
 
@@ -496,7 +534,7 @@ function generatePiecewiseSnappedScale(opts) {
   }
   out[0] = min;
   out[steps - 1] = max;
-  return enforceMonotonicScale(out, min, max, grid > 0 ? grid : 1);
+  return enforceMonotonicScale(out, min, max, grid > 0 ? grid : 1, opts && opts.report);
 }
 
 function mapScaleTypeToLibrary(type) {
@@ -600,7 +638,7 @@ function generateScale(opts) {
       rawMod = snapScaleGrid(Math.round(rawMod * 100) / 100, roundTo);
       out.push(Math.max(min, Math.min(max, rawMod)));
     }
-    return enforceMonotonicScale(out, min, max, roundTo > 0 ? roundTo : 1);
+    return enforceMonotonicScale(out, min, max, roundTo > 0 ? roundTo : 1, opts && opts.report);
   }
 
   for (i = 0; i < steps; i++) {
@@ -641,5 +679,5 @@ function generateScale(opts) {
   }
   out[0] = Math.max(min, Math.min(max, snapScaleGrid(min, roundTo)));
   out[steps - 1] = Math.max(min, Math.min(max, snapScaleGrid(max, roundTo)));
-  return enforceMonotonicScale(out, min, max, roundTo > 0 ? roundTo : 1);
+  return enforceMonotonicScale(out, min, max, roundTo > 0 ? roundTo : 1, opts && opts.report);
 }

@@ -55,18 +55,18 @@ const codes = (result) => result.warnings.map((w) => w.code);
 test('metric is a base plus a step that grows every few tokens', () => {
   // "4, 8, 12, 16, 24, 32" — a base of 4, a step of 4, growing every third token. This is the
   // sequence people write down, and the reason metric becomes the default.
-  const result = scaleSequence('metric', { steps: 6, min: 4, base: 4, baseIndex: 0, step: 4, mod: 3 });
+  const result = scaleSequence('metric', { steps: 6, min: 4, baseValue: 4, baseIndex: 0, step: 4, mod: 3 });
   assert.deepEqual(values(result), [4, 8, 12, 16, 24, 32]);
   assert.deepEqual(result.warnings, []);
 });
 
 test('metric grows its increment exactly every `mod` steps', () => {
-  const result = scaleSequence('metric', { steps: 8, min: 16, base: 16, baseIndex: 0, step: 4, mod: 3 });
+  const result = scaleSequence('metric', { steps: 8, min: 16, baseValue: 16, baseIndex: 0, step: 4, mod: 3 });
   assert.deepEqual(values(result), [16, 20, 24, 28, 36, 44, 52, 64]);
 });
 
 test('metric below the base subtracts a flat step', () => {
-  const result = scaleSequence('metric', { steps: 5, min: 0, base: 16, baseIndex: 2, step: 4, mod: 3 });
+  const result = scaleSequence('metric', { steps: 5, min: 0, baseValue: 16, baseIndex: 2, step: 4, mod: 3 });
   assert.deepEqual(values(result), [8, 12, 16, 20, 24]);
 });
 
@@ -74,7 +74,7 @@ test('one step held at the floor is a note, not a warning', () => {
   // A base part-way up the token list puts the step below it under the minimum, and the minimum
   // is there to catch it. That is the config working, so it reads in the summary rather than
   // interrupting.
-  const result = scaleSequence('metric', { steps: 4, min: 8, base: 16, baseIndex: 3, step: 4, mod: 3, tokens: ['xs', 'sm', 'md', 'lg'] });
+  const result = scaleSequence('metric', { steps: 4, min: 8, baseValue: 16, baseIndex: 3, step: 4, mod: 3, tokens: ['xs', 'sm', 'md', 'lg'] });
   assert.deepEqual(values(result), [8, 8, 12, 16]);
   assert.deepEqual(codes(result), ['scale-floor-held']);
   assert.match(result.warnings[0].message, /xs held at the minimum of 8\./);
@@ -83,7 +83,7 @@ test('one step held at the floor is a note, not a warning', () => {
 test('several steps flattened onto the floor is a warning', () => {
   // Now the model and the token list disagree about how many steps sit below the base, and three
   // tokens sharing one number is worth interrupting for.
-  const result = scaleSequence('metric', { steps: 5, min: 10, base: 16, baseIndex: 4, step: 4, mod: 3, tokens: ['a', 'b', 'c', 'd', 'e'] });
+  const result = scaleSequence('metric', { steps: 5, min: 10, baseValue: 16, baseIndex: 4, step: 4, mod: 3, tokens: ['a', 'b', 'c', 'd', 'e'] });
   assert.deepEqual(values(result), [10, 10, 10, 12, 16]);
   assert.deepEqual(codes(result), ['scale-floored']);
   assert.match(result.warnings[0].message, /3 steps land below the minimum of 10/);
@@ -95,13 +95,13 @@ test('several steps flattened onto the floor is a warning', () => {
 // ---------------------------------------------------------------------------
 
 test('modular multiplies by its ratio above the base and divides below', () => {
-  const result = scaleSequence('modular', { steps: 5, min: 0, base: 16, baseIndex: 2, ratio: 1.25 });
+  const result = scaleSequence('modular', { steps: 5, min: 0, baseValue: 16, baseIndex: 2, ratio: 1.25 });
   assert.deepEqual(values(result).map((v) => Math.round(v * 100) / 100), [10.24, 12.8, 16, 20, 25]);
 });
 
 test('modular produces the numbers designers recognise', () => {
   // 16 → 20 → 25 → 31.25, from the shipped rounded table rather than equal temperament.
-  const result = scaleSequence('modular', { steps: 4, min: 0, base: 16, baseIndex: 0, ratio: 'majorThird' });
+  const result = scaleSequence('modular', { steps: 4, min: 0, baseValue: 16, baseIndex: 0, ratio: 'majorThird' });
   assert.deepEqual(values(result).map((v) => Math.round(v * 100) / 100), [16, 20, 25, 31.25]);
 });
 
@@ -127,12 +127,12 @@ test('the ratio table is the shipped one, not equal temperament', () => {
 
 test('a numeric ratio is accepted, which is how you get an exact value', () => {
   assert.equal(resolveModularRatio(1.2599), 1.2599);
-  const result = scaleSequence('modular', { steps: 3, min: 0, base: 10, baseIndex: 0, ratio: 2 });
+  const result = scaleSequence('modular', { steps: 3, min: 0, baseValue: 10, baseIndex: 0, ratio: 2 });
   assert.deepEqual(values(result), [10, 20, 40]);
 });
 
 test('an unknown ratio name is refused, not guessed at', () => {
-  const result = scaleSequence('modular', { steps: 3, min: 0, base: 10, baseIndex: 0, ratio: 'sixthish' });
+  const result = scaleSequence('modular', { steps: 3, min: 0, baseValue: 10, baseIndex: 0, ratio: 'sixthish' });
   assert.deepEqual(values(result), []);
   assert.ok(codes(result).includes('scale-ratio-unknown'));
 });
@@ -140,8 +140,8 @@ test('an unknown ratio name is refused, not guessed at', () => {
 test('modular ignores max, and says so', () => {
   // The top comes out of the ratio. Enforcing a max would change the ratio, which is the one
   // property a modular scale promises to hold.
-  const withMax = scaleSequence('modular', { steps: 4, min: 0, base: 16, baseIndex: 0, ratio: 1.25, max: 20 });
-  const without = scaleSequence('modular', { steps: 4, min: 0, base: 16, baseIndex: 0, ratio: 1.25 });
+  const withMax = scaleSequence('modular', { steps: 4, min: 0, baseValue: 16, baseIndex: 0, ratio: 1.25, max: 20 });
+  const without = scaleSequence('modular', { steps: 4, min: 0, baseValue: 16, baseIndex: 0, ratio: 1.25 });
   assert.deepEqual(values(withMax), values(without));
   assert.ok(codes(withMax).includes('scale-max-ignored'));
   assert.deepEqual(codes(without), []);
@@ -149,7 +149,7 @@ test('modular ignores max, and says so', () => {
 
 test('a clamp warns rather than squashes, naming both numbers', () => {
   const result = scaleSequence('modular', {
-    steps: 4, min: 0, base: 16, baseIndex: 0, ratio: 1.25, clamp: 24,
+    steps: 4, min: 0, baseValue: 16, baseIndex: 0, ratio: 1.25, clamp: 24,
     tokens: ['sm', 'md', 'lg', 'xl']
   });
   assert.deepEqual(values(result).map((v) => Math.round(v * 100) / 100), [16, 20, 25, 31.25]);
@@ -220,7 +220,7 @@ test('endpoints honours max, because in that model max is the top', () => {
 
 test('min is required in every model', () => {
   for (const model of ['endpoints', 'modular', 'metric', 'explicit']) {
-    const result = scaleSequence(model, { steps: 3, base: 16, baseIndex: 0, ratio: 1.25, step: 4, mod: 3, values: [1, 2, 3] });
+    const result = scaleSequence(model, { steps: 3, baseValue: 16, baseIndex: 0, ratio: 1.25, step: 4, mod: 3, values: [1, 2, 3] });
     assert.ok(codes(result).includes('scale-min-required'), model + ' accepted a missing min');
   }
 });
@@ -236,11 +236,11 @@ test('every generated model is monotonic before rounding', () => {
   // model that generates a flat or backwards sequence would be patched over downstream and never
   // look broken. `explicit` is exempt: those numbers are the user's.
   const cases = [
-    ['metric', { steps: 9, min: 0, base: 4, baseIndex: 0, step: 4, mod: 3 }],
-    ['metric', { steps: 9, min: 0, base: 24, baseIndex: 4, step: 2, mod: 2 }],
-    ['modular', { steps: 9, min: 0, base: 16, baseIndex: 4, ratio: 'minorSecond' }],
-    ['modular', { steps: 9, min: 0, base: 16, baseIndex: 0, ratio: 1.02 }],
-    ['modular', { steps: 9, min: 0, base: 100, baseIndex: 8, ratio: 'phi' }],
+    ['metric', { steps: 9, min: 0, baseValue: 4, baseIndex: 0, step: 4, mod: 3 }],
+    ['metric', { steps: 9, min: 0, baseValue: 24, baseIndex: 4, step: 2, mod: 2 }],
+    ['modular', { steps: 9, min: 0, baseValue: 16, baseIndex: 4, ratio: 'minorSecond' }],
+    ['modular', { steps: 9, min: 0, baseValue: 16, baseIndex: 0, ratio: 1.02 }],
+    ['modular', { steps: 9, min: 0, baseValue: 100, baseIndex: 8, ratio: 'phi' }],
     ['endpoints', { steps: 9, min: 1, max: 200, type: 'sine', ease: 'in', baseIndex: 4, baseValue: 20 }]
   ];
   for (const [model, options] of cases) {
@@ -256,8 +256,8 @@ test('every generated model is monotonic before rounding', () => {
 });
 
 test('a single-step scale is the base, in every model', () => {
-  assert.deepEqual(values(scaleSequence('modular', { steps: 1, min: 0, base: 16, baseIndex: 0, ratio: 1.25 })), [16]);
-  assert.deepEqual(values(scaleSequence('metric', { steps: 1, min: 0, base: 16, baseIndex: 0, step: 4, mod: 3 })), [16]);
+  assert.deepEqual(values(scaleSequence('modular', { steps: 1, min: 0, baseValue: 16, baseIndex: 0, ratio: 1.25 })), [16]);
+  assert.deepEqual(values(scaleSequence('metric', { steps: 1, min: 0, baseValue: 16, baseIndex: 0, step: 4, mod: 3 })), [16]);
 });
 
 test('zero steps is an empty scale, not a crash', () => {
@@ -276,4 +276,45 @@ test('the library knows nothing about Figma, viewports or variables', () => {
       `@scale-models.js mentions "${forbidden}" — the boundary is size sequences and nothing else`
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// Nothing edits a scale in silence
+// ---------------------------------------------------------------------------
+
+test('enforceMonotonicScale reports every value it moves, including the pinned ends', () => {
+  // This is where a generated scale's numbers actually change — collisions pushed apart, and the
+  // first and last values pinned to min and max whatever the curve produced. It was silent, and
+  // that silence hid three separate bugs.
+  const report = {};
+  const out = lib.enforceMonotonicScale([5, 5, 5, 30], 4, 40, 4, report);
+
+  assert.deepEqual(out, [4, 8, 12, 40]);
+  const moved = report.adjustments.map((a) => a.index);
+  assert.deepEqual(moved, [0, 1, 2, 3], 'every one of them');
+  assert.match(report.adjustments[0].why, /minimum/);
+  assert.match(report.adjustments[3].why, /maximum/);
+  assert.match(report.adjustments[1].why, /above the step before/);
+  assert.equal(report.adjustments[1].from, 5);
+  assert.equal(report.adjustments[1].to, 8);
+});
+
+test('a scale it does not need to touch reports nothing', () => {
+  const report = {};
+  const out = lib.enforceMonotonicScale([4, 8, 12, 16], 4, 16, 4, report);
+  assert.deepEqual(out, [4, 8, 12, 16]);
+  assert.deepEqual(report.adjustments, []);
+});
+
+test('the report is opt-in, so every existing caller is untouched', () => {
+  assert.deepEqual(lib.enforceMonotonicScale([5, 5, 5, 30], 4, 40, 4), [4, 8, 12, 40]);
+  assert.doesNotThrow(() => lib.enforceMonotonicScale([1, 2], 1, 2, 1, null));
+});
+
+test('an endpoints scale carries its adjustments out with it', () => {
+  const built = scaleSequence('endpoints', {
+    steps: 4, min: 4, max: 10, type: 'linear', ease: 'none', roundTo: 4
+  });
+  assert.deepEqual(built.values, [4, 8, 10, 10]);
+  assert.ok(built.adjustments.length > 0, 'and does not keep them to itself');
 });

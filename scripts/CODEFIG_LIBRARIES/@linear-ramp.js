@@ -42,7 +42,7 @@
 // | Specs | spacingRampSpec, radiusRampSpec |
 // | Config | ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, resolveRampRoundTo, validateRampScalingType |
 // | Scale | buildRampScaleOpts, calculateRampValue, generateRampVariables |
-// | Run | runLinearRamp, describeUndeclaredModes, describeRampModels |
+// | Run | runLinearRamp, describeUndeclaredModes, describeRampModels, describeRampAdjustments |
 // @DOC_END
 
 // ============================================================================
@@ -330,8 +330,10 @@ function buildRampScaleOpts(totalSteps, viewport, config, spec) {
     easeInExponent: scaling.easeInExponent,
     easeOutExponent: scaling.easeOutExponent,
     defaultRangeMode: 'full',
-    // modular, metric, explicit
-    base: sizes.base.size,
+    // modular, metric, explicit. `baseValue`/`baseIndex` is the library's spelling; the config's
+    // is `base: { level, size }`, and this is the translation one way. rampModePayloadFor is the
+    // other. Both directions or neither — see @Scale Models.
+    baseValue: sizes.base.size,
     ratio: sizes.ratio,
     step: sizes.step,
     mod: sizes.mod,
@@ -351,7 +353,7 @@ function rampSequenceFor(viewport, config, spec) {
   var opts = buildRampScaleOpts((config[spec.tokensKey] || []).length, viewport, config, spec);
   if (!opts) return { opts: null, values: [], warnings: [] };
   var built = scaleSequence(opts.model, opts);
-  return { opts: opts, values: built.values, warnings: built.warnings };
+  return { opts: opts, values: built.values, warnings: built.warnings, adjustments: built.adjustments || [] };
 }
 
 /**
@@ -381,6 +383,26 @@ function describeRampCollision(previousToken, token, value, opts, gridSize) {
     ' with a grid of ' + gridSize + " can't separate them.";
 }
 
+/**
+ * Every value the guard moved, named — always, in the summary.
+ *
+ * The guard has caused two bugs by being silent: rounded steps colliding (19b) and deliberate
+ * floor repeats being bumped apart (19c). Both fixes were local, and a third case is out there.
+ * A guard that edits numbers without saying so is the failure mode, not any particular case of
+ * it — so it now reports whatever it changed and why, whether or not anyone thinks that case is
+ * a problem.
+ */
+function describeRampAdjustments(adjustments) {
+  if (!adjustments || adjustments.length === 0) return [];
+  var lines = ['Adjusted ' + adjustments.length + ' value' + (adjustments.length === 1 ? '' : 's') +
+    ' after generating — the scale itself is unchanged:'];
+  for (var i = 0; i < adjustments.length; i++) {
+    var a = adjustments[i];
+    lines.push('  ' + a.viewport + ' ' + a.token + ': ' + a.from + ' → ' + a.to + ' — ' + a.why);
+  }
+  return lines;
+}
+
 /** Range curve or piecewise ramp, via the shared `generateScale`. */
 function calculateRampValue(scaleIndex, totalSteps, viewport, config, spec) {
   var opts = buildRampScaleOpts(totalSteps, viewport, config, spec);
@@ -398,7 +420,7 @@ function calculateRampValue(scaleIndex, totalSteps, viewport, config, spec) {
  * step once rounding has been applied, and a scale that goes backwards is worse than one that is
  * slightly off. It bumps by the grid until it moves, or until the max stops it.
  */
-function generateRampVariables(config, spec) {
+function generateRampVariables(config, spec, report) {
   var variables = {};
   var prefix = namePrefix(resolveGroup({ config: config }));
   var sizes = config[spec.sizesKey] || {};
@@ -412,10 +434,21 @@ function generateRampVariables(config, spec) {
   var lastPerViewport = {};
   var sequences = {};
   var collisions = [];
+  var adjustments = [];
   viewportNames.forEach(function(viewport) {
     lastPerViewport[viewportLabel(viewport)] = -1;
     // Once per viewport, not once per token.
     sequences[viewport] = rampSequenceFor(viewport, config, spec);
+    // Whatever the model's own generator moved, named with the viewport it happened in.
+    sequences[viewport].adjustments.forEach(function(a) {
+      adjustments.push({
+        viewport: viewportLabel(viewport),
+        token: (config[spec.tokensKey] || [])[a.index] || ('step ' + (a.index + 1)),
+        from: a.from,
+        to: a.to,
+        why: a.why
+      });
+    });
     sequences[viewport].warnings.forEach(function(w) {
       // A value doing what the config declares is not a surprise: it belongs in the summary,
       // beside the model that produced it.
@@ -439,9 +472,15 @@ function generateRampVariables(config, spec) {
       var previous = lastPerViewport[viewportKey];
       var step = gridSize > 0 ? gridSize : 1;
       var guard = 0;
-      var collided = index > 0 && value <= previous && previous >= 0;
+      // A repeat *at the floor* is the model doing what it was told: two tokens below the base
+      // both land under `min` and are held there, which scaleSequence already reported. The guard
+      // is for rounding collisions above the floor — bumping a held token invents a value nobody
+      // asked for, and makes the scale unrecognisable to adoption afterwards.
+      var atFloor = value === minSize && previous === minSize;
+      var collided = index > 0 && value <= previous && previous >= 0 && !atFloor;
+      var before = value;
 
-      while (index > 0 && value <= previous && previous >= 0 && guard++ < 32) {
+      while (collided && value <= previous && previous >= 0 && guard++ < 32) {
         var nextRaw = Math.min(maxSize, previous + step);
         if (nextRaw <= previous) break;
         value = nextRaw;
@@ -449,8 +488,17 @@ function generateRampVariables(config, spec) {
         value = Math.max(minSize, Math.min(maxSize, value));
       }
 
-      if (collided && value !== previous) {
-        collisions.push(describeRampCollision(tokens[index - 1], tokenName, previous, sequence.opts, gridSize));
+      if (value !== before) {
+        adjustments.push({
+          viewport: viewportKey,
+          token: tokenName,
+          from: before,
+          to: value,
+          why: value >= maxSize
+            ? 'it collided with ' + tokens[index - 1] + ' and could go no higher than ' + maxSize
+            : 'it collided with ' + tokens[index - 1] + ' at ' + before + '; moved up by the grid'
+        });
+        collisions.push(describeRampCollision(tokens[index - 1], tokenName, before, sequence.opts, gridSize));
       }
 
       lastPerViewport[viewportKey] = value;
@@ -464,13 +512,17 @@ function generateRampVariables(config, spec) {
     };
   });
 
-  // Reported once per distinct collision: the same cause across three viewports is one problem.
+  // The cause, once per distinct collision: the same one across three viewports is one problem.
   var said = {};
   collisions.forEach(function(line) {
     if (said[line]) return;
     said[line] = true;
     console.warn(line);
   });
+
+  // Every individual value the guard moved, for the summary. Always, not only when a case looks
+  // like a problem — the two bugs this guard caused both looked fine until they did not.
+  if (report && typeof report === 'object') report.adjustments = adjustments;
 
   return variables;
 }
@@ -578,7 +630,8 @@ async function runLinearRamp(config, spec) {
 
   setupModes(collection, modes);
 
-  var variables = generateRampVariables(data, spec);
+  var runReport = {};
+  var variables = generateRampVariables(data, spec, runReport);
   var stats = await processVariables(collection, variables, data, modes);
 
   // Record the set. This is what makes the import button and `figma:run --from-file` work.
@@ -611,9 +664,282 @@ async function runLinearRamp(config, spec) {
   console.log('Collection: ' + collectionName);
   console.log('Scale:');
   describeRampModels(data, spec).forEach(function(line) { console.log(line); });
+  describeRampAdjustments(runReport.adjustments).forEach(function(line) { console.log(line); });
   console.log('Variables created: ' + stats.created);
   console.log('Variables updated: ' + stats.updated);
   console.log('Variables skipped: ' + stats.skipped);
 
   return { collection: collection, stats: stats, manifest: manifest, undeclaredModes: undeclared };
+}
+
+// ============================================================================
+// ADOPTION
+//
+// Read the tokens a file already has, work out which model produced them, and record it.
+// **Adoption changes nothing you can see** — not "adoption writes nothing": it writes a manifest
+// and it stamps, both plugin data. No value moves, no name changes, no binding breaks, and
+// nothing is ever deleted or recreated.
+// ============================================================================
+
+/** A token's name below its group, or null when it is not one level under it. */
+function rampTokenNameFor(variableName, group) {
+  var prefix = namePrefix(group);
+  if (prefix && variableName.indexOf(prefix) !== 0) return null;
+  var rest = prefix ? variableName.slice(prefix.length) : variableName;
+  if (!rest || rest.indexOf('/') !== -1) return null;
+  return rest;
+}
+
+/**
+ * The FLOAT tokens one level under a group, with every mode's value, plus what was skipped.
+ *
+ * Guessing at nested groups is how a tool adopts half a scale and claims the whole, so anything
+ * that is not a plain FLOAT directly under the prefix is skipped **and named**.
+ */
+async function readRampGroup(collection, group) {
+  var tokens = [];
+  var skipped = [];
+
+  for (var i = 0; i < collection.variableIds.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+    if (!variable) continue;
+
+    var tokenName = rampTokenNameFor(variable.name, group);
+    if (tokenName === null) {
+      if (namePrefix(group) && variable.name.indexOf(namePrefix(group)) === 0) {
+        skipped.push({ name: variable.name, why: 'nested group' });
+      }
+      continue;
+    }
+    if (variable.resolvedType !== 'FLOAT') {
+      skipped.push({ name: variable.name, why: 'not a number (' + variable.resolvedType + ')' });
+      continue;
+    }
+
+    var byMode = {};
+    var aliased = false;
+    for (var m = 0; m < collection.modes.length; m++) {
+      var value = variable.valuesByMode[collection.modes[m].modeId];
+      if (value && typeof value === 'object') {
+        aliased = true;
+        break;
+      }
+      byMode[collection.modes[m].name] = value;
+    }
+    if (aliased) {
+      skipped.push({ name: variable.name, why: 'an alias to another collection' });
+      continue;
+    }
+
+    tokens.push({ name: tokenName, variable: variable, byMode: byMode });
+  }
+
+  return { tokens: tokens, skipped: skipped };
+}
+
+/**
+ * Fit one mode's values.
+ *
+ * Ordering is by value, not by creation order: `collection.variableIds` is the order tokens were
+ * made in, which has nothing to do with the order of a scale.
+ */
+function fitRampMode(tokens, modeName) {
+  var pairs = tokens.map(function(t) { return { name: t.name, value: t.byMode[modeName] }; })
+    .filter(function(p) { return typeof p.value === 'number'; });
+  pairs.sort(function(a, b) { return a.value - b.value; });
+
+  var recognised = recogniseScale(pairs.map(function(p) { return p.value; }));
+  return { order: pairs.map(function(p) { return p.name; }), values: pairs.map(function(p) { return p.value; }), recognised: recognised };
+}
+
+/** One line per mode, in the voice the run output uses. */
+function describeRampAdoption(fits, spec) {
+  var lines = [];
+  for (var mode in fits) {
+    if (!Object.prototype.hasOwnProperty.call(fits, mode)) continue;
+    var fit = fits[mode];
+    var r = fit.recognised;
+    if (r.exact) {
+      var params = r.model === 'metric'
+        ? 'base ' + r.options.base + ', step ' + r.options.step + ', mod ' + r.options.mod
+        : (r.model === 'modular' ? 'base ' + r.options.base + ', ratio ' + r.options.ratio
+          : 'min ' + r.options.min + ', max ' + r.options.max);
+      lines.push('  ' + mode + '  ' + r.model + ', ' + params + ' — exact');
+      continue;
+    }
+    lines.push('  ' + mode + '  explicit' + (r.note ? ' — ' + r.note : ''));
+    if (r.suggestion) {
+      var deviations = r.suggestion.deviations.map(function(d) {
+        return '`' + (fit.order[d.index] || ('step ' + (d.index + 1))) + '` (' + d.found + ' vs ' + d.expected + ')';
+      });
+      lines.push('           closest is ' + r.suggestion.model + ', except ' + deviations.join(', '));
+      lines.push('           switching would change ' + deviations.length + ' value(s).');
+    }
+  }
+  return lines;
+}
+
+/**
+ * A recognised scale, in the spelling a **config** uses.
+ *
+ * `base` means two different things either side of this boundary: in `modes[]` it is
+ * `{ level, size }` — a token name and its value — and in `@Scale Models` it is a number with a
+ * separate `baseIndex`. `buildRampScaleOpts` translates config → models; this is the way back,
+ * and its absence is what made an adopted scale regenerate wrong: `rampModesToSizes` saw a `base`
+ * that was not an object, discarded it, and substituted the middle token, moving the base two
+ * steps and flooring everything below it.
+ */
+function rampModePayloadFor(recognised, tokenOrder) {
+  var options = recognised.options || {};
+  var payload = { model: recognised.model, min: options.min };
+
+  if (recognised.model === 'metric' || recognised.model === 'modular') {
+    var index = typeof options.baseIndex === 'number' ? options.baseIndex : 0;
+    payload.base = { level: tokenOrder[index], size: options.baseValue };
+    if (recognised.model === 'metric') {
+      payload.step = options.step;
+      payload.mod = options.mod;
+    } else {
+      payload.ratio = options.ratio;
+    }
+    return payload;
+  }
+
+  if (recognised.model === 'endpoints') {
+    payload.max = options.max;
+    return payload;
+  }
+
+  payload.values = (options.values || []).slice();
+  return payload;
+}
+
+/** The v1 slice a set of per-mode fits describes. */
+function rampAdoptionSlice(fits, tokenOrder, group, collectionName) {
+  var perViewport = {};
+  var scaling = {};
+  for (var mode in fits) {
+    if (!Object.prototype.hasOwnProperty.call(fits, mode)) continue;
+    var r = fits[mode].recognised;
+    perViewport[viewportKeyFromLabel(mode)] = rampModePayloadFor(r, fits[mode].order || tokenOrder);
+    // `type` and `ease` live on the config, not on a viewport, so an adopted straight ramp
+    // records its curve once.
+    if (r.model === 'endpoints') {
+      scaling.type = r.options.type || 'linear';
+      scaling.ease = r.options.ease || 'none';
+    }
+  }
+  return {
+    tokens: tokenOrder.slice(),
+    nameTemplate: null,
+    steps: null,
+    scaling: scaling,
+    perViewport: perViewport,
+    extra: {},
+    collection: collectionName,
+    group: group
+  };
+}
+
+/**
+ * May adoption write to a collection with this publish status?
+ *
+ * Pure, so the decision and its wording are testable without Figma — the same shape as
+ * `isTestFileName`. Stubbing `getPublishStatusAsync` on a real collection to reach this branch
+ * would be fighting the environment to test a rule that has no Figma in it; the spec's job is
+ * only to prove the status is fetched and handed in.
+ *
+ * → { allowed, message }
+ */
+function publishedWriteGate(status, confirmPublished, collectionName) {
+  if (status === 'UNPUBLISHED' || !status) return { allowed: true, message: null };
+  if (confirmPublished) {
+    return {
+      allowed: true,
+      message: '"' + collectionName + '" is published (' + status + '). Recording it anyway, as asked.'
+    };
+  }
+  return {
+    allowed: false,
+    message: '"' + collectionName + '" is published (' + status + '). Recording this set and ' +
+      'stamping its tokens writes plugin data, which will show subscribing files a library update ' +
+      'for something invisible to them. Nothing else would change — no value, name or binding. ' +
+      'Run again with confirmPublished to record it.'
+  };
+}
+
+/**
+ * Adopt a group: read it, fit it, record it.
+ *
+ * On a **published** collection this reports and writes nothing until `options.confirmPublished`.
+ * Stamps and manifests are plugin data, and plugin data is part of a published variable's state —
+ * so recording would show every subscriber a library update for something invisible to them. The
+ * reading half is always free; the writing half waits for a yes.
+ */
+async function adoptRamp(collection, group, spec, options) {
+  var opts = options || {};
+  var read = await readRampGroup(collection, group);
+  var result = {
+    tokens: read.tokens.map(function(t) { return t.name; }),
+    skipped: read.skipped,
+    fits: {},
+    written: false,
+    stamped: 0,
+    warnings: [],
+    lines: []
+  };
+
+  if (read.tokens.length === 0) {
+    result.warnings.push('No number tokens directly under "' + group + '" in "' + collection.name + '".');
+    return result;
+  }
+
+  for (var m = 0; m < collection.modes.length; m++) {
+    var modeName = collection.modes[m].name;
+    result.fits[modeName] = fitRampMode(read.tokens, modeName);
+  }
+  result.lines = describeRampAdoption(result.fits, spec);
+
+  var anyMode = collection.modes[0] && result.fits[collection.modes[0].name];
+  var tokenOrder = anyMode ? anyMode.order : result.tokens;
+  result.slice = rampAdoptionSlice(result.fits, tokenOrder, group, collection.name);
+
+  var publishStatus = 'UNPUBLISHED';
+  try {
+    if (typeof collection.getPublishStatusAsync === 'function') {
+      publishStatus = await collection.getPublishStatusAsync();
+    }
+  } catch (e) {
+    publishStatus = 'UNKNOWN';
+  }
+  result.publishStatus = publishStatus;
+
+  var gate = publishedWriteGate(publishStatus, !!opts.confirmPublished, collection.name);
+  if (gate.message) result.warnings.push(gate.message);
+  if (!gate.allowed) return result;
+
+  var manifest = writeManifest(collection, {
+    domain: spec.domain,
+    group: group,
+    modes: collection.modes.map(function(mode) { return viewportKeyFromLabel(mode.name); }),
+    tokens: tokenOrder,
+    config: result.slice
+  });
+  result.manifest = manifest;
+  result.written = !!manifest.ok;
+
+  if (manifest.ok) {
+    for (var t = 0; t < read.tokens.length; t++) {
+      try {
+        stampToken(read.tokens[t].variable, spec.domain, read.tokens[t].name);
+        result.stamped++;
+      } catch (e) {
+        result.warnings.push('Could not stamp ' + read.tokens[t].variable.name + ': ' + (e && e.message ? e.message : e));
+      }
+    }
+  } else {
+    result.warnings.push('Nothing was recorded: ' + ((manifest.warnings[0] || {}).message || 'the manifest could not be written.'));
+  }
+
+  return result;
 }

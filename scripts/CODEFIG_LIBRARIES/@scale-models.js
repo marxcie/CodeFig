@@ -19,6 +19,20 @@
 // reported. Set `clamp` to be **told** when a scale passes a number, without it being squashed to
 // fit: squashing a modular scale changes its ratio, which is the one property it promises to hold.
 //
+// ## Two spellings of "base", on purpose
+// A **config** names its base by token: `base: { level: "xs", size: 4 }` — that is what a user
+// writes and what a manifest stores, and it cannot change without breaking every config in
+// existence. This library names it by position: **`baseValue`** (a number) and **`baseIndex`**
+// (where in the sequence it sits), which is also how `generateScale` in `@Math Helpers` has always
+// spelled it.
+//
+// **Translating between them is the caller's job, in both directions.** `@Linear Ramp` does it in
+// `buildRampScaleOpts` (config → here) and `rampModePayloadFor` (here → config). Getting only one
+// direction is not a compile error and not a crash: an adopted metric scale regenerated as
+// `4, 5, 6, 8, 12` because a `base` that was not an object was silently replaced with the middle
+// token. Plan 20's typography ramps carry `base: { step, size, lineHeight, tracking }`, so the
+// same split arrives with more fields to lose — wire both directions before wiring anything else.
+//
 // ## What is deliberately not here
 // Rounding, and the monotonic guard that rounding makes necessary — both belong to the caller, so
 // there is one grid ladder rather than four. Line height and letter spacing, which are reciprocal
@@ -172,14 +186,22 @@ function explicitSequence(steps, opts, warnings) {
   return { values: given, warnings: warnings };
 }
 
-/** The old code path, unchanged: a ramp between two endpoints along a curve. */
+/**
+ * The old code path, unchanged: a ramp between two endpoints along a curve.
+ *
+ * `generateScale` edits its own output — it keeps the scale ascending and pins the ends to `min`
+ * and `max` — so a report goes in with it and whatever it moved comes back out. Silence there is
+ * what let three separate bugs hide.
+ */
 function endpointsSequence(steps, opts, warnings) {
   var passed = {};
   for (var k in opts) {
     if (Object.prototype.hasOwnProperty.call(opts, k)) passed[k] = opts[k];
   }
   passed.steps = steps;
-  return { values: generateScale(passed), warnings: warnings };
+  var report = {};
+  passed.report = report;
+  return { values: generateScale(passed), warnings: warnings, adjustments: report.adjustments || [] };
 }
 
 function scaleBaseIndex(steps, opts) {
@@ -189,8 +211,8 @@ function scaleBaseIndex(steps, opts) {
   return baseIndex;
 }
 
+/** By position, never by token: a caller hands in a number, not a `{ level, size }`. */
 function scaleBaseValue(opts) {
-  if (typeof opts.base === 'number' && isFinite(opts.base)) return opts.base;
   if (typeof opts.baseValue === 'number' && isFinite(opts.baseValue)) return opts.baseValue;
   return opts.min;
 }
@@ -304,4 +326,190 @@ function reportClamp(sequence, opts, warnings) {
     clamp: opts.clamp
   }));
   return warnings;
+}
+
+// ============================================================================
+// RECOGNITION
+//
+// The inverse: numbers in, a description of the scale that would produce them out.
+//
+// Every candidate is **derived** from the values and then **verified by generating** — fed back
+// through scaleSequence and accepted only on an exact match. That is what makes it impossible for
+// this to claim something the generator will not honour. A recogniser with its own arithmetic is
+// a recogniser that can lie about what it found.
+// ============================================================================
+
+/** Comparison to a fixed number of decimals: a representation detail, not a tolerance. */
+function scaleValuesMatch(a, b) {
+  if (typeof a !== 'number' || typeof b !== 'number') return false;
+  return Math.round(a * 1e6) === Math.round(b * 1e6);
+}
+
+function scaleSequencesMatch(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (!scaleValuesMatch(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+/**
+ * Where a candidate differs from the numbers it is meant to explain.
+ *
+ * `expected` is what the model would produce and `found` is what the file has — the direction a
+ * user reads a suggestion in: "metric would give 24 here; your file has 25."
+ */
+function scaleDeviations(actual, produced) {
+  var out = [];
+  for (var i = 0; i < produced.length; i++) {
+    if (!scaleValuesMatch(actual[i], produced[i])) {
+      out.push({
+        index: i,
+        expected: Math.round(produced[i] * 1e6) / 1e6,
+        found: Math.round(actual[i] * 1e6) / 1e6
+      });
+    }
+  }
+  return out;
+}
+
+/** A named ratio when one matches exactly, so a recognised scale reads the way it was written. */
+function nameForRatio(ratio) {
+  var table = modularRatios();
+  for (var name in table) {
+    if (Object.prototype.hasOwnProperty.call(table, name) && scaleValuesMatch(table[name], ratio)) return name;
+  }
+  return ratio;
+}
+
+/** Metric's parameters, read off the differences rather than searched for. */
+function deriveMetric(values, baseIndex, min) {
+  if (values.length < 2) return null;
+  var step = values[1] - values[0];
+  if (!(step > 0)) return null;
+
+  // `mod` is where the increment first grows. A constant increment means it never does inside
+  // this range, which any mod at least as large as the range expresses.
+  var mod = values.length;
+  for (var i = 2; i < values.length; i++) {
+    if (!scaleValuesMatch(values[i] - values[i - 1], step)) {
+      mod = i - 1;
+      break;
+    }
+  }
+  return { model: 'metric', min: min, baseValue: values[0], baseIndex: baseIndex, step: step, mod: mod };
+}
+
+/** Modular's ratio, read off the first adjacent pair. */
+function deriveModular(values, baseIndex, min) {
+  if (values.length < 2) return null;
+  if (!(values[0] > 0) || !(values[1] > 0)) return null;
+  var ratio = values[1] / values[0];
+  if (!(ratio > 1)) return null;
+  return { model: 'modular', min: min, baseValue: values[0], baseIndex: baseIndex, ratio: nameForRatio(ratio) };
+}
+
+/** A straight ramp between the ends. The curve is not derivable, so only the even case. */
+function deriveEndpoints(values, min) {
+  if (values.length < 2) return null;
+  return {
+    model: 'endpoints',
+    min: min,
+    max: values[values.length - 1],
+    type: 'linear',
+    ease: 'none',
+    rangeMode: 'full'
+  };
+}
+
+/** Build a candidate's full option set and run it back through the generator. */
+function verifyScaleCandidate(candidate, steps, values) {
+  if (!candidate) return null;
+  var options = {};
+  for (var k in candidate) {
+    if (Object.prototype.hasOwnProperty.call(candidate, k) && k !== 'model') options[k] = candidate[k];
+  }
+  options.steps = steps;
+  var produced = scaleSequence(candidate.model, options).values;
+  return {
+    model: candidate.model,
+    options: options,
+    produced: produced,
+    exact: scaleSequencesMatch(values, produced),
+    deviations: scaleDeviations(values, produced)
+  };
+}
+
+function explicitRecognition(values, note, suggestion) {
+  var result = {
+    model: 'explicit',
+    options: { values: values.slice(), min: values.length ? values[0] : 0 },
+    exact: false,
+    deviations: []
+  };
+  if (note) result.note = note;
+  if (suggestion) result.suggestion = suggestion;
+  return result;
+}
+
+/**
+ * What scale would produce these numbers?
+ *
+ * → { model, options, exact, deviations, note?, suggestion? }
+ *
+ * `explicit` unless a model reproduces the values exactly — a near-fit recorded as metric means
+ * the next regeneration silently moves a token, which is a value change by a tool that said it was
+ * only recording. A near-miss comes back as `explicit` with the closest fit as a `suggestion`, so
+ * switching is a choice made in front of the numbers it would change.
+ */
+function recogniseScale(values) {
+  if (!Array.isArray(values)) return explicitRecognition([], 'Not a list of numbers.');
+  for (var n = 0; n < values.length; n++) {
+    if (typeof values[n] !== 'number' || isNaN(values[n])) {
+      return explicitRecognition([], 'Not every value is a number.');
+    }
+  }
+  if (values.length < 2) return explicitRecognition(values);
+
+  var note = null;
+  var i;
+  for (i = 1; i < values.length; i++) {
+    if (values[i] < values[i - 1]) note = 'This scale goes down at step ' + (i + 1) + '; no model produces that.';
+    else if (scaleValuesMatch(values[i], values[i - 1])) {
+      note = i === values.length - 1 || scaleValuesMatch(values[values.length - 1], values[values.length - 2])
+        ? 'The top of this scale repeats, which no generator produces — a clamp only warns, and the ramp\'s guard is not part of a model.'
+        : 'Two steps share a value, so no model explains all of them.';
+    }
+    if (note) break;
+  }
+
+  // Two passes: the whole list, then the list with its floor-held head removed. The shipped
+  // spacing default is 1, 4, 8, 12, 16, 24 — deriving the step from the first difference gives 3
+  // and fails, and a textbook metric scale would record as explicit. Verification is against the
+  // *full* list either way, so the retry only changes how parameters are guessed at.
+  var held = 0;
+  while (held + 1 < values.length && scaleValuesMatch(values[held + 1], values[0])) held++;
+
+  var attempts = [{ from: 0, min: values[0] }];
+  if (values.length > held + 2) attempts.push({ from: held + 1, min: values[0] });
+
+  var best = null;
+  for (var a = 0; a < attempts.length; a++) {
+    var from = attempts[a].from;
+    var min = attempts[a].min;
+    var tail = values.slice(from);
+    var candidates = [
+      deriveMetric(tail, from, min),
+      deriveModular(tail, from, min),
+      from === 0 ? deriveEndpoints(tail, min) : null
+    ];
+    for (var c = 0; c < candidates.length; c++) {
+      var verified = verifyScaleCandidate(candidates[c], values.length, values);
+      if (!verified) continue;
+      if (verified.exact) return verified;
+      if (!best || verified.deviations.length < best.deviations.length) best = verified;
+    }
+  }
+
+  return explicitRecognition(values, note, best && best.deviations.length > 0 ? best : null);
 }

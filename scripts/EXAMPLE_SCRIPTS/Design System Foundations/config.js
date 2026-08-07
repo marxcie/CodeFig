@@ -12,6 +12,7 @@
 // | `to-canvas` | Write the same JSON into a text layer on the current page, ready to read back. Updates the existing layer rather than adding a second one. |
 // | `from-canvas` | Read the config off a selected text layer (or the page's config layer), report everything it translated, and write the **viewport registry**. |
 // | `check` | Normalise the config in `pastedConfig` and report what it would mean. Writes nothing. |
+// | `adopt` | Read the spacing or radius tokens a file already has, work out which model produced them, and record it. **Changes nothing you can see.** |
 //
 // ## What it will not do
 // Applying a domain's settings — regenerating your spacing scale, your grid, your type ramp — is
@@ -40,7 +41,10 @@
 // This script is another route, not a replacement for that one.
 // @DOC_END
 
-@import { readFoundation, toPortableConfig, toDomainConfig, formatConfigBlock, foundationDomainScriptName, serialisePortableConfig, parsePortableConfig, normaliseConfig, describeConfigTranslations, describeFoundation, writeConfigToTextLayer, readConfigFromTextLayer, writeRegistry } from "@Foundation"
+@import { readFoundation, toPortableConfig, toDomainConfig, formatConfigBlock, foundationDomainScriptName, serialisePortableConfig, parsePortableConfig, normaliseConfig, describeConfigTranslations, describeFoundation, writeConfigToTextLayer, readConfigFromTextLayer, writeRegistry, writeManifest, stampToken, namePrefix, viewportKeyFromLabel } from "@Foundation"
+@import { spacingRampSpec, radiusRampSpec, adoptRamp } from "@Linear Ramp"
+@import { scaleSequence, recogniseScale, resolveModularRatio } from "@Scale Models"
+@import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { displayResults, createResult, createCopyResult, requestClipboardCopy } from "@InfoPanel"
 
 var foundationConfigOptions = typeof foundationConfigOptions !== 'undefined' ? foundationConfigOptions : {
@@ -52,7 +56,18 @@ var foundationConfigOptions = typeof foundationConfigOptions !== 'undefined' ? f
   pastedConfig: "",
 
   // Only for `copy` and `to-canvas`: limit to these collections. Empty = every local collection.
-  collections: []
+  collections: [],
+
+  // Only for `adopt`: which group in which collection, and which kind of scale it holds.
+  adopt: {
+    collection: "Responsive System",
+    group: "Spacing",
+    domain: "spacing", // spacing | radius
+
+    // Recording writes plugin data, which counts as a change to a published collection — so a
+    // published one is reported and left alone until you set this.
+    confirmPublished: false
+  }
   // @CONFIG_END
 };
 
@@ -225,6 +240,71 @@ async function foundationConfigFromCanvas() {
   });
 }
 
+/**
+ * Adopt: understand a file, then record what was understood.
+ *
+ * The reading half is always free. The writing half is a manifest and a stamp per token — plugin
+ * data, so no value, name or binding moves — and on a published collection it waits for
+ * `confirmPublished`, because plugin data counts as a change subscribers will be offered.
+ */
+async function foundationConfigAdopt(options) {
+  var settings = (options && options.adopt) || {};
+  var spec = settings.domain === 'radius' ? radiusRampSpec() : spacingRampSpec();
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.find(function (c) { return c.name === settings.collection; });
+
+  if (!collection) {
+    displayResults({
+      title: 'Foundation config',
+      results: [createResult('No collection called "' + settings.collection + '"', 'Set adopt.collection to one of: ' + collections.map(function (c) { return c.name; }).join(', '), 'error')],
+      type: 'error',
+      showFilters: false
+    });
+    return;
+  }
+
+  var group = settings.group != null ? settings.group : spec.group;
+  var adopted = await adoptRamp(collection, group, spec, { confirmPublished: !!settings.confirmPublished });
+
+  var results = [];
+  if (adopted.tokens.length === 0) {
+    results.push(createResult('Nothing to adopt', adopted.warnings.join(' '), 'warning'));
+  } else {
+    results.push(createResult(
+      (adopted.written ? 'Adopted ' : 'Read ') + adopted.tokens.length + ' token(s) across ' + collection.modes.length + ' mode(s)',
+      adopted.lines.join('\n'),
+      adopted.written ? 'success' : 'info'
+    ));
+  }
+
+  if (adopted.skipped.length > 0) {
+    results.push(createResult(
+      'Skipped ' + adopted.skipped.length + ' variable(s)',
+      adopted.skipped.map(function (sk) { return sk.name + ' — ' + sk.why; }).join('\n'),
+      'info'
+    ));
+  }
+
+  adopted.warnings.forEach(function (w) {
+    results.push(createResult(w, '', adopted.written ? 'warning' : 'info'));
+  });
+
+  if (adopted.written) {
+    results.push(createResult(
+      'Recorded ' + adopted.manifest.key + ', stamped ' + adopted.stamped + ' token(s)',
+      'No value, name or binding changed. The import button and `figma:run --from-file` can now offer this config back.',
+      'success'
+    ));
+  }
+
+  displayResults({
+    title: 'Foundation config',
+    results: results,
+    type: adopted.written ? 'success' : 'info',
+    showFilters: false
+  });
+}
+
 function foundationConfigCheck(options) {
   var pasted = options && typeof options.pastedConfig === 'string' ? options.pastedConfig : '';
   var read = parsePortableConfig(pasted);
@@ -270,10 +350,12 @@ function foundationConfigCheck(options) {
       await foundationConfigFromCanvas();
     } else if (mode === 'check') {
       foundationConfigCheck(options);
+    } else if (mode === 'adopt') {
+      await foundationConfigAdopt(options);
     } else {
       displayResults({
         title: 'Foundation config',
-        results: [createResult('Unknown mode "' + mode + '"', 'Use copy, to-canvas, from-canvas or check.', 'error')],
+        results: [createResult('Unknown mode "' + mode + '"', 'Use copy, to-canvas, from-canvas, check or adopt.', 'error')],
         type: 'error',
         showFilters: false
       });

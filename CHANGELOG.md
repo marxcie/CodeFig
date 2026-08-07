@@ -25,6 +25,15 @@ deleting variable modes they did not recognise.
 
 ### Added
 
+- **Adopt a file CodeFig has never touched.** Point **Foundation config** at a group of spacing or
+  corner-radius tokens in `adopt` mode and it works out how the scale was built — a base and a
+  growing step, a fixed ratio, or a straight ramp — and records it, so the import button and
+  `figma:run --from-file` work on a file made years before this plugin. **Nothing you can see
+  changes**: no value, no name, no binding, nothing deleted or recreated. Where the numbers do not
+  fit a model exactly it records them as they are and tells you what the closest fit would have
+  changed, so switching is your decision and you see the cost first. A published collection is
+  reported and left alone until you confirm, because recording writes plugin data and that shows
+  subscribers a library update.
 - **Foundation config** — a new Design System Foundations script that moves a config between
   files. It reads the viewports and generated sets a file already has and hands you the config
   **in the shape your scripts already use**: paste it straight between `// @CONFIG_START` and
@@ -152,6 +161,9 @@ deleting variable modes they did not recognise.
   works with them unchanged; each generator drops its branch of that bridge as it is rewritten.
   v1 carries **declared inputs only**: a run mutates its config in place, and exporting a
   derivation would freeze it.
+- **Scales say when something moved their numbers.** Keeping a generated scale ascending can push
+  colliding steps apart and pins its ends to the minimum and maximum — quietly, until now. Every
+  value that changes is named in the run summary with what it was and why.
 - **`@Scale Models`**: four ways to describe a scale — `endpoints` (a curve between a minimum and
   a maximum, what every earlier config is), `modular` (a fixed ratio per step), `metric` (a base
   plus a growing step) and `explicit` (your own numbers). Size sequences only: rounding, the

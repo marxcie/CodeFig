@@ -414,3 +414,206 @@ test('two steps that round onto the same number are named, not silently bumped',
     /a step of 1 with a grid of 4/
   );
 });
+
+// ---------------------------------------------------------------------------
+// Adoption, round-tripped through the manifest
+// ---------------------------------------------------------------------------
+
+/**
+ * The hop the recognition sweep skips.
+ *
+ * `tests/recognise-scale.test.js` proves recognise → generate. This proves
+ * recognise → **write manifest → read manifest** → generate, which is where an adopted metric
+ * scale regenerated as 4, 5, 6, 8, 12: `base` means `{level, size}` in a config's `modes[]` and a
+ * plain number in `@Scale Models`, and the translation only existed in one direction. The
+ * recogniser's answer was correct at every step and wrong by the time it reached the generator.
+ */
+function adoptionRoundTrip(ctx, spec, tokens, valuesByMode) {
+  const fits = {};
+  for (const mode of Object.keys(valuesByMode)) {
+    fits[mode] = {
+      order: tokens,
+      values: valuesByMode[mode],
+      recognised: ctx.recogniseScale(valuesByMode[mode])
+    };
+  }
+
+  // Through the manifest: the slice is normalised on the way in, exactly as writeManifest does.
+  const slice = ctx.normaliseDomainSlice(ctx.rampAdoptionSlice(fits, tokens, 'Spacing', 'C'));
+  const viewports = Object.keys(valuesByMode).map((mode) => ({
+    key: ctx.viewportKeyFromLabel(mode), label: mode, width: null
+  }));
+  const config = ctx.toDomainConfig(
+    { v: 1, collection: 'C', group: 'Spacing', viewports, domains: { spacing: slice } },
+    'spacing'
+  );
+
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+  const generated = ctx.generateRampVariables(config, spec);
+
+  const out = {};
+  for (const mode of Object.keys(valuesByMode)) {
+    out[mode] = tokens.map((t) => generated['Spacing/' + t].values[mode]);
+  }
+  return { fits, generated: out };
+}
+
+test('adoption survives the manifest: every model, swept', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  const tokens = ['xs', 'sm', 'md', 'lg', 'xl', '2xl'];
+
+  const cases = [];
+  for (const step of [1, 2, 4]) {
+    for (const mod of [2, 3]) {
+      cases.push(['metric', { steps: 6, min: 0, baseValue: 4, baseIndex: 0, step, mod }]);
+      cases.push(['metric', { steps: 6, min: 4, baseValue: 8, baseIndex: 2, step, mod }]);
+    }
+  }
+  for (const ratio of ['majorSecond', 'majorThird', 'perfectFifth']) {
+    cases.push(['modular', { steps: 6, min: 0, baseValue: 8, baseIndex: 0, ratio }]);
+    cases.push(['modular', { steps: 6, min: 0, baseValue: 16, baseIndex: 3, ratio }]);
+  }
+
+  for (const [model, options] of cases) {
+    const values = ctx.scaleSequence(model, options).values;
+    const label = `${model} ${JSON.stringify(options)} → ${values.join(',')}`;
+    const { fits, generated } = adoptionRoundTrip(ctx, spec, tokens, { Desktop: values });
+
+    assert.equal(fits.Desktop.recognised.model, model, label);
+    assert.ok(fits.Desktop.recognised.exact, label);
+    assert.deepEqual(generated.Desktop, values, 'regenerated from its own manifest: ' + label);
+  }
+});
+
+test("adoption survives the manifest: the shipped default's own numbers", () => {
+  // 1, 4, 8, 12, 16, 24 with `px` floored — the case that failed in Figma, in Node now.
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  const tokens = ['px', 'xs', 'sm', 'md', 'lg', 'xl'];
+  const values = { Desktop: [1, 4, 8, 12, 16, 24], Mobile: [1, 2, 4, 6, 8, 12] };
+
+  const { fits, generated } = adoptionRoundTrip(ctx, spec, tokens, values);
+
+  assert.equal(fits.Desktop.recognised.model, 'metric');
+  assert.equal(fits.Desktop.recognised.options.baseIndex, 1);
+  assert.deepEqual(generated.Desktop, values.Desktop);
+  assert.deepEqual(generated.Mobile, values.Mobile);
+});
+
+test('adoption survives the manifest: an explicit table', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  const tokens = ['xs', 'sm', 'md', 'lg'];
+  const values = { Desktop: [3, 7, 13, 29] };
+
+  const { fits, generated } = adoptionRoundTrip(ctx, spec, tokens, values);
+  assert.equal(fits.Desktop.recognised.model, 'explicit');
+  assert.deepEqual(generated.Desktop, values.Desktop, 'the numbers you had are the numbers you keep');
+});
+
+test('two tokens held at the floor stay held, rather than being bumped apart', () => {
+  // The guard exists for rounding collisions above the floor. At the floor a repeat is the model
+  // doing what it was told — and bumping one to an invented value also makes the scale
+  // unrecognisable, so an adopted file could never regenerate itself.
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  const config = {
+    collectionName: 'C', group: 'Spacing',
+    spacings: ['xs', 'sm', 'md', 'lg'],
+    modes: [{ name: 'desktop', model: 'metric', min: 4, base: { level: 'md', size: 8 }, step: 4, mod: 2 }]
+  };
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+  const generated = ctx.generateRampVariables(config, spec);
+
+  assert.deepEqual(
+    ['xs', 'sm', 'md', 'lg'].map((t) => generated['Spacing/' + t].values.Desktop),
+    [4, 4, 8, 12],
+    'the model said 4, 4, 8, 12 — the ramp must not turn the second 4 into a 5'
+  );
+});
+
+test('the published-write gate is a function of the status, and says what it costs', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const gate = (status, confirm) => ctx.publishedWriteGate(status, confirm, 'Responsive System');
+
+  assert.equal(gate('UNPUBLISHED', false).allowed, true);
+  assert.equal(gate('UNPUBLISHED', false).message, null, 'nothing to say about a private collection');
+
+  for (const status of ['CURRENT', 'CHANGED']) {
+    const refused = gate(status, false);
+    assert.equal(refused.allowed, false, status);
+    assert.match(refused.message, /Responsive System/);
+    assert.match(refused.message, /published \(/);
+    assert.match(refused.message, /library update/, 'names the cost to subscribers');
+    assert.match(refused.message, /no value, name or binding/, 'and what it does not cost');
+    assert.match(refused.message, /confirmPublished/, 'and how to say yes');
+
+    const confirmed = gate(status, true);
+    assert.equal(confirmed.allowed, true, status + ' with a yes');
+    assert.match(confirmed.message, /as asked/, 'still says what it did');
+  }
+
+  // An unknown status is treated as published: the safe reading when the answer is unclear.
+  assert.equal(gate('UNKNOWN', false).allowed, false);
+});
+
+test('the guard names every value it moves, and why', () => {
+  // It has caused two bugs by being silent — rounded steps colliding, and floor repeats being
+  // bumped apart. Both fixes were local; this closes the class. A guard that edits numbers
+  // without saying so is the failure mode, not any particular case of it.
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+
+  // A range too narrow for its grid: adjacent steps snap onto the same multiple. Endpoints,
+  // because it is the only model whose values are rounded today — see the note in the plan about
+  // `roundTo` being inert for metric and modular.
+  const config = {
+    collectionName: 'C', group: 'Spacing',
+    spacings: ['xs', 'sm', 'md', 'lg'],
+    scaling: { type: 'linear', ease: 'none', roundTo: 4 },
+    modes: [{ name: 'desktop', min: 4, max: 10 }]
+  };
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+
+  const report = {};
+  ctx.generateRampVariables(config, spec, report);
+
+  assert.ok(report.adjustments.length > 0, 'something moved a value and said nothing');
+  const first = report.adjustments[0];
+  assert.equal(first.viewport, 'Desktop');
+  assert.ok(first.token, 'the token is named');
+  assert.notEqual(first.from, first.to, 'with what it was and what it became');
+  assert.match(first.why, /raised|lowered|pinned|held|collided/, 'and a reason: ' + first.why);
+
+  const lines = ctx.describeRampAdjustments(report.adjustments);
+  assert.match(lines[0], /Adjusted \d+ value/);
+  assert.match(lines[1], new RegExp(first.token + ': ' + first.from + ' → ' + first.to));
+});
+
+test('a scale the guard never touches reports no adjustments', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.spacingRampSpec();
+  const config = shippedConfigBlock('spacing.js');
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+
+  const report = {};
+  ctx.generateRampVariables(config, spec, report);
+  assert.deepEqual(report.adjustments, [], 'the shipped default needs no correcting');
+  assert.deepEqual(ctx.describeRampAdjustments([]), [], 'and says nothing about it');
+});
