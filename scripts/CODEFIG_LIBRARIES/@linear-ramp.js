@@ -41,6 +41,7 @@
 // |----------|-----------|
 // | Specs | spacingRampSpec, radiusRampSpec |
 // | Config | ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, resolveRampRoundTo, validateRampScalingType |
+// | Seeing it | rampScaleTable, rampScaleHtml, rampGaps, rampCaptions, rampModelCaption |
 // | Sets | resolveRampSets, rampSetsFromConfig, rampModePlan, rampModeNames, collapseRampSets, describeRampSetPlan |
 // | Scale | buildRampScaleOpts, calculateRampValue, generateRampVariables |
 // | Run | runLinearRamp, describeUndeclaredModes, describeRampModels, describeRampAdjustments |
@@ -831,24 +832,33 @@ function generateRampVariables(config, spec, report) {
  * has been pressing Run on the shipped block gets different numbers after an upgrade. If the
  * numbers move, the reason belongs in the output that reports the move.
  */
+/**
+ * One mode's scale in a phrase: `metric, base 4, step 4, mod 3`.
+ *
+ * Extracted so the console line and the InfoPanel caption are the same sentence rather than two
+ * that drift — the caption is the model line, not a second description of it.
+ */
+function rampModelCaption(v, config) {
+  var model = typeof v.model === 'string' && v.model ? v.model : 'endpoints';
+  var parts = [model];
+  if (model === 'metric') {
+    parts.push('base ' + v.base.size, 'step ' + v.step, 'mod ' + (v.mod === undefined ? 1 : v.mod));
+  } else if (model === 'modular') {
+    parts.push('base ' + v.base.size, 'ratio ' + v.ratio);
+  } else if (model === 'explicit') {
+    parts.push((v.values || []).length + ' values');
+  } else {
+    parts.push('min ' + v.min, 'max ' + v.max, (config.scaling || {}).type || 'linear');
+  }
+  return parts.join(', ');
+}
+
 function describeRampModels(config, spec) {
   var sizes = config[spec.sizesKey] || {};
   var lines = [];
   for (var viewport in sizes) {
     if (!Object.prototype.hasOwnProperty.call(sizes, viewport)) continue;
-    var v = sizes[viewport];
-    var model = typeof v.model === 'string' && v.model ? v.model : 'endpoints';
-    var parts = [model];
-    if (model === 'metric') {
-      parts.push('base ' + v.base.size, 'step ' + v.step, 'mod ' + (v.mod === undefined ? 1 : v.mod));
-    } else if (model === 'modular') {
-      parts.push('base ' + v.base.size, 'ratio ' + v.ratio);
-    } else if (model === 'explicit') {
-      parts.push((v.values || []).length + ' values');
-    } else {
-      parts.push('min ' + v.min, 'max ' + v.max, (config.scaling || {}).type || 'linear');
-    }
-    lines.push('  ' + viewportLabel(viewport) + ': ' + parts.join(', '));
+    lines.push('  ' + viewportLabel(viewport) + ': ' + rampModelCaption(sizes[viewport], config));
 
     // Anything the model reported that is expected rather than wrong reads here, in context.
     var built = rampSequenceFor(viewport, config, spec);
@@ -924,6 +934,150 @@ function rampUsesEndpoints(config, spec) {
   // No resolved sizes to read: assume it does, because dropping a curve someone declared is worse
   // than keeping one nothing reads.
   return true;
+}
+
+// ============================================================================
+// SEEING THE SCALE
+//
+// A run's numbers reach you as one log line per token per mode, which is enough to check a value
+// and useless for judging one. What a scale is judged on is **proportion** — whether the steps
+// grow the way a spacing scale should — and proportion is a shape, not a list.
+//
+// So: bars, sized against the largest value anywhere in the run so the modes are comparable
+// side by side rather than each normalised to its own maximum; the gaps printed under each
+// column, because `4, 8, 12, 16, 24` reads as regular until you see `gaps 4, 4, 4, 8`; and the
+// model line already printed to the console as the caption.
+// ============================================================================
+
+/** The differences between consecutive values — the thing that says whether a scale feels right. */
+function rampGaps(values) {
+  var gaps = [];
+  for (var i = 1; i < values.length; i++) {
+    gaps.push(Math.round((values[i] - values[i - 1]) * 1000) / 1000);
+  }
+  return gaps;
+}
+
+/** Tokens down, modes across: { tokens, modes, rows: [{token, cells:[{mode,value,ratio}]}], gaps } */
+function rampScaleTable(variables, group) {
+  var prefix = group ? group + '/' : '';
+  var tokens = [];
+  var modes = [];
+  var byToken = {};
+
+  for (var name in variables) {
+    if (!Object.prototype.hasOwnProperty.call(variables, name)) continue;
+    var token = name.indexOf(prefix) === 0 ? name.slice(prefix.length) : name;
+    tokens.push(token);
+    byToken[token] = variables[name].values || {};
+    for (var mode in byToken[token]) {
+      if (!Object.prototype.hasOwnProperty.call(byToken[token], mode)) continue;
+      if (modes.indexOf(mode) === -1) modes.push(mode);
+    }
+  }
+
+  var max = 0;
+  for (var t = 0; t < tokens.length; t++) {
+    for (var m = 0; m < modes.length; m++) {
+      var v = byToken[tokens[t]][modes[m]];
+      if (typeof v === 'number' && v > max) max = v;
+    }
+  }
+
+  var rows = tokens.map(function (token) {
+    return {
+      token: token,
+      cells: modes.map(function (mode) {
+        var value = byToken[token][mode];
+        return {
+          mode: mode,
+          value: typeof value === 'number' ? value : null,
+          // Against the whole run, not the column: a mode being tighter is the point.
+          ratio: (typeof value === 'number' && max > 0) ? value / max : 0
+        };
+      })
+    };
+  });
+
+  var gaps = {};
+  for (var g = 0; g < modes.length; g++) {
+    var series = tokens.map(function (token) { return byToken[token][modes[g]]; })
+      .filter(function (v) { return typeof v === 'number'; });
+    gaps[modes[g]] = rampGaps(series);
+  }
+
+  return { tokens: tokens, modes: modes, rows: rows, gaps: gaps, max: max };
+}
+
+function rampEscapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** The table as one HTML block. Inline styles: the panel's stylesheet is not ours to extend. */
+function rampScaleHtml(table, captions) {
+  var cellStyle = 'padding:4px 10px 4px 0;vertical-align:middle;';
+  var html = ['<div style="font-size:11px;line-height:1.5;">'];
+
+  html.push('<table style="width:100%;border-collapse:collapse;">');
+  html.push('<tr>');
+  html.push('<th style="' + cellStyle + 'text-align:left;opacity:0.6;font-weight:500;"></th>');
+  for (var m = 0; m < table.modes.length; m++) {
+    html.push('<th style="' + cellStyle + 'text-align:left;font-weight:600;">' +
+      rampEscapeHtml(table.modes[m]) + '</th>');
+  }
+  html.push('</tr>');
+
+  for (var r = 0; r < table.rows.length; r++) {
+    var row = table.rows[r];
+    html.push('<tr>');
+    html.push('<td style="' + cellStyle + 'opacity:0.6;white-space:nowrap;">' +
+      rampEscapeHtml(row.token) + '</td>');
+    for (var c = 0; c < row.cells.length; c++) {
+      var cell = row.cells[c];
+      var width = Math.max(cell.ratio * 100, cell.value ? 1.5 : 0);
+      html.push('<td style="' + cellStyle + 'min-width:120px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<div style="flex:1;height:10px;background:currentColor;opacity:0.08;border-radius:2px;position:relative;">' +
+        '<div style="position:absolute;inset:0 auto 0 0;width:' + width.toFixed(2) + '%;' +
+        'background:currentColor;opacity:0.85;border-radius:2px;"></div></div>' +
+        '<span style="font-variant-numeric:tabular-nums;min-width:34px;text-align:right;">' +
+        (cell.value === null ? '—' : rampEscapeHtml(cell.value)) + '</span>' +
+        '</div></td>');
+    }
+    html.push('</tr>');
+  }
+
+  html.push('<tr>');
+  html.push('<td style="' + cellStyle + 'opacity:0.6;">gaps</td>');
+  for (var g = 0; g < table.modes.length; g++) {
+    var list = table.gaps[table.modes[g]] || [];
+    html.push('<td style="' + cellStyle + 'opacity:0.7;font-variant-numeric:tabular-nums;">' +
+      (list.length > 0 ? rampEscapeHtml(list.join(', ')) : '—') + '</td>');
+  }
+  html.push('</tr>');
+
+  html.push('<tr>');
+  html.push('<td style="' + cellStyle + '"></td>');
+  for (var q = 0; q < table.modes.length; q++) {
+    var caption = (captions && captions[table.modes[q]]) || '';
+    html.push('<td style="' + cellStyle + 'opacity:0.55;">' + rampEscapeHtml(caption) + '</td>');
+  }
+  html.push('</tr>');
+
+  html.push('</table></div>');
+  return html.join('');
+}
+
+/** One caption per mode: the same phrase the console prints, keyed by the mode it describes. */
+function rampCaptions(config, spec) {
+  var sizes = config[spec.sizesKey] || {};
+  var captions = {};
+  for (var mode in sizes) {
+    if (!Object.prototype.hasOwnProperty.call(sizes, mode)) continue;
+    captions[viewportLabel(mode)] = rampModelCaption(sizes[mode], config);
+  }
+  return captions;
 }
 
 /**
@@ -1024,7 +1178,20 @@ async function runLinearRamp(config, spec) {
   console.log('Variables updated: ' + stats.updated);
   console.log('Variables skipped: ' + stats.skipped);
 
-  return { collection: collection, stats: stats, manifest: manifest, undeclaredModes: undeclared };
+  // The scale, as a shape rather than a list of log lines. Built here because this is where the
+  // values and the models are both in hand; displayed by the caller, so the run is not reported
+  // complete before an overview frame it also asked for has been drawn.
+  var table = rampScaleTable(variables, groupName);
+  var scaleHtml = rampScaleHtml(table, rampCaptions(data, spec));
+
+  return {
+    collection: collection,
+    stats: stats,
+    manifest: manifest,
+    undeclaredModes: undeclared,
+    table: table,
+    scaleHtml: scaleHtml
+  };
 }
 
 // ============================================================================

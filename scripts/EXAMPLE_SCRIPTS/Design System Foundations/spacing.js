@@ -27,6 +27,7 @@
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
 @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, normaliseConfig } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
+@import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { spacingRampSpec, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
 
@@ -117,6 +118,17 @@ runLinearRamp(spacingConfig, spacingRampSpec())
     if (showOverview) msg += '; overview frame';
     if (result.manifest && result.manifest.ok) msg += '; set recorded';
     figma.notify(msg);
+
+    // After the overview, so `displayResults` — which is what reports the run complete — is not
+    // called while there is still a frame being drawn.
+    var results = [createHtmlResult(result.scaleHtml, null, 'info')];
+    if (result.undeclaredModes) results.push(createResult('Modes this run did not write', result.undeclaredModes, 'info'));
+    results.push(createResult(
+      result.stats.created + ' created, ' + result.stats.updated + ' updated, ' + result.stats.skipped + ' skipped',
+      'Collection: ' + (result.collection ? result.collection.name : '—'),
+      'success'
+    ));
+    displayResults({ title: 'Spacing', results: results, type: 'success', showFilters: false });
   })
   .catch(function (error) {
     console.error('Error:', error);
