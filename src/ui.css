@@ -1842,4 +1842,90 @@
         min-height: 0;
       }
 
+      /* `@rows`: one repeatable-group control with two renderings — stacked, or a tab per named
+         row. Appended, because this file is order- and specificity-dependent. */
+      .config-ui-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+      }
+
+      .config-ui-rows-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+      }
+
+      .config-ui-rows-tab {
+        padding: 5px 10px;
+        border: none;
+        background: none;
+        font: inherit;
+        font-size: 11px;
+        color: inherit;
+        opacity: 0.6;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+      }
+
+      .config-ui-rows-tab.is-active {
+        opacity: 1;
+        font-weight: 600;
+        border-bottom-color: currentColor;
+      }
+
+      .config-ui-rows-body {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .config-ui-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid rgba(128, 128, 128, 0.22);
+        border-radius: 4px;
+      }
+
+      /* A tab per row means one row at a time, so it does not need its own frame. */
+      .config-ui-rows--tabs .config-ui-row {
+        border: none;
+        padding: 0;
+      }
+
+      .config-ui-row-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        flex: 1 1 90px;
+        min-width: 80px;
+      }
+
+      .config-ui-row-cell-label {
+        font-size: 10px;
+        opacity: 0.6;
+      }
+
+      .config-ui-row-remove,
+      .config-ui-row-add {
+        padding: 5px 10px;
+        font: inherit;
+        font-size: 11px;
+        color: inherit;
+        background: none;
+        border: 1px solid rgba(128, 128, 128, 0.35);
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .config-ui-row-add {
+        align-self: flex-start;
+      }
+
       /* End of styles */

@@ -217,6 +217,14 @@ deleting variable modes they did not recognise.
 
 ### Developer
 
+- **`@rows`** — a repeatable-group control for a config field holding a list of objects. Add and
+  remove rows; `@tabs` renders one tab per row using its `name` instead of stacking them, which is a
+  display choice on the same control rather than a second control with its own serialization. A
+  column can carry a fixed set of options: `model:(metric|modular|endpoints)`, parenthesised because
+  the column separator is already a pipe. An untouched `@rows` line round-trips byte-identical, and
+  the annotation survives the form changing the value — without that, the second interaction would
+  render the field as an uneditable array.
+
 - **One canonical config shape.** A single v1 shape now covers paste, the per-set manifest and
   export, with one compat reader in `@Foundation` that accepts every earlier shape and reports
   what it translated — replacing the four half-overlapping readers the DSF scripts each carried.

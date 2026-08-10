@@ -191,6 +191,53 @@
     return null;
   }
 
+  /**
+   * `name:text|appliesTo:text|min:number|model:(metric|modular)` → the columns of a `@rows` control.
+   *
+   * One control with two renderings, not two controls. A parallel "tab" control would need its own
+   * serialization and would drift from this one the first time either changed; a rendering choice
+   * cannot drift from the data it renders.
+   *
+   * A parenthesised list is a fixed set of options for that column, reusing the option plumbing the
+   * flat controls already have rather than inventing a second mechanism. Parentheses because the
+   * column separator is `|`, so options cannot also be `|`-delimited at the top level.
+   */
+  function parseRowColumns(spec) {
+    var columns = [];
+    var depth = 0;
+    var current = "";
+    var parts = [];
+    for (var i = 0; i < spec.length; i++) {
+      var ch = spec.charAt(i);
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+      if (ch === "|" && depth === 0) { parts.push(current); current = ""; continue; }
+      current += ch;
+    }
+    if (current.trim()) parts.push(current);
+
+    for (var p = 0; p < parts.length; p++) {
+      var text = parts[p].trim();
+      if (!text) continue;
+      var at = text.indexOf(":");
+      var key = (at === -1 ? text : text.slice(0, at)).trim();
+      var typeText = (at === -1 ? "text" : text.slice(at + 1)).trim();
+      if (!key) continue;
+
+      var column = { key: key, label: labelFromName(key), type: "text" };
+      var optionMatch = typeText.match(/^\((.*)\)$/);
+      if (optionMatch) {
+        column.type = "select";
+        column.options = optionMatch[1].split("|").map(function (o) { return o.trim(); })
+          .filter(function (o) { return o.length > 0; });
+      } else if (typeText === "number" || typeText === "checkbox" || typeText === "text") {
+        column.type = typeText;
+      }
+      columns.push(column);
+    }
+    return columns;
+  }
+
   function parse(code) {
     var rows = [];
     var lines = (code || "").split(/\r?\n/);
@@ -331,6 +378,14 @@
         // then collected and serialize wrote back over the real value — triggered by editing any
         // other field, since the whole block is serialised on every change. Marked here, rendered
         // read-only, and deliberately not collected.
+        // A repeatable group: a list of objects, edited as rows. Claimed before the fallback
+        // below, which is what an unclaimed array falls into.
+        var rowsMatch = tip.match(/@rows:\s*(.+?)(?=\s+@|$)/);
+        var rowColumns = null;
+        if (rowsMatch && Array.isArray(val)) {
+          rowColumns = parseRowColumns(rowsMatch[1]);
+          if (rowColumns.length > 0) inputType = "rows";
+        }
         if (inputType === "object" || inputType === "array") {
           inputType = "unsupported";
         }
@@ -349,6 +404,11 @@
           inputType: inputType,
         };
         if (phMatch) f.placeholder = phMatch[1];
+        if (inputType === "rows") {
+          f.columns = rowColumns;
+          // A display choice on one control. Same values, same serialization.
+          f.tabs = /@tabs\b/.test(tip);
+        }
         // Exactly as the user wrote it. serialize() re-emits this verbatim unless the form
         // actually changed the value, so bare keys, single quotes and the comments explaining
         // each option all survive a form interaction untouched.
@@ -356,7 +416,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|tabs)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -497,6 +557,13 @@
         if (r.inputType === "radio") parts.push("@radio");
         if (r.inputType === "multiselect") parts.push("@multi");
         if (r.inputType === "textarea") parts.push("@textarea");
+        if (r.inputType === "rows" && r.columns) {
+          parts.push("@rows: " + r.columns.map(function (c) {
+            if (c.type === "select") return c.key + ":(" + (c.options || []).join("|") + ")";
+            return c.key + ":" + c.type;
+          }).join("|"));
+          if (r.tabs) parts.push("@tabs");
+        }
         // Emitted before @label so the annotation order stays stable across a round trip; a
         // dropped @fromFile would silently remove the sync button from the script.
         if (r.fromFile) parts.push("@fromFile: " + r.fromFile);

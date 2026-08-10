@@ -125,6 +125,8 @@
       });
       if (!sel2.value && field.options[0]) sel2.value = field.options[0];
       cw.appendChild(sel2);
+    } else if (t === "rows") {
+      cw.appendChild(buildRowsControl(field, Array.isArray(v) ? v : []));
     } else if (t === "unsupported") {
       // No control represents this value, so it is shown as written and **not** given a
       // `data-field`: getValues collects by that attribute, so leaving it off is what makes
@@ -287,6 +289,171 @@
     container.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
   }
 
+  /**
+   * One repeatable-group control, in one of two renderings.
+   *
+   * Stacked by default; `@tabs` gives one tab per row, named from its `name` column. That is a
+   * **display choice on one control**, not a second control type — same values, same serialization,
+   * so a rendering cannot drift from the data the way a parallel control would.
+   *
+   * Cells carry `data-row-field` rather than `data-field`, so the flat collector never sees them:
+   * a cell called `min` must not become a top-level `min`. `collectRows` reads them back.
+   */
+  function buildRowsControl(field, rows) {
+    var wrap = document.createElement("div");
+    wrap.className = "config-ui-rows" + (field.tabs ? " config-ui-rows--tabs" : "");
+    wrap.setAttribute("data-rows-field", field.name);
+
+    var body = document.createElement("div");
+    body.className = "config-ui-rows-body";
+
+    var tabBar = null;
+    if (field.tabs) {
+      tabBar = document.createElement("div");
+      tabBar.className = "config-ui-rows-tabs";
+      wrap.appendChild(tabBar);
+    }
+    wrap.appendChild(body);
+
+    function rowLabel(row, index) {
+      var named = row && row.name;
+      return (typeof named === "string" && named.trim()) ? named : "Row " + (index + 1);
+    }
+
+    function selectTab(index) {
+      if (!field.tabs) return;
+      body.querySelectorAll(".config-ui-row").forEach(function (el, i) {
+        el.style.display = i === index ? "" : "none";
+      });
+      tabBar.querySelectorAll(".config-ui-rows-tab").forEach(function (el, i) {
+        el.classList.toggle("is-active", i === index);
+      });
+    }
+
+    /** Rebuilt rather than patched: a row's index is in its tab label and its remove handler. */
+    function draw(list, active) {
+      body.innerHTML = "";
+      if (tabBar) tabBar.innerHTML = "";
+
+      list.forEach(function (row, index) {
+        var rowEl = document.createElement("div");
+        rowEl.className = "config-ui-row";
+        rowEl.setAttribute("data-row-index", String(index));
+
+        (field.columns || []).forEach(function (column) {
+          var cell = document.createElement("label");
+          cell.className = "config-ui-row-cell";
+          var caption = document.createElement("span");
+          caption.className = "config-ui-row-cell-label";
+          caption.textContent = column.label;
+          cell.appendChild(caption);
+          cell.appendChild(buildRowCell(column, row ? row[column.key] : undefined));
+          rowEl.appendChild(cell);
+        });
+
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "config-ui-row-remove";
+        remove.textContent = "Remove";
+        // Remove-then-add is how a row is replaced, so removal needs no confirmation here — this
+        // control edits a config, and nothing reaches the document until the script runs.
+        remove.addEventListener("click", function () {
+          var next = collectRows(wrap, field);
+          next.splice(index, 1);
+          draw(next, Math.max(0, Math.min(index, next.length - 1)));
+          wrap.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        rowEl.appendChild(remove);
+        body.appendChild(rowEl);
+
+        if (tabBar) {
+          var tab = document.createElement("button");
+          tab.type = "button";
+          tab.className = "config-ui-rows-tab";
+          tab.textContent = rowLabel(row, index);
+          tab.addEventListener("click", function () { selectTab(index); });
+          tabBar.appendChild(tab);
+        }
+      });
+
+      var add = document.createElement("button");
+      add.type = "button";
+      add.className = "config-ui-row-add";
+      add.textContent = "Add";
+      add.addEventListener("click", function () {
+        var next = collectRows(wrap, field);
+        var blank = {};
+        (field.columns || []).forEach(function (column) {
+          blank[column.key] = column.type === "number" ? 0
+            : column.type === "checkbox" ? false
+            : column.type === "select" ? (column.options || [])[0] || ""
+            : "";
+        });
+        next.push(blank);
+        draw(next, next.length - 1);
+        wrap.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      body.appendChild(add);
+
+      if (field.tabs) selectTab(typeof active === "number" ? active : 0);
+    }
+
+    draw(rows, 0);
+    return wrap;
+  }
+
+  function buildRowCell(column, value) {
+    if (column.type === "select") {
+      var sel = document.createElement("select");
+      sel.className = "config-ui-input config-ui-input--select";
+      sel.setAttribute("data-row-field", column.key);
+      (column.options || []).forEach(function (opt) {
+        var o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt;
+        if (String(value) === opt) o.selected = true;
+        sel.appendChild(o);
+      });
+      return sel;
+    }
+    if (column.type === "checkbox") {
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "config-ui-toggle";
+      cb.setAttribute("data-row-field", column.key);
+      cb.checked = value === true;
+      return cb;
+    }
+    var input = document.createElement("input");
+    input.type = column.type === "number" ? "number" : "text";
+    input.className = "config-ui-input config-ui-input--text";
+    input.setAttribute("data-row-field", column.key);
+    input.value = value == null ? "" : String(value);
+    return input;
+  }
+
+  /** The rows of one control, read back out of the DOM in their displayed order. */
+  function collectRows(wrap, field) {
+    var out = [];
+    wrap.querySelectorAll(".config-ui-row").forEach(function (rowEl) {
+      var row = {};
+      (field.columns || []).forEach(function (column) {
+        var el = rowEl.querySelector('[data-row-field="' + column.key + '"]');
+        if (!el) return;
+        if (column.type === "number") {
+          var n = parseFloat(el.value, 10);
+          row[column.key] = Number.isNaN(n) ? 0 : n;
+        } else if (column.type === "checkbox") {
+          row[column.key] = !!el.checked;
+        } else {
+          row[column.key] = el.value;
+        }
+      });
+      out.push(row);
+    });
+    return out;
+  }
+
   function attachListeners(container, schema, onChange) {
     if (!onChange || typeof onChange !== "function") return;
 
@@ -299,6 +466,18 @@
         box.querySelectorAll(".config-ui-multiselect-cb:checked").forEach(function (cb) {
           vals[n].push(cb.value);
         });
+      });
+      // Rows first, and by their own attribute. A cell named `min` inside a row must never
+      // become a top-level `min` — which is what would happen if cells carried `data-field`.
+      container.querySelectorAll("[data-rows-field]").forEach(function (wrap) {
+        var n = wrap.getAttribute("data-rows-field");
+        if (!n) return;
+        var field = null;
+        var rows = schema && schema.rows ? schema.rows : [];
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i].type === "field" && rows[i].name === n) { field = rows[i]; break; }
+        }
+        if (field) vals[n] = collectRows(wrap, field);
       });
       container.querySelectorAll("[data-field]").forEach(function (el) {
         var n = el.getAttribute("data-field");
