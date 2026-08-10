@@ -220,7 +220,7 @@ it survives, it survives as that, with none of the four modes.
 
 ---
 
-## The import button appears a beat late
+## ~~The import button appears a beat late~~ — CLOSED, the button is being deleted
 
 **Found:** walking the DSF flow (Aug 2026). On a file that had just been written to, the button
 only appeared after switching to another script and back.
@@ -230,9 +230,16 @@ derives the right answer, but nothing asks it again after a run writes a manifes
 choosing the moments to re-probe, which is UI work better done alongside the rest of the import
 UX than wedged in next to a parser fix.
 
-**What fixing it involves:** re-evaluate `configImportState` after a run completes, not only on
-script switch. Watch for the opposite failure — probing on every run makes a Figma round trip per
-run for a button most runs do not change.
+**Closed (Aug 2026) without being fixed.** The Foundations panel designs replace the button with
+**auto-import**: when Collection and Group resolve to something, the config loads itself, and a
+helper line under Group says whether it came from a recorded set, from recognising the existing
+variables, or not at all. The button, its probe, its badge and `configImportState` are all deleted
+in `18`'s second slice.
+
+Kept as a note because the shape of the bug is worth remembering: the state was correct and the
+question was simply never asked again. Nothing about auto-import removes that risk — it moves it to
+"when do Collection and Group count as resolved" — so `18` names the moments rather than caching an
+answer.
 
 ---
 
