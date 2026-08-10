@@ -145,8 +145,12 @@ testBegin('foundation-config');
       var read = await readConfigFromTextLayer({ node: written.node });
 
       expect(read.config.collection).toBe('Old System');
+      // The curve survives because this mode declares no model, and absent means endpoints.
       expect(read.config.domains.spacing.scaling.type).toBe('quad');
-      expect(read.config.domains.spacing.scaling.roundTo).toBe(4);
+      // `roundTo` has one home now, and it is not inside the curve — a deliberate correction, since
+      // rounding applies to every model while `scaling` describes a curve only endpoints reads.
+      expect(read.config.domains.spacing.roundTo).toBe(4);
+      expect(read.config.domains.spacing.scaling.roundTo).toBe(undefined);
       expect(read.translations.length > 0).toBe(true);
     } finally {
       await removeConfigLayers();

@@ -138,7 +138,9 @@ testBegin('adopt-ramp');
       var spec = spacingRampSpec();
       ensureCompatRampConfig(config, spec);
       materialiseRampTokens(config, spec);
-      materialiseRampSizes(config, spec);
+      // The modes come from the run, as they come from the collection in `runLinearRamp`: adoption
+      // collapses value-identical fits into one `appliesTo: "*"` set, which names no modes itself.
+      materialiseRampSizes(config, spec, ['Desktop']);
       var generated = generateRampVariables(config, spec);
 
       expect(generated['Spacing/xs'].values.Desktop).toBe(4);
