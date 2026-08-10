@@ -1556,6 +1556,13 @@
 
       function finishConfigLoad(message, error) {
         configLoadInFlight = false;
+        // The settle point a bridge-driven import waits on. Drained here rather than polled, so a
+        // command never reads the editor before the import has written to it.
+        if (_codefigImportWaiters.length > 0) {
+          var waiters = _codefigImportWaiters;
+          _codefigImportWaiters = [];
+          waiters.forEach(function (resolve) { resolve(error || message || null); });
+        }
         if (configLoadTimer) { clearTimeout(configLoadTimer); configLoadTimer = null; }
         if (configLoadBtn) configLoadBtn.classList.remove('working');
         if (error) {
@@ -3686,6 +3693,174 @@
               'done — call window.codefigRunComplete(), or displayResults() from @InfoPanel, which does it for you.'
           );
         }, CODEFIG_JOB_TIMEOUT_MS);
+      }
+
+      // ======================================================================
+      // UI COMMANDS FROM THE DEV BRIDGE
+      //
+      // Plan 12 made scripts runnable from a terminal. Everything it could not reach — button
+      // state, the import path, panel refresh, the config editor — stayed reachable only by a
+      // person clicking, which made that person the instrument. Five bugs this month lived there.
+      //
+      // Commands are **named, not evaluated**. Every case calls the same function the button
+      // calls, so the channel drives the UI rather than a copy of it: a command that reimplemented
+      // an action would pass while the button stayed broken, which is worse than no command.
+      //
+      // Dev only, through _codefigBridgeFetch like every other bridge call.
+      // ======================================================================
+
+      /** Resolvers waiting for an import to settle, drained by finishConfigLoad. */
+      var _codefigImportWaiters = [];
+
+      function _codefigUiCommandNames() {
+        return ['selectScript', 'listScripts', 'readConfig', 'writeConfig', 'readInfoPanel',
+          'pressImport', 'readButtonState', 'readPreview', 'readTabs'];
+      }
+
+      /**
+       * Run one named UI command. Returns a promise of its answer.
+       * Throws on an unknown name — a channel that silently ignored one would report success.
+       */
+      function handleUiCommand(command, args) {
+        var a = args || {};
+        switch (command) {
+          case 'listScripts':
+            return Promise.resolve(allScripts.map(function (s) {
+              return { name: s.name, type: s.type };
+            }));
+
+          case 'selectScript': {
+            if (!a.name) throw new Error('selectScript needs { name }');
+            var found = allScripts.filter(function (s) { return s.name === a.name; })[0];
+            if (!found) {
+              // Same forgiveness the CLI gives, and the same refusal to guess between two.
+              var matches = allScripts.filter(function (s) {
+                return s.name.toLowerCase().indexOf(String(a.name).toLowerCase()) !== -1;
+              });
+              if (matches.length === 1) found = matches[0];
+              else if (matches.length > 1) {
+                throw new Error('"' + a.name + '" matches ' + matches.length + ' scripts: ' +
+                  matches.map(function (s) { return s.name; }).join(', '));
+              }
+            }
+            if (!found) throw new Error('No script named "' + a.name + '"');
+            selectScriptDirectly(found);
+            return Promise.resolve({ name: found.name, tab: currentTab });
+          }
+
+          case 'readConfig':
+            return Promise.resolve({
+              text: currentConfigBlock(),
+              hasUiConfig: !!scriptHasUIConfig,
+              script: currentScript ? currentScript.name : null
+            });
+
+          case 'writeConfig': {
+            if (typeof a.text !== 'string') throw new Error('writeConfig needs { text }');
+            if (scriptHasUIConfig) throw new Error('This script uses a form, not a config block');
+            if (!configEditor) throw new Error('The configuration editor is not open');
+            configEditor.setValue(a.text);
+            mergeConfigIntoMain();
+            return Promise.resolve({ text: currentConfigBlock() });
+          }
+
+          case 'readInfoPanel':
+            // innerText, not innerHTML: the questions worth asking here are about content, and
+            // markup assertions would break on a style change.
+            return Promise.resolve({
+              title: (document.querySelector('.info-title') || {}).textContent || null,
+              text: infoContent ? infoContent.innerText : '',
+              open: !!(infoPanel && infoPanel.classList.contains('open')),
+              showingResultsFrom: _infoPanelScript
+            });
+
+          case 'readPreview': {
+            var body = document.getElementById('configPreviewBody');
+            var region = document.getElementById('configPreview');
+            return Promise.resolve({
+              visible: !!(region && region.style.display !== 'none'),
+              text: body ? body.innerText : ''
+            });
+          }
+
+          case 'readTabs':
+            return Promise.resolve({ current: currentTab, hasDocs: !!scriptHasDocs,
+              hasConfig: !!scriptHasConfig, hasUiConfig: !!scriptHasUIConfig });
+
+          case 'readButtonState': {
+            // The derived state itself, not a reading of the DOM — this is the thing three cached
+            // booleans used to get wrong.
+            var state = window.CodeFigConfigUI && window.CodeFigConfigUI.configImportState
+              ? window.CodeFigConfigUI.configImportState(currentConfigBlock(), foundationProbe)
+              : null;
+            return Promise.resolve({
+              state: state,
+              visible: !!(configLoadBtn && configLoadBtn.style.display !== 'none')
+            });
+          }
+
+          case 'pressImport': {
+            if (!configLoadBtn || configLoadBtn.style.display === 'none') {
+              throw new Error('The import button is not visible for this script');
+            }
+            // Waits for the UI's own settle point rather than a timer, so the answer is never
+            // read before the thing it is describing has happened.
+            var settled = new Promise(function (resolve) { _codefigImportWaiters.push(resolve); });
+            requestConfigLoad();
+            return settled.then(function (message) {
+              return { message: message, text: currentConfigBlock() };
+            });
+          }
+
+          default:
+            throw new Error('Unknown UI command "' + command + '". Known: ' +
+              _codefigUiCommandNames().join(', '));
+        }
+      }
+
+      function _codefigUiReport(id, payload) {
+        _codefigBridgeFetch('/ui/' + id + '/result', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+
+      var _codefigUiBusy = false;
+
+      function _codefigUiPoll() {
+        if (!CODEFIG_BUILD_IS_DEV) return;
+        // Never while a run is in flight: selecting a script under a running script is not a
+        // question anyone wants answered.
+        if (_codefigUiBusy || codefigJob.active || codefigRunSession.active) return;
+        _codefigBridgeFetch('/ui/next')
+          .then(function (res) { return res && res.status === 200 ? res.json() : null; })
+          .then(function (cmd) {
+            if (!cmd) return;
+            _codefigUiBusy = true;
+            var buildId = CODEFIG_BUILD_ID;
+            var running;
+            try {
+              running = handleUiCommand(cmd.command, cmd.args);
+            } catch (e) {
+              running = Promise.reject(e);
+            }
+            return Promise.resolve(running)
+              .then(function (result) {
+                _codefigUiReport(cmd.id, { ok: true, result: result, buildId: buildId });
+              })
+              .catch(function (e) {
+                _codefigUiReport(cmd.id, {
+                  ok: false, error: (e && e.message) ? e.message : String(e), buildId: buildId
+                });
+              })
+              .then(function () { _codefigUiBusy = false; });
+          })
+          .catch(function () { _codefigUiBusy = false; });
+      }
+
+      if (CODEFIG_BUILD_IS_DEV) {
+        setInterval(_codefigUiPoll, CODEFIG_JOB_POLL_MS);
       }
 
       function _codefigQueuePoll() {

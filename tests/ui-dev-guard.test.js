@@ -86,3 +86,32 @@ test('the committed manifest template has no localhost, so production cannot rea
     'https://api.figma.com must stay: REST-using scripts depend on it'
   );
 });
+
+test('the UI-command poller is gated twice, and never registers in a production build', () => {
+  // The bridge grew a second channel (plan 22): named commands that drive the iframe. It is a
+  // remote control into the plugin, acceptable only because it cannot exist in a shipped build.
+  // Two gates, both asserted, because one of them being enough is not a thing to rely on.
+  const poll = UI.match(/function _codefigUiPoll\(\) \{[\s\S]*?\n      \}/);
+  assert.ok(poll, '_codefigUiPoll not found — did it get renamed?');
+  assert.match(poll[0], /^\s*function _codefigUiPoll\(\) \{\s*\n\s*if \(!CODEFIG_BUILD_IS_DEV\) return;/,
+    'the dev guard must be the first statement in the poller');
+
+  // And the interval is only ever installed on a dev build, so production does not even tick.
+  assert.match(
+    UI,
+    /if \(CODEFIG_BUILD_IS_DEV\) \{\s*\n\s*setInterval\(_codefigUiPoll, CODEFIG_JOB_POLL_MS\);/,
+    'the UI-command interval must be installed only under CODEFIG_BUILD_IS_DEV'
+  );
+});
+
+test('every UI-command request goes through the guarded helper', () => {
+  // The rule that keeps this channel dev-only: no direct fetch, so the guard cannot be bypassed
+  // by adding a route. A handler reaching for fetch itself is the one way this ships.
+  const start = UI.indexOf('function handleUiCommand(');
+  const end = UI.indexOf('if (CODEFIG_BUILD_IS_DEV) {', UI.indexOf('function _codefigUiPoll('));
+  const region = UI.slice(start, end);
+  assert.equal(region.indexOf('fetch('), -1,
+    'the UI-command code calls fetch directly — route it through _codefigBridgeFetch');
+  assert.match(region, /_codefigBridgeFetch\('\/ui\/next'\)/);
+  assert.match(region, /_codefigBridgeFetch\('\/ui\/' \+ id \+ '\/result'/);
+});
