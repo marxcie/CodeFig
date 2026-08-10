@@ -61,6 +61,13 @@ deleting variable modes they did not recognise.
   live. Every old spelling still works and is promoted for you: `scaling.roundTo`,
   `roundUpperValuesTo` and the `fontScaling` alias all mean the same thing. A curve is only
   recorded when something reads it.
+- **A mode that is not a viewport is left alone.** If a collection's modes are a density axis —
+  `tight` / `relaxed` — rather than breakpoints, CodeFig says so and does not add them to your
+  viewport list. Previously it adopted any mode it did not recognise as a viewport, which meant the
+  tool decided which axis your collection used. Figma gives a collection one mode axis, so that is
+  your decision. The message carries the way in: *"The registry is untouched — add them in Grid if
+  they're breakpoints."* A file that has no viewport list yet gets one sentence pointing at Grid
+  rather than a complaint per collection.
 - **A scale can be described once instead of once per breakpoint.** Spacing and Corner radius take
   a list of parameter sets, each saying which modes it applies to. `appliesTo: "*"` means every
   mode the collection already has — the common case, which previously had to be written out once

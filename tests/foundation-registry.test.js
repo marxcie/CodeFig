@@ -200,16 +200,59 @@ test('a registry that agrees with the file produces no warnings', () => {
   assert.deepEqual(byKey(result, 'mobile').materialisedIn, ['Responsive System']);
 });
 
-test('a mode with no registry entry is adopted, not ignored', () => {
+test('a mode with no registry entry is reported, not adopted', () => {
+  // **A deliberate correction to 16a**, which adopted an unmatched mode as a discovered viewport.
+  // That is right for a breakpoint added by hand and wrong for everything else: `tight`/`relaxed`
+  // is a density axis, and since Figma gives a collection one mode axis, a tool that turns every
+  // mode into a viewport is deciding which axis your collection uses. It should not. After this the
+  // registry is only ever written by a person.
   const result = reconcileFoundation({
     registry: registry([MOBILE]),
     modes: [modesOf('Responsive System', ['Mobile', 'Ultra Wide'])]
   });
-  const discovered = byKey(result, 'ultra-wide');
-  assert.ok(discovered, 'keyed from its label');
-  assert.equal(discovered.label, 'Ultra Wide');
-  assert.equal(discovered.width, null);
-  assert.ok(codes(result).includes('viewport-discovered'));
+
+  assert.equal(byKey(result, 'ultra-wide'), undefined, 'not a viewport');
+  assert.deepEqual(result.viewports.map((v) => v.key), ['mobile']);
+  assert.deepEqual(result.unregisteredModes.map((m) => m.name), ['Ultra Wide'], 'returned separately');
+  assert.equal(result.unregisteredModes[0].collection, 'Responsive System');
+
+  assert.ok(codes(result).includes('mode-not-a-viewport'));
+  assert.equal(codes(result).includes('viewport-discovered'), false, 'the old code is gone');
+});
+
+test('the report carries the manual route, because it is now the only route', () => {
+  // Removing the automatic path into the registry removed the only path a user ever saw. Without
+  // the second sentence, a real breakpoint someone added by hand becomes invisible rather than
+  // merely un-adopted.
+  const result = reconcileFoundation({
+    registry: registry([MOBILE]),
+    modes: [modesOf('Responsive System', ['Mobile', 'Tight', 'Relaxed'])]
+  });
+  const message = result.warnings
+    .filter((w) => w.code === 'mode-not-a-viewport')
+    .map((w) => w.message)
+    .join(' ');
+
+  assert.match(message, /`Tight`, `Relaxed`/, 'both, in one warning');
+  assert.match(message, /not viewports in this file's registry/);
+  assert.match(message, /The registry is untouched/);
+  assert.match(message, /add them in Grid if they're breakpoints/);
+});
+
+test('density modes across two collections are two facts, not five', () => {
+  // Per collection rather than per mode: three modes on one collection is one thing to know, and
+  // three warnings would read as three problems.
+  const result = reconcileFoundation({
+    registry: registry([MOBILE]),
+    modes: [
+      modesOf('Density', ['Tight', 'Relaxed']),
+      modesOf('Other', ['Compact', 'Roomy', 'Airy'])
+    ]
+  });
+  const reported = result.warnings.filter((w) => w.code === 'mode-not-a-viewport');
+  assert.equal(reported.length, 2);
+  assert.deepEqual(result.unregisteredModes.map((m) => m.name),
+    ['Tight', 'Relaxed', 'Compact', 'Roomy', 'Airy']);
 });
 
 test('a label that drifted from the registry stays one viewport, matched on its key', () => {
@@ -224,17 +267,21 @@ test('a label that drifted from the registry stays one viewport, matched on its 
 });
 
 test('a mode genuinely renamed in Figma is reported from both ends, not silently merged', () => {
-  // Mobile → Handset, with the registry still saying `mobile`. Nothing ties the two together
-  // — a mode's identity is its modeId, which the registry does not record — so guessing would
-  // be guessing. Both halves are reported and no width is invented.
+  // Mobile → Handset, with the registry still saying `mobile`. Nothing ties the two together — a
+  // mode's identity is its modeId, which the registry does not record — so guessing would be
+  // guessing. Both halves are reported and no width is invented.
+  //
+  // **Changed with step 3**: Handset used to be adopted as a second viewport. It is now reported as
+  // a mode outside the registry, which is the same information without the tool having decided that
+  // a mode it did not recognise is a breakpoint.
   const result = reconcileFoundation({
     registry: registry([MOBILE]),
     modes: [modesOf('Responsive System', ['Handset'])]
   });
-  assert.deepEqual(result.viewports.map((v) => v.key).sort(), ['handset', 'mobile']);
-  assert.ok(codes(result).includes('viewport-discovered'), 'Handset is adopted');
+  assert.deepEqual(result.viewports.map((v) => v.key), ['mobile'], 'Handset is not a viewport');
+  assert.deepEqual(result.unregisteredModes.map((m) => m.name), ['Handset']);
+  assert.ok(codes(result).includes('mode-not-a-viewport'), 'Handset is reported');
   assert.ok(codes(result).includes('viewport-not-materialised'), 'Mobile is left, not deleted');
-  assert.equal(byKey(result, 'handset').width, null, 'and no width is carried over on a guess');
 });
 
 test('a width variable overrides a stale registry width, and says so', () => {
@@ -337,9 +384,40 @@ test('the manifest is never believed over the file', () => {
       manifest: { v: 1, domain: 'spacing', group: 'Spacing', modes: ['tablet'], tokens: ['xs'] }
     }]
   });
-  assert.deepEqual(result.viewports.map((v) => v.key), ['mobile'], 'from the modes, not the manifest');
+  // With no registry there are no viewports at all — step 3's consequence — so `Mobile` is a mode
+  // outside the registry rather than a discovered viewport. The set is still described from the
+  // file, which is what this test is about.
+  assert.deepEqual(result.viewports, []);
+  assert.deepEqual(result.unregisteredModes.map((m) => m.name), ['Mobile'], 'from the modes, not the manifest');
   assert.deepEqual(result.sets[0].missing, ['xs']);
   assert.ok(codes(result).includes('manifest-mode-missing'));
+});
+
+test('a file with no viewport list gets one sentence, not one per collection', () => {
+  // "Your three modes are not viewports" on a file where nobody has written a viewport list is
+  // true and useless — it reads as a complaint about the shipped default, which is how people learn
+  // to ignore warnings. Same failure as a metric config warning about a `max` it never declared.
+  const result = reconcileFoundation({
+    registry: null,
+    modes: [modesOf('A', ['Desktop', 'Tablet']), modesOf('B', ['Mobile'])]
+  });
+  assert.equal(codes(result).filter((c) => c === 'mode-not-a-viewport').length, 0);
+  assert.equal(codes(result).filter((c) => c === 'registry-missing').length, 1);
+  assert.match(
+    result.warnings.filter((w) => w.code === 'registry-missing')[0].message,
+    /no viewport list yet.*Run Grid/
+  );
+  assert.equal(result.unregisteredModes.length, 3, 'the data is still there, only the nagging is not');
+});
+
+test('an empty-but-present registry does report each collection', () => {
+  // Present and empty is a decision someone made; absent is a decision nobody has made yet.
+  const result = reconcileFoundation({
+    registry: registry([]),
+    modes: [modesOf('A', ['Tight'])]
+  });
+  assert.ok(codes(result).includes('mode-not-a-viewport'));
+  assert.equal(codes(result).includes('registry-missing'), false);
 });
 
 test('parallel sets in two collections share one registry', () => {

@@ -375,8 +375,15 @@ function reconcileFoundation(sources) {
     });
   }
 
-  // 2. Modes. A mode nobody knows about is adopted, not ignored — and a mode renamed by hand
-  //    matches on its key, so it does not become a second viewport.
+  // 2. Modes. A mode the registry does not list is **reported, not adopted** — a mode renamed by
+  //    hand still matches on its key, so it does not become a second viewport.
+  //
+  //    This is a deliberate correction to 16a, which adopted an unmatched mode as a discovered
+  //    viewport. That is right for a breakpoint someone added by hand and wrong for everything
+  //    else: `tight` / `relaxed` is a density axis, and Figma gives a collection one mode axis, so
+  //    a tool that turns every mode into a viewport decides which axis your collection uses. It
+  //    should not. The registry is now only ever written by a person.
+  var unregisteredModes = [];
   var modeSets = src.modes || [];
   for (i = 0; i < modeSets.length; i++) {
     var collectionName = modeSets[i].collection;
@@ -385,18 +392,15 @@ function reconcileFoundation(sources) {
       var modeName = modeList[m].name;
       var viewport = findViewport(modeName);
       if (!viewport) {
-        var discovered = normaliseViewport({ label: modeName });
-        if (!discovered) continue;
-        viewport = {
-          key: discovered.key,
-          label: discovered.label,
-          width: null,
-          widthSource: null,
-          materialisedIn: [],
-          fromRegistry: false
-        };
-        viewports.push(viewport);
-        warnings.push(foundationWarning('viewport-discovered', 'Collection "' + collectionName + '" has a mode "' + modeName + '" that the registry does not list. Adopted as a viewport.', { collection: collectionName, key: viewport.key }));
+        var outside = normaliseViewport({ label: modeName });
+        if (!outside) continue;
+        unregisteredModes.push({
+          collection: collectionName,
+          name: modeName,
+          key: outside.key,
+          modeId: modeList[m].modeId || null
+        });
+        continue;
       } else if (viewport.label !== modeName) {
         warnings.push(foundationWarning('viewport-relabelled', 'Viewport "' + viewport.key + '" is called "' + modeName + '" in "' + collectionName + '" but "' + viewport.label + '" in the registry. Using the file\'s name.', { collection: collectionName, key: viewport.key }));
         viewport.label = modeName;
@@ -439,6 +443,46 @@ function reconcileFoundation(sources) {
       target.width = value;
       target.widthSource = { kind: 'file', collection: widthEntry.collection, variable: widthEntry.variable };
     }
+  }
+
+  // Reported per collection rather than per mode: three density modes are one fact about that
+  // collection, and three warnings would read as three problems. The manual route is attached
+  // because removing the automatic path into the registry removed the only path a user ever saw —
+  // without it, a real breakpoint someone added by hand becomes invisible rather than un-adopted.
+  //
+  // **A file with no registry at all is a different state**, and gets one sentence rather than
+  // one per collection. "Your three modes are not viewports" on a file where nobody has ever
+  // written a viewport list is technically true and useless — it reads as a complaint about the
+  // shipped default, which is how people learn to ignore warnings. Nothing has claimed the
+  // registry yet, so nothing contradicts these modes.
+  var hasRegistryList = !!(src.registry && Array.isArray(src.registry.viewports));
+  var byCollection = {};
+  var collectionOrder = [];
+  for (i = 0; i < unregisteredModes.length; i++) {
+    var owner = unregisteredModes[i].collection;
+    if (!byCollection[owner]) { byCollection[owner] = []; collectionOrder.push(owner); }
+    byCollection[owner].push(unregisteredModes[i].name);
+  }
+  if (!hasRegistryList && unregisteredModes.length > 0) {
+    warnings.push(foundationWarning(
+      'registry-missing',
+      'This file has no viewport list yet, so none of its ' + unregisteredModes.length +
+        ' mode(s) is a viewport. Run Grid to create one.',
+      { modes: unregisteredModes.map(function(m) { return m.name; }) }
+    ));
+    collectionOrder = [];
+  }
+  for (i = 0; i < collectionOrder.length; i++) {
+    var names = byCollection[collectionOrder[i]];
+    warnings.push(foundationWarning(
+      'mode-not-a-viewport',
+      'Collection "' + collectionOrder[i] + '" writes modes ' +
+        names.map(function(n) { return '`' + n + '`'; }).join(', ') +
+        ', which are not viewports in this file\'s registry. The registry is untouched — add ' +
+        (names.length === 1 ? 'it' : 'them') + ' in Grid if ' +
+        (names.length === 1 ? "it's a breakpoint" : "they're breakpoints") + '.',
+      { collection: collectionOrder[i], modes: names.slice() }
+    ));
   }
 
   // 4 and 5. States worth naming: no width anywhere, and a viewport no collection carries.
@@ -530,7 +574,14 @@ function reconcileFoundation(sources) {
     };
   });
 
-  return { viewports: ordered, sets: sets, warnings: warnings };
+  return {
+    viewports: ordered,
+    sets: sets,
+    warnings: warnings,
+    // Separate from `viewports` on purpose: these are modes, and whether a mode is a viewport is
+    // a decision only a person can make.
+    unregisteredModes: unregisteredModes
+  };
 }
 
 /**
@@ -675,6 +726,7 @@ async function readFoundation(options) {
     viewports: result.viewports,
     sets: result.sets,
     warnings: warnings.concat(result.warnings),
+    unregisteredModes: result.unregisteredModes,
     collections: collections.map(function(c) { return c.name; }),
     hasRegistry: registryRead.registry !== null
   };

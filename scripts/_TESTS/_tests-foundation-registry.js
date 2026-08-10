@@ -154,8 +154,12 @@ testBegin('foundation-registry');
 
   await itInTestFile('a mode renamed in Figma is reported from both ends, and nothing is deleted', async function () {
     // A mode's identity is its modeId, which the registry does not record, so a rename cannot
-    // be tracked — only reported. The honest outcome: the new name is adopted, the old entry
-    // stays put, and the user decides.
+    // be tracked — only reported. The honest outcome: the new name is reported as a mode outside
+    // the registry, the old entry stays put, and the user decides.
+    //
+    // **Changed with 17 step 3**: the new name used to be adopted as a viewport. It is not any
+    // more — a tool that turns every unrecognised mode into a breakpoint is deciding which axis
+    // your collection uses. Deliberate correction to 16a, not a regression.
     var before = currentRegistryRaw();
     var collection = scratchCollection('-rename', ['Mobile']);
     try {
@@ -164,10 +168,13 @@ testBegin('foundation-registry');
 
       var foundation = await readFoundation({ collections: [collection.name] });
 
-      expect(warningCodes(foundation)).toContain('viewport-discovered');
+      expect(warningCodes(foundation)).toContain('mode-not-a-viewport');
       expect(warningCodes(foundation)).toContain('viewport-not-materialised');
       expect(viewportByKey(foundation, 'mobile').width).toBe(375, 'the old entry keeps its width');
-      expect(viewportByKey(foundation, 'handset')).toBeTruthy();
+      // A renamed mode is not a new viewport.
+      expect(viewportByKey(foundation, 'handset')).toBeFalsy();
+      expect((foundation.unregisteredModes || []).map(function (m) { return m.name; }))
+        .toContain('Handset');
     } finally {
       try { collection.remove(); } catch (e) {}
       restoreRegistryRaw(before);

@@ -696,3 +696,46 @@ test('a slice that names no model keeps its curve', () => {
   };
   assert.equal(toDomainConfig(quiet, 'spacing').scaling.type, 'quad');
 });
+
+test('a config still imports when nothing is a viewport', () => {
+  // Step 3's real risk. Unmatched modes stop becoming viewports, so a file where Grid has never
+  // run has an empty viewport list — and `toDomainConfig` reads viewports to rebuild `modes[]`.
+  // What saves it is `viewportOrder`, recorded on each set at generation time: the run knew the
+  // order even if the registry never did. Without this test, step 3 would silently make import
+  // return a config with no modes on exactly the files most likely to need it.
+  const v1 = {
+    v: 1, collection: 'RS', group: 'Spacing',
+    viewports: [],
+    domains: {
+      spacing: {
+        tokens: ['xs', 'sm'],
+        viewportOrder: ['desktop', 'mobile'],
+        perViewport: {
+          desktop: { model: 'metric', min: 1, base: { level: 'xs', size: 4 }, step: 4, mod: 3 },
+          mobile: { model: 'metric', min: 1, base: { level: 'xs', size: 2 }, step: 2, mod: 3 }
+        },
+        extra: {}
+      }
+    }
+  };
+  const back = toDomainConfig(v1, 'spacing');
+  assert.ok(back, 'no config at all would be the silent failure');
+  assert.deepEqual(back.modes.map((m) => m.name), ['desktop', 'mobile']);
+  assert.equal(back.modes[0].step, 4);
+});
+
+test('a portable config from a registry-less file carries no invented viewports', () => {
+  // The other half: the config says what the file holds, and an empty registry means it holds no
+  // viewport list. Emitting three from the collection's modes is what step 3 removed.
+  const config = toPortableConfig({
+    viewports: [],
+    unregisteredModes: [
+      { collection: 'RS', name: 'Tight', key: 'tight', modeId: null },
+      { collection: 'RS', name: 'Relaxed', key: 'relaxed', modeId: null }
+    ],
+    sets: [],
+    warnings: []
+  });
+  assert.deepEqual(config.viewports, []);
+  assert.equal(JSON.stringify(config).indexOf('Tight'), -1, 'a density mode is not a viewport');
+});
