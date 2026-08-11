@@ -81,6 +81,11 @@
            it to reach the edges. */
         --panel-padding-x: 24px;
 
+        /* Content bottom to the next section's title. Measured off the frame, whose section blocks abut
+           with 24px of padding below one and 24 above the next. Applies with or without a rule between
+           them: a heading carries it, and a divider carries it instead when there is one. */
+        --section-gap: 48px;
+
         /* Border radius */
         --radius-sm: 3px;
         --radius-md: 6px;
@@ -1095,8 +1100,8 @@
          The top margin is 24 less the previous row's own `margin-bottom`, so the two sides come out
          equal rather than one being the sum of two rules. */
       .config-ui-row--divider {
-        margin-top: calc(var(--space-2xl) - var(--space-md));
-        margin-bottom: var(--space-2xl);
+        margin-top: calc(var(--section-gap) / 2 - var(--space-md));
+        margin-bottom: calc(var(--section-gap) / 2);
       }
 
       .config-ui-row--divider + .config-ui-row--heading h2 {
@@ -1130,9 +1135,10 @@
       }
       .config-ui-form--rows .config-ui-row--heading h2 {
         font-size: var(--font-size-headline);
-        /* 16px between a title and its content, measured: the frame's title sits at y=24 and is 21 tall,
-           and the content slot starts at y=61. */
-        margin: var(--space-lg) 0 var(--space-lg) 0;
+        /* Above: the section gap, less the previous row's own bottom margin, so the two do not add up
+           to more than the gap. Below: 16px to the content, measured — the frame's title sits at y=24
+           and is 21 tall, and the content slot starts at y=61. */
+        margin: calc(var(--section-gap) - var(--space-md)) 0 var(--space-lg) 0;
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
       }

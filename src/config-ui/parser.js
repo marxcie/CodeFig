@@ -1335,7 +1335,12 @@
   /** The config block's body as a plain object. Never evaluated — the tolerant reader does it. */
   function parseConfigBlockObject(text) {
     try {
-      return JSON.parse(looseJsonToJson("{" + text + "}"));
+      // `\n` before the brace, and it is load-bearing. Grid's block now **ends with a comment** —
+      // `// @suggestions` — and `serialize` trims trailing whitespace, so `"{" + text + "}"` put the
+      // closing brace on the comment's own line, where the comment skip swallowed it. The whole config
+      // then failed to parse and the preview read "Waiting for a config this can read", which is true
+      // and says nothing about why.
+      return JSON.parse(looseJsonToJson("{" + text + "\n}"));
     } catch (e) {
       return null;
     }

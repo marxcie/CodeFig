@@ -940,7 +940,11 @@
     }
     var input = document.createElement("input");
     input.type = column.type === "number" ? "number" : "text";
-    input.className = "config-ui-input config-ui-input--text";
+    // The **modifier has to match the type**, or the narrow-number width never applies: this always
+    // said `--text`, so `.config-ui-input--number { width: 96px }` matched nothing and the mode fields
+    // filled their column.
+    input.className = "config-ui-input config-ui-input--" +
+      (column.type === "number" ? "number" : "text");
     input.setAttribute("data-row-field", column.key);
     input.value = value == null ? "" : String(value);
     return input;

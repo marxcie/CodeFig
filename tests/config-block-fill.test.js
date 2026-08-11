@@ -304,3 +304,26 @@ test('a comma before a trailing comment is punctuation, not part of the value', 
   assert.match(changed.text, /extensionColumns: 4 \/\/ no comma on the last one/, 'and none is invented');
   assert.deepEqual(changed.substituted.sort(), ['collectionName', 'extensionColumns']);
 });
+
+test('a block that ends with a comment still parses', () => {
+  // `"{" + text + "}"` put the closing brace on the trailing comment's own line, where the comment skip
+  // swallowed it. Grid's block ends with `// @suggestions` and `serialize` trims trailing whitespace, so
+  // every form interaction produced an unparseable config — the preview read "Waiting for a config this
+  // can read", which is true and explains nothing.
+  assert.ok(P.parseConfigBlockObject('a: 1, // a trailing note'), 'a one-line block ending in a comment');
+  assert.ok(P.parseConfigBlockObject('  a: 1,\n  // @suggestions'), 'a marker row last');
+  assert.deepEqual(P.parseConfigBlockObject('a: 1, // note'), { a: 1 });
+
+  // And the round trip a form interaction actually makes: parse → serialize → parse.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const src = fs2.readFileSync(
+    path2.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'grid.js'), 'utf8'
+  );
+  const block = src.slice(src.indexOf('// @CONFIG_START') + 16, src.indexOf('// @CONFIG_END'));
+  const schema = P.parse(block);
+  const values = {};
+  for (const r of schema.rows) if (r.type === 'field') values[r.name] = r.value;
+  assert.ok(P.parseConfigBlockObject(P.serialize(schema, values)),
+    'what the editor holds after one form interaction must still parse');
+});
