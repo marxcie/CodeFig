@@ -2107,4 +2107,161 @@
         font-weight: bold;
       }
 
+      /* ============================================================
+         GRID PANEL — preview and suggestions
+
+         Written against artifacts/mockup-panels/grid-target.html, which links this stylesheet, so
+         the mockup and the plugin cannot disagree about how these look. Colours from the frames:
+         margins purple, columns green.
+         ============================================================ */
+      .grid-preview {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas: "diagram values" "spans values";
+        gap: 4px var(--space-xl);
+        width: 100%;
+        align-items: start;
+      }
+
+      .grid-preview-diagram {
+        grid-area: diagram;
+        display: flex;
+        gap: 4px;
+        height: 44px;
+      }
+
+      .grid-preview-margin {
+        flex: 0 0 26px;
+        background: #b7a8f0;
+      }
+
+      .grid-preview-col {
+        flex: 1 1 auto;
+        background: #17976a;
+      }
+
+      .grid-preview-spans {
+        grid-area: spans;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding: 10px 26px;
+        /* Dotted guides at the margin edges: every span starts at the content edge. */
+        border-left: 1px dashed rgba(120, 100, 200, 0.7);
+        border-right: 1px dashed rgba(120, 100, 200, 0.7);
+        background: rgba(183, 168, 240, 0.09);
+      }
+
+      .grid-preview-span {
+        height: 5px;
+        background: #17976a;
+        border-radius: 1px;
+      }
+
+      .grid-preview-values {
+        grid-area: values;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: var(--font-size-body);
+        white-space: nowrap;
+      }
+
+      .grid-preview-total {
+        margin-bottom: 3px;
+      }
+
+      .grid-preview-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        opacity: 0.85;
+      }
+
+      /* No target chosen yet. The Start and New frames are grey even with modes set, so this is
+         about whether there is somewhere to write, not whether the fields are filled. */
+      .grid-preview.is-unset .grid-preview-margin { background: #dcdcdf; }
+      .grid-preview.is-unset .grid-preview-col { background: #8a8a8e; }
+      .grid-preview.is-unset .grid-preview-span { background: #dcdcdf; }
+      .grid-preview.is-unset .grid-preview-spans { border-color: rgba(140, 140, 145, 0.6); background: rgba(140, 140, 145, 0.05); }
+
+      .grid-suggestions {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        width: 100%;
+      }
+
+      .grid-suggestion {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-lg);
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid var(--border-color, #e1e5e9);
+        border-radius: 6px;
+        background: var(--input-bg, #fff);
+        font: inherit;
+        font-size: var(--font-size-body);
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      /* Selected means *currently applied*, computed from the fields rather than remembered. */
+      .grid-suggestion.is-selected {
+        border-color: var(--active-bg, #0a84ff);
+        box-shadow: 0 0 0 1px var(--active-bg, #0a84ff);
+      }
+
+      .grid-suggestion-main {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .grid-suggestion-spans {
+        font-size: 11px;
+        opacity: 0.6;
+      }
+
+      .grid-suggestion-badges {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        opacity: 0.7;
+        white-space: nowrap;
+      }
+
+      .grid-suggestion-badge {
+        padding: 2px 6px;
+        border-radius: 10px;
+        background: rgba(23, 151, 106, 0.13);
+        color: #0f6b4c;
+      }
+
+      /* ============================================================
+         NOT WIRED YET
+
+         A section whose layout exists and whose behaviour does not. Dimmed so the panel says how far
+         along it is, and so nobody tests a control that cannot do anything yet. Removed per section
+         as behaviour lands — `data-unwired` on the row is the whole mechanism, so there is one place
+         to look for what is still pending.
+         ============================================================ */
+      [data-unwired] {
+        opacity: 0.45;
+      }
+
+      [data-unwired]::after {
+        content: attr(data-unwired);
+        display: block;
+        margin-top: 2px;
+        font-size: 10px;
+        font-style: italic;
+        opacity: 0.8;
+      }
+
       /* End of styles */

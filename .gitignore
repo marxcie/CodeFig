@@ -39,3 +39,9 @@ scripts/EXAMPLE_SCRIPTS/*.old*
 scripts/EXAMPLE_SCRIPTS/_*.*
 figma-console.log
 /artifacts
+# ...except the target layouts, which are the fixed goal for the panels and should survive. They
+# link src/ui.css rather than carrying styling, so they cannot become a competing style source —
+# which is what artifacts/ui-mockup.html became.
+!/artifacts/mockup-panels/
+/artifacts/mockup-panels/*
+!/artifacts/mockup-panels/*-target.html

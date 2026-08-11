@@ -541,11 +541,15 @@
             configUIInstance = window.CodeFigConfigUI.render(schema, {
               container: configUIContainer,
               onChange: function (values) {
-                noteConfigEdit(values, configLastValues);
+                // Choosing a Collection and Group *is* the instruction to load, so that is the only
+                // thing that asks. Every other edit is an answer, not a question.
+                var addressChanged = !configLastValues ||
+                  values.collectionName !== configLastValues.collectionName ||
+                  values.group !== configLastValues.group;
                 configLastValues = JSON.parse(JSON.stringify(values));
                 syncUIToCode(values);
                 scheduleConfigPreview();
-                scheduleAutoImport();
+                if (addressChanged) scheduleAutoImport();
               }
             });
           } else {
@@ -908,7 +912,10 @@
         configFormReadOnly = false;
         initConfigUI(block || '');
         configLastValues = configUIInstance ? JSON.parse(JSON.stringify(configUIInstance.getValues())) : null;
-        scheduleAutoImport();
+        // **Rendering the form does not trigger a load.** It used to, and applying a load re-rendered
+        // the form, which triggered another — a rebuild every 350ms that destroyed any open inline
+        // input or select dropdown between one lap and the next. Loading is a response to the address
+        // changing, and nothing else.
 
         const unsupported = (schema.rows || []).filter(function (r) {
           return r.type === 'field' && r.inputType === 'unsupported';
@@ -1340,8 +1347,6 @@
         // Check if this script uses @InfoPanel
         // A different script is a different question: what was edited about the last one is not an
         // edit to this one.
-        configEditedFields = Object.create(null);
-        autoImportOffer = null;
         setAutoImportNote(null);
 
         infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
@@ -1663,27 +1668,29 @@
       // Filling over typed values silently is the loss the whole import rewrite existed to remove.
       // ======================================================================
 
-      /** Field names edited this session. Collection and Group do not count: they are the question. */
-      var configEditedFields = Object.create(null);
       var autoImportTimer = null;
       var autoImportSeq = 0;
-      var autoImportOffer = null;
 
-      function configIsUntouched() {
-        for (var name in configEditedFields) {
-          if (name !== 'collectionName' && name !== 'group') return false;
-        }
-        return true;
-      }
-
-      function noteConfigEdit(values, previous) {
-        if (!values || !previous) return;
-        for (var name in values) {
-          if (!Object.prototype.hasOwnProperty.call(values, name)) continue;
-          if (JSON.stringify(values[name]) !== JSON.stringify(previous[name])) {
-            configEditedFields[name] = true;
-          }
-        }
+      /**
+       * Write the config block into the canonical text.
+       *
+       * The same splice `mergeConfigIntoMain` performs, without depending on which tab is showing —
+       * because switching tabs to reach the editor is what rebuilt the form, and rebuilding the form
+       * is what turned auto-import into a loop.
+       */
+      function writeConfigBlockText(text) {
+        if (!scriptHasConfig || !parsedSections || !code) return;
+        var mainCode = code.getValue();
+        var startMarker = parsedSections.configStartMarker || '// @CONFIG_START';
+        var endMarker = parsedSections.configEndMarker || '// @CONFIG_END';
+        var i = mainCode.indexOf(startMarker);
+        var j = mainCode.indexOf(endMarker);
+        if (i === -1 || j === -1 || j <= i) return;
+        var next = mainCode.slice(0, i + startMarker.length) + '\n' +
+          text.replace(/\n\s*$/, '') + '\n' + mainCode.slice(j);
+        if (next === mainCode) return;
+        code.setValue(next);
+        if (configEditor) configEditor.setValue(currentConfigBlock());
       }
 
       /** The note under Group, which is where the answer belongs. */
@@ -1749,32 +1756,24 @@
       function applyAutoImport(found) {
         if (!found || found.source !== 'recorded' || !found.config) {
           setAutoImportNote(null);
-          autoImportOffer = null;
           return;
         }
         var where = found.collection + (found.group ? ' \u00b7 ' + found.group : '');
 
-        if (!configIsUntouched()) {
-          // Offered rather than applied. The panel says what is there and leaves the decision.
-          autoImportOffer = found;
-          setAutoImportNote('This Collection and Group has a saved config. Your edits are kept — ' +
-            'clear them to load it, or keep going.');
-          return;
-        }
+        // No untouched rule and no offer. Loading overwrites, because choosing an address is the
+        // instruction — and the note that said "clear them to load it" told someone to do something
+        // the panel gave them no way to do.
 
         var fill = window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock;
-        if (!fill || !configEditor) return;
+        if (!fill) return;
         var filled = fill(currentConfigBlock(), found.config);
-        var previousTab = currentTab;
-        if (currentTab !== 'configCode') switchTab('configCode');
-        configEditor.setValue(filled.text);
-        mergeConfigIntoMain();
-        if (isConfigTab(previousTab)) switchTab(previousTab);
+        // Straight into the canonical text, with no tab switching. Switching to Configuration code and
+        // back was what rebuilt the form, and a rebuild is what made this loop.
+        writeConfigBlockText(filled.text);
 
         setAutoImportNote('As this Collection and Group combination contains a ' +
           configPreviewDomainLabel() + ' set, it was imported automatically.' +
           (filled.summary && filled.summary.indexOf('Nothing to fill') === -1 ? ' ' + filled.summary : ''));
-        autoImportOffer = null;
       }
 
       /** The domain, as a person would name it. */
@@ -4446,6 +4445,27 @@
             fields.push(entry);
           });
 
+          // Collection modes, as chips.
+          container.querySelectorAll('[data-chips-field]').forEach(function (wrap) {
+            var chips = [];
+            wrap.querySelectorAll('.config-ui-chip').forEach(function (chip) {
+              chips.push({
+                name: chip.getAttribute('data-chip-name'),
+                placeholder: chip.classList.contains('config-ui-chip--placeholder'),
+                removable: !!chip.querySelector('.config-ui-chip-remove'),
+                draggable: chip.getAttribute('draggable') === 'true'
+              });
+            });
+            fields.push({
+              name: wrap.getAttribute('data-chips-field'),
+              control: 'chips',
+              chips: chips,
+              placeholder: wrap.getAttribute('data-placeholder') === 'true',
+              editing: !!wrap.querySelector('.config-ui-chip-input'),
+              visible: rowVisible(wrap)
+            });
+          });
+
           // Fields no control can hold. Reported because "the form dropped it" and "the form has
           // no control for it" look identical from outside otherwise.
           container.querySelectorAll('[data-readonly-field]').forEach(function (el) {
@@ -4458,6 +4478,35 @@
           });
         }
 
+        // A catch-all for composites nobody has taught this function about yet.
+        //
+        // Three times now a new control has been invisible here — the collection picker, the chips,
+        // and `@rows` before them — because a composite carries `data-<kind>-field` rather than
+        // `data-field`, and absent reads identically to "it did not render". Reporting the class
+        // rather than the instance means the next composite is at worst under-described, never
+        // missing.
+        if (container) {
+          var seen = {};
+          fields.forEach(function (f) { seen[f.name] = true; });
+          container.querySelectorAll('*').forEach(function (el) {
+            if (!el.attributes) return;
+            for (var a = 0; a < el.attributes.length; a++) {
+              var match = /^data-([a-z]+)-field$/.exec(el.attributes[a].name);
+              if (!match || match[1] === 'row' || match[1] === 'readonly') continue;
+              var name = el.attributes[a].value;
+              if (!name || seen[name]) continue;
+              seen[name] = true;
+              fields.push({
+                name: name,
+                control: match[1],
+                undescribed: true,
+                text: el.innerText ? el.innerText.slice(0, 200) : '',
+                visible: rowVisible(el)
+              });
+            }
+          });
+        }
+
         // Auto-import's answer, reported because it *is* the behaviour: "it was imported
         // automatically" is a claim, and a claim nothing can read is one nobody can check.
         var autoNote = document.getElementById('autoImportNote');
@@ -4466,7 +4515,9 @@
           script: currentScript ? currentScript.name : null,
           hasUiConfig: !!scriptHasUIConfig,
           autoImportNote: autoNote ? autoNote.textContent : null,
-          untouched: configIsUntouched(),
+          // Gone with the untouched rule: loading overwrites, and the safety lives entirely in the
+          // trigger — only an address change asks.
+          autoImportTriggers: ['collectionName', 'group'],
           fields: fields
         };
       }
