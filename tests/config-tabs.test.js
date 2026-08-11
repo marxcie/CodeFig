@@ -149,3 +149,35 @@ test('which view the merge reads is decided by which view you are in', () => {
   assert.match(fn[0], /configContent = configEditor \? configEditor\.getValue\(\) : ''/,
     'and Configuration code is authoritative otherwise');
 });
+
+test('a helper line belongs to its field, and renders under the control', () => {
+  // The frames put helper text under the input. A comment line above the field is a paragraph row
+  // instead — it sits at the label's left edge and reads as prose about the section rather than as an
+  // explanation of that input. `@helper:` attaches it to the field; the renderer puts it in the grid's
+  // second column, which is what lands it under the control.
+  const P = require('../src/config-ui/parser.js');
+  const line = 'extensionColumns: 0, // @label: Extra columns @helper: Just numeric variables';
+  const f = P.parse(line).rows.filter((r) => r.type === 'field')[0];
+  assert.equal(f.helper, 'Just numeric variables');
+  assert.equal(f.label, 'Extra columns', 'and it does not swallow the label');
+  assert.equal(P.serialize(P.parse(line), {}), line, 'and survives untouched');
+
+  const renderer = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+  assert.match(renderer, /if \(field\.helper\) \{[\s\S]{0,200}row\.appendChild\(helper\)/,
+    'the note goes in the field row, not after it');
+  const css = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'src', 'ui.css'), 'utf8'
+  );
+  assert.match(css, /\.config-ui-field-note \{[\s\S]{0,160}grid-column: 2/);
+});
+
+test('the space around a section divider is symmetric', () => {
+  // It was 12 above and 28 below — the previous row's margin plus the heading's own 16 — which read as
+  // the rule belonging to the section above it rather than separating two.
+  const css = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'src', 'ui.css'), 'utf8'
+  );
+  assert.match(css, /\.config-ui-row--divider \+ \.config-ui-row--heading h2 \{\s*\n\s*margin-top: 0;/);
+});

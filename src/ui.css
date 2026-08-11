@@ -1085,8 +1085,15 @@
          same line. `// ---` separates items and stays inside the content; `// --- @section` separates
          sections and reaches the edges, which is only expressible because the padding is one variable.
          Neither appears on its own: a divider is something the config block asks for. */
+      /* Symmetric: the space above a divider is the previous row's `margin-bottom`, so the space below
+         has to be that same number and nothing else. It was 12 above and 28 below — 12 plus the
+         heading's own 16 — which read as the rule belonging to the section above it. */
       .config-ui-row--divider {
         margin-bottom: var(--space-md);
+      }
+
+      .config-ui-row--divider + .config-ui-row--heading h2 {
+        margin-top: 0;
       }
 
       /* Edge to edge: no horizontal padding, rather than a negative margin trying to escape one. */
@@ -2033,6 +2040,8 @@
       /* A note under a field — auto-import's answer sits under Group, which is where the question
          was asked. */
       .config-ui-field-note {
+        /* The second column of the field's grid, so it lands under the control it explains. */
+        grid-column: 2;
         margin-top: 4px;
         font-size: 11px;
         line-height: 1.4;

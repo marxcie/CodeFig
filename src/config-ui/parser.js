@@ -565,6 +565,14 @@
         if (inputType === "object" || inputType === "array") {
           inputType = "unsupported";
         }
+        // `@helper: …` — a line that belongs to *this field* and renders under its control, which is
+        // where the frames put it. A comment line above the field is a paragraph row instead: it sits
+        // at the label's left edge and reads as prose about the section, not about the input.
+        var helperMatch = tip.match(/@helper:\s*(.+?)(?=\s+@[a-z]|$)/);
+        if (helperMatch) {
+          tip = tip.replace(/@helper:\s*.+?(?=\s+@[a-z]|$)/, "").trim();
+        }
+
         var labelMatch = tip.match(/@label:\s*(.+?)(?=\s+@|$)/);
         var fieldLabel = labelFromName(m[1]);
         if (labelMatch) {
@@ -580,6 +588,7 @@
           inputType: inputType,
         };
         if (phMatch) f.placeholder = phMatch[1];
+        if (helperMatch) f.helper = helperMatch[1].trim();
         // Which syntax this row was written in, so serialize puts it back the same way. A block is
         // one or the other in practice, but recording it per row means a mixed block round-trips too.
         f.syntax = syntax;
@@ -596,7 +605,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|tabs|collection)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|tabs|collection|helper)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -737,6 +746,7 @@
         if (r.inputType === "radio") parts.push("@radio");
         if (r.inputType === "multiselect") parts.push("@multi");
         if (r.inputType === "textarea") parts.push("@textarea");
+        if (r.helper) parts.push("@helper: " + r.helper);
         if (r.inputType === "collection") parts.push("@collection");
         if (r.inputType === "rows" && r.columns) {
           parts.push("@rows: " + r.columns.map(function (c) {

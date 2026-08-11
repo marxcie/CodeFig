@@ -188,6 +188,15 @@
       cw.appendChild(ti);
     }
     row.appendChild(cw);
+    // Under the **control**, not under the row: a note at the label's left edge reads as prose about
+    // the section rather than as an explanation of this input. It goes in the grid's second column,
+    // which is what puts it under the field it describes.
+    if (field.helper) {
+      var helper = document.createElement("div");
+      helper.className = "config-ui-field-note";
+      helper.textContent = field.helper;
+      row.appendChild(helper);
+    }
     wrap.appendChild(row);
     return wrap;
   }

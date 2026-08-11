@@ -145,8 +145,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 
   // # Mode settings
   // Global mode settings — values that apply to every mode, above the tab bar.
-  // These doesn't appear in the grid, just added as numeric variables for overshoot layout
-  extensionColumns: 0, // @label: Extra columns
+  extensionColumns: 0, // @label: Extra columns @helper: These doesn't appear in the grid, just added as numeric variables for overshoot layout
 
   modes: [
     {
@@ -171,8 +170,6 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
       padding: 20
     }
   ], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes
-
-  // --- @section
 
   // # Preview
   // @preview
