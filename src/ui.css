@@ -59,6 +59,14 @@
         --font-size-headline: 15px;
         --font-size-helper: 10px;
         --font-size-display: 20px;
+        /* A config form's section title. Its ladder is **even**: 16 / 14 / 12, the same 2px between
+           each level, which is what put it a step above the 14 its `h2` uses instead of one below.
+           Márton's call after seeing all three levels beside each other in the reference.
+           NOTE: this leaves `--font-size-headline` (15px) one pixel away, now used only by the script
+           title, the Documentation tab's `h2` and the InfoPanel header. Two sizes that differ by 1px
+           are an accident waiting to be quoted as a decision — worth collapsing into this one, which
+           is a call about the panel chrome and the docs tab rather than about this ladder. */
+        --font-size-title: 16px;
         --font-weight-normal: 400;
         --font-weight-medium: 500;
         --font-weight-semibold: 600;
@@ -1134,7 +1142,7 @@
          *inside* a section and steps down from h1. */
       .config-ui-form--rows .config-ui-row--heading h1,
       .config-ui-form--rows .config-ui-row--heading h2 {
-        font-size: var(--font-size-headline);
+        font-size: var(--font-size-title);
         /* Above: the section gap, less the previous row's own bottom margin, so the two do not add up
            to more than the gap. Below: 16px to the content, measured — the frame's title sits at y=24
            and is 21 tall, and the content slot starts at y=61. */
@@ -1151,8 +1159,10 @@
       .config-ui-form--rows .config-ui-row--heading:first-child h1 {
         margin-top: var(--space-sm);
       }
+      /* Body size, and semibold is the only thing separating it from the paragraph beside it. That is
+         deliberate: it is the bottom of the ladder, so the weight does the work. */
       .config-ui-form--rows .config-ui-row--heading h3 {
-        font-size: var(--font-size-subheadline);
+        font-size: var(--font-size-body);
         margin: var(--space-md) 0 var(--space-xs) 0;
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);

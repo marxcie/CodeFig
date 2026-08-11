@@ -1,16 +1,20 @@
 /**
- * `scripts/HELP/style-and-ui-reference.js` is a reference, which means its whole value is being
- * trustworthy: it gets quoted, and a wrong entry is worse than a missing one. So it is checked the
- * way the rest of this repo checks agreements — by deriving one side from the other rather than
- * asserting a copy.
+ * The Style & UI reference — the `## Style & UI reference` section and the `@UI_CONFIG` specimen shelf
+ * in `scripts/HELP/help-documentation.js`, plus the generated `artifacts/style-reference.html`.
  *
- * Two properties:
+ * Its whole value is being trustworthy: it gets quoted, and a wrong entry is worse than a missing one.
+ * So it is checked the way the rest of this repo checks agreements — by deriving one side from the
+ * other rather than asserting a copy.
+ *
+ * Three properties:
  *   1. **Coverage.** Every control the renderer can build appears in the reference's own config block,
  *      and every marker row the parser emits is demonstrated. A new control that nobody can see is
  *      the failure this file exists to make loud, because the heading bug that prompted the reference
  *      was invisible for exactly that reason.
  *   2. **Correctness.** Every token value the documentation states is read back out of `src/ui.css`.
  *      Changing a token now fails here until the reference is updated.
+ *   3. **Freshness.** The HTML page is generated, so it cannot be wrong — only stale. That is a
+ *      comparison against a fresh build, not an assertion about its contents.
  */
 const { test } = require('node:test');
 const assert = require('node:assert');
@@ -18,23 +22,40 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const REF = fs.readFileSync(path.join(root, 'scripts', 'HELP', 'style-and-ui-reference.js'), 'utf8');
+// The reference lives **inside** `@Help & documentation` rather than beside it: one Help script, its
+// Documentation tab holding the values and its Configuration UI tab holding the live specimens.
+const HELP = path.join(root, 'scripts', 'HELP', 'help-documentation.js');
+const REF = fs.readFileSync(HELP, 'utf8');
 const CSS = fs.readFileSync(path.join(root, 'src', 'ui.css'), 'utf8');
 const RENDERER = fs.readFileSync(path.join(root, 'src', 'config-ui', 'renderer.js'), 'utf8');
 const PARSER_SRC = fs.readFileSync(path.join(root, 'src', 'config-ui', 'parser.js'), 'utf8');
 const parser = require('../src/config-ui/parser.js');
 
+/**
+ * A section, extracted the way `extractSection` in `src/ui.html` extracts it: **line-anchored**
+ * markers.
+ *
+ * Not a stylistic choice. This file talks *about* the markers, so `// @DOC_END` appears in its own
+ * prose — and a lazy `[\s\S]*?` stopped there, handing back nine lines and reporting that the
+ * reference listed no tokens at all. The plugin was never fooled, because its extractor requires the
+ * marker to be the whole line. Matching it here is the difference between testing the file and
+ * testing a regex.
+ */
+function section(startMarker, endMarker) {
+  const start = new RegExp('^\\s*//\\s*' + startMarker + '\\s*$', 'm').exec(REF);
+  const end = new RegExp('^\\s*//\\s*' + endMarker + '\\s*$', 'm').exec(REF);
+  assert.ok(start && end && end.index > start.index,
+    'the reference has no ' + startMarker + ' … ' + endMarker + ' block');
+  return REF.slice(start.index + start[0].length, end.index);
+}
+
 /** The block as the UI extracts it: comment rows keep their `//`, field lines are live JS. */
 function configBlock() {
-  const m = /@UI_CONFIG_START\n([\s\S]*?)\/\/ @UI_CONFIG_END/.exec(REF);
-  assert.ok(m, 'the reference has no @UI_CONFIG block');
-  return m[1];
+  return section('@UI_CONFIG_START', '@UI_CONFIG_END').replace(/^\n/, '');
 }
 
 function docBlock() {
-  const m = /@DOC_START\n([\s\S]*?)\/\/ @DOC_END/.exec(REF);
-  assert.ok(m, 'the reference has no @DOC block');
-  return m[1];
+  return section('@DOC_START', '@DOC_END');
 }
 
 const SCHEMA = parser.parse(configBlock());
@@ -84,10 +105,19 @@ test('every marker row the parser emits is demonstrated, or exempt for a stated 
 
 test('the reference reaches the plugin: it ships and it parses', () => {
   // A `_`-prefixed file or a parse error would make it invisible — the same failure it documents.
-  assert.equal(path.basename('scripts/HELP/style-and-ui-reference.js').startsWith('_'), false);
+  assert.equal(path.basename(HELP).startsWith('_'), false);
   assert.doesNotThrow(() => new Function('figma', 'console', 'window', REF),
     'the reference does not parse the way the sandbox parses it');
-  assert.match(REF, /\/\/ SCRIPT_NAME: Style & UI reference/);
+  assert.match(REF, /## Style & UI reference/, 'the documentation section is gone');
+  assert.match(REF, /^\/\/ @UI_CONFIG_START$/m, 'the specimen block is gone');
+
+  // `hasSection` is an `indexOf`, so this file's *prose* about `// @UI_CONFIG_START` already made the
+  // plugin think it had a config block. `extractSection` is line-anchored, so extraction is not
+  // fooled — the block below is what gets read, and the mention above it stays inert.
+  const anchored = /^\s*\/\/\s*@UI_CONFIG_START\s*$/m.exec(REF);
+  const prose = REF.indexOf('**// @UI_CONFIG_START**');
+  assert.ok(prose !== -1 && anchored && anchored.index > prose,
+    'the prose mention now comes after the real marker, which changes which one extraction finds');
 });
 
 test('every field in the reference names the syntax that produced it', () => {
@@ -182,4 +212,19 @@ test('the two heading ladders are described as they are actually styled', () => 
   // And it says which rule owns which, because that is the sentence that was missing.
   assert.match(doc, /\.docs-rendered h1\|h2\|h3/);
   assert.match(doc, /\.config-ui-form--rows \.config-ui-row--heading\s*\n?\/\/ h1\|h2\|h3/);
+});
+
+test('the committed HTML page is not stale', () => {
+  // The page is built by the renderer from the config block and by reading ui.css, so it cannot
+  // disagree with them — it can only be an older build of them. Comparing to a fresh one covers every
+  // input at once: a new control, a renamed class, a changed token, an edited specimen.
+  //
+  // This is also the only place in the suite that **executes** `renderer.js` rather than reading it as
+  // text. `if (field.tabs) return;` in a function with no `field` in scope killed every form in the
+  // plugin while every renderer test passed, because they all grep. A crash here is that bug.
+  const { buildPage, OUT } = require('../build-style-reference.js');
+  const fresh = buildPage();
+  const committed = fs.readFileSync(OUT, 'utf8');
+  assert.equal(fresh, committed,
+    'artifacts/style-reference.html is out of date — run `npm run build:style-reference`');
 });

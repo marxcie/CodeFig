@@ -164,8 +164,13 @@ test('the section heading rule names the tag the renderer actually emits', () =>
   const tags = [rule[1], rule[3]].filter(Boolean);
   assert.ok(tags.includes(tag),
     'a section heading renders as <' + tag + '>, but the rule styles ' + tags.join(' and '));
-  assert.match(rule[4], /font-size: var\(--font-size-headline\)/, 'sections are 15px, not display size');
-  assert.match(rule[4], /margin: calc\(var\(--section-gap\)/, 'and carry the section gap themselves');
+  // Not the display size, which is the Documentation tab's `h1` and was what the form was wearing for
+  // as long as the rule named the wrong tag. Which token it *is* belongs to the reference's ladder
+  // table, checked against this same CSS in tests/style-reference.test.js — one place, not two.
+  assert.doesNotMatch(rule[4], /font-size: var\(--font-size-display\)/,
+    'a form section heading is wearing the Documentation tab size');
+  assert.match(rule[4], /font-size: var\(--font-size-[a-z]+\)/, 'and takes its size from a token');
+  assert.match(rule[4], /margin: calc\(var\(--section-gap\)/, 'and carries the section gap itself');
 });
 
 test('a section gap arrives with or without a divider', () => {

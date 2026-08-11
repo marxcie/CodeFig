@@ -25,12 +25,12 @@ deleting variable modes they did not recognise.
 
 ### Added
 
-- **A Style & UI reference in Help.** Every control a script's settings form can render, live, with
-  the exact line that produces each one written underneath it — so a change can be asked for by
-  pointing at the thing rather than describing it. Its Documentation tab holds the type scale, the
-  spacing scale and the colours, and keeps the two heading ladders apart: the same `// # Title` is
-  20px in a Documentation tab and 15px as a form's section title, which is not obvious from either
-  one alone.
+- **A Style & UI reference, inside Help & documentation.** Every control a script's settings form can
+  render, live in that script's own Configuration UI tab, with the exact line that produces each one
+  written underneath it — so a change can be asked for by pointing at the thing rather than describing
+  it. Its Documentation tab holds the type scale, the spacing scale and the colours, and keeps the two
+  heading ladders apart: the same `// # Title` is 20px in a Documentation tab and 16px as a form's
+  section title, which is not obvious from either one alone.
 - **A note under a field can mention an annotation.** `@helper:` text stopped at the next `@word`, so
   a note reading *"an object with no `@rows`"* was stored as *"an object with no"*. Notes now run to
   the end of the line, which means `@helper:` has to be the last annotation on it.
@@ -78,6 +78,10 @@ deleting variable modes they did not recognise.
   the viewport list and nothing more.
 
 ### Changed
+
+- **A settings form's heading sizes now step evenly:** 16 / 14 / 12, two pixels a level, with the
+  smallest told apart from body copy by its weight. They were 20 / 14 / 14 — a jump, then no step at
+  all.
 
 - **Grid's config block lists its settings in the order the panel shows them** — collection, group,
   extra columns, then the per-viewport modes. A visible diff if you paste that block around, and no
