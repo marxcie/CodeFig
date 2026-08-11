@@ -2141,6 +2141,13 @@
         padding: 6px 8px;
       }
 
+      /* A pending mode removal, under the chips. Deliberately the same note style as a field's
+         helper: it explains the control above it, and it is not an error — it is a decision that has
+         been taken and will be carried out at Run. */
+      .config-ui-chips-removal {
+        grid-column: 1 / -1;
+      }
+
       /* Locked until a collection exists: there is nowhere for a mode to be created, so there is no
          `+` either. The wording is the design's own — a hidden text node in the frame reads "Modes
          locked by Collection scope". */

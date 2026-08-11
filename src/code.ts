@@ -559,7 +559,14 @@ figma.ui.onmessage = (msg) => {
         codefigRunComplete: (opts?: { message?: string }) => void;
         codefigConfigLoadResult: (result: any) => void;
         _codefigRunOpEnd: () => void;
+        // What the panel's mode chips said, when a panel started this run. A `modeId` is
+        // file-specific and must never travel in a config, so the intent comes with the run instead
+        // of in the text. Null for a CLI run, a queued job, or any script with no chips — and every
+        // consumer treats null as "match on names and remove nothing", which is the standing
+        // invariant a pasted config relies on.
+        codefigModeIntents: any;
       } = {
+        codefigModeIntents: msg.modeIntents || null,
         _codefigDeterminateProgress: false,
         _codefigPendingOps: 0,
         _codefigRunCompleteSent: false,

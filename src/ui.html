@@ -511,6 +511,145 @@
       const configCodeContainer = document.getElementById('configCodeContainer');
       const configUIContainer = document.getElementById('configUIContainer');
 
+      // ======================================================================
+      // MODE CHIPS — panel session state
+      //
+      // A chip is a 1:1 view of a Figma mode, and this is the only place a `modeId` lives in the UI.
+      // Ids never travel in a config: they are file-specific, and a config is something you paste
+      // between files. So the panel remembers which chip came from which mode, and a run is told.
+      //
+      // Two things held, and the difference matters:
+      //   `fileModes`   — facts, re-read whenever the address changes.
+      //   `chipModeIds` — parallel to the config's `modes` array; `null` where a mode is not in the
+      //                   file yet. Transformed by the same operation that transforms the array, so
+      //                   the two cannot drift apart.
+      //   `removedModeIds` — the **only remembered intent** in the feature. Everything else is
+      //                   derived. It exists because "the config has no mode with this id" cannot
+      //                   tell a deliberate removal from a config pasted out of another file, and
+      //                   deleting on the latter would destroy values nobody offered up.
+      // ======================================================================
+      let fileModes = { collection: null, modes: [], found: false };
+      let chipModeIds = [];
+      let removedModeIds = [];
+
+      /** Everything about chips that a rebuild has to put back. Derived; call it after any render. */
+      function syncChipsToPanelState() {
+        if (!configUIContainer || !window.CodeFigConfigUI) return;
+        const wraps = configUIContainer.querySelectorAll('[data-chips-field]');
+        if (!wraps.length) return;
+        wraps.forEach(function (wrap) {
+          if (window.CodeFigConfigUI.populateChipsControl) {
+            window.CodeFigConfigUI.populateChipsControl(wrap, chipModeIds);
+          }
+          renderModeRemovalNote(wrap);
+        });
+      }
+
+      /**
+       * What a pending removal costs, said before it happens.
+       *
+       * Nothing reaches the document until Run, so this is a standing line rather than a toast: it
+       * describes a decision that has been made and not yet carried out, and it should still be there
+       * when you come back to the tab. The count comes from the mode table read when the address
+       * resolved — a chip click cannot afford its own document read, because only one silent run may
+       * be in flight and the preview's debounce owns that slot half the time. With no count it says
+       * so instead of inventing one.
+       */
+      function renderModeRemovalNote(wrap) {
+        const row = wrap.closest ? wrap.closest('.config-ui-row') : null;
+        const host = row || wrap.parentNode;
+        if (!host) return;
+        let note = host.querySelector('.config-ui-chips-removal');
+        const names = window.CodeFigConfigUI ? window.CodeFigConfigUI.readChipsControl(wrap) : [];
+        const pending = removedModeIds
+          .map(function (id) {
+            return (fileModes.modes || []).filter(function (m) { return m.modeId === id; })[0];
+          })
+          .filter(Boolean)
+          .filter(function (mode) { return chipModeIds.indexOf(mode.modeId) === -1; });
+
+        if (!pending.length) {
+          if (note) note.remove();
+          return;
+        }
+        if (!note) {
+          note = document.createElement('div');
+          note.className = 'config-ui-field-note config-ui-chips-removal';
+          host.appendChild(note);
+        }
+        note.textContent = pending.map(function (mode) {
+          const count = typeof mode.valueCount === 'number' ? mode.valueCount : null;
+          const held = count === null
+            ? 'its values go with it'
+            : count + (count === 1 ? ' variable holds a value' : ' variables hold values') + ' there';
+          // **Removed, or replaced.** Adding a chip with the name you just removed is how you replace a
+          // mode — the old one goes with its values and a fresh one is created. Same intent, very
+          // different outcome, so it does not get the same sentence.
+          const replaced = names.indexOf(mode.name) !== -1;
+          return replaced
+            ? 'Replacing mode ' + mode.name + ' at Run — ' + held + ', and it is recreated empty.'
+            : 'Removing mode ' + mode.name + ' at Run — ' + held +
+              ', and any binding to it is lost.';
+        }).join(' ');
+      }
+
+      /**
+       * Apply one chip edit to the config, then let the form catch up.
+       *
+       * The chips deliberately do **not** go through `getValues`: that function is called again by
+       * every visibility pass, and an operation applied twice would add two modes or remove the wrong
+       * one. It is read once, cleared as it is read, and applied here.
+       */
+      function applyChipOperation(wrap) {
+        const api = window.CodeFigConfigUI;
+        if (!api || !api.readChipOp || !api.applyChipOp) return;
+        const op = api.readChipOp(wrap);
+        if (!op) return;
+
+        const field = wrap.getAttribute('data-chips-field') || 'modes';
+        const block = currentConfigBlock();
+        let schema;
+        try {
+          schema = api.parse(block);
+        } catch (e) {
+          debugError('A chip edit could not read the config block: ' + (e && e.message));
+          return;
+        }
+        const row = (schema.rows || []).filter(function (r) {
+          return r.type === 'field' && r.name === field;
+        })[0];
+        if (!row || !Array.isArray(row.value)) {
+          // The chips are showing, and there is no array for them to edit. Only reachable from a
+          // hand-edited block, and saying so beats a click that appears to do nothing.
+          post('NOTIFY', { message: 'This config has no "' + field + '" list for the chips to edit.' });
+          return;
+        }
+
+        const next = api.applyChipOp(row.value, chipModeIds, op);
+        chipModeIds = next.ids;
+        if (next.removed) removedModeIds = removedModeIds.concat([next.removed.modeId]);
+
+        const values = {};
+        values[field] = next.entries;
+        writeConfigBlockText(api.serialize(schema, values));
+
+        // The Mode settings tabs are drawn from this array, so they follow the chips by being rebuilt
+        // from the same text — rather than by a second code path that keeps them in step.
+        projectConfigIntoForm();
+        scheduleConfigPreview();
+      }
+
+      // Once, on the container that survives every render. Attaching inside the render would stack a
+      // listener per rebuild.
+      if (configUIContainer) {
+        configUIContainer.addEventListener('change', function (e) {
+          const target = e.target;
+          if (!target || !target.getAttribute) return;
+          if (!target.getAttribute('data-chips-field')) return;
+          applyChipOperation(target);
+        });
+      }
+
       function initConfigUI(configCode) {
         if (!configUIContainer) return;
         if (configUIInstance) {
@@ -905,6 +1044,7 @@
         configFormReadOnly = false;
         initConfigUI(block || '');
         configLastValues = configUIInstance ? JSON.parse(JSON.stringify(configUIInstance.getValues())) : null;
+        syncChipsToPanelState();
         // **Rendering the form does not trigger a load.** It used to, and applying a load re-rendered
         // the form, which triggered another — a rebuild every 350ms that destroyed any open inline
         // input or select dropdown between one lap and the next. Loading is a response to the address
@@ -1728,15 +1868,82 @@
         if (!domain) return;
 
         var seq = ++autoImportSeq;
+        // **One read, two answers.** The recorded config and the collection's live mode table are
+        // both needed the moment the address resolves, and only one silent run may be in flight —
+        // two snippets would mean the second is refused about half the time.
         runSilentSnippet([
-          '@import { foundationAutoImport } from "@Foundation"',
+          '@import { foundationAutoImport, foundationCollectionModes } from "@Foundation"',
           '(async function () {',
           '  var found = await foundationAutoImport(' +
             JSON.stringify(collection) + ', ' + JSON.stringify(group == null ? '' : group) + ', ' +
             JSON.stringify(domain) + ');',
-          '  window.codefigConfigLoadResult({ autoImport: found, autoImportSeq: ' + seq + ' });',
+          '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ');',
+          '  window.codefigConfigLoadResult({',
+          '    autoImport: found, fileModes: modes, autoImportSeq: ' + seq,
+          '  });',
           '})();'
         ].join('\n'));
+      }
+
+      /**
+       * The file's modes for the chosen collection: the moment ids enter the panel.
+       *
+       * Re-seeding the id list from names is right **here and only here** — a config that has just
+       * been read from the file, or is about to be, agrees with the file by definition, so matching by
+       * name is sound. Everywhere after this the link is positional and travels with the operation,
+       * because a renamed chip no longer matches the name the file has for its mode.
+       *
+       * A different collection is a different question: whatever was going to be removed from the old
+       * one is not going to be removed from this one.
+       */
+      function applyFileModes(table) {
+        var next = table && Array.isArray(table.modes) ? table : { collection: null, modes: [], found: false };
+        var changedCollection = next.collection !== fileModes.collection;
+        fileModes = next;
+        if (changedCollection) removedModeIds = [];
+
+        var idByName = {};
+        (fileModes.modes || []).forEach(function (mode) { idByName[mode.name] = mode.modeId; });
+
+        var entries = configModeEntries();
+        chipModeIds = entries.map(function (entry) {
+          var name = entry && entry.name;
+          return name && idByName[name] ? idByName[name] : null;
+        });
+        syncChipsToPanelState();
+      }
+
+      /** The config's per-mode array, or [] — read from the block, which is the truth. */
+      function configModeEntries() {
+        if (!window.CodeFigConfigUI) return [];
+        var wrap = configUIContainer && configUIContainer.querySelector('[data-chips-field]');
+        var field = (wrap && wrap.getAttribute('data-chips-field')) || 'modes';
+        try {
+          var schema = window.CodeFigConfigUI.parse(currentConfigBlock());
+          var row = (schema.rows || []).filter(function (r) {
+            return r.type === 'field' && r.name === field;
+          })[0];
+          return row && Array.isArray(row.value) ? row.value : [];
+        } catch (e) {
+          return [];
+        }
+      }
+
+      /**
+       * What this run should do to the collection's modes, or null when there is nothing to say.
+       *
+       * Sent with the run rather than written into the config, because a `modeId` must never end up in
+       * text someone pastes into another file.
+       */
+      function currentModeIntents() {
+        if (!window.CodeFigConfigUI || !window.CodeFigConfigUI.modeIntents) return null;
+        if (!configUIContainer || !configUIContainer.querySelector('[data-chips-field]')) return null;
+        if (!fileModes.found) return null;
+        var intents = window.CodeFigConfigUI.modeIntents(
+          fileModes.collection, configModeEntries(), chipModeIds, fileModes.modes, removedModeIds
+        );
+        if (!intents.renames.length && !intents.removals.length) return null;
+        return intents;
       }
 
       /**
@@ -2562,7 +2769,7 @@
           // Process runtime imports before execution
           scriptCode = processRuntimeImports(scriptCode);
           beginRunSession();
-          post('RUN', { code: scriptCode });
+          post('RUN', { code: scriptCode, modeIntents: currentModeIntents() });
         }
       }
 
@@ -3527,7 +3734,10 @@
                 return;
               }
               if (data.autoImport !== undefined) {
-                if (data.autoImportSeq === autoImportSeq) applyAutoImport(data.autoImport);
+                if (data.autoImportSeq === autoImportSeq) {
+                  applyFileModes(data.fileModes);
+                  applyAutoImport(data.autoImport);
+                }
                 return;
               }
               if (data.preview !== undefined) {

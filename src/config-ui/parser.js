@@ -862,6 +862,129 @@
     return out.join("\n").replace(/\s+$/, "");
   }
 
+  /**
+   * Apply one chip operation to the config's `modes` array and to the panel's parallel list of
+   * `modeId`s — together, in one place, because the whole design rests on them staying parallel.
+   *
+   * `entries` is the config's array of per-mode settings; `ids[i]` is the Figma `modeId` entry `i` was
+   * read from, or `null` for a mode that does not exist in the file yet. Returns new arrays plus what
+   * to remember:
+   *
+   *     { entries, ids, removed: { modeId, name } | null, added: name | null }
+   *
+   * A **removal** hands back the id it dropped so the panel can record that this one was asked for.
+   * That record is the only remembered intent in the whole feature, and it exists because "the config
+   * has no mode with this id" cannot distinguish a deliberate removal from a config pasted out of
+   * another file. Deleting on the latter would destroy values nobody offered up.
+   *
+   * A **new mode** is seeded from the last entry rather than from zeros: its fields have to hold
+   * something, the tab appears immediately, and copying the neighbour is both obvious on screen and
+   * closer to right than `0` for every width and column count. `name` is then overwritten, so the only
+   * thing inherited is the shape and the numbers.
+   */
+  function applyChipOp(entries, ids, op) {
+    var list = Array.isArray(entries) ? entries.slice() : [];
+    var idList = Array.isArray(ids) ? ids.slice() : [];
+    while (idList.length < list.length) idList.push(null);
+    var result = { entries: list, ids: idList, removed: null, added: null };
+    if (!op || !op.op) return result;
+
+    if (op.op === "rename") {
+      if (op.index < 0 || op.index >= list.length) return result;
+      var renamed = {};
+      // Rebuilt key by key so `name` keeps its position in the object — first, where every block
+      // writes it. Assigning to a copy would move it to the end on some engines.
+      for (var key in list[op.index]) {
+        renamed[key] = key === "name" ? op.to : list[op.index][key];
+      }
+      if (!Object.prototype.hasOwnProperty.call(renamed, "name")) renamed.name = op.to;
+      list[op.index] = renamed;
+      return result;
+    }
+
+    if (op.op === "remove") {
+      if (op.index < 0 || op.index >= list.length) return result;
+      var goneId = idList[op.index] || null;
+      var goneName = list[op.index] && list[op.index].name;
+      list.splice(op.index, 1);
+      idList.splice(op.index, 1);
+      if (goneId) result.removed = { modeId: goneId, name: goneName || op.name || null };
+      return result;
+    }
+
+    if (op.op === "add") {
+      var template = list.length ? list[list.length - 1] : null;
+      var fresh = {};
+      if (template) {
+        for (var k in template) fresh[k] = template[k];
+      }
+      fresh.name = op.name;
+      list.push(fresh);
+      idList.push(null);
+      result.added = op.name;
+      return result;
+    }
+
+    if (op.op === "reorder") {
+      if (op.from < 0 || op.from >= list.length || op.to < 0 || op.to >= list.length) return result;
+      list.splice(op.to, 0, list.splice(op.from, 1)[0]);
+      idList.splice(op.to, 0, idList.splice(op.from, 1)[0]);
+      return result;
+    }
+
+    return result;
+  }
+
+  /**
+   * What a run should do to the collection's modes: the panel's chips against the file's modes.
+   *
+   * Derived, not remembered — with one exception, and the exception is the point. Renames and
+   * additions fall out of comparing the two lists by `modeId`. Removals cannot: a file mode that no
+   * chip carries is *either* a mode someone removed *or* a mode this config has never heard of,
+   * because it came from another file. So `removedIds` is passed in, holding only what was removed by
+   * clicking the dash, and nothing else can ever produce a removal.
+   *
+   *     { collection, renames: [{ modeId, from, to }], removals: [{ modeId, name }], additions: [names] }
+   */
+  function modeIntents(collectionName, entries, ids, fileModes, removedIds) {
+    var out = { collection: collectionName || null, renames: [], removals: [], additions: [] };
+    var list = Array.isArray(entries) ? entries : [];
+    var idList = Array.isArray(ids) ? ids : [];
+    var file = Array.isArray(fileModes) ? fileModes : [];
+    var removed = removedIds || [];
+
+    var nameById = {};
+    file.forEach(function (mode) { nameById[mode.modeId] = mode.name; });
+
+    list.forEach(function (entry, i) {
+      var name = entry && entry.name;
+      if (!name) return;
+      var id = idList[i] || null;
+      if (!id) {
+        out.additions.push(name);
+        return;
+      }
+      var was = nameById[id];
+      // A mode the file no longer has: not a rename and not an error. `setupModes` will create the
+      // name, which is the same outcome a chip with no id would have had.
+      if (was === undefined) {
+        out.additions.push(name);
+        return;
+      }
+      if (was !== name) out.renames.push({ modeId: id, from: was, to: name });
+    });
+
+    var carried = {};
+    idList.forEach(function (id) { if (id) carried[id] = true; });
+    removed.forEach(function (id) {
+      if (carried[id]) return; // Removed, then added back by name: nothing to do.
+      if (nameById[id] === undefined) return; // Already gone from the file.
+      out.removals.push({ modeId: id, name: nameById[id] });
+    });
+
+    return out;
+  }
+
   // ---------------------------------------------------------------------------
   // Loading the file's config into a form — what one press of the sync button changes.
   //
@@ -1468,6 +1591,8 @@
     serialize: serialize,
     applyFileConfig: applyFileConfig,
     fillConfigBlock: fillConfigBlock,
+    applyChipOp: applyChipOp,
+    modeIntents: modeIntents,
     parseConfigBlockObject: parseConfigBlockObject,
     hasFileFields: hasFileFields
   };

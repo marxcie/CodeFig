@@ -719,15 +719,17 @@ function removeModes(collection, modeNames) {
  * 3. **Additions need nothing here** — `setupModes` creates a mode it cannot find by name, which is
  *    what a chip with no `modeId` is.
  *
- * Renames run first so the rest of the run sees the names the panel is showing. Removals run
- * **after** everything else, so a failure (Figma refuses to remove the last mode) leaves a complete,
- * correct set of variables rather than a half-written one — call this twice, `phase: "before"` then
- * `phase: "after"`.
+ * **Order: renames, then removals, then everything else.** Both happen before `setupModes` and before
+ * a single value is written, and the reason is the gesture Márton named for replacing a mode: remove
+ * it, then add one with the same name. With removals last that produced a *deletion* — `setupModes`
+ * found the name still there and did nothing, then the removal took it away. Removing first means the
+ * add creates a fresh mode, which is what was asked for, and the write pass then sees the final set of
+ * modes rather than one that is about to change.
  *
  * The collection name is checked rather than trusted: a panel whose Collection field changed after a
  * chip was removed must not apply that removal to whatever is there now.
  */
-function applyModeIntents(collection, intents, phase) {
+function applyModeIntents(collection, intents) {
   var report = { renamed: [], removed: [], skipped: [], applied: false };
   if (!collection || !intents) return report;
 
@@ -741,8 +743,8 @@ function applyModeIntents(collection, intents, phase) {
   }
   report.applied = true;
 
-  if (phase !== 'after') {
-    var renames = intents.renames || [];
+  var renames = intents.renames || [];
+  if (renames.length) {
     for (var i = 0; i < renames.length; i++) {
       var r = renames[i];
       var mode = collection.modes.filter(function (m) { return m.modeId === r.modeId; })[0];
@@ -768,8 +770,8 @@ function applyModeIntents(collection, intents, phase) {
     }
   }
 
-  if (phase !== 'before') {
-    var removals = intents.removals || [];
+  var removals = intents.removals || [];
+  if (removals.length) {
     var names = [];
     for (var k = 0; k < removals.length; k++) {
       // By id, resolved to the name the collection holds *now* — a mode renamed since the panel read

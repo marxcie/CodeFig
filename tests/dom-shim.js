@@ -210,14 +210,34 @@ class Element {
     return null;
   }
 
-  // --- events and focus: recorded, never fired. A test drives one on purpose.
+  // --- events. Nothing fires on its own; a test or the renderer dispatches on purpose.
   addEventListener(type, fn) { this._listeners.push({ type, fn }); }
   removeEventListener(type, fn) {
     this._listeners = this._listeners.filter((l) => !(l.type === type && l.fn === fn));
   }
-  dispatch(type, event) {
-    const e = Object.assign({ type, target: this, preventDefault() {}, stopPropagation() {} }, event || {});
-    this._listeners.filter((l) => l.type === type).forEach((l) => l.fn.call(this, e));
+
+  /** `dispatch('click')` — the convenience a test wants. */
+  dispatch(type, init) {
+    return this.dispatchEvent(Object.assign({ type }, init || {}));
+  }
+
+  /**
+   * The real thing, including bubbling, because the renderer announces a chip edit with
+   * `wrap.dispatchEvent(new Event("change", { bubbles: true }))` and the panel listens for it on the
+   * form container. A shim that swallowed that would make every delegated listener untestable — which
+   * is most of them.
+   */
+  dispatchEvent(event) {
+    const e = event || {};
+    e.target = e.target || this;
+    if (!e.preventDefault) e.preventDefault = function () {};
+    if (!e.stopPropagation) e.stopPropagation = function () { e._stopped = true; };
+    let node = this;
+    while (node && node.nodeType === 1) {
+      node._listeners.filter((l) => l.type === e.type).forEach((l) => l.fn.call(node, e));
+      if (!e.bubbles || e._stopped) break;
+      node = node.parentNode;
+    }
     return e;
   }
   focus() { this._focused = true; }
@@ -275,6 +295,17 @@ function serialize(node, indent) {
  * `window` has to exist: the renderer asks for `window.marked` when rendering a paragraph, and
  * `typeof window` on a missing global throws rather than being undefined.
  */
+/** `new Event("change", { bubbles: true })` — the two properties the renderer sets. */
+class ShimEvent {
+  constructor(type, init) {
+    this.type = type;
+    this.bubbles = !!(init && init.bubbles);
+    this.defaultPrevented = false;
+  }
+  preventDefault() { this.defaultPrevented = true; }
+  stopPropagation() { this._stopped = true; }
+}
+
 function install() {
   const document = {
     createElement: (tag) => new Element(tag),
@@ -284,7 +315,8 @@ function install() {
   const window = { marked: undefined };
   global.document = document;
   global.window = window;
-  return { document, window, serialize, Element };
+  global.Event = ShimEvent;
+  return { document, window, serialize, Element, Event: ShimEvent };
 }
 
-module.exports = { install, serialize, Element, TextNode, RawHtml };
+module.exports = { install, serialize, Element, TextNode, RawHtml, Event: ShimEvent };

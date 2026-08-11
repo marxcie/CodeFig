@@ -443,6 +443,37 @@
     return [];
   }
 
+  /**
+   * Hang the file's `modeId`s back on the chips, by position.
+   *
+   * By position and not by name, deliberately: a renamed chip no longer matches the name the file has
+   * for that mode, and matching on names is what would turn the rename into a delete. The panel's list
+   * is parallel to the config's `modes` array and both are transformed by the same operation, so the
+   * positions cannot disagree.
+   *
+   * The ids are informational in the DOM — they are here so `readForm` and a person with the inspector
+   * can see which chip is which mode. Nothing reads them back out to make a decision.
+   */
+  function populateChipsControl(wrap, modeIds) {
+    var ids = modeIds || [];
+    wrap.querySelectorAll(".config-ui-chip").forEach(function (chip, i) {
+      if (ids[i]) chip.setAttribute("data-mode-id", ids[i]);
+      else chip.removeAttribute("data-mode-id");
+    });
+  }
+
+  /** The last operation, consumed: read once and cleared, so it can never be applied twice. */
+  function readChipOp(wrap) {
+    var raw = wrap.getAttribute("data-chip-op");
+    if (!raw) return null;
+    wrap.removeAttribute("data-chip-op");
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
   /** The chips a control currently holds, in their displayed order. */
   function readChipsControl(wrap) {
     if (wrap.getAttribute("data-placeholder") === "true") return [];
@@ -454,6 +485,18 @@
     return names;
   }
 
+  /**
+   * Draw the chips, and say **what changed** rather than leaving it to be worked out.
+   *
+   * Every edit announces a named operation on the wrap — `{"op":"rename","index":1,"to":"Pad"}` — which
+   * the panel applies to the config's `modes` array and to its own list of `modeId`s in one step.
+   *
+   * The alternative was matching the new chip list against the old one, and it cannot work: after a
+   * rename the config says `Pad` and the file still says `Tablet`, so a name match sees one mode gone
+   * and one arrived. That is an add plus an orphan, and the orphan keeps every value and binding —
+   * exactly the loss a rename is supposed to avoid. Positions are not enough either, because a reorder
+   * moves them. The operation is the only thing that is unambiguous, so it is what travels.
+   */
   function drawChips(wrap, names, placeholder) {
     wrap.innerHTML = "";
 
@@ -461,8 +504,10 @@
       wrap.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    function commit(next) {
+    function commit(next, op) {
       wrap.setAttribute("data-placeholder", "false");
+      // Set before the redraw, because the redraw is what the panel will re-read the chips from.
+      wrap.setAttribute("data-chip-op", JSON.stringify(op));
       drawChips(wrap, next, false);
       announce();
     }
@@ -497,7 +542,7 @@
         minus.addEventListener("click", function () {
           var next = names.slice();
           next.splice(index, 1);
-          commit(next);
+          commit(next, { op: "remove", index: index, name: name });
         });
         chip.appendChild(minus);
       }
@@ -558,7 +603,7 @@
       var known = names.indexOf(name) !== -1;
       close();
       if (!name || known) return;
-      commit(names.concat([name]));
+      commit(names.concat([name]), { op: "add", name: name });
     }
 
     input.addEventListener("keydown", function (e) {
@@ -598,7 +643,7 @@
       if (!name || name === names[index]) return;
       var next = names.slice();
       next[index] = name;
-      commit(next);
+      commit(next, { op: "rename", index: index, from: names[index], to: name });
     }
 
     input.addEventListener("keydown", function (e) {
@@ -644,7 +689,7 @@
       var next = names.slice();
       var moved = next.splice(from, 1)[0];
       next.splice(index, 0, moved);
-      commit(next);
+      commit(next, { op: "reorder", from: from, to: index });
     });
   }
 
@@ -1105,5 +1150,9 @@
     populateCollectionControl: populateCollectionControl,
     readCollectionControl: readCollectionControl,
     readChipsControl: readChipsControl,
+    // A `modeId` is file-specific and never travels in a config, so the panel holds the list and
+    // hangs it back on the chips after every redraw.
+    populateChipsControl: populateChipsControl,
+    readChipOp: readChipOp,
   };
 });

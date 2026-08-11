@@ -77,6 +77,16 @@ deleting variable modes they did not recognise.
   paste never quietly means something else. It never generates variables: reading a config writes
   the viewport list and nothing more.
 
+- **The mode chips do something.** They were a view; now they are the control. Click a chip's label to
+  rename that mode — a **rename**, so its values and every binding to it survive. The dash removes one,
+  and says what that costs before it happens: *"Removing mode Tablet at Run — 12 variables hold values
+  there, and any binding to it is lost."* The `+` adds one, seeded from the mode beside it so its
+  settings tab has real numbers to edit. Drag to reorder. **Nothing reaches your file until you press
+  Run**, and removing a mode then adding one with the same name is how you replace it — the panel says
+  *"Replacing…"* when that is what you have set up.
+- **A config pasted from another file still never deletes a mode.** A mode this config has not heard of
+  is left exactly where it is, values and all. The only thing that removes a mode is clicking its dash.
+
 ### Removed
 
 - **The import button is gone.** Auto-import replaced it: choose a Collection and a Group, and a

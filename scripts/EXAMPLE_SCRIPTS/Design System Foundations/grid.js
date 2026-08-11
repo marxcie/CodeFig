@@ -27,7 +27,7 @@
 // @SUGGESTIONS: gridSuggestionsHtml
 
 // Import functions from libraries
-@import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables } from "@Variables"
+@import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables, applyModeIntents } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
 @import { gridPreviewHtml, gridSuggestionsHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest } from "@Foundation"
@@ -254,7 +254,30 @@ async function createOrUpdateCollection(config) {
   console.log('Processing collection: ' + collectionName + (group ? ' (group: ' + group + ')' : ' (no group)'));
   
   var collection = await getOrCreateCollection(collectionName);
-  
+
+  // What the panel's chips asked for, before anything else reads a mode name.
+  //
+  // Renames must land before `setupModes`, which matches on names: a mode renamed in the panel would
+  // otherwise read as one mode gone and one arrived — an add plus an orphan holding every value and
+  // binding. Removals land here too, so that removing a mode and adding one with the same name is the
+  // replacement Márton's spec calls it rather than a deletion.
+  //
+  // Null for a CLI run or a script opened without a panel, and then nothing here happens at all: names
+  // are matched, nothing is removed, which is the invariant a pasted config relies on.
+  var intents = typeof window !== 'undefined' ? window.codefigModeIntents : null;
+  var modeReport = applyModeIntents(collection, intents);
+  if (modeReport.renamed.length) {
+    console.log('Renamed ' + modeReport.renamed.length + ' mode(s) from the panel: ' +
+      modeReport.renamed.map(function (r) { return r.from + ' \u2192 ' + r.to; }).join(', '));
+  }
+  if (modeReport.removed.length) {
+    console.log('Removed ' + modeReport.removed.length + ' mode(s) as asked: ' +
+      modeReport.removed.join(', ') + ' — their values are gone and any binding to them is lost');
+  }
+  modeReport.skipped.forEach(function (skip) {
+    console.warn('Mode "' + skip.name + '" was left alone: ' + skip.reason);
+  });
+
   // Mode order follows modes[] array or legacy config key order
   var modes = getViewportConfigKeys(innerConfig).map(function(k) { return viewportLabel(k); });
   if (modes.length === 0) {
@@ -270,7 +293,8 @@ async function createOrUpdateCollection(config) {
   }
   
   var stats = await processVariables(collection, variablesWithPrefix, innerConfig, modes);
-  
+
+
   console.log('=== GRID SYSTEM SUMMARY ===');
   console.log('Collection: ' + collectionName);
   console.log('Variables created: ' + stats.created);
