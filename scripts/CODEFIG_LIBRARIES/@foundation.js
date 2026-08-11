@@ -995,7 +995,7 @@ function foundationSliceKeys(domain) {
     'tokens', 'nameTemplate', 'steps', 'scaling', 'perViewport', 'sets', 'viewportOrder',
     'modeNames', 'extra',
     'defaultBaseLevel', 'generateOverview', 'roundTo', 'roundLowerValuesTo',
-    'styles', 'fontWeights', 'distributeToMaxColumns', 'extensionColumns'
+    'styles', 'fontWeights', 'extensionColumns'
   ];
   // A field in a shipped default block is declared by definition. Leaving these to `extra` meant
   // an untouched config warned about itself the first time anyone ran the script it came with,
@@ -1014,7 +1014,7 @@ function foundationDomainKeys(domain) {
   if (domain === 'spacing') return common.concat(['spacings']);
   if (domain === 'radius') return common.concat(['radii']);
   if (domain === 'typography') return common.concat(['fontScale', 'fontWeights', 'styles', 'figmaStyles']);
-  if (domain === 'grid') return common.concat(['distributeToMaxColumns', 'extensionColumns']);
+  if (domain === 'grid') return common.concat(['extensionColumns']);
   if (domain === 'colors') return common.concat(['light', 'dark']);
   return common;
 }
@@ -1316,7 +1316,6 @@ function buildDomainSlice(inner, domain, translations, warnings) {
     if (inner.dark !== undefined) slice.dark = foundationClone(inner.dark);
   }
   if (domain === 'grid') {
-    if (inner.distributeToMaxColumns !== undefined) slice.distributeToMaxColumns = !!inner.distributeToMaxColumns;
     if (typeof inner.extensionColumns === 'number') slice.extensionColumns = inner.extensionColumns;
   }
 
@@ -1503,7 +1502,6 @@ function toDomainConfig(v1, domain, options) {
   if (config.fontFamily !== undefined) out.fontFamily = foundationClone(config.fontFamily);
   if (config.light !== undefined) out.light = foundationClone(config.light);
   if (config.dark !== undefined) out.dark = foundationClone(config.dark);
-  if (config.distributeToMaxColumns !== undefined) out.distributeToMaxColumns = config.distributeToMaxColumns;
   if (config.extensionColumns !== undefined) out.extensionColumns = config.extensionColumns;
   if (typeof v1.lineGrid === 'number') out.lineGrid = v1.lineGrid;
 

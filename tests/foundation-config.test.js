@@ -753,7 +753,6 @@ test('a recorded Grid set comes back as the config that made it', () => {
     collectionName: 'Responsive System',
     group: 'Grid',
     extensionColumns: 4,
-    distributeToMaxColumns: true,
     generateOverview: true,
     modes: [
       { name: 'desktop', containerWidth: 1920, columns: 12, gap: 40, padding: 80 },
@@ -770,7 +769,6 @@ test('a recorded Grid set comes back as the config that made it', () => {
   }, 'grid');
 
   assert.equal(back.extensionColumns, 4, 'a top-level grid key was dropped');
-  assert.equal(back.distributeToMaxColumns, true);
   assert.equal(back.generateOverview, true);
   assert.deepEqual(back.modes.map((m) => m.name), ['desktop', 'mobile'], 'and in the order declared');
   assert.deepEqual(back.modes[0], {
@@ -795,4 +793,33 @@ test('a Grid manifest keeps mode order without needing the registry', () => {
   assert.deepEqual(slice.viewportOrder, ['mobile', 'desktop']);
   const back = toDomainConfig({ v: 1, collection: 'RS', viewports: [], domains: { grid: slice } }, 'grid');
   assert.deepEqual(back.modes.map((m) => m.name), ['mobile', 'desktop']);
+});
+
+test('a config still carrying distributeToMaxColumns is reported, not carried through', () => {
+  // Removed rather than deprecated: `round(s × N ÷ maxCols)` made tokens collide — on an 8-column mode
+  // `col-1` and `col-2` both became one column, `col-4` and `col-5` both became three, so twelve
+  // tokens held eight distinct widths. It is no longer a declared field, so an old config carrying it
+  // lands in `extra` with a warning naming it, rather than round-tripping as though it still worked.
+  const result = normaliseConfig({
+    collectionName: 'RS', group: 'Grid',
+    distributeToMaxColumns: true,
+    modes: [{ name: 'desktop', containerWidth: 1440, columns: 12, gap: 24, padding: 80 }]
+  });
+  const slice = result.config.domains.grid;
+
+  assert.equal(slice.distributeToMaxColumns, undefined, 'not a declared field any more');
+  assert.equal(slice.extra.distributeToMaxColumns, true, 'kept, because the author wrote it');
+  assert.ok(
+    result.warnings.some((w) => w.message.indexOf('distributeToMaxColumns') !== -1),
+    'and named, so it is not silently inert'
+  );
+
+  // It *does* come back out, because `extra` exists so an author's key is never lost — and that is
+  // the right end of the chain: the value reaches the script, and the script reports that it is no
+  // longer supported and ignores it. Two honest signals rather than a disappearance.
+  assert.equal(toDomainConfig(result.config, 'grid').distributeToMaxColumns, true);
+
+  const grid = fs.readFileSync(path.join(SCRIPTS, 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'grid.js'), 'utf8');
+  assert.match(grid, /distributeToMaxColumns is no longer supported and was ignored/);
+  assert.equal(/function slotToProportionalSpan/.test(grid), false, 'the arithmetic is gone, not just unused');
 });

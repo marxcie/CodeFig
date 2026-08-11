@@ -236,6 +236,14 @@ deleting variable modes they did not recognise.
 
 ### Removed
 
+- **`distributeToMaxColumns` is gone from Grid.** It could make `col-6` mean "the same fraction of the
+  grid as 6 of 12" rather than "six columns", by rounding the span for modes with fewer columns. The
+  rounding made tokens collide: on an eight-column mode `col-1` and `col-2` were both one column, and
+  `col-4` and `col-5` were both three — twelve variables holding eight distinct widths, with `col-6`
+  measuring four columns. `col-s` is now always the width of `s` columns of that mode. If your config
+  still sets it, the run says so and ignores it; if it was `true`, your `col-*` values change on any
+  mode whose column count differs from the largest.
+
 - 42 scripts that never shipped. Everything under `scripts/` now ships, apart from `_TESTS/`.
 
 ### Developer
