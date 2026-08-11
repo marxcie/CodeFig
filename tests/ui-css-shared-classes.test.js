@@ -139,3 +139,43 @@ test('the row buttons take their height from the same values the inputs do', () 
   assert.match(input, /padding: 8px 10px/, 'if the input padding changes, the buttons must follow');
   assert.match(input, /font-size: var\(--font-size-body\)/);
 });
+
+test('the section heading rule names the tag the renderer actually emits', () => {
+  // The rule that sets 15px and the 48px section gap shipped **twice** without changing anything on
+  // screen, because it named `h2` and every config block writes its section titles as `// # Title`,
+  // which is level 1 and renders as `h1`. Two places had to agree about a tag name and did not.
+  //
+  // So this test derives the tag rather than asserting one: it asks the parser what level `// # X` is
+  // and the renderer what tag that level becomes, then requires the CSS rule to name that tag. If the
+  // mapping is ever changed in the renderer, this fails instead of the panel quietly going back to
+  // 20px headings with no gap.
+  const parser = require('../src/config-ui/parser.js');
+  const level = parser.parse('// # Mode settings').rows[0].level;
+
+  const renderer = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+  const map = renderer.match(/var tag = r\.level >= 3 \? "(\w+)" : r\.level === 2 \? "(\w+)" : "(\w+)"/);
+  assert.ok(map, 'the heading tag mapping is not where this test can read it');
+  const tag = level >= 3 ? map[1] : level === 2 ? map[2] : map[3];
+
+  const rule = CSS.match(/\.config-ui-form--rows \.config-ui-row--heading (h\d)(,\s*\n\s*\.config-ui-form--rows \.config-ui-row--heading (h\d))? \{([^}]*)\}/);
+  assert.ok(rule, 'the section heading rule is missing');
+  const tags = [rule[1], rule[3]].filter(Boolean);
+  assert.ok(tags.includes(tag),
+    'a section heading renders as <' + tag + '>, but the rule styles ' + tags.join(' and '));
+  assert.match(rule[4], /font-size: var\(--font-size-headline\)/, 'sections are 15px, not display size');
+  assert.match(rule[4], /margin: calc\(var\(--section-gap\)/, 'and carry the section gap themselves');
+});
+
+test('a section gap arrives with or without a divider', () => {
+  // Preview and Suggestions have no rule above them, so a gap carried only by `.config-ui-row--divider`
+  // left them at the old 28px — which is what Márton kept seeing after the measurement was "applied".
+  assert.match(CSS, /--section-gap: 48px/);
+  const divider = CSS.match(/\.config-ui-row--divider \{[^}]*\}/)[0];
+  assert.match(divider, /var\(--section-gap\)/, 'a divider spends the gap');
+  // And where both a divider and a heading follow each other, only one of them pays.
+  assert.match(CSS,
+    /\.config-ui-row--divider \+ \.config-ui-row--heading h1,\s*\n\s*\.config-ui-row--divider \+ \.config-ui-row--heading h2 \{\s*\n\s*margin-top: 0;/,
+    'a heading after a divider must drop its own top margin, h1 included');
+});

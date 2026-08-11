@@ -1104,6 +1104,7 @@
         margin-bottom: calc(var(--section-gap) / 2);
       }
 
+      .config-ui-row--divider + .config-ui-row--heading h1,
       .config-ui-row--divider + .config-ui-row--heading h2 {
         margin-top: 0;
       }
@@ -1126,13 +1127,12 @@
         margin: 0;
         flex-shrink: 0;
       }
-      /* Config form headings: same as Documentation tab (h1/h2/h3) */
-      .config-ui-form--rows .config-ui-row--heading h1 {
-        font-size: var(--font-size-display);
-        margin: 0 0 var(--space-md) 0;
-        font-weight: var(--font-weight-semibold);
-        color: var(--text-primary);
-      }
+      /* Config-block headings. **`// # Heading` parses as level 1 and renders as `h1`** — that is how
+         every shipped block writes a section title, so h1 is *the* section heading and the size and
+         the section gap belong on it. A rule that names only `h2` never fires, which is how 15px and
+         48px both shipped twice without changing anything on screen. h2 stays available for a title
+         *inside* a section and steps down from h1. */
+      .config-ui-form--rows .config-ui-row--heading h1,
       .config-ui-form--rows .config-ui-row--heading h2 {
         font-size: var(--font-size-headline);
         /* Above: the section gap, less the previous row's own bottom margin, so the two do not add up
@@ -1141,6 +1141,15 @@
         margin: calc(var(--section-gap) - var(--space-md)) 0 var(--space-lg) 0;
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
+      }
+      .config-ui-form--rows .config-ui-row--heading h2 {
+        font-size: var(--font-size-subheadline);
+        margin-top: calc(var(--section-gap) / 2 - var(--space-md));
+      }
+      /* The first heading has no previous section to be separated from: the form's own top padding
+         plus this is the frame's 24 to the first title. */
+      .config-ui-form--rows .config-ui-row--heading:first-child h1 {
+        margin-top: var(--space-sm);
       }
       .config-ui-form--rows .config-ui-row--heading h3 {
         font-size: var(--font-size-subheadline);
