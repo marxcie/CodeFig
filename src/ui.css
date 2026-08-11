@@ -2003,4 +2003,13 @@
         opacity: 0.7;
       }
 
+      /* A note under a field — auto-import's answer sits under Group, which is where the question
+         was asked. */
+      .config-ui-field-note {
+        margin-top: 4px;
+        font-size: 11px;
+        line-height: 1.4;
+        opacity: 0.7;
+      }
+
       /* End of styles */

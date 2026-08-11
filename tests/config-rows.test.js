@@ -158,3 +158,30 @@ test('a static @multi list is a multiselect, not a text input', () => {
   assert.equal(f.inputType, 'multiselect');
   assert.deepEqual(f.options, ['gap', 'margin', 'padding']);
 });
+
+test('every control kind reaches onChange, not only the ones with data-field', () => {
+  // `@rows` shipped able to render and unable to save. The delegated listeners tested for
+  // `data-field`, which the rows cells, its Add/Remove and the collection picker deliberately omit —
+  // so the flat collector cannot mistake a cell for a top-level field. The consequence nobody checked
+  // was that editing any of them never reached `onChange`, so the config was never written.
+  //
+  // Found by `setField` reporting it settled on the frame fallback rather than on a change: the
+  // settle point exists precisely so a write that goes nowhere is visible.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const renderer = fs2.readFileSync(
+    path2.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+
+  const fn = renderer.match(/function isControlEvent\(target\)[\s\S]*?\n    \}/);
+  assert.ok(fn, 'isControlEvent not found — the listener is testing something narrower again');
+  for (const attr of ['data-field', 'data-row-field', 'data-rows-field']) {
+    assert.match(fn[0], new RegExp(attr), 'not treated as a control: ' + attr);
+  }
+  assert.match(fn[0], /config-ui-multiselect-cb/);
+  assert.match(fn[0], /data-collection-field/);
+
+  // And the listeners ask that question rather than re-deriving it.
+  assert.match(renderer, /addEventListener\("change", function \(e\) \{\s*\n\s*if \(isControlEvent\(e\.target\)\)/);
+  assert.match(renderer, /addEventListener\("input", function \(e\) \{\s*\n\s*if \(isControlEvent\(e\.target\) && e\.target\.type !== "checkbox"\)/);
+});

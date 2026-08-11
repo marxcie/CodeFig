@@ -732,6 +732,53 @@ async function readFoundation(options) {
   };
 }
 
+/**
+ * What a Collection + Group already holds, for a panel to fill itself from.
+ *
+ * Replaces the import button: the question "is there a config here" is asked the moment those two
+ * fields point somewhere, rather than waiting for someone to press an icon whose meaning had to be
+ * explained. Read-only — nothing here writes, so asking costs nothing and can happen on every edit.
+ *
+ * → { source: 'recorded' | 'none', config, group, collection, tokens, modes }
+ *
+ * `recognised` — fitting a scale from the variables that are already there — is the third answer and
+ * is not wired yet: `adoptRamp` records as it fits, and auto-import must not write. Splitting the fit
+ * from the record is its own step, so this reports `none` and the defaults stand, which is the
+ * honest outcome rather than a half one.
+ */
+async function foundationAutoImport(collectionName, group, domain) {
+  var answer = {
+    source: 'none', config: null, collection: collectionName || null,
+    group: group == null ? null : group, tokens: [], modes: []
+  };
+  if (!collectionName || !domain) return answer;
+
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.filter(function(c) { return c.name === collectionName; })[0];
+  if (!collection) return answer;
+
+  var read = readManifest(collection, domain, group == null ? '' : group);
+  if (!read.manifest) return answer;
+
+  // A manifest carries the slice; `toDomainConfig` needs a v1 around it. `viewportOrder` is recorded
+  // on the slice at generation time, so the modes survive even when this file's registry is empty —
+  // which is exactly the case a fresh file is in.
+  var v1 = {
+    v: 1,
+    collection: collectionName,
+    group: group,
+    viewports: [],
+    domains: {}
+  };
+  v1.domains[domain] = read.manifest.config || {};
+
+  answer.source = 'recorded';
+  answer.config = toDomainConfig(v1, domain);
+  answer.tokens = read.manifest.tokens || [];
+  answer.modes = read.manifest.modes || [];
+  return answer;
+}
+
 /** Write the registry. Over the entry cap it reports and writes nothing, rather than throwing. */
 function writeRegistry(viewports) {
   var text = serialiseRegistry(viewports);

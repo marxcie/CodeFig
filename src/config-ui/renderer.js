@@ -683,17 +683,37 @@
     }
 
     applyVisibility();
+    /**
+     * Is this event a control changing?
+     *
+     * This used to be `data-field` and nothing else, which quietly excluded **every control whose
+     * parts deliberately lack that attribute** — the `@rows` cells (`data-row-field`), its Add and
+     * Remove (which dispatch on the wrap), and the collection picker. They omit `data-field` so the
+     * flat collector cannot mistake a cell for a top-level field; the consequence nobody checked was
+     * that editing them never reached `onChange`, so the config was never written.
+     *
+     * `@rows` therefore shipped able to render and unable to save. The sweep proved the controls
+     * appeared; nothing proved a keystroke in one arrived anywhere. Found by `setField` reporting it
+     * settled on the frame fallback instead of on a change.
+     */
+    function isControlEvent(target) {
+      if (!target || typeof target.getAttribute !== "function") return false;
+      if (target.getAttribute("data-field")) return true;
+      if (target.getAttribute("data-row-field")) return true;
+      if (target.getAttribute("data-rows-field")) return true;
+      if (target.classList && target.classList.contains("config-ui-multiselect-cb")) return true;
+      if (typeof target.closest === "function" && target.closest("[data-collection-field]")) return true;
+      return false;
+    }
+
     container.addEventListener("change", function (e) {
-      if (
-        e.target.getAttribute("data-field") ||
-        e.target.classList.contains("config-ui-multiselect-cb")
-      ) {
+      if (isControlEvent(e.target)) {
         applyVisibility();
         onChange(getValues());
       }
     });
     container.addEventListener("input", function (e) {
-      if (e.target.getAttribute("data-field") && e.target.type !== "checkbox") {
+      if (isControlEvent(e.target) && e.target.type !== "checkbox") {
         applyVisibility();
         onChange(getValues());
       }

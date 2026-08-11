@@ -513,6 +513,8 @@
       }
 
       let configUIInstance = null;
+      /** The values as last seen, so a change can be attributed to a field. */
+      let configLastValues = null;
       const configCodeContainer = document.getElementById('configCodeContainer');
       const configUIContainer = document.getElementById('configUIContainer');
 
@@ -538,7 +540,13 @@
             configUIContainer.innerHTML = '';
             configUIInstance = window.CodeFigConfigUI.render(schema, {
               container: configUIContainer,
-              onChange: function (values) { syncUIToCode(values); scheduleConfigPreview(); }
+              onChange: function (values) {
+                noteConfigEdit(values, configLastValues);
+                configLastValues = JSON.parse(JSON.stringify(values));
+                syncUIToCode(values);
+                scheduleConfigPreview();
+                scheduleAutoImport();
+              }
             });
           } else {
             configUIContainer.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
@@ -899,6 +907,8 @@
 
         configFormReadOnly = false;
         initConfigUI(block || '');
+        configLastValues = configUIInstance ? JSON.parse(JSON.stringify(configUIInstance.getValues())) : null;
+        scheduleAutoImport();
 
         const unsupported = (schema.rows || []).filter(function (r) {
           return r.type === 'field' && r.inputType === 'unsupported';
@@ -1328,6 +1338,12 @@
         originalCode = fullCode;
         
         // Check if this script uses @InfoPanel
+        // A different script is a different question: what was edited about the last one is not an
+        // edit to this one.
+        configEditedFields = Object.create(null);
+        autoImportOffer = null;
+        setAutoImportNote(null);
+
         infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
         updateInfoPanelButtonVisibility();
         updateInfoPanelOwnership();
@@ -1632,6 +1648,141 @@
           buildPreviewSnippet(currentScript.code || '', fn, config, configPreviewDomain(), seq));
         // Busy is not a failure: another silent run is in flight and the next edit will ask again.
         if (!started && _previewTimer === null) _previewTimer = setTimeout(requestConfigPreview, 400);
+      }
+
+      // ======================================================================
+      // AUTO-IMPORT
+      //
+      // Replaces the import button. The question "is there a config where this panel is pointing"
+      // is asked the moment Collection and Group point somewhere, rather than waiting for someone
+      // to press an icon whose meaning had to be explained — and whose state was the source of
+      // three bugs.
+      //
+      // **It never overwrites an edit.** It fills while the config is still untouched, and once
+      // anything but Collection or Group has been edited it stops filling and offers instead.
+      // Filling over typed values silently is the loss the whole import rewrite existed to remove.
+      // ======================================================================
+
+      /** Field names edited this session. Collection and Group do not count: they are the question. */
+      var configEditedFields = Object.create(null);
+      var autoImportTimer = null;
+      var autoImportSeq = 0;
+      var autoImportOffer = null;
+
+      function configIsUntouched() {
+        for (var name in configEditedFields) {
+          if (name !== 'collectionName' && name !== 'group') return false;
+        }
+        return true;
+      }
+
+      function noteConfigEdit(values, previous) {
+        if (!values || !previous) return;
+        for (var name in values) {
+          if (!Object.prototype.hasOwnProperty.call(values, name)) continue;
+          if (JSON.stringify(values[name]) !== JSON.stringify(previous[name])) {
+            configEditedFields[name] = true;
+          }
+        }
+      }
+
+      /** The note under Group, which is where the answer belongs. */
+      function setAutoImportNote(text) {
+        var container = document.getElementById('configUIContainer');
+        if (!container) return;
+        var groupField = container.querySelector('[data-field="group"]');
+        var wrap = groupField && groupField.closest ? groupField.closest('.config-ui-field') : null;
+        var existing = document.getElementById('autoImportNote');
+        if (!text) {
+          if (existing) existing.remove();
+          return;
+        }
+        var note = existing;
+        if (!note) {
+          note = document.createElement('div');
+          note.id = 'autoImportNote';
+          note.className = 'config-ui-field-note';
+        }
+        note.textContent = text;
+        if (wrap && note.parentNode !== wrap) wrap.appendChild(note);
+        else if (!wrap && note.parentNode !== container) container.appendChild(note);
+      }
+
+      function scheduleAutoImport() {
+        if (autoImportTimer) clearTimeout(autoImportTimer);
+        autoImportTimer = setTimeout(requestAutoImport, 350);
+      }
+
+      function requestAutoImport() {
+        autoImportTimer = null;
+        if (!scriptHasConfig || !configUIInstance) return;
+        var values = configUIInstance.getValues();
+        var collection = values.collectionName;
+        var group = values.group;
+        // Both have to point somewhere. Half an address is not a question worth asking.
+        if (!collection || typeof collection !== 'string' || !collection.trim()) {
+          setAutoImportNote(null);
+          return;
+        }
+        var domain = configPreviewDomain();
+        if (!domain) return;
+
+        var seq = ++autoImportSeq;
+        runSilentSnippet([
+          '@import { foundationAutoImport } from "@Foundation"',
+          '(async function () {',
+          '  var found = await foundationAutoImport(' +
+            JSON.stringify(collection) + ', ' + JSON.stringify(group == null ? '' : group) + ', ' +
+            JSON.stringify(domain) + ');',
+          '  window.codefigConfigLoadResult({ autoImport: found, autoImportSeq: ' + seq + ' });',
+          '})();'
+        ].join('\n'));
+      }
+
+      /**
+       * Apply what auto-import found, or offer it.
+       *
+       * Filling goes through `fillConfigBlock`, the same path the import button used: values
+       * substituted in place, comments and key order kept, entries inserted and removed with what
+       * was written for them. So an auto-import is as non-destructive as a manual one was.
+       */
+      function applyAutoImport(found) {
+        if (!found || found.source !== 'recorded' || !found.config) {
+          setAutoImportNote(null);
+          autoImportOffer = null;
+          return;
+        }
+        var where = found.collection + (found.group ? ' \u00b7 ' + found.group : '');
+
+        if (!configIsUntouched()) {
+          // Offered rather than applied. The panel says what is there and leaves the decision.
+          autoImportOffer = found;
+          setAutoImportNote('This Collection and Group has a saved config. Your edits are kept — ' +
+            'clear them to load it, or keep going.');
+          return;
+        }
+
+        var fill = window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock;
+        if (!fill || !configEditor) return;
+        var filled = fill(currentConfigBlock(), found.config);
+        var previousTab = currentTab;
+        if (currentTab !== 'configCode') switchTab('configCode');
+        configEditor.setValue(filled.text);
+        mergeConfigIntoMain();
+        if (isConfigTab(previousTab)) switchTab(previousTab);
+
+        setAutoImportNote('As this Collection and Group combination contains a ' +
+          configPreviewDomainLabel() + ' set, it was imported automatically.' +
+          (filled.summary && filled.summary.indexOf('Nothing to fill') === -1 ? ' ' + filled.summary : ''));
+        autoImportOffer = null;
+      }
+
+      /** The domain, as a person would name it. */
+      function configPreviewDomainLabel() {
+        var domain = configPreviewDomain();
+        if (domain === 'radius') return 'Corner radius';
+        if (!domain) return 'config';
+        return domain.charAt(0).toUpperCase() + domain.slice(1);
       }
 
       /**
@@ -3584,6 +3735,11 @@
               // A preview shares the silent-run channel rather than adding a second one, and
               // clears the in-flight flag itself: a debounced preview must never leave the import
               // button believing something is still running.
+              if (data.autoImport !== undefined) {
+                configLoadInFlight = false;
+                if (data.autoImportSeq === autoImportSeq) applyAutoImport(data.autoImport);
+                return;
+              }
               if (data.preview !== undefined) {
                 configLoadInFlight = false;
                 if (data.previewSeq === _previewSeq) renderConfigPreview(data.preview);
