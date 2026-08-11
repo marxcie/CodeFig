@@ -147,6 +147,8 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // Global mode settings — values that apply to every mode, above the tab bar.
   extensionColumns: 0, // @label: Extra columns @helper: These doesn't appear in the grid, just added as numeric variables for overshoot layout
 
+  generateOverview: false, // @label: Generate overview @helper: Fills the Grid — overview section in Design System Foundations, one preview frame per mode
+
   modes: [
     {
       name: "desktop",
@@ -174,14 +176,11 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // # Preview
   // @preview
 
-  // These two are real settings that appear in none of the three frames, so they have no designed
-  // home yet and sit here without a section of their own. Awaiting a decision: leave them visible,
-  // give them a section, or drop them from the form and leave them to Configuration code.
+  // Appears in none of the three frames, so it has no designed home yet. It is a global rule about
+  // how col-* is computed across modes — the same kind of thing as Extra columns — so that band is
+  // where it most likely belongs. Awaiting a decision.
   // When true: col-s uses span round(s×N÷maxCols) per viewport so grid fractions align (see @DOC)
   distributeToMaxColumns: false,
-
-  // When true: create the "Grid System Preview" overview frame (one column per viewport)
-  generateOverview: false,
 
   // @CONFIG_END
   // Variables to be created in Figma (function of config; max columns = viewport with most columns)
