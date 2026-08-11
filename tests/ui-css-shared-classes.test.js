@@ -122,7 +122,8 @@ test('a tabbed rows control has no add or remove', () => {
   const renderer = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
   );
-  assert.match(renderer, /if \(field\.tabs\) return;/, 'the add button is not built under tabs');
+  assert.match(renderer, /if \(field\.tabs\) \{[\s\S]{0,140}return;/,
+    'the add button is not built under tabs');
   assert.match(renderer, /var remove = field\.tabs \? null :/, 'nor a remove button per row');
 });
 

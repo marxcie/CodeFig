@@ -220,3 +220,27 @@ test('the mode input is a normal input, not a smaller one', () => {
   assert.equal(/padding/.test(rule[0]), false,
     'it overrides padding again, which is what made it the wrong height');
 });
+
+test('no function references a name from another function’s scope', () => {
+  // `if (field.tabs) return;` went into `drawChips`, which has no `field` — the chips and the rows
+  // control both build an add button, and the patch landed in the wrong one. The whole form died with
+  // "Could not render configuration: field is not defined", which no test caught because nothing here
+  // executes the renderer against a DOM.
+  //
+  // So this checks the property directly: the chips code must not mention `field`, and the rows code
+  // must, since that is where the flag lives.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const src = fs2.readFileSync(path2.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8');
+
+  const slice = (from, to) => src.slice(src.indexOf(from), src.indexOf(to));
+
+  const chips = slice('function drawChips(', 'function openChipInput(');
+  assert.ok(chips.length > 0, 'drawChips not found');
+  assert.equal(/\bfield\b/.test(chips), false,
+    'drawChips references `field`, which is not in its scope — the form will not render at all');
+
+  const rowsDraw = slice('function draw(list, active)', 'function buildRowCell(');
+  assert.ok(rowsDraw.length > 0, 'the rows draw function not found');
+  assert.match(rowsDraw, /field\.tabs/, 'the tabs guard belongs here, where field is in scope');
+});

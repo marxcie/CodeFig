@@ -506,10 +506,6 @@
       wrap.appendChild(chip);
     });
 
-    // With `@tabs` the modes are managed by the chips above, so add and remove do not belong here —
-    // two places to add a mode is one too many.
-    if (field.tabs) return;
-
     // **No `+` until a collection exists.** With nowhere for a mode to be created, an add button is an
     // affordance for something that cannot happen. The wording is the design's own — a hidden text
     // node in the frame reads "Modes locked by Collection scope".
@@ -882,6 +878,13 @@
           tabBar.appendChild(tab);
         }
       });
+
+      // With `@tabs` the modes are managed by the chips above, so Add does not belong here — two
+      // places to add a mode is one too many.
+      if (field.tabs) {
+        if (field.tabs) selectTab(typeof active === "number" ? active : 0);
+        return;
+      }
 
       var add = document.createElement("button");
       add.type = "button";
