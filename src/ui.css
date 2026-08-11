@@ -1242,8 +1242,20 @@
         align-items: flex-start;
       }
       
+      /* A native select renders 2px taller than a text input, everywhere in the plugin — `@rows` only
+         made it visible by putting the two side by side. `appearance: none` was coming anyway for the
+         custom chevron in the Grid frame, so the height is folded into that rather than corrected
+         twice: the select now takes the same font-size, padding and border as `.config-ui-input`, so
+         the two track together when any of those change. */
       .config-ui-input--select {
         cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        padding-right: 28px;
+        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 10px 6px;
       }
 
       /* Variable collection dropdown: library / document group headers (native optgroup; limited browser styling) */
@@ -1970,6 +1982,25 @@
         font-size: 11px;
         line-height: 1.45;
         opacity: 0.85;
+      }
+
+      /* The collection picker: a select over this file's collections, and a companion input for a
+         name that is not one of them. Both write the same config field. */
+      .config-ui-collection {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 100%;
+      }
+
+      .config-ui-collection .config-ui-input {
+        width: 100%;
+      }
+
+      .config-ui-collection-note {
+        font-size: 11px;
+        line-height: 1.4;
+        opacity: 0.7;
       }
 
       /* End of styles */

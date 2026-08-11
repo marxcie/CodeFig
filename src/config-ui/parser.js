@@ -501,6 +501,17 @@
         // then collected and serialize wrote back over the real value — triggered by editing any
         // other field, since the whole block is serialised on every change. Marked here, rendered
         // read-only, and deliberately not collected.
+        // The collection picker: a select of this file's collections, plus "create a new one", which
+        // is an affordance for typing a name that is not in the list rather than a second setting.
+        // `getOrCreateCollection` already creates when the name does not exist, so the config stays
+        // one string — a `createNew` flag would be a second source of truth for what the name
+        // already says, and nonsense in a pasted config, which is the case that matters: paste into
+        // a file without that collection and it should be created without the config having
+        // predicted it.
+        if (/@collection\b/.test(tip) && typeof val === "string") {
+          inputType = "collection";
+        }
+
         // A repeatable group: a list of objects, edited as rows. Claimed before the fallback
         // below, which is what an unclaimed array falls into.
         var rowsMatch = tip.match(/@rows:\s*(.+?)(?=\s+@|$)/);
@@ -543,7 +554,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|tabs)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|tabs|collection)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -684,6 +695,7 @@
         if (r.inputType === "radio") parts.push("@radio");
         if (r.inputType === "multiselect") parts.push("@multi");
         if (r.inputType === "textarea") parts.push("@textarea");
+        if (r.inputType === "collection") parts.push("@collection");
         if (r.inputType === "rows" && r.columns) {
           parts.push("@rows: " + r.columns.map(function (c) {
             if (c.type === "select") return c.key + ":(" + (c.options || []).join("|") + ")";
@@ -1236,9 +1248,18 @@
     var trailingWs = body.slice(body.replace(/\s+$/, "").length);
     body = body.replace(/\s+$/, "");
 
+    // `key: value, // note` — the comma is inside this item, because `reattachTrailingComments`
+    // moved it here with the comment it precedes. It is punctuation, not part of the value: leaving
+    // it in `body` made every such line count as changed and then wrote the new value over the comma.
+    var comma = "";
+    if (/,$/.test(body)) {
+      comma = ",";
+      body = body.slice(0, -1).replace(/\s+$/, "");
+    }
+
     var written = formatConfigValue(value, itemIndent(itemText));
     if (written !== body) report.substituted.push(path);
-    return itemText.slice(0, start) + lead + written + trailingWs + after;
+    return itemText.slice(0, start) + lead + written + comma + trailingWs + after;
   }
 
   /** The config block's body as a plain object. Never evaluated — the tolerant reader does it. */

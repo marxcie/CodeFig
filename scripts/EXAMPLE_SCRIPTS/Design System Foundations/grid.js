@@ -129,8 +129,15 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // @CONFIG_START
   // @fromFile: domains.grid
   // Use existing config if already defined, otherwise use default
-  collectionName: "Responsive System",
-  group: "Grid",
+
+  // Pick a collection in this file, or choose "Create a new one" and type a name. A name that is
+  // not in this file is created on Run — including one that arrived in a pasted config.
+  collectionName: "Responsive System", // @collection @label: Collection
+
+  group: "Grid", // @label: Group within collection @placeholder="eg. Grid"
+
+  // Extra virtual col-* slots beyond max viewport columns (0 = none; 4 on a 12-col grid → col-13..col-16)
+  extensionColumns: 0, // @label: Extra columns
 
   modes: [
     {
@@ -158,9 +165,6 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 
   // When true: col-s uses span round(s×N÷maxCols) per viewport so grid fractions align (see @DOC)
   distributeToMaxColumns: false,
-
-  // Extra virtual col-* slots beyond max viewport columns (0 = none; 4 on a 12-col grid → col-13..col-16)
-  extensionColumns: 0,
 
   // When true: create the "Grid System Preview" overview frame (one column per viewport)
   generateOverview: false,

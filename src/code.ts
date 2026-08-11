@@ -259,6 +259,25 @@ figma.ui.onmessage = (msg) => {
 
   if (msg.type === 'GET_OPTIONS') {
     const optionSource = msg.optionSource;
+    // Where a set should be *written*: this file's collections only, and no empty entry.
+    // `variableCollections` answers a different question — which collections to *read* — so it
+    // includes libraries and an "(all collections)" option, neither of which is a valid target.
+    if (optionSource === 'localCollections') {
+      figma.variables.getLocalVariableCollectionsAsync().then((collections) => {
+        const names = (collections || [])
+          .map((c) => c && c.name)
+          .filter((n) => n != null && String(n).trim() !== '');
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource,
+          options: [...new Set(names)].sort((a, b) => String(a).localeCompare(String(b)))
+        });
+      }).catch((err) => {
+        console.error('Backend: localCollections fetch failed', err);
+        figma.ui.postMessage({ type: 'OPTIONS', optionSource: optionSource, options: [] });
+      });
+      return;
+    }
     if (optionSource === 'variableCollections') {
       Promise.all([
         figma.variables.getLocalVariableCollectionsAsync(),

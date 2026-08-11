@@ -150,6 +150,8 @@
       });
       if (!sel2.value && field.options[0]) sel2.value = field.options[0];
       cw.appendChild(sel2);
+    } else if (t === "collection") {
+      cw.appendChild(buildCollectionControl(field, v == null ? "" : String(v)));
     } else if (t === "rows") {
       cw.appendChild(buildRowsControl(field, Array.isArray(v) ? v : []));
     } else if (t === "unsupported") {
@@ -314,6 +316,122 @@
       return;
     }
     container.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
+  }
+
+  /**
+   * The collection picker: one field, two ways to fill it.
+   *
+   * The select lists this file's collections; choosing *Create a new one* reveals a text input. Both
+   * write the same string, because `getOrCreateCollection` creates a collection whose name is not
+   * found — so "new" is not a state the config records, it is a thing that happens on Run.
+   *
+   * What that costs is a typo quietly creating a collection, so the control says which of the two is
+   * about to happen before anyone presses Run. A pasted config naming a collection this file does not
+   * have lands in exactly that state, and it is the case worth being clear about rather than the
+   * exception.
+   */
+  function buildCollectionControl(field, value) {
+    var wrap = document.createElement("div");
+    wrap.className = "config-ui-collection";
+    wrap.setAttribute("data-collection-field", field.name);
+    // Local collections only, and no empty "(all)" entry: `variableCollections` is a *filter*
+    // source, which is a different question from "where should this be written".
+    wrap.setAttribute("data-option-source", "localCollections");
+    wrap.setAttribute("data-initial-value", value);
+
+    // No `data-field` on either part: the flat collector would report the sentinel as the value.
+    var select = document.createElement("select");
+    select.className = "config-ui-input config-ui-input--select config-ui-collection-select";
+    wrap.appendChild(select);
+
+    var newName = document.createElement("input");
+    newName.type = "text";
+    newName.className = "config-ui-input config-ui-input--text config-ui-collection-new";
+    newName.setAttribute("placeholder", "New collection name");
+    newName.style.display = "none";
+    wrap.appendChild(newName);
+
+    var note = document.createElement("div");
+    note.className = "config-ui-collection-note";
+    wrap.appendChild(note);
+
+    // Populated for real when the option list arrives; until then the value it already has is the
+    // only option, so the control never renders empty.
+    populateCollectionControl(wrap, value ? [value] : [], value, false);
+
+    // The list is a backend round trip; the same request the dynamic option sources make.
+    if (typeof parent !== "undefined" && parent.postMessage) {
+      parent.postMessage(
+        { pluginMessage: { type: "GET_OPTIONS", optionSource: "localCollections" } },
+        "*"
+      );
+    }
+    return wrap;
+  }
+
+  /** The sentinel the select uses for "create a new one". Never a collection name. */
+  function collectionNewSentinel() {
+    return "\u0000codefig-new";
+  }
+
+  /**
+   * Fill the picker from a list of this file's collections.
+   *
+   * `known` is whether that list is real yet: before the backend answers, a value that is not in the
+   * list is not evidence that it does not exist, so the note stays quiet rather than claiming a
+   * collection will be created when nobody has looked.
+   */
+  function populateCollectionControl(wrap, names, value, known) {
+    var select = wrap.querySelector(".config-ui-collection-select");
+    var newName = wrap.querySelector(".config-ui-collection-new");
+    var note = wrap.querySelector(".config-ui-collection-note");
+    if (!select) return;
+
+    var list = Array.isArray(names) ? names.filter(Boolean) : [];
+    var inList = list.indexOf(value) !== -1;
+
+    select.innerHTML = "";
+    var placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select target collection or create a new one";
+    select.appendChild(placeholder);
+    list.forEach(function (name) {
+      var o = document.createElement("option");
+      o.value = name;
+      o.textContent = name;
+      select.appendChild(o);
+    });
+    var create = document.createElement("option");
+    create.value = collectionNewSentinel();
+    create.textContent = "Create a new one\u2026";
+    select.appendChild(create);
+
+    // A value that is not one of this file's collections is the create case, whether it was typed
+    // here or arrived in a pasted config.
+    var creating = !!value && !inList;
+    select.value = creating ? collectionNewSentinel() : value;
+    if (newName) {
+      newName.style.display = creating ? "block" : "none";
+      newName.value = creating ? value : "";
+    }
+    if (note) {
+      if (creating && known) {
+        note.style.display = "block";
+        note.textContent = '"' + value + '" doesn\'t exist in this file \u2014 it will be created.';
+      } else {
+        note.style.display = "none";
+        note.textContent = "";
+      }
+    }
+  }
+
+  /** What the picker holds: the typed name when creating, the chosen one otherwise. */
+  function readCollectionControl(wrap) {
+    var select = wrap.querySelector(".config-ui-collection-select");
+    var newName = wrap.querySelector(".config-ui-collection-new");
+    if (!select) return "";
+    if (select.value === collectionNewSentinel()) return newName ? newName.value : "";
+    return select.value;
   }
 
   /**
@@ -496,6 +614,10 @@
       });
       // Rows first, and by their own attribute. A cell named `min` inside a row must never
       // become a top-level `min` — which is what would happen if cells carried `data-field`.
+      container.querySelectorAll("[data-collection-field]").forEach(function (wrap) {
+        var n = wrap.getAttribute("data-collection-field");
+        if (n) vals[n] = readCollectionControl(wrap);
+      });
       container.querySelectorAll("[data-rows-field]").forEach(function (wrap) {
         var n = wrap.getAttribute("data-rows-field");
         if (!n) return;
@@ -579,10 +701,15 @@
     return { getValues: getValues, applyVisibility: applyVisibility };
   }
 
+  // The renderer's public API. `bridge.js` copies this object onto `window.CodeFigConfigUI` the same
+  // way it copies the parser's, so adding a function here is the whole of publishing it.
   return {
     buildForm: buildForm,
     buildField: buildField,
     buildSection: buildSection,
     attachListeners: attachListeners,
+    // The collection list is a backend round trip, so `ui.html` fills the picker when it arrives.
+    populateCollectionControl: populateCollectionControl,
+    readCollectionControl: readCollectionControl,
   };
 });

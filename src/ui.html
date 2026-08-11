@@ -3479,6 +3479,21 @@
               }
             }
 
+            // The collection pickers. Filled here rather than at render time because the list is a
+            // backend round trip, and the control has to exist before it can be waited on.
+            document
+              .querySelectorAll('.config-ui-collection[data-option-source="' + optionSource + '"]')
+              .forEach(function (wrap) {
+                var current = wrap.getAttribute('data-initial-value') || '';
+                var live = window.CodeFigConfigUI && window.CodeFigConfigUI.readCollectionControl
+                  ? window.CodeFigConfigUI.readCollectionControl(wrap)
+                  : current;
+                if (window.CodeFigConfigUI && window.CodeFigConfigUI.populateCollectionControl) {
+                  // `true`: the list is real now, so a name that is not in it genuinely is not here.
+                  window.CodeFigConfigUI.populateCollectionControl(wrap, options, live || current, true);
+                }
+              });
+
             document
               .querySelectorAll('.config-ui-multiselect[data-option-source="' + optionSource + '"]')
               .forEach(function (box) {
@@ -4016,6 +4031,28 @@
         }
 
         if (container) {
+          // The collection picker. Its parts deliberately carry no `data-field` — the flat collector
+          // would report the "create a new one" sentinel as the value — so without a branch here it
+          // was simply absent from the report, which reads identically to "it did not render".
+          container.querySelectorAll('[data-collection-field]').forEach(function (wrap) {
+            var select = wrap.querySelector('.config-ui-collection-select');
+            var newName = wrap.querySelector('.config-ui-collection-new');
+            var note = wrap.querySelector('.config-ui-collection-note');
+            fields.push({
+              name: wrap.getAttribute('data-collection-field'),
+              control: 'collection',
+              value: window.CodeFigConfigUI && window.CodeFigConfigUI.readCollectionControl
+                ? window.CodeFigConfigUI.readCollectionControl(wrap)
+                : null,
+              options: select ? Array.prototype.map.call(select.options, function (o) {
+                return o.textContent;
+              }) : [],
+              creating: !!(newName && newName.style.display !== 'none'),
+              note: note && note.style.display !== 'none' ? note.textContent : null,
+              visible: rowVisible(wrap)
+            });
+          });
+
           container.querySelectorAll('[data-rows-field]').forEach(function (wrap) {
             var rows = [];
             var layout = null;

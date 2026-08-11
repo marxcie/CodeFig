@@ -283,3 +283,24 @@ test('the summary counts in English', () => {
   assert.match(out.summary, /Added 2 entries to modes: wide, ultra\./);
   assert.equal(out.summary.indexOf('entry entries'), -1);
 });
+
+test('a comma before a trailing comment is punctuation, not part of the value', () => {
+  // `key: value, // note` puts the comma inside the item, because the comment is reattached to the
+  // line it sits on. Treating it as part of the value made every annotated line count as changed
+  // and then wrote the new value over the comma — found the moment Grid's block gained annotations.
+  const block = [
+    '  collectionName: "Responsive System", // @collection @label: Collection',
+    '  group: "Grid", // @label: Group within collection',
+    '  extensionColumns: 0 // no comma on the last one',
+    ''
+  ].join('\n');
+
+  const unchanged = P.fillConfigBlock(block, P.parseConfigBlockObject(block));
+  assert.equal(unchanged.text, block, 'nothing changed, so nothing moved');
+  assert.deepEqual(unchanged.substituted, [], 'and nothing counted as a change');
+
+  const changed = P.fillConfigBlock(block, { collectionName: 'Other', group: 'Grid', extensionColumns: 4 });
+  assert.match(changed.text, /collectionName: "Other", \/\/ @collection @label: Collection/);
+  assert.match(changed.text, /extensionColumns: 4 \/\/ no comma on the last one/, 'and none is invented');
+  assert.deepEqual(changed.substituted.sort(), ['collectionName', 'extensionColumns']);
+});

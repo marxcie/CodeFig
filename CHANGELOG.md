@@ -25,6 +25,16 @@ deleting variable modes they did not recognise.
 
 ### Added
 
+- **Pick a collection instead of typing its name.** The collection field is a list of the collections
+  in your file, plus *Create a new one* for a name that is not there yet. It stays one setting — the
+  name — because a collection whose name does not exist is created when you run, so there is nothing
+  extra for a config to remember. Which of the two is about to happen is said before you run:
+  *"Brand tokens" doesn't exist in this file — it will be created.* That also covers a config pasted
+  from another file, where the collection genuinely may not be here.
+- **Design System Foundations scripts have a form.** Their settings were only ever editable as code,
+  because the form could not read the shape those blocks are written in. It can now, so every one of
+  them opens on Configuration UI, and the config block is still exactly the thing you paste. Settings
+  a form cannot represent yet stay editable in Configuration code and say so.
 - **See the scale before you commit to it.** Spacing and Corner radius draw their scale in the
   Configuration tab and redraw it as you type — tokens down, modes across, each value as a bar,
   with the gaps under each column, because `1, 4, 8, 12, 16, 24` reads as regular until you see
@@ -53,6 +63,12 @@ deleting variable modes they did not recognise.
 
 ### Changed
 
+- **Grid's config block lists its settings in the order the panel shows them** — collection, group,
+  extra columns, then the per-viewport modes. A visible diff if you paste that block around, and no
+  change to what any of it does.
+- **Selects are the same height as text inputs.** They were two pixels taller everywhere, which only
+  became obvious once a form put the two side by side. They also have a chevron of their own now
+  instead of the browser's.
 - **Rounding is spelled one way.** `roundTo` sits beside the other settings instead of inside
   `scaling`, because it applies whatever model a scale uses, while `scaling` describes a curve that
   only the `endpoints` model reads. Spacing and Corner radius shipped with

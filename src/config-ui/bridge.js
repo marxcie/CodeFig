@@ -7,9 +7,9 @@
  * read the config this file holds" about a block that parsed perfectly, because `fillConfigBlock`
  * had never been added here.
  *
- * So the facade is **derived**. What the UI may reach is exactly what `parser.js` chooses to
- * export, which puts the decision in the module that owns the functions and leaves one list
- * instead of two. Adding a function to the parser's exports is the whole of publishing it.
+ * So the facade is **derived**. What the UI may reach is exactly what `parser.js` and `renderer.js`
+ * choose to export, which puts the decision in the modules that own the functions and leaves one
+ * list instead of two. Adding a function to a module's exports is the whole of publishing it.
  */
 (function (root) {
   var P = root.ConfigUIParser;
@@ -18,13 +18,15 @@
   if (!P || !R || !C) return;
 
   var api = {};
-  for (var name in P) {
-    if (Object.prototype.hasOwnProperty.call(P, name) && typeof P[name] === "function") {
-      api[name] = P[name];
+  [P, R].forEach(function (module) {
+    for (var name in module) {
+      if (Object.prototype.hasOwnProperty.call(module, name) && typeof module[name] === "function") {
+        api[name] = module[name];
+      }
     }
-  }
+  });
 
-  // The one member that is not a parser function. Wiring the renderer to the controller — and
+  // The one member that is not copied from a module. Wiring the renderer to the controller — and
   // refusing to build a form with nowhere to put it — is the only thing this file does itself.
   api.render = function (schema, opts) {
     var container = opts && opts.container;

@@ -19,6 +19,7 @@ const SRC = path.join(__dirname, '..', 'src');
 const bridge = fs.readFileSync(path.join(SRC, 'config-ui', 'bridge.js'), 'utf8');
 const ui = fs.readFileSync(path.join(SRC, 'ui.html'), 'utf8');
 const parser = require('../src/config-ui/parser.js');
+const renderer = require('../src/config-ui/renderer.js');
 
 /** Members `bridge.js` defines itself, rather than copying from the parser. */
 function ownMembers() {
@@ -49,9 +50,11 @@ function buildBridge() {
   return root.CodeFigConfigUI;
 }
 
-test('the facade is every function the parser exports', () => {
+test('the facade is every function its modules export', () => {
   // The whole point of the change: publishing a function is adding it to the parser's exports,
   // and there is no second place that has to agree.
+  // Both modules, copied the same way. The renderer joined when the collection picker needed two of
+  // its functions in `ui.html`: naming them in the bridge would have been the hand-written list back.
   const api = buildBridge();
   const exported = Object.keys(parser).filter((k) => typeof parser[k] === 'function');
   for (const name of exported) {
@@ -65,11 +68,12 @@ test('a function added to the parser needs no change here', () => {
   // forwarder written for it.
   const root = {
     ConfigUIParser: Object.assign({}, parser, { somethingNewlyAdded: () => 'ok' }),
-    ConfigUIRenderer: {},
+    ConfigUIRenderer: { alsoFromTheRenderer: () => 'ok' },
     ConfigUIFormController: { createForm: () => ({}) }
   };
   vm.runInNewContext(bridge, { self: root });
   assert.equal(root.CodeFigConfigUI.somethingNewlyAdded(), 'ok');
+  assert.equal(root.CodeFigConfigUI.alsoFromTheRenderer(), 'ok', 'the renderer is copied too');
 });
 
 test('render refuses to build a form with nowhere to put it', () => {
@@ -80,7 +84,8 @@ test('render refuses to build a form with nowhere to put it', () => {
 
 test('the bridge copies the parser rather than listing it', () => {
   // The property that makes the seam gone rather than watched: no per-function forwarder.
-  assert.match(bridge, /for \(var name in P\)/, 'the facade is no longer derived from the parser');
+  assert.match(bridge, /\[P, R\]\.forEach/, 'the facade is no longer copied from its modules');
+  assert.match(bridge, /for \(var name in module\)/);
   assert.equal(/return P\.[A-Za-z_$][\w$]*\(/.test(bridge), false,
     'a hand-written forwarder is back — that list is what caused the import failure');
 });
@@ -88,10 +93,12 @@ test('the bridge copies the parser rather than listing it', () => {
 test('every CodeFigConfigUI call in the UI resolves to something real', () => {
   const own = ownMembers();
   const missing = [...uiCalls()].filter(
-    (name) => !own.has(name) && typeof parser[name] !== 'function'
+    (name) => !own.has(name) &&
+      typeof parser[name] !== 'function' &&
+      typeof renderer[name] !== 'function'
   );
   assert.deepEqual(missing, [],
-    'ui.html calls these, and neither the parser nor the bridge provides them: ' + missing.join(', '));
+    'ui.html calls these, and no module or the bridge provides them: ' + missing.join(', '));
 });
 
 test('the two functions whose absence caused the import failure are reachable', () => {
