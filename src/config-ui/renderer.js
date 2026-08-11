@@ -201,7 +201,8 @@
     }
     if (r.type === "divider") {
       var wr2 = document.createElement("div");
-      wr2.className = "config-ui-row config-ui-row--divider";
+      wr2.className = "config-ui-row config-ui-row--divider" +
+        (r.section ? " config-ui-row--divider-section" : "");
       wr2.appendChild(document.createElement("hr"));
       return wr2;
     }
@@ -235,6 +236,13 @@
           : md.replace(/&/g, "&amp;").replace(/\x3c/g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
       wrap2.appendChild(mdWrap);
       return wrap2;
+    }
+    if (r.type === "preview") {
+      // The panel fills this: the row's job is to say where the section belongs in the order.
+      var previewSlot = document.createElement("div");
+      previewSlot.className = "config-ui-row config-ui-row--preview";
+      previewSlot.setAttribute("data-preview-slot", "true");
+      return previewSlot;
     }
     if (r.type === "chips") {
       var chipsWrap = document.createElement("div");
@@ -464,13 +472,24 @@
       wrap.appendChild(chip);
     });
 
+    // **No `+` until a collection exists.** With nowhere for a mode to be created, an add button is an
+    // affordance for something that cannot happen. The wording is the design's own — a hidden text
+    // node in the frame reads "Modes locked by Collection scope".
+    if (placeholder) {
+      var locked = document.createElement("span");
+      locked.className = "config-ui-chips-locked";
+      locked.textContent = "Modes locked by Collection scope";
+      wrap.appendChild(locked);
+      return;
+    }
+
     var add = document.createElement("button");
     add.type = "button";
     add.className = "config-ui-chip-add";
     add.setAttribute("aria-label", "Add a mode");
     add.textContent = "+";
     add.addEventListener("click", function () {
-      openChipInput(wrap, placeholder ? [] : names, commit);
+      openChipInput(wrap, names, commit);
     });
     wrap.appendChild(add);
   }

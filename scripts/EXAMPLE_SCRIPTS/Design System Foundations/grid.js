@@ -141,7 +141,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 
   group: "Grid", // @label: Group within collection @placeholder="eg. Grid"
 
-  // ---
+  // --- @section
 
   // # Mode settings
   // Global mode settings — values that apply to every mode, above the tab bar.
@@ -171,6 +171,13 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
       padding: 20
     }
   ], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes
+
+  // --- @section
+
+  // # Preview
+  // @preview
+
+  // --- @section
 
   // When true: col-s uses span round(s×N÷maxCols) per viewport so grid fractions align (see @DOC)
   distributeToMaxColumns: false,

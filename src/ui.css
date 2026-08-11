@@ -546,8 +546,9 @@
         flex-direction: row;
         padding: 0 var(--panel-padding-x);
         /* 6. The active underline is as wide as the label, so the space between tabs is a gap on the
-           strip rather than padding on each tab. */
-        gap: var(--space-lg);
+           strip rather than padding on each tab. 24px, measured off the frame rather than guessed
+           from the screenshot: Desktop ends at 48 and Tablet starts at 72. */
+        gap: var(--space-2xl);
         background: var(--bg-primary);
         border-bottom: 1px solid var(--border-color);
         min-height: 36px;
@@ -576,7 +577,9 @@
       }
       
       .editor-tab.active {
-        color: var(--active-bg);
+        color: var(--text-primary);
+        /* The underline is the Figma blue every other active thing uses. The label stays text
+           coloured — only the line changes. */
         border-bottom-color: var(--active-bg);
       }
       
@@ -1072,10 +1075,15 @@
       .config-ui-form--rows .config-ui-row:last-child {
         margin-bottom: 0;
       }
-      /* 5. Edge to edge: the divider negates the padding that positions everything else, which is
-         only expressible because that padding is one variable. */
+      /* Two lengths, because a divider between *sections* and a divider between *items* are not the
+         same line. `// ---` separates items and stays inside the content; `// --- @section` separates
+         sections and reaches the edges, which is only expressible because the padding is one variable.
+         Neither appears on its own: a divider is something the config block asks for. */
       .config-ui-row--divider {
         margin-bottom: var(--space-md);
+      }
+
+      .config-ui-row--divider-section {
         margin-inline: calc(-1 * var(--panel-padding-x));
       }
       .config-ui-row--divider hr {
@@ -1873,8 +1881,8 @@
       .config-ui-rows-tabs {
         display: flex;
         flex-wrap: wrap;
-        /* The same rule as the editor tabs: underline as wide as the label, space as a gap. */
-        gap: var(--space-lg);
+        /* The same rule and the same measurement as the editor tabs. */
+        gap: var(--space-2xl);
         border-bottom: 1px solid rgba(128, 128, 128, 0.25);
       }
 
@@ -1894,7 +1902,8 @@
       .config-ui-rows-tab.is-active {
         opacity: 1;
         font-weight: 600;
-        border-bottom-color: currentColor;
+        /* The same blue as every other active thing in the plugin, not the text colour. */
+        border-bottom-color: var(--active-bg);
       }
 
       .config-ui-rows-body {
@@ -2035,22 +2044,24 @@
 
       /* 4. Grey pills, not inputs. They were reading as text fields, which is wrong twice over: a
          chip is not typed into until you click its label, and the frames show grey. */
+      /* A grey pill **with a stroke** — the design has both. Not the input border, because a chip is
+         not typed into until its label is clicked. */
       .config-ui-chip {
         display: inline-flex;
         align-items: center;
         gap: 6px;
         padding: 6px 10px;
-        border: none;
+        border: 1px solid var(--border-color);
         border-radius: 6px;
         font-size: var(--font-size-body);
         background: var(--bg-tertiary);
       }
 
       /* Before a collection exists there is nowhere for a mode to be created, so the one chip is a
-         placeholder: it does not rename, does not remove, and says so by looking inert. */
+         placeholder: it does not rename and does not remove. It keeps its pill — dropping the
+         background made it read as loose text rather than as a mode that is simply not editable yet. */
       .config-ui-chip--placeholder {
         opacity: 0.55;
-        background: none;
       }
 
       .config-ui-chip-label {
@@ -2081,6 +2092,14 @@
 
       .config-ui-chip-add {
         padding: 6px 8px;
+      }
+
+      /* Locked until a collection exists: there is nowhere for a mode to be created, so there is no
+         `+` either. The wording is the design's own — a hidden text node in the frame reads "Modes
+         locked by Collection scope". */
+      .config-ui-chips-locked {
+        font-size: 11px;
+        opacity: 0.6;
       }
 
       /* The inline input sits where the chip will be, so the gesture reads as "type it here". */
@@ -2160,6 +2179,15 @@
 
       /* A filled band, not a dashed edge. The dashed guides still run down the spans area at the
          content edges — the frame has both — but the band is the margin. */
+      /* `flex: 0 0 auto` because these widths *are* the drawing: a flex item that shrinks turns a
+         proportional diagram into an approximate one, and at a narrow width the margin band rounds
+         away to nothing — which is exactly how it went missing. */
+      .grid-preview-margin,
+      .grid-preview-col,
+      .grid-preview-gap {
+        flex: 0 0 auto;
+      }
+
       .grid-preview-margin { background: #b7a8f0; }
       .grid-preview-col { background: #17976a; }
       .grid-preview-gap { background: transparent; }
@@ -2217,7 +2245,9 @@
 
       .grid-suggestion {
         display: flex;
-        align-items: center;
+        /* The badges belong on the title's line, not centred against the card: the frame puts the Tags
+           frame at y=2, level with "margin 80 · gap 24" rather than between it and the spans. */
+        align-items: flex-start;
         justify-content: space-between;
         gap: var(--space-lg);
         width: 100%;

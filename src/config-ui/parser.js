@@ -396,6 +396,15 @@
         // So this row owns no value, serializes back verbatim, and the tab strip below takes its
         // names and order from it. Ahead of the heading and paragraph branches, which would each
         // otherwise claim it.
+        // `@preview` — a marker row for a section the panel draws rather than a field. It is a row so
+        // the config block can say where it goes, which is also what lets a divider sit before it.
+        if (/^@preview\b/.test(c)) {
+          rows.push({ type: "preview", raw: line });
+          lastWasBlank = false;
+          i++;
+          continue;
+        }
+
         var chipsMatch = c.match(/^@collectionModes\s*:\s*(.*)$/);
         if (chipsMatch) {
           rows.push({
@@ -440,8 +449,11 @@
           i++;
           continue;
         }
-        if (/^(---|\*\*\*|___)\s*$/.test(c)) {
-          rows.push({ type: "divider", raw: line });
+        if (/^(---|\*\*\*|___)(\s+@section\b)?\s*$/.test(c)) {
+          // Two lengths. `// ---` separates items and stays within the content; `// --- @section`
+          // separates sections and reaches the panel's edges. A divider is always asked for — none
+          // appears between blocks on its own.
+          rows.push({ type: "divider", section: /@section\b/.test(c), raw: line });
           lastWasBlank = false;
           i++;
           continue;
