@@ -834,6 +834,10 @@
         rowEl.setAttribute("data-row-index", String(index));
 
         (field.columns || []).forEach(function (column) {
+          // Under `@tabs` the row's `name` **is** the tab, so it is not also a field. Renaming happens
+          // on the chips, which is the only rename affordance — a second one here would be a second
+          // place to do the same thing, and the two could disagree.
+          if (field.tabs && column.key === "name") return;
           var cell = document.createElement("label");
           // With `@tabs` a tab shows one row at a time, so its fields read as a form — one labelled
           // field per line, as the frames show — rather than as a horizontal strip of cells, which is

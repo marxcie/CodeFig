@@ -244,3 +244,19 @@ test('no function references a name from another function’s scope', () => {
   assert.ok(rowsDraw.length > 0, 'the rows draw function not found');
   assert.match(rowsDraw, /field\.tabs/, 'the tabs guard belongs here, where field is in scope');
 });
+
+test('under @tabs the name column is the tab, not also a field', () => {
+  // The tab label comes from the row's `name`, so rendering a `name` cell as well put a "Mode" text
+  // input under the tab strip — a second place to rename, which could disagree with the chips.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const src = fs2.readFileSync(path2.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8');
+  assert.match(src, /if \(field\.tabs && column\.key === "name"\) return;/);
+
+  // The column stays in the parsed spec — it is still the data, and serialize still writes it.
+  const f = P.parse(
+    'var m = [{ "name": "desktop", "gap": 24 }]; // @rows: name:text=Mode|gap:number=Gap @tabs'
+  ).rows.filter((r) => r.type === 'field')[0];
+  assert.deepEqual(f.columns.map((c) => c.key), ['name', 'gap'], 'the name column is still declared');
+  assert.equal(f.value[0].name, 'desktop', 'and still carried');
+});

@@ -54,7 +54,10 @@
         --font-size-caption: 10px;
         --font-size-body: 12px;
         --font-size-subheadline: 14px;
-        --font-size-headline: 16px;
+        /* 15, not 16: the frame's section titles are 21px tall, which is 15 at this line height. The
+           ratio Márton is aiming for is body 12 / heading 15 / helper 10. */
+        --font-size-headline: 15px;
+        --font-size-helper: 10px;
         --font-size-display: 20px;
         --font-weight-normal: 400;
         --font-weight-medium: 500;
@@ -1085,11 +1088,15 @@
          same line. `// ---` separates items and stays inside the content; `// --- @section` separates
          sections and reaches the edges, which is only expressible because the padding is one variable.
          Neither appears on its own: a divider is something the config block asks for. */
-      /* Symmetric: the space above a divider is the previous row's `margin-bottom`, so the space below
-         has to be that same number and nothing else. It was 12 above and 28 below — 12 plus the
-         heading's own 16 — which read as the rule belonging to the section above it. */
+      /* **24 above and 24 below**, measured rather than guessed. The frame's section blocks abut — gaps
+         of 0 to 1px between them — so all the separation comes from padding *inside* each block: 24 to
+         the title, and 24 below the content. Two adjacent sections therefore read as 48px apart with the
+         rule in the middle.
+         The top margin is 24 less the previous row's own `margin-bottom`, so the two sides come out
+         equal rather than one being the sum of two rules. */
       .config-ui-row--divider {
-        margin-bottom: var(--space-md);
+        margin-top: calc(var(--space-2xl) - var(--space-md));
+        margin-bottom: var(--space-2xl);
       }
 
       .config-ui-row--divider + .config-ui-row--heading h2 {
@@ -1123,7 +1130,9 @@
       }
       .config-ui-form--rows .config-ui-row--heading h2 {
         font-size: var(--font-size-headline);
-        margin: var(--space-lg) 0 var(--space-sm) 0;
+        /* 16px between a title and its content, measured: the frame's title sits at y=24 and is 21 tall,
+           and the content slot starts at y=61. */
+        margin: var(--space-lg) 0 var(--space-lg) 0;
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
       }
@@ -1288,6 +1297,12 @@
          custom chevron in the Grid frame, so the height is folded into that rather than corrected
          twice: the select now takes the same font-size, padding and border as `.config-ui-input`, so
          the two track together when any of those change. */
+      /* 96px, measured: every number field in the frame is 96 wide. A number does not need the width a
+         name does, and filling the column made the mode fields read as text inputs. */
+      .config-ui-input--number {
+        width: 96px;
+      }
+
       .config-ui-input--select {
         cursor: pointer;
         appearance: none;
@@ -1968,6 +1983,11 @@
         width: 100%;
       }
 
+      /* Except a number, which keeps its own width — the whole point of the narrow variant. */
+      .config-ui-rows-cell .config-ui-input--number {
+        width: 96px;
+      }
+
       .config-ui-rows-cell-label {
         font-size: 10px;
         opacity: 0.6;
@@ -2044,7 +2064,7 @@
       }
 
       .config-ui-collection-note {
-        font-size: 11px;
+        font-size: var(--font-size-helper);
         line-height: 1.4;
         opacity: 0.7;
       }
@@ -2055,7 +2075,7 @@
         /* The second column of the field's grid, so it lands under the control it explains. */
         grid-column: 2;
         margin-top: 4px;
-        font-size: 11px;
+        font-size: var(--font-size-helper);
         line-height: 1.4;
         opacity: 0.7;
       }
@@ -2126,7 +2146,7 @@
          `+` either. The wording is the design's own — a hidden text node in the frame reads "Modes
          locked by Collection scope". */
       .config-ui-chips-locked {
-        font-size: 11px;
+        font-size: var(--font-size-helper);
         opacity: 0.6;
       }
 
@@ -2305,7 +2325,7 @@
       }
 
       .grid-suggestion-spans {
-        font-size: 11px;
+        font-size: var(--font-size-helper);
         opacity: 0.6;
       }
 
