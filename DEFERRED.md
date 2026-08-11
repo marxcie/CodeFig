@@ -220,7 +220,7 @@ it survives, it survives as that, with none of the four modes.
 
 ---
 
-## ~~The import button appears a beat late~~ — CLOSED, the button is being deleted
+## ~~The import button appears a beat late~~ — CLOSED, the button is deleted
 
 **Found:** walking the DSF flow (Aug 2026). On a file that had just been written to, the button
 only appeared after switching to another script and back.
@@ -234,12 +234,33 @@ UX than wedged in next to a parser fix.
 **auto-import**: when Collection and Group resolve to something, the config loads itself, and a
 helper line under Group says whether it came from a recorded set, from recognising the existing
 variables, or not at all. The button, its probe, its badge and `configImportState` are all deleted
-in `18`'s second slice.
+in `18`'s second slice. **Done** — the markup, `probeFoundation`, `foundationProbe`,
+`updateConfigLoadButtonVisibility`, `requestConfigLoad`, `applyLoadedConfig`, `configImportState`
+and the `pressImport` / `readButtonState` bridge commands are gone.
 
 Kept as a note because the shape of the bug is worth remembering: the state was correct and the
 question was simply never asked again. Nothing about auto-import removes that risk — it moves it to
 "when do Collection and Group count as resolved" — so `18` names the moments rather than caching an
 answer.
+
+---
+
+## `applyFileConfig` and `hasFileFields` have no caller
+
+**Found:** deleting the import button (Aug 2026). Both are the **per-field** `@fromFile:` spelling —
+a form whose individual rows each name a path into the file's config. The button was their only
+caller. Auto-import replaced it and fills a config *block* through `fillConfigBlock`, because all five
+Design System Foundations scripts write object-literal blocks.
+
+**Why they are kept:** the per-field spelling is not wrong, it is unused. Every panel Márton has
+designed so far reads a whole block, and the moment one does not — a script with three loadable fields
+and nothing else — this is the path, already written and tested (`tests/config-load.test.js`).
+
+**The risk in keeping them:** an exported, tested function with no caller reads as live code, and the
+next person to wire loading may reach for the wrong one. If a second block-shaped panel ships and this
+is still unused, delete it along with the parser's per-field `@fromFile:` support rather than leaving
+it to be found a third time. The block-level `@fromFile:` is a different thing and is very much in use
+— `configPreviewDomain` and every Foundations script depend on it.
 
 ---
 

@@ -881,32 +881,6 @@
         color: #0D99FF;
       }
 
-      /* Import-config button states. The button only appears when there is something to
-         import, so the dot means "and you have not taken it yet" rather than "one exists". */
-      .icon-btn.has-update {
-        position: relative;
-      }
-
-      .icon-btn.has-update::after {
-        content: '';
-        position: absolute;
-        top: 5px;
-        right: 5px;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: #14AE5C;
-      }
-
-      .icon-btn.working {
-        opacity: 0.5;
-        cursor: progress;
-      }
-
-      .icon-btn.failed {
-        color: #E5484D;
-      }
-
       .action-buttons {
         display: flex;
         gap: 8px;

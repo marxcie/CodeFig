@@ -77,6 +77,15 @@ deleting variable modes they did not recognise.
   paste never quietly means something else. It never generates variables: reading a config writes
   the viewport list and nothing more.
 
+### Removed
+
+- **The import button is gone.** Auto-import replaced it: choose a Collection and a Group, and a
+  recorded config loads itself with a line under Group saying so. The button only ever appeared when
+  it had something to offer, which meant working out whether it *would* appear was a question you
+  could not answer by looking — and it appeared a beat late after a run, which is now moot rather than
+  fixed. Nothing else about loading changed: it still writes into the editor only, and your file is
+  unchanged until you run.
+
 ### Changed
 
 - **A settings form's heading sizes now step evenly:** 16 / 14 / 12, two pixels a level, with the

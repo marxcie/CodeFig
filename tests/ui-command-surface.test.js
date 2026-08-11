@@ -88,7 +88,7 @@ function commandBody(name) {
 
 test('setField goes through the real event path, never a handler', () => {
   // A command that called `getValues` or an onChange directly would pass while the control stayed
-  // broken. `pressImport` avoided that by pressing the button; these dispatch what a keystroke does
+  // broken, which is the whole reason these dispatch what a keystroke does
   // and let the existing listeners run.
   const body = commandBody('setField');
   assert.match(body, /dispatchEvent\(new Event\('input', \{ bubbles: true \}\)\)/);

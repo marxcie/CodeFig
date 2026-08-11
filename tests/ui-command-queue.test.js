@@ -87,9 +87,9 @@ test('a structured answer survives the trip', async () => {
   // `result` is separate from `output` precisely so an object is never flattened to a string on
   // the way back — the CLI formats it, and a stringified object would defeat that.
   await withBridge(async ({ base }) => {
-    const { json } = await req(base, 'POST', '/ui', { command: 'readButtonState' });
+    const { json } = await req(base, 'POST', '/ui', { command: 'readTabs' });
     await req(base, 'GET', '/ui/next');
-    const payload = { state: { visible: true, dot: false, reason: 'taken' }, visible: true };
+    const payload = { current: 'configUI', tabs: ['configUI', 'configCode', 'source'] };
     await req(base, 'POST', '/ui/' + json.id + '/result', { ok: true, result: payload });
     const done = await req(base, 'GET', '/ui/' + json.id);
     assert.deepEqual(done.json.result, payload);

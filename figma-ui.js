@@ -17,7 +17,6 @@
  *   node figma-ui.js readConfig
  *   node figma-ui.js writeConfig --text-file ./block.txt
  *   node figma-ui.js readInfoPanel
- *   node figma-ui.js pressImport
  *
  * Options:
  *   --timeout <ms>   how long to wait for an answer (default 20000)
@@ -63,8 +62,6 @@ const COMMANDS = {
   switchTab: 'open a tab — name=configUI|configCode|docs|source',
   setField: 'type into a control — name=<field> value=<...> [part=<cell|new|option>] [index=<n>]',
   clickControl: 'press part of a control — name=<field> part=add|remove|tab [index=<n>]',
-  pressImport: "press the import button and wait for it to settle",
-  readButtonState: 'the import button state, derived — visible, dot, reason'
 };
 
 function currentBuildId() {

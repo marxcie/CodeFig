@@ -936,48 +936,6 @@
     };
   }
 
-  /**
-   * The import button's whole state, derived in one place from the two things that decide it:
-   * what the open script's config block declares, and what the file was last found to hold.
-   *
-   * It replaced three cached booleans — has-annotation, probe-found-something and
-   * taken-this-session — computed at different moments and invalidated by nothing. A CLI run
-   * writing a manifest behind the UI's back made all three disagree at once: the dot said "you
-   * already took it" about a config that had just changed. State that contradicts itself is
-   * exactly the silent-failure class these tests exist for, so the derivation is pure and the
-   * caller only decides *when* to ask.
-   *
-   * probe: { checked, hasRegistry, domains: { spacing: true, … } }
-   * → { path, domain, visible, dot, reason }
-   */
-  function configImportState(configBlock, probe) {
-    var state = { path: null, domain: null, visible: false, dot: false, reason: "no-annotation" };
-    var text = typeof configBlock === "string" ? configBlock : "";
-    var declared = /@fromFile:\s*([A-Za-z0-9_$.]+)/.exec(text);
-    if (!declared) return state;
-
-    state.path = declared[1];
-    var domain = /^domains\.([A-Za-z0-9_$]+)/.exec(state.path);
-    state.domain = domain ? domain[1] : null;
-
-    var p = probe || {};
-    if (!p.checked) {
-      // Nothing has been read yet. Not "no config" — a different answer, and the button stays
-      // out of the way rather than claiming either.
-      state.reason = "not-checked";
-      return state;
-    }
-
-    // A block naming a domain asks about that domain. A form whose fields carry their own paths
-    // reads top-level v1 fields, which the registry alone can satisfy.
-    var available = state.domain ? !!(p.domains || {})[state.domain] : !!p.hasRegistry;
-    state.visible = available;
-    state.dot = available;
-    state.reason = available
-      ? "available"
-      : (state.domain ? "no-config-for-domain" : "no-foundation");
-    return state;
-  }
 
 
   // ==========================================================================
@@ -1465,7 +1423,6 @@
     applyFileConfig: applyFileConfig,
     fillConfigBlock: fillConfigBlock,
     parseConfigBlockObject: parseConfigBlockObject,
-    hasFileFields: hasFileFields,
-    configImportState: configImportState
+    hasFileFields: hasFileFields
   };
 });
