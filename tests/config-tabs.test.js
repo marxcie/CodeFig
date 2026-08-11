@@ -171,6 +171,14 @@ test('a helper line belongs to its field, and renders under the control', () => 
     require('path').join(__dirname, '..', 'src', 'ui.css'), 'utf8'
   );
   assert.match(css, /\.config-ui-field-note \{[\s\S]{0,160}grid-column: 2/);
+
+  // And no row gap: the helper is a second grid row, so a row gap would put 12px between a control
+  // and the text explaining it. The note's own 4px margin is that spacing.
+  const fieldRow = css.match(/\.config-ui-field__row \{[^}]*\}/);
+  assert.ok(fieldRow, 'the field row rule is missing');
+  assert.match(fieldRow[0], /row-gap: 0;/);
+  assert.equal(/^\s*gap:/m.test(fieldRow[0]), false,
+    'a shorthand gap is back, which applies to rows as well as columns');
 });
 
 test('the space around a section divider is symmetric', () => {

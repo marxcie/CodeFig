@@ -1149,7 +1149,10 @@
       .config-ui-field__row {
         display: grid;
         grid-template-columns: 3fr 7fr;
-        gap: var(--space-md);
+        /* Column gap only. The helper line added a second grid row, and a row gap there put 12px
+           between a control and the text explaining it — the note's own 4px margin is that spacing. */
+        column-gap: var(--space-md);
+        row-gap: 0;
         align-items: start;
         min-height: 28px;
       }
