@@ -126,3 +126,16 @@ test('switchTab refuses a tab this script does not offer', () => {
   assert.match(fn[0], /throw new Error\('No tab "'/);
   assert.match(fn[0], /switchTab\(wanted\)/, 'and it calls the same function the button calls');
 });
+
+test('which view the merge reads is decided by which view you are in', () => {
+  // The defect slice 1 shipped with: the merge preferred the form whenever one had been rendered,
+  // so typing into Configuration code on a form script did nothing — the form's values were
+  // serialised over the text on the next merge. That is the canonical-text rule backwards. Found by
+  // `writeConfig` reporting the old block after writing a new one.
+  const fn = UI.match(/function mergeConfigIntoMain\(\)[\s\S]*?\n        const before =/);
+  assert.ok(fn, 'mergeConfigIntoMain not found');
+  assert.match(fn[0], /const fromForm = currentTab === 'configUI' &&/,
+    'the form is only authoritative while the form is the view you are in');
+  assert.match(fn[0], /configContent = configEditor \? configEditor\.getValue\(\) : ''/,
+    'and Configuration code is authoritative otherwise');
+});

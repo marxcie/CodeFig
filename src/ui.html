@@ -667,8 +667,15 @@
         const i = mainCode.indexOf(startMarker);
         const j = mainCode.indexOf(endMarker);
         if (i === -1 || j === -1 || j <= i) return;
+        // **Which view is authoritative is decided by which one you are in**, not by whether a form
+        // happens to exist. This used to prefer the form whenever one had been rendered, which made
+        // typing into Configuration code do nothing on a form script: the form's values were
+        // serialised over the text on the next merge. That contradicts slice 1's rule — the block
+        // text is canonical and the form is a projection of it — so an edit in the text must win.
         let configContent = '';
-        if (scriptHasUIConfig && configUIInstance && window.CodeFigConfigUI) {
+        const fromForm = currentTab === 'configUI' && scriptHasUIConfig && configUIInstance &&
+          window.CodeFigConfigUI;
+        if (fromForm) {
           const schema = window.CodeFigConfigUI.parse(mainCode.slice(i + startMarker.length, j));
           configContent = window.CodeFigConfigUI.serialize(schema, configUIInstance.getValues());
         } else {
@@ -3886,7 +3893,9 @@
             // editable views of one config, and the block text is the canonical one. Writing it and
             // re-projecting is exactly what typing into Configuration code does.
             var previousTab = currentTab;
-            if (!isConfigTab(currentTab)) switchTab('configCode');
+            // Always through Configuration code: that is the view whose content the merge takes,
+            // and writing the canonical text is what this command means.
+            if (currentTab !== 'configCode') switchTab('configCode');
             configEditor.setValue(a.text);
             mergeConfigIntoMain();
             if (scriptHasUIConfig) projectConfigIntoForm();
