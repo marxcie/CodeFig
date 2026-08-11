@@ -494,34 +494,51 @@
     wrap.appendChild(add);
   }
 
-  /** The inline input, where the chip will appear. A mode never exists unnamed. */
+  /**
+   * The inline input. **It replaces the `+`**, focused, at the place the chip will appear.
+   *
+   * Márton corrected the design here: the input standing beside a still-visible `+` reads as two
+   * ways to do the same thing at once. Pressing `+` *becomes* the input; Enter commits and the pill
+   * appears; Escape puts the `+` back. A mode never exists unnamed, and there is never a moment where
+   * both affordances are offered.
+   */
   function openChipInput(wrap, names, commit) {
     if (wrap.querySelector(".config-ui-chip-input")) return;
+    var add = wrap.querySelector(".config-ui-chip-add");
+
     var input = document.createElement("input");
     input.type = "text";
     input.className = "config-ui-input config-ui-input--text config-ui-chip-input";
     input.setAttribute("placeholder", "Mode name");
 
-    function cancel() {
+    var settled = false;
+    function close() {
+      if (settled) return;
+      settled = true;
       if (input.parentNode) input.parentNode.removeChild(input);
+      // The `+` comes back — it was hidden rather than removed, so nothing has to rebuild to restore it.
+      if (add) add.style.display = "";
     }
     function accept() {
       var name = input.value.trim();
-      cancel();
-      if (!name) return;
-      if (names.indexOf(name) !== -1) return;
+      var known = names.indexOf(name) !== -1;
+      close();
+      if (!name || known) return;
       commit(names.concat([name]));
     }
 
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter") { e.preventDefault(); accept(); }
-      else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+      else if (e.key === "Escape") { e.preventDefault(); close(); }
     });
     input.addEventListener("blur", accept);
 
-    var add = wrap.querySelector(".config-ui-chip-add");
-    if (add) wrap.insertBefore(input, add);
-    else wrap.appendChild(input);
+    if (add) {
+      add.style.display = "none";
+      wrap.insertBefore(input, add);
+    } else {
+      wrap.appendChild(input);
+    }
     input.focus();
   }
 

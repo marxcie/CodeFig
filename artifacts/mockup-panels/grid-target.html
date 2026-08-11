@@ -262,10 +262,12 @@
               <div class="config-ui-chips">
                 <span class="config-ui-chip"><span class="config-ui-chip-label">Desktop grid 1</span><button class="config-ui-chip-remove" type="button">—</button></span>
                 <span class="config-ui-chip"><span class="config-ui-chip-label">Desktop grid 2</span><button class="config-ui-chip-remove" type="button">—</button></span>
-                <!-- `+` reveals this input where the chip will appear. Enter or blur commits,
-                     Escape cancels: a mode never exists unnamed. -->
-                <input class="config-ui-input config-ui-input--text config-ui-chip-input" placeholder="Mode name">
-                <button class="config-ui-chip-add" type="button">+</button>
+                <!-- The input **replaces** the `+`, focused, where the chip will appear. Enter
+                     commits and the pill appears; Escape puts the `+` back. There is never a moment
+                     where both are offered. `autofocus` rather than a mockup-only focus class, so the
+                     ring shown is the real `:focus` style. -->
+                <input class="config-ui-input config-ui-input--text config-ui-chip-input"
+                       placeholder="Mode name" autofocus>
               </div>
             </div>
           </div>

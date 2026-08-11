@@ -2109,10 +2109,11 @@
         opacity: 0.6;
       }
 
-      /* The inline input sits where the chip will be, so the gesture reads as "type it here". */
+      /* The inline input takes the `+`'s place, so the gesture reads as "type it here". A **normal
+         input** — the shorter padding it had made it a different kind of thing from every other field,
+         and the same height as the pills beside it is what the design shows. */
       .config-ui-chip-input {
-        width: 120px;
-        padding: 5px 8px;
+        width: 140px;
       }
 
       .config-ui-chip.is-dragging {

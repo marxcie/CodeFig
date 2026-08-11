@@ -185,3 +185,38 @@ test('every control kind reaches onChange, not only the ones with data-field', (
   assert.match(renderer, /addEventListener\("change", function \(e\) \{\s*\n\s*if \(isControlEvent\(e\.target\)\)/);
   assert.match(renderer, /addEventListener\("input", function \(e\) \{\s*\n\s*if \(isControlEvent\(e\.target\) && e\.target\.type !== "checkbox"\)/);
 });
+
+test('the mode input replaces the plus, and never sits beside it', () => {
+  // Márton's correction to the design: an input standing next to a still-visible `+` reads as two
+  // ways to do the same thing at once. Pressing `+` *becomes* the input; Escape puts it back. There
+  // is no state where both are offered.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const renderer = fs2.readFileSync(
+    path2.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+  const fn = renderer.match(/function openChipInput\(wrap, names, commit\)[\s\S]*?\n  \}/);
+  assert.ok(fn, 'openChipInput not found');
+
+  assert.match(fn[0], /add\.style\.display = "none"/, 'the plus is hidden while the input is open');
+  assert.match(fn[0], /if \(add\) add\.style\.display = ""/, 'and restored when it closes');
+  assert.match(fn[0], /e\.key === "Enter"/);
+  assert.match(fn[0], /e\.key === "Escape"/);
+
+  // Escape must not commit, and a double close must not double-commit.
+  assert.match(fn[0], /if \(settled\) return;/, 'close is idempotent, so blur after Escape does nothing');
+  const escapeBranch = fn[0].slice(fn[0].indexOf('Escape'));
+  assert.equal(escapeBranch.indexOf('accept()'), -1, 'Escape must cancel, not accept');
+});
+
+test('the mode input is a normal input, not a smaller one', () => {
+  // The shorter padding made it a different kind of thing from every other field. The design shows it
+  // the same height as the pills beside it, which is what a normal input already is.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const css = fs2.readFileSync(path2.join(__dirname, '..', 'src', 'ui.css'), 'utf8');
+  const rule = css.match(/\.config-ui-chip-input \{[^}]*\}/);
+  assert.ok(rule, 'the chip input rule is missing');
+  assert.equal(/padding/.test(rule[0]), false,
+    'it overrides padding again, which is what made it the wrong height');
+});
