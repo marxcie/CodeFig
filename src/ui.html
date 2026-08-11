@@ -833,7 +833,17 @@
 
         if (!scriptHasUIConfig) {
           // No form for this script yet. Said plainly rather than showing an empty tab.
-          if (configUIContainer) configUIContainer.style.display = 'none';
+          //
+          // And **emptied**, not just hidden. A hidden container kept the previous script's
+          // controls in the DOM, which `readForm` reported as this script's — the instrument
+          // finding it on its first use. Nothing reads them today, because a script with no form
+          // merges from the code editor instead, but a stale form is a loaded gun: the next thing
+          // that collects values from the container would collect someone else's.
+          if (configUIContainer) {
+            configUIContainer.style.display = 'none';
+            configUIContainer.innerHTML = '';
+          }
+          configUIInstance = null;
           if (note) note.style.display = 'none';
           if (noForm) {
             noForm.style.display = 'block';
@@ -3828,7 +3838,7 @@
 
       function _codefigUiCommandNames() {
         return ['selectScript', 'listScripts', 'readConfig', 'writeConfig', 'readInfoPanel',
-          'pressImport', 'readButtonState', 'readPreview', 'readTabs', 'readForm'];
+          'pressImport', 'readButtonState', 'readPreview', 'readTabs', 'readForm', 'switchTab'];
       }
 
       /**
@@ -3895,6 +3905,22 @@
               visible: !!(region && region.style.display !== 'none'),
               text: body ? body.innerText : ''
             });
+          }
+
+          case 'switchTab': {
+            // Calls the function the tab button calls, so the command drives the UI rather than a
+            // copy of it. Refuses a name no button offers: silently doing nothing would report
+            // success and leave a verifier reading the wrong pane.
+            var wanted = a.name;
+            var offered = [];
+            [].forEach.call(document.querySelectorAll('.editor-tab'), function (btn) {
+              if (btn.style.display !== 'none') offered.push(btn.getAttribute('data-tab'));
+            });
+            if (offered.indexOf(wanted) === -1) {
+              throw new Error('No tab "' + wanted + '" for this script. Offered: ' + offered.join(', '));
+            }
+            switchTab(wanted);
+            return Promise.resolve({ current: currentTab });
           }
 
           case 'readForm':

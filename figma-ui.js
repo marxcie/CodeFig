@@ -60,6 +60,7 @@ const COMMANDS = {
   readForm: 'the rendered form: every control, its type, and what it holds',
   readPreview: 'the Configuration tab preview: whether it is shown, and its text',
   readTabs: 'which tabs this script has and which is current',
+  switchTab: 'open a tab — name=configUI|configCode|docs|source',
   pressImport: "press the import button and wait for it to settle",
   readButtonState: 'the import button state, derived — visible, dot, reason'
 };

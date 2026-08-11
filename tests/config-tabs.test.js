@@ -106,3 +106,23 @@ test('readTabs reports what a verifier needs to see', () => {
     assert.match(fn[0], new RegExp(key + ':'), 'readTabs does not report ' + key);
   }
 });
+
+test('a script with no form leaves no other script’s controls behind', () => {
+  // Found by `readForm` on its first real use: the no-form path hid the container without emptying
+  // it, so the previous script's controls were still in the DOM and reported as this script's.
+  // Nothing reads them today — a no-form script merges from the code editor — but a stale form is a
+  // loaded gun: the next thing to collect values from that container collects someone else's.
+  const fn = UI.match(/function projectConfigIntoForm\(\)[\s\S]*?\n      \}/)[0];
+  const branch = fn.slice(fn.indexOf('if (!scriptHasUIConfig)'));
+  assert.match(branch, /configUIContainer\.innerHTML = ''/, 'the container is emptied, not just hidden');
+  assert.match(branch, /configUIInstance = null/, 'and the instance is dropped with it');
+});
+
+test('switchTab refuses a tab this script does not offer', () => {
+  // Silently doing nothing would report success and leave a verifier reading the wrong pane —
+  // which is worse than an error, because it looks like the assertion passed.
+  const fn = UI.match(/case 'switchTab': \{[\s\S]*?\n          \}/);
+  assert.ok(fn, 'switchTab case not found');
+  assert.match(fn[0], /throw new Error\('No tab "'/);
+  assert.match(fn[0], /switchTab\(wanted\)/, 'and it calls the same function the button calls');
+});
