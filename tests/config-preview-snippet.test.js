@@ -36,7 +36,9 @@ test('the scripts that declare a preview name a function their imports provide',
     assert.ok(imported.has(match[1]),
       file + ' declares @PREVIEW: ' + match[1] + ' but never imports it');
   }
-  assert.deepEqual(declaring.sort(), ['corner-radius.js', 'spacing.js']);
+  // Grid joined when its preview arithmetic went live — the one thing kept live through the layout
+  // pass, because a preview drawn from invented numbers is what nobody can judge.
+  assert.deepEqual(declaring.sort(), ['corner-radius.js', 'grid.js', 'spacing.js']);
 });
 
 test('the UI reads the marker the same way this test does', () => {
@@ -50,7 +52,7 @@ test('the UI reads the marker the same way this test does', () => {
 test('a preview declaration is not inside a doc block', () => {
   // `findImports` skips doc blocks so a script can document import syntax. A `@PREVIEW:` line
   // written as an example would silently turn a preview on.
-  for (const file of ['spacing.js', 'corner-radius.js']) {
+  for (const file of ['spacing.js', 'corner-radius.js', 'grid.js']) {
     const source = fs.readFileSync(path.join(DSF, file), 'utf8');
     const at = source.indexOf('// @PREVIEW:');
     const docEnd = source.indexOf('// @DOC_END');

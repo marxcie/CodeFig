@@ -828,7 +828,11 @@
           tab.type = "button";
           tab.className = "config-ui-rows-tab";
           tab.textContent = rowLabel(row, index);
-          tab.addEventListener("click", function () { selectTab(index); });
+              tab.addEventListener("click", function () {
+            selectTab(index);
+            // The preview follows the tab, so switching one is a change worth announcing.
+            wrap.dispatchEvent(new Event("change", { bubbles: true }));
+          });
           tabBar.appendChild(tab);
         }
       });

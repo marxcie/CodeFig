@@ -1580,6 +1580,125 @@ function sliceUsesEndpoints(slice) {
   return false;
 }
 
+// ============================================================================
+// PANEL PREVIEWS
+//
+// A domain's preview is the one bespoke part of the shared panel skeleton (see plan 18). The ramp
+// previews live with their generator in `@Linear Ramp`; Grid has no generator library — `grid.js` is a
+// script — so its preview lives here. If a Grid library ever appears, this moves to it.
+//
+// Pure, like `rampPreviewHtml`: it computes and renders, and touches nothing. That is what lets the
+// Configuration tab redraw it on every keystroke.
+// ============================================================================
+
+/** `&` and `<` in a label would otherwise close a tag. */
+function foundationEscapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * One mode's grid, as numbers.
+ *
+ * `calculateColumnWidth` is the generator's own function, so the preview and the run cannot disagree
+ * about a column width — which is the whole point of a preview.
+ *
+ * → { ok, width, columns, gap, margin, content, colWidth, spans: [{ n, span }], scale }
+ */
+function gridPreviewModel(mode, drawnWidth) {
+  var width = Number(mode && mode.containerWidth);
+  var columns = Number(mode && mode.columns);
+  var gap = Number(mode && mode.gap);
+  var margin = Number(mode && mode.padding);
+  var ok = isFinite(width) && width > 0 && isFinite(columns) && columns > 0 &&
+    isFinite(gap) && gap >= 0 && isFinite(margin) && margin >= 0 && width - 2 * margin > 0;
+  if (!ok) return { ok: false, columns: isFinite(columns) && columns > 0 ? columns : 12 };
+
+  var content = width - 2 * margin;
+  var colWidth = calculateColumnWidth({
+    containerWidth: width, padding: margin, columns: columns, gap: gap
+  });
+  var spans = [];
+  for (var n = 1; n <= columns; n++) {
+    spans.push({ n: n, span: n * colWidth + (n - 1) * gap });
+  }
+  return {
+    ok: true,
+    width: width, columns: columns, gap: gap, margin: margin,
+    content: content, colWidth: colWidth, spans: spans,
+    // The percentage the Total line reports *is* the scale the diagram is drawn at — the frame draws
+    // 716 for a 1440 total, which is 49.7%.
+    scale: (drawnWidth || 716) / width
+  };
+}
+
+/** A number as a panel shows it: whole when it is whole, one decimal when it is not. */
+function gridPreviewNumber(value) {
+  return Math.abs(value - Math.round(value)) < 0.01 ? String(Math.round(value)) : String(Math.round(value * 10) / 10);
+}
+
+/**
+ * The preview for one mode. Grey until there is somewhere to write — the Start and New frames are grey
+ * even with modes set, so grey is about whether a collection has been chosen, not whether fields are
+ * filled.
+ */
+function gridPreviewHtml(config, domain, modeName) {
+  var inner = (config && config.config) || config || {};
+  var modes = Array.isArray(inner.modes) ? inner.modes : [];
+  var mode = null;
+  for (var i = 0; i < modes.length; i++) {
+    if (!modeName || String(modes[i].name).toLowerCase() === String(modeName).toLowerCase()) {
+      mode = modes[i];
+      break;
+    }
+  }
+  if (!mode) mode = modes[0] || null;
+
+  var unset = !inner.collectionName || String(inner.collectionName).trim() === '';
+  var model = gridPreviewModel(mode, 716);
+
+  var out = ['<div class="grid-preview' + (unset || !model.ok ? ' is-unset' : '') + '">'];
+
+  var columns = model.ok ? model.columns : (model.columns || 12);
+  var pct = function(value) { return Math.round((value / model.width) * 10000) / 100; };
+
+  out.push('<div class="grid-preview-diagram">');
+  if (model.ok) {
+    out.push('<div class="grid-preview-margin" style="width:' + pct(model.margin) + '%"></div>');
+    for (var c = 0; c < columns; c++) {
+      if (c) out.push('<div class="grid-preview-gap" style="width:' + pct(model.gap) + '%"></div>');
+      out.push('<div class="grid-preview-col" style="width:' + pct(model.colWidth) + '%"></div>');
+    }
+    out.push('<div class="grid-preview-margin" style="width:' + pct(model.margin) + '%"></div>');
+  } else {
+    // Nothing to be proportional to yet, so an even field of columns stands in for the shape.
+    for (var e = 0; e < columns; e++) {
+      if (e) out.push('<div class="grid-preview-gap" style="width:1.5%"></div>');
+      out.push('<div class="grid-preview-col" style="width:' +
+        (Math.round((97 / columns) * 100) / 100) + '%"></div>');
+    }
+  }
+  out.push('</div>');
+
+  out.push('<div class="grid-preview-total">Total: <b>' +
+    (model.ok ? gridPreviewNumber(model.width) : '—') + '</b> (' +
+    (model.ok ? Math.round(model.scale * 100) + '%' : '—') + ')</div>');
+
+  var inset = model.ok ? pct(model.margin) : 0;
+  out.push('<div class="grid-preview-guides" style="margin-left:' + inset + '%;margin-right:' + inset + '%"></div>');
+
+  for (var r = 0; r < columns; r++) {
+    var span = model.ok ? model.spans[r] : null;
+    out.push('<div class="grid-preview-bar" style="margin-left:' + inset + '%;width:' +
+      (span ? pct(span.span) : Math.round(((r + 1) / columns) * 9000) / 100) + '%"></div>');
+    out.push('<div class="grid-preview-value">col-' + (r + 1) + ': <b>' +
+      (span ? gridPreviewNumber(span.span) : '—') + '</b></div>');
+  }
+
+  out.push('</div>');
+  return out.join('');
+}
+
 /** Can this key be written without quotes in a JS object literal? */
 function isPlainConfigKey(key) {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(String(key));

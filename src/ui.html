@@ -1588,13 +1588,20 @@
        * library call — while the script's import list already covers everything it needs and is
        * already checked by `validateResolvedCalls`. One list, and it is not this one.
        */
+      /** The mode tab the panel is showing, so a preview follows the tab rather than always the first. */
+      function activeModeName() {
+        var tab = document.querySelector('.config-ui-rows-tabs .config-ui-rows-tab.is-active');
+        return tab ? tab.textContent : null;
+      }
+
       function buildPreviewSnippet(code, fn, config, domain, seq) {
         const imports = (window.CodeFigImports && typeof window.CodeFigImports.findImports === 'function')
           ? window.CodeFigImports.findImports(code).map(function (imp) { return imp.statement; })
           : [];
         return imports.concat([
           'window.codefigConfigLoadResult({',
-          '  preview: ' + fn + '(' + JSON.stringify(config) + ', ' + JSON.stringify(domain) + '),',
+          '  preview: ' + fn + '(' + JSON.stringify(config) + ', ' + JSON.stringify(domain) + ', ' +
+            JSON.stringify(activeModeName()) + '),',
           '  previewSeq: ' + seq,
           '});'
         ]).join('\n');
@@ -1609,6 +1616,11 @@
       function updateConfigPreviewVisibility() {
         const region = document.getElementById('configPreview');
         if (!region) return;
+        // With a `@preview` row the section is inside the form, so the panel-level region stays hidden.
+        if (document.querySelector('[data-preview-slot]')) {
+          region.style.display = 'none';
+          return;
+        }
         const on = !!(currentScript && scriptPreviewFunction(currentScript.code || ''));
         region.style.display = on ? 'flex' : 'none';
         if (!on) {
@@ -1619,10 +1631,18 @@
       }
 
       function renderConfigPreview(html) {
-        const body = document.getElementById('configPreviewBody');
-        if (!body) return;
         _previewLastHtml = html;
-        body.innerHTML = html;
+        // A `@preview` marker row means the block said where this belongs, so it goes there rather than
+        // in the panel-level region below the form.
+        const slot = document.querySelector('[data-preview-slot]');
+        const region = document.getElementById('configPreview');
+        if (slot) {
+          slot.innerHTML = html;
+          if (region) region.style.display = 'none';
+          return;
+        }
+        const body = document.getElementById('configPreviewBody');
+        if (body) body.innerHTML = html;
       }
 
       /** Debounced: long enough that typing `12` never renders `1`. */

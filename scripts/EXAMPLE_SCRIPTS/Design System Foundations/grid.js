@@ -22,11 +22,14 @@
 // | (output scopes) | `columns` → `EFFECT_FLOAT` (layout grid count in the Effects / layout guide picker). `gap`, `padding`, `viewport-width`, `col-*` → `WIDTH_HEIGHT` and `GAP`. |
 // @DOC_END
 
+// The Configuration tab redraws this as you type. Pure: it computes and renders, and touches nothing.
+// @PREVIEW: gridPreviewHtml
+
 // Import functions from libraries
 @import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest } from "@Foundation"
+@import { gridPreviewHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest } from "@Foundation"
 
 // ========================================
 // GRID SYSTEM CONFIGURATION
