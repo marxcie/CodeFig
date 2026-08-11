@@ -128,15 +128,22 @@ function resolveColVariableValue(colSlot, viewportConfig, maxCols, distribute) {
 var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfig : {
   // @CONFIG_START
   // @fromFile: domains.grid
-  // Use existing config if already defined, otherwise use default
 
-  // Pick a collection in this file, or choose "Create a new one" and type a name. A name that is
-  // not in this file is created on Run — including one that arrived in a pasted config.
+  // # General
+  // Where this goes, and what exists. Pick a collection in this file, or choose "New collection" and
+  // type a name — a name that is not in this file is created on Run, including one that arrived in a
+  // pasted config.
   collectionName: "Responsive System", // @collection @label: Collection
+
+  // The collection's own modes. For Grid these are viewports; the chips are a view of the file, and
+  // the tabs below hold each mode's values.
+  // @collectionModes: Collection modes
 
   group: "Grid", // @label: Group within collection @placeholder="eg. Grid"
 
-  // Extra virtual col-* slots beyond max viewport columns (0 = none; 4 on a 12-col grid → col-13..col-16)
+  // # Mode settings
+  // Global mode settings — values that apply to every mode, above the tab bar.
+  // These doesn't appear in the grid, just added as numeric variables for overshoot layout
   extensionColumns: 0, // @label: Extra columns
 
   modes: [
@@ -161,7 +168,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
       gap: 16,
       padding: 20
     }
-  ],
+  ], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes
 
   // When true: col-s uses span round(s×N÷maxCols) per viewport so grid fractions align (see @DOC)
   distributeToMaxColumns: false,

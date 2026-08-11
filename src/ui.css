@@ -2012,4 +2012,99 @@
         opacity: 0.7;
       }
 
+      /* Collection modes, as chips. A 1:1 view of the collection's modes: the label renames in
+         place, the dash removes, the plus opens an inline input where the chip will appear. */
+      .config-ui-chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+      }
+
+      .config-ui-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border: 1px solid var(--border-color, #e1e5e9);
+        border-radius: 6px;
+        font-size: var(--font-size-body);
+        background: var(--input-bg, #fff);
+      }
+
+      /* Before a collection exists there is nowhere for a mode to be created, so the one chip is a
+         placeholder: it does not rename, does not remove, and says so by looking inert. */
+      .config-ui-chip--placeholder {
+        opacity: 0.55;
+        background: none;
+      }
+
+      .config-ui-chip-label {
+        cursor: text;
+      }
+
+      .config-ui-chip--placeholder .config-ui-chip-label {
+        cursor: default;
+      }
+
+      .config-ui-chip-remove,
+      .config-ui-chip-add {
+        border: none;
+        background: none;
+        padding: 0 2px;
+        font: inherit;
+        font-size: var(--font-size-body);
+        color: inherit;
+        opacity: 0.55;
+        cursor: pointer;
+        line-height: 1;
+      }
+
+      .config-ui-chip-remove:hover,
+      .config-ui-chip-add:hover {
+        opacity: 1;
+      }
+
+      .config-ui-chip-add {
+        padding: 6px 8px;
+      }
+
+      /* The inline input sits where the chip will be, so the gesture reads as "type it here". */
+      .config-ui-chip-input {
+        width: 120px;
+        padding: 5px 8px;
+      }
+
+      .config-ui-chip.is-dragging {
+        opacity: 0.4;
+      }
+
+      .config-ui-chip.is-drop-target {
+        border-color: var(--active-bg, #0a84ff);
+      }
+
+      /* A tab shows one row at a time, so its fields read as a form: one labelled field per line,
+         label left and control right, matching every other field in the panel. */
+      .config-ui-rows-item--stacked {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-sm);
+      }
+
+      .config-ui-rows-cell--stacked {
+        display: grid;
+        grid-template-columns: 3fr 7fr;
+        gap: var(--space-md);
+        align-items: center;
+        flex: none;
+        min-width: 0;
+      }
+
+      .config-ui-rows-cell--stacked .config-ui-rows-cell-label {
+        font-size: var(--font-size-body);
+        opacity: 1;
+        font-weight: bold;
+      }
+
       /* End of styles */

@@ -229,7 +229,17 @@
       var typeText = (at === -1 ? "text" : text.slice(at + 1)).trim();
       if (!key) continue;
 
-      var column = { key: key, label: labelFromName(key), type: "text" };
+      // `containerWidth:number=Width` — a label of its own, because the frames say *Width* and
+      // *Margins* where the config says `containerWidth` and `padding`. The label belongs to the
+      // panel and the key belongs to the config; neither should have to bend to the other.
+      var label = null;
+      var eq = typeText.indexOf("=");
+      if (eq !== -1) {
+        label = typeText.slice(eq + 1).trim();
+        typeText = typeText.slice(0, eq).trim();
+      }
+
+      var column = { key: key, label: label || labelFromName(key), type: "text" };
       var optionMatch = typeText.match(/^\((.*)\)$/);
       if (optionMatch) {
         column.type = "select";
@@ -377,6 +387,26 @@
           continue;
         }
         if (/^\s*var\s+/.test(c) || /^=+$/.test(c)) {
+          i++;
+          continue;
+        }
+        // `@collectionModes: Collection modes` — a marker row that renders a **control**, not a
+        // field. The chips are a view of the collection's modes, not of a config key: a mode is a
+        // thing in the file and a set of values in the config at once, and only the second is a key.
+        // So this row owns no value, serializes back verbatim, and the tab strip below takes its
+        // names and order from it. Ahead of the heading and paragraph branches, which would each
+        // otherwise claim it.
+        var chipsMatch = c.match(/^@collectionModes\s*:\s*(.*)$/);
+        if (chipsMatch) {
+          rows.push({
+            type: "chips",
+            label: (chipsMatch[1] || "Collection modes").trim(),
+            // Where the per-mode values live, so the control can seed itself before a collection has
+            // been chosen — which is the whole of the layout pass.
+            from: "modes",
+            raw: line
+          });
+          lastWasBlank = false;
           i++;
           continue;
         }
@@ -698,8 +728,9 @@
         if (r.inputType === "collection") parts.push("@collection");
         if (r.inputType === "rows" && r.columns) {
           parts.push("@rows: " + r.columns.map(function (c) {
-            if (c.type === "select") return c.key + ":(" + (c.options || []).join("|") + ")";
-            return c.key + ":" + c.type;
+            var spec = c.type === "select" ? "(" + (c.options || []).join("|") + ")" : c.type;
+            var named = c.label && c.label !== labelFromName(c.key) ? "=" + c.label : "";
+            return c.key + ":" + spec + named;
           }).join("|"));
           if (r.tabs) parts.push("@tabs");
         }

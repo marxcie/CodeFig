@@ -192,7 +192,7 @@
     return wrap;
   }
 
-  function buildRow(r, idx) {
+  function buildRow(r, idx, schema) {
     if (r.type === "lineBreak") {
       var wr = document.createElement("div");
       wr.className = "config-ui-row config-ui-row--line-break";
@@ -235,6 +235,25 @@
           : md.replace(/&/g, "&amp;").replace(/\x3c/g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
       wrap2.appendChild(mdWrap);
       return wrap2;
+    }
+    if (r.type === "chips") {
+      var chipsWrap = document.createElement("div");
+      chipsWrap.className = "config-ui-row config-ui-row--field config-ui-row--chips";
+      var chipsField = document.createElement("div");
+      chipsField.className = "config-ui-field config-ui-field--chips";
+      var chipsRow = document.createElement("div");
+      chipsRow.className = "config-ui-field__row";
+      var chipsLabel = document.createElement("label");
+      chipsLabel.className = "config-ui-field__label";
+      chipsLabel.textContent = r.label || "Collection modes";
+      chipsRow.appendChild(chipsLabel);
+      var chipsControl = document.createElement("div");
+      chipsControl.className = "config-ui-field__control";
+      chipsControl.appendChild(buildChipsControl(r, schema));
+      chipsRow.appendChild(chipsControl);
+      chipsField.appendChild(chipsRow);
+      chipsWrap.appendChild(chipsField);
+      return chipsWrap;
     }
     if (r.type === "field") {
       var wrap3 = document.createElement("div");
@@ -301,7 +320,10 @@
       container.className = "config-ui-form config-ui-form--rows";
       var fieldIdx = 0;
       schema.rows.forEach(function (r, i) {
-        var el = buildRow(r, r.type === "field" ? fieldIdx++ : 0);
+        // The schema goes with the row: the chips control needs the mode names, which live in another
+        // row's value. Passing context beats either control reaching into the DOM for the other,
+        // which would depend on render order.
+        var el = buildRow(r, r.type === "field" ? fieldIdx++ : 0, schema);
         el.setAttribute("data-row-index", String(i));
         container.appendChild(el);
       });
@@ -316,6 +338,244 @@
       return;
     }
     container.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
+  }
+
+  /**
+   * Collection modes, as chips.
+   *
+   * **A 1:1 view of the collection's modes, not of the config.** A mode is a thing in the file and a
+   * set of values in the config at the same time; only the second is a config key. So these chips own
+   * no `data-field`, hold edit intent that reaches the document at Run, and the Mode settings tab strip
+   * takes its names and order from them.
+   *
+   * Seeded from the config's mode names while no collection has been chosen — which is the whole of the
+   * layout pass. Reading the real collection is behaviour, and comes second.
+   *
+   * Every rule here is Márton's:
+   * - before a collection exists the single chip is a **placeholder** and not editable, because there
+   *   is nowhere for a mode to be created yet;
+   * - `+` reveals an inline input where the chip will appear; Enter or blur commits, Escape cancels, so
+   *   **a mode never exists unnamed**;
+   * - clicking a label edits in place and that is a **rename** — the mode keeps its `modeId`, so values
+   *   and bindings survive, and this is the only rename affordance;
+   * - `—` removes, and the **last remaining mode has none**;
+   * - chips are draggable, and drag owns the config order, the tab order and the creation order.
+   */
+  function buildChipsControl(row, schema) {
+    var wrap = document.createElement("div");
+    wrap.className = "config-ui-chips";
+    wrap.setAttribute("data-chips-field", row.from || "modes");
+
+    var names = chipNamesFromSchema(row, schema);
+    var placeholder = names.length === 0;
+    if (placeholder) names = [chipPlaceholderName()];
+    wrap.setAttribute("data-placeholder", placeholder ? "true" : "false");
+
+    drawChips(wrap, names, placeholder);
+    return wrap;
+  }
+
+  /**
+   * The name to show before a collection exists.
+   *
+   * Figma's variables panel labels a single-mode collection's column "Value" whatever the mode is
+   * called, which is where the frame's wording comes from — but the rename affordance edits the real
+   * name, so the real name is what to show. Until a collection is read there is no real name, so this
+   * is a placeholder and says so by not being editable.
+   */
+  function chipPlaceholderName() {
+    return "Value";
+  }
+
+  function chipNamesFromSchema(row, schema) {
+    var rows = schema && schema.rows ? schema.rows : [];
+    var key = row.from || "modes";
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].type !== "field" || rows[i].name !== key) continue;
+      var value = rows[i].value;
+      if (!Array.isArray(value)) return [];
+      return value
+        .map(function (entry) { return entry && entry.name; })
+        .filter(function (name) { return typeof name === "string" && name.trim() !== ""; });
+    }
+    return [];
+  }
+
+  /** The chips a control currently holds, in their displayed order. */
+  function readChipsControl(wrap) {
+    if (wrap.getAttribute("data-placeholder") === "true") return [];
+    var names = [];
+    wrap.querySelectorAll(".config-ui-chip").forEach(function (chip) {
+      var name = chip.getAttribute("data-chip-name");
+      if (name) names.push(name);
+    });
+    return names;
+  }
+
+  function drawChips(wrap, names, placeholder) {
+    wrap.innerHTML = "";
+
+    function announce() {
+      wrap.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function commit(next) {
+      wrap.setAttribute("data-placeholder", "false");
+      drawChips(wrap, next, false);
+      announce();
+    }
+
+    names.forEach(function (name, index) {
+      var chip = document.createElement("span");
+      chip.className = "config-ui-chip" + (placeholder ? " config-ui-chip--placeholder" : "");
+      chip.setAttribute("data-chip-name", name);
+      chip.setAttribute("data-chip-index", String(index));
+      if (!placeholder) chip.setAttribute("draggable", "true");
+
+      var label = document.createElement("span");
+      label.className = "config-ui-chip-label";
+      label.textContent = name;
+      if (!placeholder) {
+        // The only rename affordance. Deliberately not on the Mode settings tabs.
+        label.setAttribute("role", "button");
+        label.setAttribute("title", "Click to rename — the mode keeps its values and bindings");
+        label.addEventListener("click", function () {
+          editChipName(wrap, names, index, commit);
+        });
+      }
+      chip.appendChild(label);
+
+      // The last remaining mode has no remove: a collection cannot have zero modes.
+      if (!placeholder && names.length > 1) {
+        var minus = document.createElement("button");
+        minus.type = "button";
+        minus.className = "config-ui-chip-remove";
+        minus.setAttribute("aria-label", "Remove mode " + name);
+        minus.textContent = "\u2014";
+        minus.addEventListener("click", function () {
+          var next = names.slice();
+          next.splice(index, 1);
+          commit(next);
+        });
+        chip.appendChild(minus);
+      }
+
+      if (!placeholder) attachChipDrag(chip, wrap, names, index, commit);
+      wrap.appendChild(chip);
+    });
+
+    var add = document.createElement("button");
+    add.type = "button";
+    add.className = "config-ui-chip-add";
+    add.setAttribute("aria-label", "Add a mode");
+    add.textContent = "+";
+    add.addEventListener("click", function () {
+      openChipInput(wrap, placeholder ? [] : names, commit);
+    });
+    wrap.appendChild(add);
+  }
+
+  /** The inline input, where the chip will appear. A mode never exists unnamed. */
+  function openChipInput(wrap, names, commit) {
+    if (wrap.querySelector(".config-ui-chip-input")) return;
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "config-ui-input config-ui-input--text config-ui-chip-input";
+    input.setAttribute("placeholder", "Mode name");
+
+    function cancel() {
+      if (input.parentNode) input.parentNode.removeChild(input);
+    }
+    function accept() {
+      var name = input.value.trim();
+      cancel();
+      if (!name) return;
+      if (names.indexOf(name) !== -1) return;
+      commit(names.concat([name]));
+    }
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); accept(); }
+      else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener("blur", accept);
+
+    var add = wrap.querySelector(".config-ui-chip-add");
+    if (add) wrap.insertBefore(input, add);
+    else wrap.appendChild(input);
+    input.focus();
+  }
+
+  /** Editing a label in place. A rename, so the mode keeps its identity. */
+  function editChipName(wrap, names, index, commit) {
+    var chip = wrap.querySelectorAll(".config-ui-chip")[index];
+    if (!chip || chip.querySelector(".config-ui-chip-input")) return;
+    var label = chip.querySelector(".config-ui-chip-label");
+    if (!label) return;
+
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "config-ui-input config-ui-input--text config-ui-chip-input";
+    input.value = names[index];
+
+    function restore() {
+      if (input.parentNode) input.parentNode.removeChild(input);
+      label.style.display = "";
+    }
+    function accept() {
+      var name = input.value.trim();
+      restore();
+      if (!name || name === names[index]) return;
+      var next = names.slice();
+      next[index] = name;
+      commit(next);
+    }
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); accept(); }
+      else if (e.key === "Escape") { e.preventDefault(); restore(); }
+    });
+    input.addEventListener("blur", accept);
+
+    label.style.display = "none";
+    chip.insertBefore(input, label);
+    input.focus();
+    input.select();
+  }
+
+  /**
+   * Drag to reorder. Drag owns the config order, the tab order, and the creation order of a new
+   * collection — it cannot reorder the modes of a collection that already has variables, because the
+   * plugin API has no way to. That is reported when it happens rather than silently ignored.
+   */
+  function attachChipDrag(chip, wrap, names, index, commit) {
+    chip.addEventListener("dragstart", function (e) {
+      if (e.dataTransfer) {
+        e.dataTransfer.setData("text/plain", String(index));
+        e.dataTransfer.effectAllowed = "move";
+      }
+      chip.classList.add("is-dragging");
+    });
+    chip.addEventListener("dragend", function () {
+      chip.classList.remove("is-dragging");
+    });
+    chip.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      chip.classList.add("is-drop-target");
+    });
+    chip.addEventListener("dragleave", function () {
+      chip.classList.remove("is-drop-target");
+    });
+    chip.addEventListener("drop", function (e) {
+      e.preventDefault();
+      chip.classList.remove("is-drop-target");
+      var from = e.dataTransfer ? Number(e.dataTransfer.getData("text/plain")) : NaN;
+      if (isNaN(from) || from === index) return;
+      var next = names.slice();
+      var moved = next.splice(from, 1)[0];
+      next.splice(index, 0, moved);
+      commit(next);
+    });
   }
 
   /**
@@ -348,6 +608,7 @@
     newName.type = "text";
     newName.className = "config-ui-input config-ui-input--text config-ui-collection-new";
     newName.setAttribute("placeholder", "New collection name");
+    newName.setAttribute("data-collection-new-label", "New collection name");
     newName.style.display = "none";
     wrap.appendChild(newName);
 
@@ -403,7 +664,8 @@
     });
     var create = document.createElement("option");
     create.value = collectionNewSentinel();
-    create.textContent = "Create a new one\u2026";
+    // The frames' wording, which is shorter and reads as a thing rather than an instruction.
+    create.textContent = "New collection";
     select.appendChild(create);
 
     // A value that is not one of this file's collections is the create case, whether it was typed
@@ -482,12 +744,17 @@
 
       list.forEach(function (row, index) {
         var rowEl = document.createElement("div");
-        rowEl.className = "config-ui-rows-item";
+        rowEl.className = field.tabs ? "config-ui-rows-item config-ui-rows-item--stacked"
+          : "config-ui-rows-item";
         rowEl.setAttribute("data-row-index", String(index));
 
         (field.columns || []).forEach(function (column) {
           var cell = document.createElement("label");
-          cell.className = "config-ui-rows-cell";
+          // With `@tabs` a tab shows one row at a time, so its fields read as a form — one labelled
+          // field per line, as the frames show — rather than as a horizontal strip of cells, which is
+          // the right shape only when rows are stacked and being compared.
+          cell.className = field.tabs ? "config-ui-rows-cell config-ui-rows-cell--stacked"
+            : "config-ui-rows-cell";
           var caption = document.createElement("span");
           caption.className = "config-ui-rows-cell-label";
           caption.textContent = column.label;
@@ -731,5 +998,6 @@
     // The collection list is a backend round trip, so `ui.html` fills the picker when it arrives.
     populateCollectionControl: populateCollectionControl,
     readCollectionControl: readCollectionControl,
+    readChipsControl: readChipsControl,
   };
 });
