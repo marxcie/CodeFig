@@ -1921,20 +1921,41 @@
         opacity: 0.6;
       }
 
+      /* Same box as an input, so the heights match by construction rather than by a padding value
+         that happens to line up today. `font-size`, `padding` and `border` are the three things that
+         decide an input's height here, so the buttons take all three from the same places. Nudging
+         padding until it looked close would break on the next font-size change. */
       .config-ui-rows-remove,
       .config-ui-rows-add {
-        padding: 5px 10px;
         font: inherit;
-        font-size: 11px;
+        font-size: var(--font-size-body);
+        padding: 8px 10px;
+        border: 1px solid rgba(128, 128, 128, 0.35);
+        border-radius: 6px;
         color: inherit;
         background: none;
-        border: 1px solid rgba(128, 128, 128, 0.35);
-        border-radius: 4px;
         cursor: pointer;
+        line-height: normal;
       }
 
       .config-ui-rows-add {
         align-self: flex-start;
+      }
+
+      /* The label sits centred against the **whole** control — the column headers, every row, and
+         the Add button — so it stays centred as rows come and go. Márton's call.
+
+         Written out rather than left to the inherited `align-items: center`, because `@rows` looks
+         like a textarea and the obvious future edit is "multi-line controls top-align", which is the
+         rule for `.config-ui-field--textarea` right above. This says rows is not one of those.
+         Pinned by tests/ui-css-shared-classes.test.js. */
+      .config-ui-field--rows .config-ui-field__row {
+        align-items: center;
+      }
+
+      .config-ui-field--rows .config-ui-field__label {
+        align-items: center;
+        padding-top: 0;
       }
 
       /* Two views of one config (plan 18 slice 1). Neither note is the user's fault, so neither

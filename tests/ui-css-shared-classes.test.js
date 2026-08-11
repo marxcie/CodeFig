@@ -98,3 +98,27 @@ test('a rows cell sizes its own control, rather than inheriting the flat layout�
   assert.match(CSS, /\.config-ui-input--text,[\s\S]{0,120}width: 70%/,
     'the shared rule is still there — the fix is scoped, not a change to it');
 });
+
+test('the @rows label is centred against the whole control, and says so', () => {
+  // Márton's call: centred against the column headers, every row and the Add button, so it stays
+  // centred as rows come and go. Written out rather than inherited, because `@rows` looks like a
+  // textarea and the obvious future edit is "multi-line controls top-align" — which is exactly what
+  // `.config-ui-field--textarea` does two rules away.
+  assert.match(CSS, /\.config-ui-field--rows \.config-ui-field__row \{\s*align-items: center;/);
+  assert.match(CSS, /\.config-ui-field--rows \.config-ui-field__label \{[\s\S]{0,60}align-items: center;/);
+  assert.equal(/\.config-ui-field--rows[^{]*\{[^}]*align-items: flex-start/.test(CSS), false,
+    'rows must not be top-aligned like a textarea');
+});
+
+test('the row buttons take their height from the same values the inputs do', () => {
+  // "Make them line up" is a claim about height. Nudging padding until it looks close breaks on the
+  // next font-size change, so the buttons use the input's font-size, padding and border.
+  const buttons = CSS.match(/\.config-ui-rows-remove,\s*\n\s*\.config-ui-rows-add \{[^}]*\}/);
+  assert.ok(buttons, 'the row button rule is missing');
+  assert.match(buttons[0], /font-size: var\(--font-size-body\)/, 'same font-size as an input');
+  assert.match(buttons[0], /padding: 8px 10px/, 'same padding as an input');
+
+  const input = CSS.match(/\.config-ui-input \{[^}]*\}/)[0];
+  assert.match(input, /padding: 8px 10px/, 'if the input padding changes, the buttons must follow');
+  assert.match(input, /font-size: var\(--font-size-body\)/);
+});

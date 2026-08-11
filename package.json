@@ -14,6 +14,7 @@
     "clean": "rm -rf dist",
     "figma:run": "node figma-run.js",
     "figma:ui": "node figma-ui.js",
+    "figma:sync": "node figma-sync.js",
     "test:figma": "node figma-test.js",
     "pack": "npm run clean && npm run build:production && node pack-plugin.js",
     "build:release": "node release.js"

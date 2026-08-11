@@ -73,15 +73,30 @@ function currentBuildId() {
   }
 }
 
-/** The loop's most common trap, and the same warning `figma-run.js` prints. */
-function warnIfStale(reportedBuildId) {
+/**
+ * A stale build **fails** here, rather than warning and printing an answer anyway.
+ *
+ * Warning-and-continuing is how two things got "verified" today against code that was no longer on
+ * disk. An answer from the wrong build is worse than no answer, because it looks like a pass.
+ * `--allow-stale` is there for the rare case of deliberately inspecting the running build.
+ */
+function refuseIfStale(reportedBuildId, allowStale) {
   const onDisk = currentBuildId();
   if (!onDisk || !reportedBuildId || reportedBuildId === onDisk) return;
-  console.log(
+  const message =
     '\n⚠️  The plugin is running an older build than dist/ (plugin ' + reportedBuildId +
-      ', on disk ' + onDisk + ').\n' +
-      '   Reload CodeFig in Figma — close and reopen it — then run this again.'
+    ', on disk ' + onDisk + ').';
+  if (allowStale) {
+    console.log(message + '\n   --allow-stale: reporting it anyway.');
+    return;
+  }
+  console.error(
+    message + '\n' +
+      '   Refusing to report an answer from a build that is not the one on disk.\n' +
+      '   Reload CodeFig in Figma, or run `npm run figma:sync` which waits for it.\n' +
+      '   Pass --allow-stale if you meant to inspect the running build.'
   );
+  process.exit(1);
 }
 
 function usage() {
@@ -91,17 +106,19 @@ function usage() {
   for (const name of Object.keys(COMMANDS)) {
     console.log('  ' + name.padEnd(width + 2) + COMMANDS[name]);
   }
-  console.log('\nOptions: --timeout <ms>  --json  --text-file <path>');
+  console.log('\nOptions: --timeout <ms>  --json  --text-file <path>  --allow-stale');
 }
 
 function parseArgs(argv) {
-  const out = { command: null, args: {}, timeout: DEFAULT_TIMEOUT_MS, json: false };
+  const out = { command: null, args: {}, timeout: DEFAULT_TIMEOUT_MS, json: false, allowStale: false };
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (token === '--timeout') {
       out.timeout = Number(argv[++i]) || DEFAULT_TIMEOUT_MS;
     } else if (token === '--json') {
       out.json = true;
+    } else if (token === '--allow-stale') {
+      out.allowStale = true;
     } else if (token === '--text-file') {
       out.args.text = fs.readFileSync(argv[++i], 'utf8');
     } else if (token.indexOf('=') !== -1) {
@@ -217,7 +234,7 @@ async function main() {
       warnedAboutFocus = true;
     }
     if (cmd.status === 'done') {
-      warnIfStale(cmd.buildId);
+      refuseIfStale(cmd.buildId, args.allowStale);
       if (!cmd.ok) {
         console.error('\n❌ ' + (cmd.error || 'The command failed with no message.'));
         process.exit(1);

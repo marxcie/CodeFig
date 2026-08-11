@@ -4031,15 +4031,36 @@
                     key: input ? input.getAttribute('data-row-field') : null,
                     left: Math.round(cellEl.offsetLeft),
                     width: Math.round(cellEl.offsetWidth),
-                    inputWidth: input ? Math.round(input.offsetWidth) : null
+                    inputWidth: input ? Math.round(input.offsetWidth) : null,
+                    inputHeight: input ? Math.round(input.offsetHeight) : null
                   });
                 });
                 var gaps = [];
                 for (var g = 1; g < cells.length; g++) {
                   gaps.push(cells[g].left - (cells[g - 1].left + cells[g - 1].width));
                 }
+                // Buttons are measured too: "make them line up with the inputs" is a claim about
+                // heights, and nudging padding until it looks close is what breaks on the next font
+                // change.
+                var buttons = [];
+                var addBtn = wrap.querySelector('.config-ui-rows-add');
+                var removeBtn = rowEl.querySelector('.config-ui-rows-remove');
+                if (removeBtn) buttons.push({ kind: 'remove', height: Math.round(removeBtn.offsetHeight) });
+                if (addBtn) buttons.push({ kind: 'add', height: Math.round(addBtn.offsetHeight) });
+
+                var labelEl = wrap.closest ? wrap.closest('.config-ui-field') : null;
+                var labelText = labelEl ? labelEl.querySelector('.config-ui-field__label') : null;
+
                 layout = {
                   rowWidth: Math.round(rowEl.offsetWidth),
+                  buttons: buttons,
+                  controlHeight: Math.round(wrap.offsetHeight),
+                  labelAlign: labelText ? {
+                    height: Math.round(labelText.offsetHeight),
+                    top: Math.round(labelText.getBoundingClientRect().top),
+                    controlTop: Math.round(wrap.getBoundingClientRect().top),
+                    controlBottom: Math.round(wrap.getBoundingClientRect().bottom)
+                  } : null,
                   cells: cells,
                   gapsBetweenCells: gaps,
                   cssColumnGap: window.getComputedStyle(rowEl).columnGap
