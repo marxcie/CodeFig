@@ -94,6 +94,13 @@ Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `pr
 - `// @UI_CONFIG_START` … `// @UI_CONFIG_END` — rendered as a **form**; annotations on each `var` line: `@options: a|b|c` (or `@options: variableCollections` for dynamic lists), `@radio`, `@multi`, `@label:`, `@placeholder:`, `@textarea`, `@showWhen: field=value|value`. `// # Heading`, `// ---`, and plain comments become headings/dividers/paragraphs.
 - `// @CONFIG_START` … `// @CONFIG_END` — config shown in a code editor instead (used for object-literal configs the form parser can't represent).
 
+**The annotation list above is not the whole list, deliberately.** `scripts/HELP/style-and-ui-reference.js` ("Style & UI reference") *is* the list: it renders every control the form can build, with the exact source line under each one, and its Documentation tab holds the token values and the two heading ladders. `tests/style-reference.test.js` derives coverage from `renderer.js` and `parser.js` and reads the stated token values back out of `src/ui.css`, so a control that exists without a specimen and a documented value that has drifted are both build failures. Copying the list into a second place here would be the seam that reference exists to close — send people there instead.
+
+Two rules that only bite when authoring one:
+
+- **`@helper:` runs to the end of the line and must be last.** It is prose, and prose about this plugin says things like "an object with no `@rows`" — so it cannot stop at the next `@word`. Anything written after a note becomes part of it, which is why `serialize` emits it last.
+- **`// # Title` is level 1**, so a config form's section headings are `h1`, styled by `.config-ui-form--rows .config-ui-row--heading h1` — *not* by the `.docs-rendered h1` the Documentation tab uses. The two ladders are different sizes on purpose. A rule written for the wrong one is silent: it validates, it ships, and nothing on screen changes.
+
 **Long-running work:** use `collectNodesAsync`, `processWithOptimization`, `yieldToUI`, `showProgress` from `@Core Library`. Fully synchronous loops block the main thread and starve the progress bar.
 
 ## Where things are written down

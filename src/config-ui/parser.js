@@ -540,6 +540,22 @@
       if (m) {
         var val = parseValue(m[2].trim());
         var tip = (m[3] || "").trim();
+
+        // `@helper: …` — a note that belongs to *this field* and renders under its control, which is
+        // where the frames put it. A comment line above the field is a paragraph row instead: it sits
+        // at the label's left edge and reads as prose about the section, not about the input.
+        //
+        // Read **first, and to the end of the line**, so `@helper:` has to be the last annotation on
+        // it. It used to stop at the next ` @word`, which meant a note could not mention an
+        // annotation — in a config UI where every annotation starts with `@`. The style reference's
+        // own notes came back as "the same" and "an object with no", truncated mid-sentence at
+        // ` @options` and ` @rows`. Taking it first also keeps `@placeholder="…"` inside a note from
+        // being eaten by the placeholder strip below, which is a global replace.
+        var helperMatch = tip.match(/@helper:\s*(.+)$/);
+        if (helperMatch) {
+          tip = tip.slice(0, helperMatch.index).trim();
+        }
+
         var phMatch = tip.match(/@placeholder\s*=\s*["']([^"']*)["']/);
         if (phMatch) {
           tip = tip.replace(/@placeholder\s*=\s*["'][^"']*["']/g, "").trim();
@@ -582,14 +598,6 @@
         if (inputType === "object" || inputType === "array") {
           inputType = "unsupported";
         }
-        // `@helper: …` — a line that belongs to *this field* and renders under its control, which is
-        // where the frames put it. A comment line above the field is a paragraph row instead: it sits
-        // at the label's left edge and reads as prose about the section, not about the input.
-        var helperMatch = tip.match(/@helper:\s*(.+?)(?=\s+@[a-z]|$)/);
-        if (helperMatch) {
-          tip = tip.replace(/@helper:\s*.+?(?=\s+@[a-z]|$)/, "").trim();
-        }
-
         var labelMatch = tip.match(/@label:\s*(.+?)(?=\s+@|$)/);
         var fieldLabel = labelFromName(m[1]);
         if (labelMatch) {
@@ -763,7 +771,6 @@
         if (r.inputType === "radio") parts.push("@radio");
         if (r.inputType === "multiselect") parts.push("@multi");
         if (r.inputType === "textarea") parts.push("@textarea");
-        if (r.helper) parts.push("@helper: " + r.helper);
         if (r.inputType === "collection") parts.push("@collection");
         if (r.inputType === "rows" && r.columns) {
           parts.push("@rows: " + r.columns.map(function (c) {
@@ -791,6 +798,9 @@
         if (r.unknownAnnotations && r.unknownAnnotations.length) {
           parts = parts.concat(r.unknownAnnotations);
         }
+        // **Last, always.** The parser reads a note to the end of the line, so anything written after
+        // one becomes part of it. Emitting it here is what makes that rule survive a round trip.
+        if (r.helper) parts.push("@helper: " + r.helper);
         var comment = parts.length ? " // " + parts.join(" ") : "";
         if (r.syntax === "property") {
           out.push(r.name + ": " + fmt(v) + (r.trailingComma ? "," : "") + comment);

@@ -162,6 +162,35 @@ test('a helper line belongs to its field, and renders under the control', () => 
   assert.equal(f.label, 'Extra columns', 'and it does not swallow the label');
   assert.equal(P.serialize(P.parse(line), {}), line, 'and survives untouched');
 
+  // **A note runs to the end of the line, and may therefore mention an annotation.** It used to stop
+  // at the next ` @word`, which in a config UI where every annotation starts with `@` meant a note
+  // could not name one: "an object with no @rows" was stored as "an object with no", and
+  // `@helper: @placeholder="x"` was stored as nothing at all, because the placeholder strip is a
+  // global replace that ran first. The style reference is written in these notes, so it found it.
+  const quoting = 'var x = ""; // @label: Nested @helper: an object with no @rows — the form says so';
+  const q = P.parse(quoting).rows.filter((r) => r.type === 'field')[0];
+  assert.equal(q.helper, 'an object with no @rows — the form says so');
+  assert.equal(q.label, 'Nested');
+  assert.equal(P.serialize(P.parse(quoting), {}), quoting, 'and round trips with the @ intact');
+
+  const withPh = 'var y = ""; // @placeholder="Real one" @helper: @placeholder="Shown while empty"';
+  const w = P.parse(withPh).rows.filter((r) => r.type === 'field')[0];
+  assert.equal(w.placeholder, 'Real one', 'the field keeps its own placeholder');
+  assert.equal(w.helper, '@placeholder="Shown while empty"', 'and the note keeps the one it quotes');
+
+  // The cost of reading to end of line: a note has to be **last**. Which means serialize has to put
+  // it last, or a form interaction would fold every following annotation into the note.
+  const parserSrc = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'src', 'config-ui', 'parser.js'), 'utf8'
+  );
+  const emit = parserSrc.slice(parserSrc.indexOf('var parts = [];'));
+  const helperAt = emit.indexOf('parts.push("@helper: "');
+  assert.ok(helperAt > 0, 'serialize no longer emits a helper');
+  ['@label: ', '@showWhen: ', '@placeholder=', '@rows: ', '@options: '].forEach((other) => {
+    assert.ok(emit.indexOf('parts.push("' + other) < helperAt,
+      other + ' is emitted after @helper:, so a round trip would swallow it into the note');
+  });
+
   const renderer = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
   );

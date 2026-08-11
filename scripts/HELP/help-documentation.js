@@ -41,6 +41,8 @@
 //
 // Scripts with a **Config** tab expose options (e.g. dropdowns, text inputs) defined via **// @UI_CONFIG_START** … **// @UI_CONFIG_END** in the script. See any utility script with a Config tab for the pattern.
 //
+// **Style & UI reference** (in Help, beside this script) renders every control a config block can produce, with the exact line that makes each one written underneath it — plus the type scale, spacing and colours in its Documentation tab. Copy from there rather than from memory.
+//
 // ## @import system
 //
 // Reuse code across scripts:

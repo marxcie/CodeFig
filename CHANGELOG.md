@@ -25,6 +25,15 @@ deleting variable modes they did not recognise.
 
 ### Added
 
+- **A Style & UI reference in Help.** Every control a script's settings form can render, live, with
+  the exact line that produces each one written underneath it — so a change can be asked for by
+  pointing at the thing rather than describing it. Its Documentation tab holds the type scale, the
+  spacing scale and the colours, and keeps the two heading ladders apart: the same `// # Title` is
+  20px in a Documentation tab and 15px as a form's section title, which is not obvious from either
+  one alone.
+- **A note under a field can mention an annotation.** `@helper:` text stopped at the next `@word`, so
+  a note reading *"an object with no `@rows`"* was stored as *"an object with no"*. Notes now run to
+  the end of the line, which means `@helper:` has to be the last annotation on it.
 - **A panel fills itself from where it points.** When a collection and group name somewhere CodeFig
   has already generated, the settings load on their own and a line under Group says so — no button to
   find, and nothing to press. It never overwrites what you have typed: once you have edited anything,
