@@ -80,10 +80,20 @@ test('a config block that does not parse makes the form read-only', () => {
   assert.match(fn[0].replace(/\s+/g, ' '), /showing the last ' \+\s*'version it could read/);
 });
 
-test('a script with no form says so rather than showing an empty tab', () => {
+test('whether a form exists is decided by the block, not by which marker it uses', () => {
+  // **Changed in slice 2.** The parser reads property lists now, so a `@CONFIG_START` block builds a
+  // form as readily as a `var`-row one — which is the point of the whole restructure: the block stays
+  // the thing you paste and is also a form. `scriptHasUIConfig` still says which *marker* is in use,
+  // because `extractConfigSection` needs that; it stopped meaning "has a form".
   const fn = UI.match(/function projectConfigIntoForm\(\)[\s\S]*?\n      \}/)[0];
-  assert.match(fn, /has no form yet/);
-  assert.match(fn, /they are the same config/, 'and that both tabs edit one thing');
+  assert.match(fn, /formFields\.length === 0/, 'the test is whether the block yields fields');
+  assert.equal(/if \(!scriptHasUIConfig\) \{/.test(fn), false,
+    'the marker must not decide whether a form is shown');
+  assert.match(fn, /no settings a form can show/, 'and the empty case still says so');
+});
+
+test('Configuration UI is the default for any script with a config', () => {
+  assert.match(UI, /const initialTab = scriptHasConfig \? 'configUI' : 'source';/);
 });
 
 test('a script with a config always offers both views', () => {
@@ -107,13 +117,13 @@ test('readTabs reports what a verifier needs to see', () => {
   }
 });
 
-test('a script with no form leaves no other script’s controls behind', () => {
+test('a config with nothing showable leaves no other script’s controls behind', () => {
   // Found by `readForm` on its first real use: the no-form path hid the container without emptying
   // it, so the previous script's controls were still in the DOM and reported as this script's.
   // Nothing reads them today — a no-form script merges from the code editor — but a stale form is a
   // loaded gun: the next thing to collect values from that container collects someone else's.
   const fn = UI.match(/function projectConfigIntoForm\(\)[\s\S]*?\n      \}/)[0];
-  const branch = fn.slice(fn.indexOf('if (!scriptHasUIConfig)'));
+  const branch = fn.slice(fn.indexOf('if (parsedForForm && formFields.length === 0)'));
   assert.match(branch, /configUIContainer\.innerHTML = ''/, 'the container is emptied, not just hidden');
   assert.match(branch, /configUIInstance = null/, 'and the instance is dropped with it');
 });

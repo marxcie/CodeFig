@@ -320,6 +320,10 @@ test('quoting appears only where a field was edited', () => {
  * Top-level properties only: a property's value may span lines, so depth is tracked rather than
  * guessed at, and comment lines between properties pass through untouched.
  */
+/**
+ * Kept for the tests below that specifically exercise `var`-row syntax on real content. The
+ * byte-for-byte test above no longer needs it: the parser reads property lists directly.
+ */
 function blockAsRows(block) {
   const lines = block.split('\n');
   const out = [];
@@ -378,14 +382,20 @@ test('every shipped config block survives as written, byte for byte', () => {
     const source = fs.readFileSync(path.join(DSF, file), 'utf8');
     const start = source.indexOf('// @CONFIG_START') + '// @CONFIG_START'.length;
     const block = source.slice(start, source.indexOf('// @CONFIG_END'));
-    const rows = blockAsRows(block);
+    // **The block itself, not a rewrite of it.** This used to go through `blockAsRows`, which
+    // converted the property list into `var` rows because the parser could only read those — the gap
+    // that left every Design System Foundations script formless. The parser reads both syntaxes now,
+    // so the test reads the real artifact and is stronger for it.
+    assert.deepEqual(valuesOf(block), shippedConfig(file), file + ': the block lost content');
 
-    // The converter must produce the same config the block does, or the test proves nothing.
-    assert.deepEqual(valuesOf(rows), shippedConfig(file), file + ': the rewritten block lost content');
-
-    // Compared trimmed: the blank lines around a block belong to `mergeConfigIntoMain`, which
-    // writes its own newlines either side, and serialize has always trimmed for that reason.
-    assert.equal(P.serialize(P.parse(rows), {}), rows.trim(), file + ': the block came back changed');
+    // Trailing whitespace only. The blank lines *after* a block belong to `mergeConfigIntoMain`,
+    // which writes its own newlines; the indentation *before* the first key belongs to the block, and
+    // trimming it left the first line flush while every other line kept its indent.
+    assert.equal(
+      P.serialize(P.parse(block), {}),
+      block.replace(/\s+$/, ''),
+      file + ': the block came back changed'
+    );
   }
 });
 

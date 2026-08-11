@@ -673,8 +673,9 @@
         // serialised over the text on the next merge. That contradicts slice 1's rule — the block
         // text is canonical and the form is a projection of it — so an edit in the text must win.
         let configContent = '';
-        const fromForm = currentTab === 'configUI' && scriptHasUIConfig && configUIInstance &&
-          window.CodeFigConfigUI;
+        // Not gated on the marker: a `@CONFIG_START` block has a form now too, and the form is
+        // authoritative while it is the view you are in.
+        const fromForm = currentTab === 'configUI' && configUIInstance && window.CodeFigConfigUI;
         if (fromForm) {
           const schema = window.CodeFigConfigUI.parse(mainCode.slice(i + startMarker.length, j));
           configContent = window.CodeFigConfigUI.serialize(schema, configUIInstance.getValues());
@@ -838,14 +839,27 @@
 
         if (configCodeContainer) configCodeContainer.style.display = 'none';
 
-        if (!scriptHasUIConfig) {
-          // No form for this script yet. Said plainly rather than showing an empty tab.
+        // **Whether a form exists is decided by whether the block parses to fields**, not by which
+        // marker the script uses. The parser reads property lists now, so a `@CONFIG_START` block
+        // has a form too — which is the whole point: the block stays the thing you paste, and it is
+        // also a form. `scriptHasUIConfig` still says which *marker* is in use, which is what
+        // `extractConfigSection` needs; it stopped meaning "has a form".
+        var parsedForForm = null;
+        try {
+          parsedForForm = window.CodeFigConfigUI ? window.CodeFigConfigUI.parse(block) : null;
+        } catch (e) {
+          parsedForForm = null;
+        }
+        var formFields = parsedForForm && parsedForForm.rows
+          ? parsedForForm.rows.filter(function (r) { return r.type === 'field'; })
+          : [];
+
+        if (parsedForForm && formFields.length === 0) {
+          // A config with no fields at all — nothing a form could show.
           //
-          // And **emptied**, not just hidden. A hidden container kept the previous script's
-          // controls in the DOM, which `readForm` reported as this script's — the instrument
-          // finding it on its first use. Nothing reads them today, because a script with no form
-          // merges from the code editor instead, but a stale form is a loaded gun: the next thing
-          // that collects values from the container would collect someone else's.
+          // Emptied, not just hidden. A hidden container kept the previous script's controls in the
+          // DOM, which `readForm` reported as this script's. Nothing reads them today, but a stale
+          // form is a loaded gun: the next thing that collects values from it collects someone else's.
           if (configUIContainer) {
             configUIContainer.style.display = 'none';
             configUIContainer.innerHTML = '';
@@ -854,8 +868,8 @@
           if (note) note.style.display = 'none';
           if (noForm) {
             noForm.style.display = 'block';
-            noForm.textContent = 'This script has no form yet — its settings live in Configuration ' +
-              'code, and they are the same config.';
+            noForm.textContent = "This script's config has no settings a form can show. " +
+              'Configuration code has it, and they are the same config.';
           }
           return;
         }
@@ -865,12 +879,7 @@
           configUIContainer.style.flexDirection = 'column';
         }
 
-        let schema = null;
-        try {
-          schema = window.CodeFigConfigUI ? window.CodeFigConfigUI.parse(block) : null;
-        } catch (e) {
-          schema = null;
-        }
+        var schema = parsedForForm;
 
         if (!schema) {
           configFormReadOnly = true;
@@ -1304,12 +1313,10 @@
           }, 10);
         }
         // First view: Configuration if script has config, otherwise Script
-        // Configuration UI is the default — but only when there is one. Until each script's form
-        // is built (18 slices 2-6), sending a config-block script to an empty form tab would be a
-        // regression dressed as a restructure, so those open on Configuration code.
-        const initialTab = scriptHasConfig
-          ? (scriptHasUIConfig ? 'configUI' : 'configCode')
-          : 'source';
+        // Configuration UI is the default for any script with a config, now that a property-list
+        // block builds a form as readily as a `var`-row one. A config with no showable settings still
+        // lands on Configuration code, because an empty form tab is not a default worth having.
+        const initialTab = scriptHasConfig ? 'configUI' : 'source';
         currentTab = initialTab;
         switchTab(initialTab);
         originalCode = fullCode;

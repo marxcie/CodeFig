@@ -151,6 +151,11 @@
         continue;
       }
       if (ch === '"' || ch === "'") { state.quote = ch; continue; }
+      // A `//` comment runs to end of line, and every caller passes at most one line, so the rest
+      // of this text is prose. `// Array ["s", "m", "l"] or a template` is a real line in a shipped
+      // config block: counting its brackets as structure would leave the reader hunting for a
+      // closing brace that does not exist.
+      if (ch === "/" && text.charAt(i + 1) === "/") return state;
       if (ch === "[" || ch === "{") state.depth++;
       else if (ch === "]" || ch === "}") state.depth--;
     }
@@ -236,6 +241,112 @@
       columns.push(column);
     }
     return columns;
+  }
+
+  /**
+   * A trailing `// comment`, split off without being fooled by one inside a string.
+   *
+   * The `var` path uses a regex for this and is wrong for `nameTemplate: "https://x"`. The property
+   * path does not inherit that, because a config block is exactly where a URL or a path shows up.
+   */
+  function scanPropertyValue(text) {
+    var depth = 0;
+    var quote = null;
+    var i = 0;
+    var end = -1;
+    var comment = null;
+    var comma = false;
+
+    while (i < text.length) {
+      var ch = text.charAt(i);
+      var next = text.charAt(i + 1);
+      if (quote) {
+        if (ch === "\\") { i += 2; continue; }
+        if (ch === quote) quote = null;
+        i++;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { quote = ch; i++; continue; }
+      if (ch === "/" && next === "/") {
+        var nl = text.indexOf("\n", i);
+        if (depth === 0) {
+          // The value ended before this. At depth 0 a comment is the entry's annotation.
+          end = i;
+          comment = (nl === -1 ? text.slice(i + 2) : text.slice(i + 2, nl)).trim();
+          break;
+        }
+        // Inside the value: prose between an object's own keys, which is most of a config block.
+        // Taking the first `//` in the whole span is what read `fontScaling: {` as the string
+        // `"{"` and lost typography's scaling settings.
+        i = nl === -1 ? text.length : nl;
+        continue;
+      }
+      if (ch === "[" || ch === "{" || ch === "(") { depth++; i++; continue; }
+      if (ch === "]" || ch === "}" || ch === ")") { depth--; i++; continue; }
+      if (ch === "," && depth === 0) {
+        end = i;
+        comma = true;
+        // A comment after the comma, on the same line, belongs to this entry. On a later line it
+        // belongs to whatever comes next.
+        var rest = text.slice(i + 1);
+        var at = rest.indexOf("//");
+        if (at !== -1 && rest.slice(0, at).indexOf("\n") === -1) {
+          var stop = rest.indexOf("\n", at);
+          comment = (stop === -1 ? rest.slice(at + 2) : rest.slice(at + 2, stop)).trim();
+        }
+        break;
+      }
+      i++;
+    }
+    if (end === -1) end = text.length;
+    return { body: text.slice(0, end), comment: comment, comma: comma };
+  }
+
+  /** `key:` or `"key":` at the head of a line → the key, or null. */
+  function propertyKeyAt(line) {
+    var m = line.match(/^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$]*))\s*:/);
+    if (!m) return null;
+    return { key: m[1] || m[2] || m[3], length: m[0].length };
+  }
+
+  /**
+   * One entry of a **property list** — the shape a `@CONFIG_START` block has:
+   *
+   *     collectionName: "Responsive System",
+   *     modes: [
+   *       { name: "desktop" }
+   *     ],
+   *
+   * The form could previously only read `var x = …;` rows, so an object-literal config produced no
+   * fields at all and every Design System Foundations script was formless. Migrating those blocks to
+   * `var` rows was the alternative, and it would have changed what a user pastes — the one thing
+   * that must not break. So the reader learns the second syntax instead.
+   *
+   * → { match: [whole, key, valueText, annotation], endLine, trailingComma }
+   */
+  function readPropertyEntry(lines, start) {
+    var head = propertyKeyAt(lines[start]);
+    if (!head) return null;
+
+    var state = { depth: 0, quote: null };
+    var first = lines[start].slice(head.length);
+    scanBrackets(first, state);
+
+    var collected = first;
+    var end = start;
+    while (state.depth > 0) {
+      end++;
+      if (end >= lines.length) return null;
+      scanBrackets(lines[end], state);
+      collected += "\n" + lines[end];
+    }
+
+    var split = scanPropertyValue(collected);
+    return {
+      match: [lines.slice(start, end + 1).join("\n"), head.key, split.body.trim(), split.comment],
+      endLine: end,
+      trailingComma: split.comma
+    };
   }
 
   function parse(code) {
@@ -340,6 +451,18 @@
       // closing `];` or `};`, then read the span as one. The annotation follows the semicolon,
       // wherever that lands — one rule, not two.
       var m = t.match(/^\s*var\s+(\w+)\s*=\s*(.+?)\s*;(?:\s*\/\/\s*(.*))?$/);
+      var syntax = "var";
+      var trailingComma = false;
+      if (!m && !/^\s*var\s+\w+\s*=/.test(t) && propertyKeyAt(t)) {
+        // A property list, the shape `@CONFIG_START` uses.
+        var entry = readPropertyEntry(lines, i);
+        if (entry) {
+          m = entry.match;
+          i = entry.endLine;
+          syntax = "property";
+          trailingComma = entry.trailingComma;
+        }
+      }
       if (!m && /^\s*var\s+\w+\s*=/.test(t)) {
         var span = readMultiLineValue(lines, i);
         if (span) {
@@ -404,6 +527,10 @@
           inputType: inputType,
         };
         if (phMatch) f.placeholder = phMatch[1];
+        // Which syntax this row was written in, so serialize puts it back the same way. A block is
+        // one or the other in practice, but recording it per row means a mixed block round-trips too.
+        f.syntax = syntax;
+        if (syntax === "property") f.trailingComma = trailingComma;
         if (inputType === "rows") {
           f.columns = rowColumns;
           // A display choice on one control. Same values, same serialization.
@@ -583,10 +710,18 @@
           parts = parts.concat(r.unknownAnnotations);
         }
         var comment = parts.length ? " // " + parts.join(" ") : "";
-        out.push("var " + r.name + " = " + fmt(v) + ";" + comment);
+        if (r.syntax === "property") {
+          out.push(r.name + ": " + fmt(v) + (r.trailingComma ? "," : "") + comment);
+        } else {
+          out.push("var " + r.name + " = " + fmt(v) + ";" + comment);
+        }
       }
     });
-    return out.join("\n").trim();
+    // Trailing whitespace only. `.trim()` also removed the **first** line's indentation, which is
+    // invisible on a `@UI_CONFIG` block (those start at column 0) and ragged on a `@CONFIG_START`
+    // one, where every other line keeps the indent `raw` preserved. `mergeConfigIntoMain` strips and
+    // re-adds the trailing newline itself, so nothing downstream wanted the leading trim.
+    return out.join("\n").replace(/\s+$/, "");
   }
 
   // ---------------------------------------------------------------------------
