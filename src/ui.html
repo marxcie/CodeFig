@@ -4011,6 +4011,7 @@
         if (container) {
           container.querySelectorAll('[data-rows-field]').forEach(function (wrap) {
             var rows = [];
+            var layout = null;
             wrap.querySelectorAll('.config-ui-rows-item').forEach(function (rowEl) {
               var row = {};
               rowEl.querySelectorAll('[data-row-field]').forEach(function (cell) {
@@ -4018,6 +4019,32 @@
                 row[key] = cell.type === 'checkbox' ? cell.checked : cell.value;
               });
               rows.push(row);
+              // Measured from the first row only: design feedback is about layout, and a control
+              // list without geometry cannot answer "is that gap 8px or 20px". Read rather than
+              // asserted — nothing here compares against a number, because a pixel assertion would
+              // break on a font change.
+              if (!layout) {
+                var cells = [];
+                rowEl.querySelectorAll('.config-ui-rows-cell').forEach(function (cellEl) {
+                  var input = cellEl.querySelector('[data-row-field]');
+                  cells.push({
+                    key: input ? input.getAttribute('data-row-field') : null,
+                    left: Math.round(cellEl.offsetLeft),
+                    width: Math.round(cellEl.offsetWidth),
+                    inputWidth: input ? Math.round(input.offsetWidth) : null
+                  });
+                });
+                var gaps = [];
+                for (var g = 1; g < cells.length; g++) {
+                  gaps.push(cells[g].left - (cells[g - 1].left + cells[g - 1].width));
+                }
+                layout = {
+                  rowWidth: Math.round(rowEl.offsetWidth),
+                  cells: cells,
+                  gapsBetweenCells: gaps,
+                  cssColumnGap: window.getComputedStyle(rowEl).columnGap
+                };
+              }
             });
             var tabs = [];
             wrap.querySelectorAll('.config-ui-rows-tab').forEach(function (tab) {
@@ -4028,6 +4055,7 @@
               control: 'rows',
               tabs: tabs.length > 0 ? tabs : null,
               rows: rows,
+              layout: layout,
               visible: rowVisible(wrap)
             });
           });

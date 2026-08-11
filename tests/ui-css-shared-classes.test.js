@@ -89,3 +89,12 @@ test('the classes the renderer writes are the classes the stylesheet defines', (
   assert.deepEqual(missing, [], 'the renderer emits these and the stylesheet never mentions them: ' +
     missing.join(', '));
 });
+
+test('a rows cell sizes its own control, rather than inheriting the flat layout’s 70%', () => {
+  // `.config-ui-input--text` is `width: 70%`, which is correct for the flat label/control layout and
+  // wrong inside a row: it left 30% of every cell empty, so a gap the CSS declared as 8px measured
+  // 37px. Pinned because the scoped override looks redundant to anyone who has not measured it.
+  assert.match(CSS, /\.config-ui-rows-cell \.config-ui-input,[\s\S]{0,80}width: 100%/);
+  assert.match(CSS, /\.config-ui-input--text,[\s\S]{0,120}width: 70%/,
+    'the shared rule is still there — the fix is scoped, not a change to it');
+});

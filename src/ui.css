@@ -1901,6 +1901,21 @@
         min-width: 80px;
       }
 
+      /* A cell is already the width the row gave it, so its control fills it.
+         `.config-ui-input--text` and friends are `width: 70%`, sized for the flat label/control
+         layout where the control column is much wider than the input needs. Inside a row that left
+         30% of every cell empty — 29px of dead space per cell on a 98px cell — which reads as a
+         37px gap between fields when the gap is actually 8px. The measurement that found it:
+         `figma:ui -- readForm` reporting cell 98 / input 69.
+
+         Scoped to this control's own class rather than changing the shared rule, per the note in
+         CLAUDE.md: an existing rule leaking *into* a new control is the same mistake as a new rule
+         leaking out of one. */
+      .config-ui-rows-cell .config-ui-input,
+      .config-ui-rows-cell .config-ui-textarea {
+        width: 100%;
+      }
+
       .config-ui-rows-cell-label {
         font-size: 10px;
         opacity: 0.6;
