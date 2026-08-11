@@ -779,6 +779,57 @@ async function foundationAutoImport(collectionName, group, domain) {
   return answer;
 }
 
+/**
+ * A collection's modes as the file has them: `[{ modeId, name, valueCount }]`.
+ *
+ * The **only** place a `modeId` enters the panel. Mode chips are a 1:1 view of these, and a chip has
+ * to carry the id it came from so that renaming its label can be a rename rather than an add-plus-orphan.
+ * Ids never travel in a config — they are file-specific — so they live in panel session state and reach
+ * a run through `window.codefigModeIntents`.
+ *
+ * `valueCount` is what makes the removal sentence true: *"removing mode Tablet — 12 variables hold
+ * values there, and any binding to it is lost."* Counted here, with the mode list, because a chip
+ * click cannot afford its own document read — `runSilentSnippet` allows one silent run at a time, so a
+ * click landing during the preview's debounce would get no answer at all. Read once when the address
+ * resolves; a panel with no count says so rather than inventing one.
+ *
+ * A count is variables that hold a value *of their own* in that mode. Figma gives every variable an
+ * entry per mode, so "has a values-by-mode key" counts everything; what a person means by "holds
+ * values there" is a value that differs from the collection's first mode, which is what disappears.
+ */
+async function foundationCollectionModes(collectionName) {
+  var answer = { collection: collectionName || null, modes: [], found: false };
+  if (!collectionName) return answer;
+
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
+  if (!collection) return answer;
+  answer.found = true;
+
+  var modes = collection.modes || [];
+  var baseId = modes.length ? modes[0].modeId : null;
+  var counts = {};
+  for (var m = 0; m < modes.length; m++) counts[modes[m].modeId] = 0;
+
+  var ids = collection.variableIds || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    if (!variable) continue;
+    var byMode = variable.valuesByMode || {};
+    for (var j = 0; j < modes.length; j++) {
+      var id = modes[j].modeId;
+      if (!Object.prototype.hasOwnProperty.call(byMode, id)) continue;
+      if (id !== baseId && JSON.stringify(byMode[id]) === JSON.stringify(byMode[baseId])) continue;
+      counts[id]++;
+    }
+  }
+
+  answer.modes = modes.map(function (mode) {
+    return { modeId: mode.modeId, name: mode.name, valueCount: counts[mode.modeId] || 0 };
+  });
+  return answer;
+}
+
 /** Write the registry. Over the entry cap it reports and writes nothing, rather than throwing. */
 function writeRegistry(viewports) {
   var text = serialiseRegistry(viewports);

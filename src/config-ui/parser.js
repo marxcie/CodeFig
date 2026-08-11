@@ -239,7 +239,13 @@
         typeText = typeText.slice(0, eq).trim();
       }
 
-      var column = { key: key, label: label || labelFromName(key), type: "text" };
+      // `labelSpelled` records that the source wrote `=Label` out, even when it matches the
+      // prettified key. Without it, serialize drops what it can infer — and `columns:number=Columns`
+      // came back as `columns:number` the first time anyone typed in a cell. Semantically identical,
+      // visibly not what was written, and this is a file people read and paste.
+      var column = {
+        key: key, label: label || labelFromName(key), type: "text", labelSpelled: label != null
+      };
       var optionMatch = typeText.match(/^\((.*)\)$/);
       if (optionMatch) {
         column.type = "select";
@@ -600,6 +606,7 @@
         }
         var labelMatch = tip.match(/@label:\s*(.+?)(?=\s+@|$)/);
         var fieldLabel = labelFromName(m[1]);
+        var labelSpelled = !!labelMatch;
         if (labelMatch) {
           fieldLabel = labelMatch[1].trim();
           tip = tip.replace(/@label:\s*.+?(?=\s+@|$)/, "").trim();
@@ -609,6 +616,7 @@
           name: m[1],
           value: val,
           label: fieldLabel,
+          labelSpelled: labelSpelled,
           tooltip: tip,
           inputType: inputType,
         };
@@ -685,11 +693,27 @@
     var vm = values || {};
 
     /**
-     * Objects, and arrays holding them, are written one value per line — the same shape
-     * formatConfigBlock produces for the clipboard, so the two agree by construction. Arrays of
-     * primitives stay inline, where a line each would be noise.
+     * A value printed the way the block is written, not the way `JSON.stringify` writes it.
+     *
+     * This used to be `JSON.stringify(v, null, 2)` for anything holding objects, which quoted every
+     * key and indented from column 0. Editing one Gap in the Mode settings tabs therefore rewrote
+     * Grid's whole `modes` array from
+     *
+     *     modes: [
+     *       {
+     *         name: "desktop",
+     *
+     * to `"name": "desktop"` hanging off the left margin — the block still ran, and it was no longer
+     * something a person would have written. **The block is the human format**: its keys are bare, its
+     * indentation is the block's own, and a config is read and pasted far more often than it is
+     * generated. So the printer matches the source style, and `indent` is the row's own leading
+     * whitespace rather than a constant.
+     *
+     * Arrays of primitives stay on one line, where a line each would be noise.
      */
-    function fmt(v) {
+    function fmt(v, indent) {
+      var pad = indent || "";
+      var inner = pad + "  ";
       if (v === null) return "null";
       if (typeof v === "boolean") return v ? "true" : "false";
       if (typeof v === "number") return String(v);
@@ -698,12 +722,26 @@
         var holdsObjects = v.some(function (item) {
           return item !== null && typeof item === "object";
         });
-        return holdsObjects ? JSON.stringify(v, null, 2) : JSON.stringify(v);
+        if (!holdsObjects) {
+          return "[" + v.map(function (item) { return fmt(item, ""); }).join(", ") + "]";
+        }
+        return "[\n" + v.map(function (item) {
+          return inner + fmt(item, inner);
+        }).join(",\n") + "\n" + pad + "]";
       }
       if (typeof v === "object") {
-        return Object.keys(v).length === 0 ? "{}" : JSON.stringify(v, null, 2);
+        var keys = Object.keys(v);
+        if (keys.length === 0) return "{}";
+        return "{\n" + keys.map(function (key) {
+          return inner + printKey(key) + ": " + fmt(v[key], inner);
+        }).join(",\n") + "\n" + pad + "}";
       }
       return JSON.stringify(v);
+    }
+
+    /** Bare where JavaScript allows it, quoted where it does not. */
+    function printKey(key) {
+      return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
     }
 
     schema.rows.forEach(function (r) {
@@ -775,7 +813,8 @@
         if (r.inputType === "rows" && r.columns) {
           parts.push("@rows: " + r.columns.map(function (c) {
             var spec = c.type === "select" ? "(" + (c.options || []).join("|") + ")" : c.type;
-            var named = c.label && c.label !== labelFromName(c.key) ? "=" + c.label : "";
+            var named = c.label && (c.labelSpelled || c.label !== labelFromName(c.key))
+              ? "=" + c.label : "";
             return c.key + ":" + spec + named;
           }).join("|"));
           if (r.tabs) parts.push("@tabs");
@@ -783,7 +822,9 @@
         // Emitted before @label so the annotation order stays stable across a round trip; a
         // dropped @fromFile would silently remove the sync button from the script.
         if (r.fromFile) parts.push("@fromFile: " + r.fromFile);
-        if (r.label && r.label !== labelFromName(r.name)) parts.push("@label: " + r.label);
+        if (r.label && (r.labelSpelled || r.label !== labelFromName(r.name))) {
+          parts.push("@label: " + r.label);
+        }
         var sr = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
         if (sr && sr.length)
           sr.forEach(function (rule) {
@@ -802,10 +843,15 @@
         // one becomes part of it. Emitting it here is what makes that rule survive a round trip.
         if (r.helper) parts.push("@helper: " + r.helper);
         var comment = parts.length ? " // " + parts.join(" ") : "";
+        // The row's own indentation, taken from the line it was read from. Reprinting without it
+        // left every edited row hanging at column 0 while its neighbours kept theirs — ragged in a
+        // `@CONFIG_START` block, invisible in a `@UI_CONFIG` one, where rows start at column 0
+        // anyway. That is why it went unnoticed.
+        var indent = /^[ \t]*/.exec(r.raw || "")[0];
         if (r.syntax === "property") {
-          out.push(r.name + ": " + fmt(v) + (r.trailingComma ? "," : "") + comment);
+          out.push(indent + r.name + ": " + fmt(v, indent) + (r.trailingComma ? "," : "") + comment);
         } else {
-          out.push("var " + r.name + " = " + fmt(v) + ";" + comment);
+          out.push(indent + "var " + r.name + " = " + fmt(v, indent) + ";" + comment);
         }
       }
     });

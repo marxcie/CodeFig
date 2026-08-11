@@ -661,9 +661,9 @@ function setupModes(collection, modeNames) {
 /**
  * Remove modes from a collection, deliberately.
  *
- * The explicit counterpart to setupModes, which never removes anything. Nothing calls this
- * yet: it exists so the capability is not lost, for a UI that previews the removal first.
- * A mode's values go with it, and there is no way to check whether a mode is in use.
+ * The explicit counterpart to setupModes, which never removes anything. Reached through
+ * `applyModeIntents` below, from a panel where the removal was previewed with its consequence.
+ * A mode's values go with it, and any binding to it is lost.
  *
  * Returns { removed: [names], skipped: [{ name, reason }] }.
  */
@@ -693,6 +693,102 @@ function removeModes(collection, modeNames) {
   }
 
   return result;
+}
+
+
+/**
+ * Apply what the panel's mode chips said, before the rest of a run touches the collection.
+ *
+ * A chip is a **1:1 view of a Figma mode**, and the panel is the only place that knows which chip
+ * came from which mode. The config block carries names only — deliberately, because a `modeId` is
+ * file-specific and a pasted config must not carry one — so the intent travels out of band, from
+ * the iframe through `window.codefigModeIntents`. What arrives:
+ *
+ *     { collection, renames: [{ modeId, from, to }], removals: [{ modeId, name }], additions: [names] }
+ *
+ * Three rules, and the second is the one that matters:
+ *
+ * 1. **A rename is a rename**, by `modeId`. `setupModes` matches on names, so without this a
+ *    renamed chip reads as "a mode I have never seen" plus "a mode nobody asked about" — an add
+ *    and an orphan, with every value and binding left behind on the orphan. This is the gap plan
+ *    16a left open.
+ * 2. **A removal happens only when it was asked for**, by `modeId`. A name the collection has and
+ *    the config does not is *not* evidence: that is exactly what a pasted config from another file
+ *    looks like, and deleting there would lose values nobody offered up. `setupModes` still never
+ *    removes anything.
+ * 3. **Additions need nothing here** — `setupModes` creates a mode it cannot find by name, which is
+ *    what a chip with no `modeId` is.
+ *
+ * Renames run first so the rest of the run sees the names the panel is showing. Removals run
+ * **after** everything else, so a failure (Figma refuses to remove the last mode) leaves a complete,
+ * correct set of variables rather than a half-written one — call this twice, `phase: "before"` then
+ * `phase: "after"`.
+ *
+ * The collection name is checked rather than trusted: a panel whose Collection field changed after a
+ * chip was removed must not apply that removal to whatever is there now.
+ */
+function applyModeIntents(collection, intents, phase) {
+  var report = { renamed: [], removed: [], skipped: [], applied: false };
+  if (!collection || !intents) return report;
+
+  if (intents.collection && intents.collection !== collection.name) {
+    report.skipped.push({
+      name: intents.collection,
+      reason: 'the intents were recorded for collection "' + intents.collection +
+        '", and this run writes to "' + collection.name + '"'
+    });
+    return report;
+  }
+  report.applied = true;
+
+  if (phase !== 'after') {
+    var renames = intents.renames || [];
+    for (var i = 0; i < renames.length; i++) {
+      var r = renames[i];
+      var mode = collection.modes.filter(function (m) { return m.modeId === r.modeId; })[0];
+      if (!mode) {
+        // The mode is gone from the file since the panel read it. Not an error and not a reason to
+        // create anything: `setupModes` will add the new name, which is the same outcome a fresh
+        // chip would have had.
+        report.skipped.push({ name: r.to, reason: 'no mode with that id is in the collection any more' });
+        continue;
+      }
+      if (mode.name === r.to) continue;
+      if (typeof collection.renameMode !== 'function') {
+        report.skipped.push({ name: r.to, reason: 'this Figma version has no renameMode' });
+        continue;
+      }
+      try {
+        collection.renameMode(r.modeId, r.to);
+        report.renamed.push({ from: mode.name, to: r.to });
+        console.log('Renamed mode "' + mode.name + '" to "' + r.to + '" — values and bindings kept');
+      } catch (e) {
+        report.skipped.push({ name: r.to, reason: (e && e.message) || String(e) });
+      }
+    }
+  }
+
+  if (phase !== 'before') {
+    var removals = intents.removals || [];
+    var names = [];
+    for (var k = 0; k < removals.length; k++) {
+      // By id, resolved to the name the collection holds *now* — a mode renamed since the panel read
+      // it is still the same mode, and `removeModes` matches on name.
+      var doomed = collection.modes.filter(function (m) { return m.modeId === removals[k].modeId; })[0];
+      if (!doomed) {
+        report.skipped.push({ name: removals[k].name, reason: 'already gone from the collection' });
+        continue;
+      }
+      names.push(doomed.name);
+    }
+    if (names.length) {
+      var out = removeModes(collection, names);
+      report.removed = out.removed;
+      report.skipped = report.skipped.concat(out.skipped);
+    }
+  }
+
+  return report;
 }
 
 /**

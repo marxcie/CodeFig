@@ -306,11 +306,21 @@ test('editing one field rewrites that field and nothing else', () => {
   assert.deepEqual(valuesOf(out).scaling, { type: 'sine', roundTo: 2 });
 });
 
-test('quoting appears only where a field was edited', () => {
+test('an edited field is reprinted in the block\'s own style, not JSON', () => {
+  // This test used to assert the opposite — that an edited object came back as `"type": "quad"` — and
+  // called that "the canonical form". It is not: the canonical form is whatever a person would have
+  // written, and every one of these blocks writes bare keys. Editing one value in Grid's `modes`
+  // reformatted 19 lines of 51 under the old rule.
   const source = 'var scaling = {\n  type: "sine",\n  roundTo: 2\n};';
   const out = P.serialize(P.parse(source), { scaling: { type: 'quad', roundTo: 2 } });
-  assert.match(out, /"type": "quad"/, 'the edited field is rewritten in the canonical form');
+  assert.match(out, /type: "quad"/, 'the edit landed');
+  assert.doesNotMatch(out, /"type"/, 'and did not quote a key that does not need it');
   assert.deepEqual(valuesOf(out).scaling, { type: 'quad', roundTo: 2 });
+
+  // A key JavaScript would not accept bare still gets quotes, because correctness is not a style.
+  const odd = P.serialize(P.parse('var m = {};'), { m: { 'font-size': 12 } });
+  assert.match(odd, /"font-size": 12/);
+  assert.deepEqual(valuesOf(odd).m, { 'font-size': 12 });
 });
 
 /**

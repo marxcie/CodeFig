@@ -224,3 +224,79 @@ test('a value with characters the tolerant reader has to handle', () => {
   assert.ok(parsed, 'the printed block did not parse. Block was:\n' + block);
   assert.equal(parsed.group, "Marton's spacing / v2");
 });
+
+// ---------------------------------------------------------------------------
+// Editing one value changes one line
+// ---------------------------------------------------------------------------
+
+test('a value edit rewrites its own line and nothing else', () => {
+  // The block is the human format, and every form interaction reserialises the whole of it. So the
+  // measure of the printer is a **diff**: change one number, and exactly one line may differ.
+  //
+  // It did not hold. `fmt` printed anything holding objects with `JSON.stringify(v, null, 2)`, and a
+  // reprinted row was written with no indentation at all — so typing in one Gap in the Mode settings
+  // tabs turned Grid's `modes` array into quoted-key JSON hanging off the left margin, 19 lines
+  // changed out of 51. Both were invisible in a `@UI_CONFIG` block, where rows start at column 0 and
+  // nothing nests, which is why they lasted.
+  const dir = path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations');
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
+  assert.ok(files.length >= 4, 'the Foundations scripts are not where this test looks');
+
+  let checked = 0;
+  for (const file of files) {
+    const src = fs.readFileSync(path.join(dir, file), 'utf8');
+    const m = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(src);
+    if (!m) continue;
+    const block = m[1];
+    const schema = P.parse(block);
+    const fields = schema.rows.filter((r) => r.type === 'field');
+
+    // A scalar, and a number nested inside a `@rows` array — the two shapes a panel edits.
+    const scalar = fields.filter((r) => r.inputType === 'number')[0];
+    const rows = fields.filter((r) => r.inputType === 'rows')[0];
+    if (!scalar && !rows) continue;
+
+    const values = {};
+    if (scalar) values[scalar.name] = (scalar.value || 0) + 7;
+    if (rows) {
+      const next = JSON.parse(JSON.stringify(rows.value));
+      const key = Object.keys(next[0] || {}).filter((k) => typeof next[0][k] === 'number')[0];
+      if (key) next[0][key] = 999;
+      values[rows.name] = next;
+    }
+
+    const before = block.split('\n');
+    const after = P.serialize(schema, values).split('\n');
+    assert.equal(after.length, before.length,
+      file + ': the block changed length — the printer is reshaping, not editing');
+
+    const changed = before
+      .map((line, i) => (line === after[i] ? null : i + 1))
+      .filter((n) => n !== null);
+    assert.equal(changed.length, Object.keys(values).length,
+      file + ': edited ' + Object.keys(values).length + ' value(s) but ' + changed.length +
+      ' line(s) differ (' + changed.join(', ') + ')\n' +
+      changed.map((n) => '  - ' + JSON.stringify(before[n - 1]) + '\n  + ' +
+        JSON.stringify(after[n - 1])).join('\n'));
+    checked++;
+  }
+  assert.ok(checked >= 3, 'only ' + checked + ' blocks were actually checked');
+});
+
+test('an annotation the source spelled out survives an edit', () => {
+  // `@rows: columns:number=Columns` and `@label: Modes` both *match* what the parser would infer, so
+  // serialize dropped them and the first keystroke in any cell rewrote the annotation. Nothing broke,
+  // which is the problem: a block that quietly loses what someone wrote is a block they stop trusting.
+  const line = 'modes: [{ name: "a", columns: 2 }], ' +
+    '// @rows: name:text=Mode|columns:number=Columns @tabs @label: Modes';
+  const schema = P.parse(line);
+  assert.equal(P.serialize(schema, {}), line, 'unedited, via raw');
+
+  const edited = P.serialize(schema, { modes: [{ name: 'a', columns: 3 }] });
+  assert.match(edited, /@rows: name:text=Mode\|columns:number=Columns @tabs @label: Modes/,
+    'the spelled-out labels came back as inferred ones');
+
+  // And one that genuinely is inferable stays absent, so this is faithfulness rather than noise.
+  const bare = P.parse('modes: [{ name: "a" }], // @rows: name:text @tabs');
+  assert.match(P.serialize(bare, { modes: [{ name: 'b' }] }), /@rows: name:text @tabs/);
+});
