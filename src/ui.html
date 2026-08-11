@@ -1305,6 +1305,16 @@
       function selectScriptDirectly(script) {
         debugLog('Selecting script:', script);
         currentScript = script;
+
+        // **Clear the form first.** `projectConfigIntoForm` empties it when a config has no showable
+        // fields, but that only runs when Configuration UI is the tab shown — so a script with no config
+        // at all left the previous script's controls in the hidden container, and `readForm` reported
+        // Grid's fields while sitting on a script that has none.
+        //
+        // Order matters and cost a round trip to learn: doing this *after* `switchTab` below wiped the
+        // form that switch had just built, on every script in the plugin.
+        if (configUIContainer) configUIContainer.innerHTML = '';
+        configUIInstance = null;
         const fullCode = script.code || '';
         
         parsedSections = parseScriptSections(fullCode);
@@ -4478,11 +4488,20 @@
             if (labelEl) {
               var lb = labelEl.getBoundingClientRect();
               var cb = el.getBoundingClientRect();
+              // The rule is "centred on the control's **first input-height band**", not on the whole
+              // control — so the measure is where the label's centre sits relative to the control's
+              // *top*. For an aligned label that is half its own height, whatever the control's height.
+              // Measuring against the control's centre reported every textarea as 28px out when it was
+              // correct, which is a broken instrument rather than a broken layout.
               align = {
                 labelHeight: Math.round(lb.height),
                 controlHeight: Math.round(cb.height),
-                // Positive means the label's centre sits below the control's.
-                offCentreBy: Math.round(((lb.top + lb.height / 2) - (cb.top + cb.height / 2)) * 10) / 10
+                centreFromControlTop: Math.round((lb.top + lb.height / 2 - cb.top) * 10) / 10,
+                // Half the **band** the control occupies, not half the label: a control shorter than a
+                // band centres inside it, so its own top is already inset. Corrected twice now, and both
+                // times the layout was right and the measure was wrong — a metric that has to be
+                // explained after every reading is not yet a metric.
+                expected: Math.round((Math.min(cb.height, lb.height) / 2) * 10) / 10
               };
             }
             var control = el.tagName.toLowerCase();

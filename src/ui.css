@@ -1169,10 +1169,16 @@
         min-height: 32px;
       }
       
+      /* The same 32px band the label has, so a control **shorter** than a text input — an 18px toggle —
+         centres in it rather than hugging the top. Without this the label's fixed line box was an
+         assumption that every control is 32px tall, and a checkbox sat 4px above its own label. A
+         control taller than the band (a textarea) simply starts at the top, which is what keeps the
+         label on its first line. */
       .config-ui-field__control {
         min-width: 0;
         display: flex;
         align-items: center;
+        min-height: 32px;
       }
       
       /* === Config UI: input elements only (toggles, inputs, selects) === */
