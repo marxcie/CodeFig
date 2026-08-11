@@ -72,6 +72,12 @@
         --space-xl: 20px;
         --space-2xl: 24px;
 
+        /* The panel's horizontal padding. One variable, because the tab strip and the form body have
+           to agree — the left edge of the first tab and the left edge of the first label are the same
+           line, and two numbers that happen to match are not the same as one number. Dividers negate
+           it to reach the edges. */
+        --panel-padding-x: 24px;
+
         /* Border radius */
         --radius-sm: 3px;
         --radius-md: 6px;
@@ -538,8 +544,10 @@
       .editor-tabs {
         display: none; /* Hidden by default, shown when needed */
         flex-direction: row;
-        gap: 0;
-        padding: 0 16px 0 24px;
+        padding: 0 var(--panel-padding-x);
+        /* 6. The active underline is as wide as the label, so the space between tabs is a gap on the
+           strip rather than padding on each tab. */
+        gap: var(--space-lg);
         background: var(--bg-primary);
         border-bottom: 1px solid var(--border-color);
         min-height: 36px;
@@ -551,7 +559,7 @@
       }
       
       .editor-tab {
-        padding: var(--space-sm) 14px;
+        padding: var(--space-sm) 0;
         font: var(--font-size-body) var(--font-family-base);
         font-weight: var(--font-weight-medium);
         color: var(--text-secondary);
@@ -1005,7 +1013,7 @@
         min-height: 0;
         width: 100%;
         max-width: 100%;
-        padding: var(--space-lg) var(--space-2xl);
+        padding: var(--space-lg) var(--panel-padding-x);
         overflow-y: auto;
         box-sizing: border-box;
         font: var(--font-size-body) var(--font-family-base);
@@ -1064,8 +1072,11 @@
       .config-ui-form--rows .config-ui-row:last-child {
         margin-bottom: 0;
       }
+      /* 5. Edge to edge: the divider negates the padding that positions everything else, which is
+         only expressible because that padding is one variable. */
       .config-ui-row--divider {
         margin-bottom: var(--space-md);
+        margin-inline: calc(-1 * var(--panel-padding-x));
       }
       .config-ui-row--divider hr {
         border: 0;
@@ -1117,16 +1128,20 @@
         display: grid;
         grid-template-columns: 3fr 7fr;
         gap: var(--space-md);
-        align-items: center;
+        align-items: start;
         min-height: 28px;
       }
       
+      /* 1. Normal weight. 2. And centred against the height of **one input**, not the whole control:
+         a line box the same height as an input, so a label lands on the first control whatever is
+         stacked below it — the collection picker's select with a name input beneath it, a rows control
+         with a tab strip and four fields. */
       .config-ui-field__label {
         min-width: 0;
-        font-weight: bold;
         margin: 0;
         display: flex;
         align-items: center;
+        min-height: 32px;
       }
       
       .config-ui-field__control {
@@ -1234,13 +1249,8 @@
       }
       
       /* Align label with top / first line of textarea */
-      .config-ui-field--textarea .config-ui-field__row {
-        align-items: flex-start;
-      }
-      .config-ui-field--textarea .config-ui-field__label {
-        padding-top: 8px;
-        align-items: flex-start;
-      }
+      /* The `--textarea` and `--multiselect` label corrections that used to live here are gone: they
+         existed only because the shared row was centring, which the rule above no longer does. */
       
       /* A native select renders 2px taller than a text input, everywhere in the plugin — `@rows` only
          made it visible by putting the two side by side. `appearance: none` was coming anyway for the
@@ -1301,9 +1311,6 @@
       }
       .config-ui-field--multiselect .config-ui-field__row {
         align-items: flex-start;
-      }
-      .config-ui-field--multiselect .config-ui-field__label {
-        padding-top: 6px;
       }
       
       /* Radio group */
@@ -1866,12 +1873,13 @@
       .config-ui-rows-tabs {
         display: flex;
         flex-wrap: wrap;
-        gap: 2px;
+        /* The same rule as the editor tabs: underline as wide as the label, space as a gap. */
+        gap: var(--space-lg);
         border-bottom: 1px solid rgba(128, 128, 128, 0.25);
       }
 
       .config-ui-rows-tab {
-        padding: 5px 10px;
+        padding: 5px 0;
         border: none;
         background: none;
         font: inherit;
@@ -1961,13 +1969,16 @@
          like a textarea and the obvious future edit is "multi-line controls top-align", which is the
          rule for `.config-ui-field--textarea` right above. This says rows is not one of those.
          Pinned by tests/ui-css-shared-classes.test.js. */
+      /* **The deliberate exception.** Márton asked for the `@rows` label to be centred against the
+         whole control — the tab bar, the fields and the Add button — so it stays centred as rows come
+         and go. Every other label centres on its first input. Do not unify these. */
       .config-ui-field--rows .config-ui-field__row {
         align-items: center;
       }
 
       .config-ui-field--rows .config-ui-field__label {
         align-items: center;
-        padding-top: 0;
+        min-height: 0;
       }
 
       /* Two views of one config (plan 18 slice 1). Neither note is the user's fault, so neither
@@ -2022,15 +2033,17 @@
         width: 100%;
       }
 
+      /* 4. Grey pills, not inputs. They were reading as text fields, which is wrong twice over: a
+         chip is not typed into until you click its label, and the frames show grey. */
       .config-ui-chip {
         display: inline-flex;
         align-items: center;
         gap: 6px;
         padding: 6px 10px;
-        border: 1px solid var(--border-color, #e1e5e9);
+        border: none;
         border-radius: 6px;
         font-size: var(--font-size-body);
-        background: var(--input-bg, #fff);
+        background: var(--bg-tertiary);
       }
 
       /* Before a collection exists there is nowhere for a mode to be created, so the one chip is a
@@ -2101,10 +2114,14 @@
         min-width: 0;
       }
 
+      /* A tab's fields are fields, so their labels match every other label: normal weight, and the
+         same 3fr/7fr grid. */
       .config-ui-rows-cell--stacked .config-ui-rows-cell-label {
         font-size: var(--font-size-body);
         opacity: 1;
-        font-weight: bold;
+        display: flex;
+        align-items: center;
+        min-height: 32px;
       }
 
       /* ============================================================
@@ -2114,76 +2131,82 @@
          the mockup and the plugin cannot disagree about how these look. Colours from the frames:
          margins purple, columns green.
          ============================================================ */
+      /* 7 & 8. **One grid.** Row N holds the span bar and its col-N value, so they share a line by
+         construction rather than because two stacks were given matching gaps — which is what they had,
+         7px against 5px, and matching the numbers would only have hidden the fact that nothing tied
+         them together.
+
+         The diagram and the Total line are the first row; the twelve span rows follow.
+
+         8. Every width is a **proportion of the total**, read from the frame: at 1440/80/24/12 the
+         frame draws 716 wide with 40px margins, 12px gaps and 42px columns — which is 1440 at 49.7%,
+         exactly the "(50%)" the Total line reports. So the scale is not decoration, it is the
+         diagram, and the inline widths the renderer writes come straight from the arithmetic. */
       .grid-preview {
         display: grid;
         grid-template-columns: 1fr auto;
-        grid-template-areas: "diagram values" "spans values";
-        gap: 4px var(--space-xl);
+        column-gap: var(--space-xl);
+        row-gap: 6px;
         width: 100%;
-        align-items: start;
+        align-items: center;
       }
 
       .grid-preview-diagram {
-        grid-area: diagram;
+        grid-column: 1;
         display: flex;
-        gap: 4px;
         height: 44px;
+        margin-bottom: 6px;
       }
 
-      .grid-preview-margin {
-        flex: 0 0 26px;
-        background: #b7a8f0;
-      }
+      /* A filled band, not a dashed edge. The dashed guides still run down the spans area at the
+         content edges — the frame has both — but the band is the margin. */
+      .grid-preview-margin { background: #b7a8f0; }
+      .grid-preview-col { background: #17976a; }
+      .grid-preview-gap { background: transparent; }
 
-      .grid-preview-col {
-        flex: 1 1 auto;
-        background: #17976a;
-      }
-
-      .grid-preview-spans {
-        grid-area: spans;
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-        padding: 10px 26px;
-        /* Dotted guides at the margin edges: every span starts at the content edge. */
-        border-left: 1px dashed rgba(120, 100, 200, 0.7);
-        border-right: 1px dashed rgba(120, 100, 200, 0.7);
-        background: rgba(183, 168, 240, 0.09);
-      }
-
-      .grid-preview-span {
-        height: 5px;
-        background: #17976a;
-        border-radius: 1px;
-      }
-
-      .grid-preview-values {
-        grid-area: values;
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-        font-size: var(--font-size-body);
+      .grid-preview-total {
+        grid-column: 2;
+        align-self: center;
+        margin-bottom: 6px;
         white-space: nowrap;
       }
 
-      .grid-preview-total {
-        margin-bottom: 3px;
+      /* The guides: one item spanning every span row, behind the bars. Drawn once rather than per row,
+         so they are continuous the way the frame shows them. */
+      .grid-preview-guides {
+        grid-column: 1;
+        grid-row: 2 / -1;
+        align-self: stretch;
+        border-left: 1px dashed rgba(120, 100, 200, 0.7);
+        border-right: 1px dashed rgba(120, 100, 200, 0.7);
+        background: rgba(183, 168, 240, 0.09);
+        pointer-events: none;
       }
 
-      .grid-preview-list {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-        opacity: 0.85;
+      .grid-preview-bar {
+        grid-column: 1;
+        height: 8px;
+        border-radius: 2px;
+        background: #17976a;
       }
 
-      /* No target chosen yet. The Start and New frames are grey even with modes set, so this is
-         about whether there is somewhere to write, not whether the fields are filled. */
+      .grid-preview-value {
+        grid-column: 2;
+        white-space: nowrap;
+        font-size: var(--font-size-body);
+      }
+
+      /* No target chosen yet. The Start and New frames are grey even with modes set, so this is about
+         whether there is somewhere to write, not whether the fields are filled. */
       .grid-preview.is-unset .grid-preview-margin { background: #dcdcdf; }
       .grid-preview.is-unset .grid-preview-col { background: #8a8a8e; }
-      .grid-preview.is-unset .grid-preview-span { background: #dcdcdf; }
-      .grid-preview.is-unset .grid-preview-spans { border-color: rgba(140, 140, 145, 0.6); background: rgba(140, 140, 145, 0.05); }
+      .grid-preview.is-unset .grid-preview-bar { background: #dcdcdf; }
+      .grid-preview.is-unset .grid-preview-guides {
+        border-color: rgba(140, 140, 145, 0.6);
+        background: rgba(140, 140, 145, 0.05);
+      }
+      .grid-preview.is-unset .grid-preview-value,
+      .grid-preview.is-unset .grid-preview-total { opacity: 0.55; }
 
       .grid-suggestions {
         display: flex;

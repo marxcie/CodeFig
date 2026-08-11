@@ -141,6 +141,8 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 
   group: "Grid", // @label: Group within collection @placeholder="eg. Grid"
 
+  // ---
+
   // # Mode settings
   // Global mode settings — values that apply to every mode, above the tab bar.
   // These doesn't appear in the grid, just added as numeric variables for overshoot layout

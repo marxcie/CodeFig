@@ -37,11 +37,10 @@
   .mock-frame { max-width: 960px; margin: 32px auto; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.12); overflow: hidden; }
   .mock-caption { max-width: 960px; margin: 32px auto 8px; font-weight: 600; font-size: 13px; }
   .mock-caption span { font-weight: 400; opacity: .6; }
-  .mock-tabs { display: flex; gap: 20px; padding: 10px 24px 0; border-bottom: 1px solid #e1e5e9; }
+  .mock-tabs { display: flex; gap: 16px; padding: 10px 24px 0; border-bottom: 1px solid #e1e5e9; }
   .mock-tab { padding-bottom: 10px; font-size: 12px; opacity: .55; }
   .mock-tab.is-active { opacity: 1; font-weight: 600; border-bottom: 2px solid #1d1d1f; margin-bottom: -1px; }
-  .mock-body { padding: 20px 24px 28px; }
-  .mock-divide { border: 0; border-top: 1px solid #e1e5e9; margin: 20px -24px; }
+  .mock-body { padding: 0; }  /* the form supplies its own padding, from --panel-padding-x */
 </style>
 </head>
 <body>
@@ -105,7 +104,7 @@
         </div>
       </div>
 
-      <hr class="mock-divide">
+      <div class="config-ui-row config-ui-row--divider"><hr></div>
 
       <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Mode settings</h2></div>
 
@@ -152,7 +151,7 @@
         </div>
       </div>
 
-      <hr class="mock-divide">
+      <div class="config-ui-row config-ui-row--divider"><hr></div>
 
       <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Preview</h2></div>
       <div class="config-ui-row config-ui-row--field">
@@ -160,38 +159,58 @@
              modes set, so grey is about whether there is a target, not whether fields are filled. -->
         <div class="grid-preview is-unset">
           <div class="grid-preview-diagram">
-            <div class="grid-preview-margin"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-margin"></div>
+            <div class="grid-preview-margin" style="width:5.5556%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-margin" style="width:5.5556%"></div>
           </div>
-          <div class="grid-preview-spans">
-            <div class="grid-preview-span" style="width:6%"></div>
-            <div class="grid-preview-span" style="width:14%"></div>
-            <div class="grid-preview-span" style="width:22%"></div>
-            <div class="grid-preview-span" style="width:30%"></div>
-            <div class="grid-preview-span" style="width:38%"></div>
-            <div class="grid-preview-span" style="width:46%"></div>
-            <div class="grid-preview-span" style="width:54%"></div>
-            <div class="grid-preview-span" style="width:62%"></div>
-            <div class="grid-preview-span" style="width:70%"></div>
-            <div class="grid-preview-span" style="width:78%"></div>
-            <div class="grid-preview-span" style="width:86%"></div>
-            <div class="grid-preview-span" style="width:100%"></div>
-          </div>
-          <div class="grid-preview-values">
-            <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
-            <div class="grid-preview-list">
-              <div>col-1: <b>84</b></div><div>col-2: <b>192</b></div><div>col-3: <b>300</b></div>
-              <div>col-4: <b>408</b></div><div>col-5: <b>504</b></div><div>col-6: <b>624</b></div>
-              <div>col-7: <b>720</b></div><div>col-8: <b>840</b></div><div>col-9: <b>936</b></div>
-              <div>col-10: <b>1032</b></div><div>col-11: <b>1128</b></div><div>col-12: <b>1280</b></div>
-            </div>
-          </div>
+          <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
+          <div class="grid-preview-guides" style="margin-left:5.5556%;margin-right:5.5556%"></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:5.8796%"></div>
+          <div class="grid-preview-value">col-1: <b>84.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:13.4259%"></div>
+          <div class="grid-preview-value">col-2: <b>193.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:20.9722%"></div>
+          <div class="grid-preview-value">col-3: <b>302</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:28.5185%"></div>
+          <div class="grid-preview-value">col-4: <b>410.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:36.0648%"></div>
+          <div class="grid-preview-value">col-5: <b>519.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:43.6111%"></div>
+          <div class="grid-preview-value">col-6: <b>628</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:51.1574%"></div>
+          <div class="grid-preview-value">col-7: <b>736.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:58.7037%"></div>
+          <div class="grid-preview-value">col-8: <b>845.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:66.25%"></div>
+          <div class="grid-preview-value">col-9: <b>954</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:73.7963%"></div>
+          <div class="grid-preview-value">col-10: <b>1062.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:81.3426%"></div>
+          <div class="grid-preview-value">col-11: <b>1171.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:88.8889%"></div>
+          <div class="grid-preview-value">col-12: <b>1280</b></div>
         </div>
       </div>
 
@@ -259,7 +278,7 @@
         </div>
       </div>
 
-      <hr class="mock-divide">
+      <div class="config-ui-row config-ui-row--divider"><hr></div>
 
       <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Mode settings</h2></div>
 
@@ -306,44 +325,64 @@
         </div>
       </div>
 
-      <hr class="mock-divide">
+      <div class="config-ui-row config-ui-row--divider"><hr></div>
 
       <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Preview</h2></div>
       <div class="config-ui-row config-ui-row--field">
         <div class="grid-preview is-unset">
           <div class="grid-preview-diagram">
-            <div class="grid-preview-margin"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-margin"></div>
+            <div class="grid-preview-margin" style="width:5.5556%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-margin" style="width:5.5556%"></div>
           </div>
-          <div class="grid-preview-spans">
-            <div class="grid-preview-span" style="width:6%"></div>
-            <div class="grid-preview-span" style="width:14%"></div>
-            <div class="grid-preview-span" style="width:22%"></div>
-            <div class="grid-preview-span" style="width:30%"></div>
-            <div class="grid-preview-span" style="width:38%"></div>
-            <div class="grid-preview-span" style="width:46%"></div>
-            <div class="grid-preview-span" style="width:54%"></div>
-            <div class="grid-preview-span" style="width:62%"></div>
-            <div class="grid-preview-span" style="width:70%"></div>
-            <div class="grid-preview-span" style="width:78%"></div>
-            <div class="grid-preview-span" style="width:86%"></div>
-            <div class="grid-preview-span" style="width:100%"></div>
-          </div>
-          <div class="grid-preview-values">
-            <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
-            <div class="grid-preview-list">
-              <div>col-1: <b>84</b></div><div>col-2: <b>192</b></div><div>col-3: <b>300</b></div>
-              <div>col-4: <b>408</b></div><div>col-5: <b>504</b></div><div>col-6: <b>624</b></div>
-              <div>col-7: <b>720</b></div><div>col-8: <b>840</b></div><div>col-9: <b>936</b></div>
-              <div>col-10: <b>1032</b></div><div>col-11: <b>1128</b></div><div>col-12: <b>1280</b></div>
-            </div>
-          </div>
+          <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
+          <div class="grid-preview-guides" style="margin-left:5.5556%;margin-right:5.5556%"></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:5.8796%"></div>
+          <div class="grid-preview-value">col-1: <b>84.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:13.4259%"></div>
+          <div class="grid-preview-value">col-2: <b>193.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:20.9722%"></div>
+          <div class="grid-preview-value">col-3: <b>302</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:28.5185%"></div>
+          <div class="grid-preview-value">col-4: <b>410.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:36.0648%"></div>
+          <div class="grid-preview-value">col-5: <b>519.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:43.6111%"></div>
+          <div class="grid-preview-value">col-6: <b>628</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:51.1574%"></div>
+          <div class="grid-preview-value">col-7: <b>736.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:58.7037%"></div>
+          <div class="grid-preview-value">col-8: <b>845.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:66.25%"></div>
+          <div class="grid-preview-value">col-9: <b>954</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:73.7963%"></div>
+          <div class="grid-preview-value">col-10: <b>1062.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:81.3426%"></div>
+          <div class="grid-preview-value">col-11: <b>1171.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:88.8889%"></div>
+          <div class="grid-preview-value">col-12: <b>1280</b></div>
         </div>
       </div>
 
@@ -408,7 +447,7 @@
         </div>
       </div>
 
-      <hr class="mock-divide">
+      <div class="config-ui-row config-ui-row--divider"><hr></div>
 
       <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Mode settings</h2></div>
 
@@ -456,44 +495,64 @@
         </div>
       </div>
 
-      <hr class="mock-divide">
+      <div class="config-ui-row config-ui-row--divider"><hr></div>
 
       <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Preview</h2></div>
       <div class="config-ui-row config-ui-row--field">
         <div class="grid-preview">
           <div class="grid-preview-diagram">
-            <div class="grid-preview-margin"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-col"></div><div class="grid-preview-col"></div>
-            <div class="grid-preview-margin"></div>
+            <div class="grid-preview-margin" style="width:5.5556%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-gap" style="width:1.6667%"></div>
+            <div class="grid-preview-col" style="width:5.8796%"></div>
+            <div class="grid-preview-margin" style="width:5.5556%"></div>
           </div>
-          <div class="grid-preview-spans">
-            <div class="grid-preview-span" style="width:6%"></div>
-            <div class="grid-preview-span" style="width:14%"></div>
-            <div class="grid-preview-span" style="width:22%"></div>
-            <div class="grid-preview-span" style="width:30%"></div>
-            <div class="grid-preview-span" style="width:38%"></div>
-            <div class="grid-preview-span" style="width:46%"></div>
-            <div class="grid-preview-span" style="width:54%"></div>
-            <div class="grid-preview-span" style="width:62%"></div>
-            <div class="grid-preview-span" style="width:70%"></div>
-            <div class="grid-preview-span" style="width:78%"></div>
-            <div class="grid-preview-span" style="width:86%"></div>
-            <div class="grid-preview-span" style="width:100%"></div>
-          </div>
-          <div class="grid-preview-values">
-            <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
-            <div class="grid-preview-list">
-              <div>col-1: <b>84</b></div><div>col-2: <b>192</b></div><div>col-3: <b>300</b></div>
-              <div>col-4: <b>408</b></div><div>col-5: <b>504</b></div><div>col-6: <b>624</b></div>
-              <div>col-7: <b>720</b></div><div>col-8: <b>840</b></div><div>col-9: <b>936</b></div>
-              <div>col-10: <b>1032</b></div><div>col-11: <b>1128</b></div><div>col-12: <b>1280</b></div>
-            </div>
-          </div>
+          <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
+          <div class="grid-preview-guides" style="margin-left:5.5556%;margin-right:5.5556%"></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:5.8796%"></div>
+          <div class="grid-preview-value">col-1: <b>84.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:13.4259%"></div>
+          <div class="grid-preview-value">col-2: <b>193.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:20.9722%"></div>
+          <div class="grid-preview-value">col-3: <b>302</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:28.5185%"></div>
+          <div class="grid-preview-value">col-4: <b>410.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:36.0648%"></div>
+          <div class="grid-preview-value">col-5: <b>519.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:43.6111%"></div>
+          <div class="grid-preview-value">col-6: <b>628</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:51.1574%"></div>
+          <div class="grid-preview-value">col-7: <b>736.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:58.7037%"></div>
+          <div class="grid-preview-value">col-8: <b>845.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:66.25%"></div>
+          <div class="grid-preview-value">col-9: <b>954</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:73.7963%"></div>
+          <div class="grid-preview-value">col-10: <b>1062.7</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:81.3426%"></div>
+          <div class="grid-preview-value">col-11: <b>1171.3</b></div>
+          <div class="grid-preview-bar" style="margin-left:5.5556%;width:88.8889%"></div>
+          <div class="grid-preview-value">col-12: <b>1280</b></div>
         </div>
       </div>
 
