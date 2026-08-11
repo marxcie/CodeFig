@@ -398,6 +398,16 @@
         // otherwise claim it.
         // `@preview` — a marker row for a section the panel draws rather than a field. It is a row so
         // the config block can say where it goes, which is also what lets a divider sit before it.
+        // `@fromFile: domains.grid` on its own line is a **directive**: it tells the panel which domain
+        // to read and is not something to show anyone. It has to stay in the block — `configBlockFromFilePath`
+        // reads it for the preview and for auto-import — so it is kept verbatim and rendered as nothing.
+        if (/^@fromFile\b/.test(c)) {
+          rows.push({ type: "directive", raw: line });
+          lastWasBlank = false;
+          i++;
+          continue;
+        }
+
         if (/^@suggestions\b/.test(c)) {
           rows.push({ type: "suggestions", raw: line });
           lastWasBlank = false;

@@ -99,15 +99,31 @@ test('a rows cell sizes its own control, rather than inheriting the flat layout�
     'the shared rule is still there — the fix is scoped, not a change to it');
 });
 
-test('the @rows label is centred against the whole control, and says so', () => {
-  // Márton's call: centred against the column headers, every row and the Add button, so it stays
-  // centred as rows come and go. Written out rather than inherited, because `@rows` looks like a
-  // textarea and the obvious future edit is "multi-line controls top-align" — which is exactly what
-  // `.config-ui-field--textarea` does two rules away.
-  assert.match(CSS, /\.config-ui-field--rows \.config-ui-field__row \{\s*align-items: center;/);
-  assert.match(CSS, /\.config-ui-field--rows \.config-ui-field__label \{[\s\S]{0,60}align-items: center;/);
-  assert.equal(/\.config-ui-field--rows[^{]*\{[^}]*align-items: flex-start/.test(CSS), false,
-    'rows must not be top-aligned like a textarea');
+test('a rows control is a section: no label, full width', () => {
+  // **Supersedes the centred-label exception.** Plan 17 recorded that the `@rows` label should centre
+  // against the whole control; Márton's later call is that it should not be visible at all and the
+  // section should fill the width, because the heading above it already names it and the tab strip was
+  // squeezed into the 7fr control column. There is no label left to centre — a deliberate replacement,
+  // not a regression.
+  assert.match(CSS, /\.config-ui-row--fullwidth \.config-ui-field__row \{\s*\n\s*display: block;/);
+  assert.match(CSS, /\.config-ui-row--fullwidth \.config-ui-field__control \{[\s\S]{0,80}display: block;/);
+  assert.equal(/\.config-ui-field--rows \.config-ui-field__label/.test(CSS), false,
+    'the old label rule is back, so something is styling a label that should not exist');
+
+  const renderer = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+  assert.match(renderer, /if \(t !== "rows"\) \{[\s\S]{0,400}row\.appendChild\(lab\);/,
+    'the label is not built for a rows field');
+});
+
+test('a tabbed rows control has no add or remove', () => {
+  // Modes are managed by the chips above. Two places to add a mode is one too many.
+  const renderer = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+  assert.match(renderer, /if \(field\.tabs\) return;/, 'the add button is not built under tabs');
+  assert.match(renderer, /var remove = field\.tabs \? null :/, 'nor a remove button per row');
 });
 
 test('the row buttons take their height from the same values the inputs do', () => {

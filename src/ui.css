@@ -2001,15 +2001,15 @@
          like a textarea and the obvious future edit is "multi-line controls top-align", which is the
          rule for `.config-ui-field--textarea` right above. This says rows is not one of those.
          Pinned by tests/ui-css-shared-classes.test.js. */
-      /* **The deliberate exception.** Márton asked for the `@rows` label to be centred against the
-         whole control — the tab bar, the fields and the Add button — so it stays centred as rows come
-         and go. Every other label centres on its first input. Do not unify these. */
-      .config-ui-field--rows .config-ui-field__row {
-        align-items: center;
+      /* A rows control is a section, not a field: the heading above it names it, so it has no label and
+         takes the whole width rather than the 7fr control column. This replaces the centred-label
+         exception plan 17 recorded — there is no label left to centre. */
+      .config-ui-row--fullwidth .config-ui-field__row {
+        display: block;
       }
 
-      .config-ui-field--rows .config-ui-field__label {
-        align-items: center;
+      .config-ui-row--fullwidth .config-ui-field__control {
+        display: block;
         min-height: 0;
       }
 
@@ -2029,11 +2029,14 @@
 
       /* The collection picker: a select over this file's collections, and a companion input for a
          name that is not one of them. Both write the same config field. */
+      /* 70%, the same as a text input. The control filled the whole column while every input beside it
+         was 70% of it, so the select read as a longer field than the ones above and below it. Its own
+         children stay 100% *of this*, which is what makes them match. */
       .config-ui-collection {
         display: flex;
         flex-direction: column;
         gap: 6px;
-        width: 100%;
+        width: 70%;
       }
 
       .config-ui-collection .config-ui-input {

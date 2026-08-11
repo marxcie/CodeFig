@@ -22,12 +22,20 @@
     }
     var row = document.createElement("div");
     row.className = "config-ui-field__row";
-    var lab = document.createElement("label");
-    lab.className = "config-ui-field__label";
-    lab.htmlFor = id;
-    lab.textContent = l;
-    if (tip) (wrap.title = tip), lab.classList.add("config-ui-field__label--has-tooltip");
-    row.appendChild(lab);
+    // A rows control is a **section**, not a field: the section heading above it already names it, and
+    // the tab strip and its fields want the whole width rather than the 7fr control column. So no label.
+    // (This supersedes the centred-label exception plan 17 recorded for `@rows` — there is no label left
+    // to centre.)
+    if (t !== "rows") {
+      var lab = document.createElement("label");
+      lab.className = "config-ui-field__label";
+      lab.htmlFor = id;
+      lab.textContent = l;
+      if (tip) (wrap.title = tip), lab.classList.add("config-ui-field__label--has-tooltip");
+      row.appendChild(lab);
+    } else if (tip) {
+      wrap.title = tip;
+    }
     var cw = document.createElement("div");
     cw.className = "config-ui-field__control";
 
@@ -246,6 +254,13 @@
       wrap2.appendChild(mdWrap);
       return wrap2;
     }
+    if (r.type === "directive") {
+      // Present in the block, absent from the panel.
+      var hidden = document.createElement("div");
+      hidden.className = "config-ui-row config-ui-row--directive";
+      hidden.style.display = "none";
+      return hidden;
+    }
     if (r.type === "suggestions") {
       var suggestSlot = document.createElement("div");
       suggestSlot.className = "config-ui-row config-ui-row--suggestions";
@@ -283,7 +298,8 @@
     }
     if (r.type === "field") {
       var wrap3 = document.createElement("div");
-      wrap3.className = "config-ui-row config-ui-row--field";
+      wrap3.className = "config-ui-row config-ui-row--field" +
+        (r.inputType === "rows" ? " config-ui-row--fullwidth" : "");
       var frules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
       if (frules && frules.length) {
         wrap3.setAttribute("data-show-when-rules", JSON.stringify(frules));
@@ -489,6 +505,10 @@
       if (!placeholder) attachChipDrag(chip, wrap, names, index, commit);
       wrap.appendChild(chip);
     });
+
+    // With `@tabs` the modes are managed by the chips above, so add and remove do not belong here —
+    // two places to add a mode is one too many.
+    if (field.tabs) return;
 
     // **No `+` until a collection exists.** With nowhere for a mode to be created, an add button is an
     // affordance for something that cannot happen. The wording is the design's own — a hidden text
@@ -706,16 +726,31 @@
     var inList = list.indexOf(value) !== -1;
 
     select.innerHTML = "";
+    // Shown when nothing is chosen, but **not an item in the list**: it is a prompt, and picking it would
+    // mean nothing. `disabled` keeps it out of the choices; `hidden` keeps it out of the open menu.
     var placeholder = document.createElement("option");
     placeholder.value = "";
     placeholder.textContent = "Select target collection or create a new one";
+    placeholder.disabled = true;
+    placeholder.hidden = true;
     select.appendChild(placeholder);
+
     list.forEach(function (name) {
       var o = document.createElement("option");
       o.value = name;
       o.textContent = name;
       select.appendChild(o);
     });
+
+    // Separated from the collections, because it is a different kind of thing: everything above is a
+    // collection that exists, and this is an instruction to make one. A disabled option is the only
+    // separator a native select has.
+    if (list.length > 0) {
+      var rule = document.createElement("option");
+      rule.disabled = true;
+      rule.textContent = "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500";
+      select.appendChild(rule);
+    }
     var create = document.createElement("option");
     create.value = collectionNewSentinel();
     // The frames' wording, which is shorter and reads as a thing rather than an instruction.
@@ -817,7 +852,8 @@
           rowEl.appendChild(cell);
         });
 
-        var remove = document.createElement("button");
+        var remove = field.tabs ? null : document.createElement("button");
+        if (remove) {
         remove.type = "button";
         remove.className = "config-ui-rows-remove";
         remove.textContent = "Remove";
@@ -830,6 +866,7 @@
           wrap.dispatchEvent(new Event("change", { bubbles: true }));
         });
         rowEl.appendChild(remove);
+        }
         body.appendChild(rowEl);
 
         if (tabBar) {
