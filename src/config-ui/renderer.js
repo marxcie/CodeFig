@@ -135,6 +135,10 @@
       ro.className = "config-ui-readonly";
       ro.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
       ro.setAttribute("aria-readonly", "true");
+      // Named, but with `data-readonly-field` rather than `data-field`, so `getValues` still
+      // ignores it and `readForm` can still see it. "The form silently dropped this field" is
+      // exactly the state worth being able to observe from outside.
+      ro.setAttribute("data-readonly-field", n);
       ro.setAttribute("title", "Edit this one in the Script tab — no form control can hold it");
       cw.appendChild(ro);
     } else if (t === "textarea") {

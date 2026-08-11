@@ -90,29 +90,35 @@
           </div>
           
           <div class="editor-tabs" id="editorTabs">
+            <button class="editor-tab" data-tab="configUI" type="button">Configuration UI</button>
+            <button class="editor-tab" data-tab="configCode" type="button">Configuration code</button>
             <button class="editor-tab" data-tab="docs" type="button">Documentation</button>
-            <button class="editor-tab" data-tab="config" type="button">Configuration</button>
-            <button class="editor-tab active" data-tab="script" type="button">Script</button>
+            <button class="editor-tab active" data-tab="source" type="button">Source code</button>
           </div>
           
           <div class="editor-container">
             <div class="tab-content" id="tabDocs">
               <div id="docsRenderer" class="docs-rendered"></div>
             </div>
-            <div class="tab-content" id="tabConfig">
-              <div class="config-code-container" id="configCodeContainer">
-                <textarea id="codeConfig" placeholder="// Configuration section"></textarea>
-              </div>
+            <div class="tab-content" id="tabConfigUI">
+              <div class="config-stale-note" id="configStaleNote" style="display: none;"></div>
               <div class="config-ui-container" id="configUIContainer" style="display: none;">
                 <!-- Rendered when script uses // @UI_CONFIG_START … // @UI_CONFIG_END -->
               </div>
-              <!-- Rendered when the script declares // @PREVIEW: <function>. Read-only. -->
-              <div class="config-preview" id="configPreview" style="display: none;">
-                <div class="config-preview-title">Preview</div>
-                <div class="config-preview-body" id="configPreviewBody"></div>
+              <div class="config-no-form" id="configNoForm" style="display: none;"></div>
+            </div>
+            <div class="tab-content" id="tabConfigCode">
+              <div class="config-code-container" id="configCodeContainer">
+                <textarea id="codeConfig" placeholder="// Configuration section"></textarea>
               </div>
             </div>
-            <div class="tab-content active" id="tabScript">
+            <!-- Moved into whichever config tab is active: it belongs beside the thing you edit,
+                 and there is one of it. Rendered when the script declares // @PREVIEW: <fn>. -->
+            <div class="config-preview" id="configPreview" style="display: none;">
+              <div class="config-preview-title">Preview</div>
+              <div class="config-preview-body" id="configPreviewBody"></div>
+            </div>
+            <div class="tab-content active" id="tabSource">
               <textarea id="code" placeholder="// Select a script from the sidebar or create a new one"></textarea>
             </div>
             
@@ -450,9 +456,12 @@
       const codeTextarea = document.getElementById('code');
       const codeConfigTextarea = document.getElementById('codeConfig');
       const editorTabsEl = document.getElementById('editorTabs');
-      const tabScriptEl = document.getElementById('tabScript');
-      const tabConfigEl = document.getElementById('tabConfig');
+      const tabSourceEl = document.getElementById('tabSource');
+      const tabConfigUIEl = document.getElementById('tabConfigUI');
+      const tabConfigCodeEl = document.getElementById('tabConfigCode');
       const tabDocsEl = document.getElementById('tabDocs');
+      // Kept as an alias so the older references below keep meaning "a config tab is showing".
+      const tabConfigEl = tabConfigUIEl;
       const docsRendererEl = document.getElementById('docsRenderer');
       const buyMeACoffeeBtn = document.getElementById('buyMeACoffeeBtn');
       const newScriptBtn = document.getElementById('newScript');
@@ -556,7 +565,9 @@
       }
 
       // Tab state for script sections (docs / config / script)
-      let currentTab = 'script';
+      let currentTab = 'source';
+      /** True while Configuration code does not parse: the form must not write over broken text. */
+      let configFormReadOnly = false;
       let scriptHasDocs = false;
       let scriptHasConfig = false;
       let scriptHasUIConfig = false; // @UI_CONFIG_START → show UI; @CONFIG_START only → show code
@@ -674,7 +685,7 @@
         // Docs, the main editor is authoritative: applying merge here would replace
         // inline edits with stale CodeFigUI/config-editor state, make the buffer match
         // originalCode, and skip autosave — feeling like a revert to the last save.
-        if (currentTab !== 'config') return;
+        if (!isConfigTab(currentTab)) return;
 
         const startReplace = i + startMarker.length;
         const oldSegLen = j - startReplace;
@@ -712,7 +723,7 @@
       }
 
       function getEffectiveContentLength() {
-        if (currentTab === 'config' && scriptHasConfig) {
+        if (isConfigTab(currentTab) && scriptHasConfig) {
           if (scriptHasUIConfig && configUIInstance) return code.getValue().trim().length > 0;
           if (configEditor) return (code.getValue().trim().length > 0) || (configEditor.getValue().trim().length > 0);
         }
@@ -740,7 +751,7 @@
 
       function updateTabVisibility(tabs) {
         scriptHasDocs = tabs.indexOf('docs') !== -1;
-        scriptHasConfig = tabs.indexOf('config') !== -1;
+        scriptHasConfig = tabs.indexOf('configUI') !== -1 || tabs.indexOf('configCode') !== -1;
         const visible = scriptHasDocs || scriptHasConfig;
         if (editorTabsEl) editorTabsEl.classList.toggle('visible', visible);
         [].forEach.call(editorTabsEl ? editorTabsEl.querySelectorAll('.editor-tab') : [], btn => {
@@ -749,31 +760,127 @@
         });
       }
 
+      /** Either of the two views of one config. */
+      function isConfigTab(name) {
+        return name === 'configUI' || name === 'configCode';
+      }
+
+      /**
+       * Four tabs, and two of them are views of the same config.
+       *
+       * **The config block text is canonical; the form is a projection of it.** Editing the form
+       * writes back through the serializer, and showing the form re-reads the text — so there is
+       * never a divergence to resolve and "last edit wins" falls out rather than being implemented.
+       * Nothing has to decide which side is fresher, because one side is derived.
+       */
       function switchTab(tabName) {
+        const previous = currentTab;
         currentTab = tabName;
-        if (tabScriptEl) tabScriptEl.classList.toggle('active', tabName === 'script');
-        if (tabConfigEl) tabConfigEl.classList.toggle('active', tabName === 'config');
+
+        // Leaving a config tab: fold whatever was edited back into the canonical text first, so
+        // the other view reads current content rather than what was there a moment ago.
+        if (isConfigTab(previous) && !isConfigTab(tabName) && scriptHasConfig) mergeConfigIntoMain();
+
+        if (tabSourceEl) tabSourceEl.classList.toggle('active', tabName === 'source');
+        if (tabConfigUIEl) tabConfigUIEl.classList.toggle('active', tabName === 'configUI');
+        if (tabConfigCodeEl) tabConfigCodeEl.classList.toggle('active', tabName === 'configCode');
         if (tabDocsEl) tabDocsEl.classList.toggle('active', tabName === 'docs');
-        if (tabName === 'config' && scriptHasConfig) {
-          if (scriptHasUIConfig) {
-            if (configCodeContainer) configCodeContainer.style.display = 'none';
-            if (configUIContainer) { configUIContainer.style.display = 'flex'; configUIContainer.style.flexDirection = 'column'; }
-            const configContent = code && code.getValue ? extractConfigSection(code.getValue(), true) : (parsedSections && parsedSections.configContent) || '';
-            initConfigUI(configContent || '');
-          } else {
-            if (configCodeContainer) configCodeContainer.style.display = 'block';
-            if (configUIContainer) configUIContainer.style.display = 'none';
-          }
+
+        if (tabName === 'configUI' && scriptHasConfig) {
+          projectConfigIntoForm();
         }
+        if (tabName === 'configCode' && scriptHasConfig) {
+          if (configCodeContainer) configCodeContainer.style.display = 'block';
+          if (configEditor) configEditor.setValue(currentConfigBlock());
+        }
+
+        // One preview, moved to whichever config tab is showing: it belongs beside the thing you
+        // are editing, and both views edit the same config.
+        const preview = document.getElementById('configPreview');
+        if (preview) {
+          const host = tabName === 'configUI' ? tabConfigUIEl
+            : tabName === 'configCode' ? tabConfigCodeEl : null;
+          if (host && preview.parentNode !== host) host.appendChild(preview);
+          if (!host) preview.style.display = 'none';
+          else updateConfigPreviewVisibility();
+        }
+
         [].forEach.call(editorTabsEl ? editorTabsEl.querySelectorAll('.editor-tab') : [], btn => {
           btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
         });
-        if (tabName === 'config' && scriptHasConfig && configEditor) {
+        if (tabName === 'configCode' && scriptHasConfig && configEditor) {
           setTimeout(() => { configEditor.refresh(); configEditor.setSize(null, '100%'); }, 10);
         }
-        if (tabName === 'script') {
-          if (scriptHasConfig && configEditor) mergeConfigIntoMain();
+        if (tabName === 'source') {
           setTimeout(() => { code.refresh(); code.setSize(null, '100%'); }, 10);
+        }
+      }
+
+      /**
+       * Render the form from the canonical text, and say when it cannot hold all of it.
+       *
+       * Two states worth showing, and neither is the user's fault, so neither is styled as an error:
+       * the block carries settings no control represents, and the block does not parse at all — in
+       * which case the form goes read-only, because writing through it would overwrite the broken
+       * text with a projection of the last version that parsed.
+       */
+      function projectConfigIntoForm() {
+        const note = document.getElementById('configStaleNote');
+        const noForm = document.getElementById('configNoForm');
+        const block = currentConfigBlock();
+
+        if (configCodeContainer) configCodeContainer.style.display = 'none';
+
+        if (!scriptHasUIConfig) {
+          // No form for this script yet. Said plainly rather than showing an empty tab.
+          if (configUIContainer) configUIContainer.style.display = 'none';
+          if (note) note.style.display = 'none';
+          if (noForm) {
+            noForm.style.display = 'block';
+            noForm.textContent = 'This script has no form yet — its settings live in Configuration ' +
+              'code, and they are the same config.';
+          }
+          return;
+        }
+        if (noForm) noForm.style.display = 'none';
+        if (configUIContainer) {
+          configUIContainer.style.display = 'flex';
+          configUIContainer.style.flexDirection = 'column';
+        }
+
+        let schema = null;
+        try {
+          schema = window.CodeFigConfigUI ? window.CodeFigConfigUI.parse(block) : null;
+        } catch (e) {
+          schema = null;
+        }
+
+        if (!schema) {
+          configFormReadOnly = true;
+          if (note) {
+            note.style.display = 'block';
+            note.textContent = 'Configuration code has an error, so the form is showing the last ' +
+              'version it could read. Fix it there and this will catch up.';
+          }
+          return;
+        }
+
+        configFormReadOnly = false;
+        initConfigUI(block || '');
+
+        const unsupported = (schema.rows || []).filter(function (r) {
+          return r.type === 'field' && r.inputType === 'unsupported';
+        });
+        if (note) {
+          if (unsupported.length > 0) {
+            note.style.display = 'block';
+            note.textContent = unsupported.length === 1
+              ? '"' + unsupported[0].label + '" is only editable in Configuration code.'
+              : unsupported.length + ' settings are only editable in Configuration code: ' +
+                unsupported.map(function (r) { return r.label; }).join(', ') + '.';
+          } else {
+            note.style.display = 'none';
+          }
         }
       }
 
@@ -810,9 +917,9 @@
         scriptHasUIConfig = nextHasUI;
 
         const tabs = [];
+        if (nextHasConfig) { tabs.push('configUI'); tabs.push('configCode'); }
         if (nextHasDocs) tabs.push('docs');
-        if (nextHasConfig) tabs.push('config');
-        tabs.push('script');
+        tabs.push('source');
         updateTabVisibility(tabs);
 
         if (structureChanged && nextHasDocs && docsRendererEl) {
@@ -823,12 +930,12 @@
           configEditor.setValue(next.configContent || '');
         }
 
-        if (structureChanged && nextHasUI && currentTab === 'config') {
+        if (structureChanged && nextHasUI && isConfigTab(currentTab)) {
           initConfigUI(next.configContent || '');
         }
 
-        if (currentTab === 'docs' && !nextHasDocs) switchTab('script');
-        else if (currentTab === 'config' && !nextHasConfig) switchTab('script');
+        if (currentTab === 'docs' && !nextHasDocs) switchTab('source');
+        else if (isConfigTab(currentTab) && !nextHasConfig) switchTab('source');
 
         updateButtonStates();
       }
@@ -1157,10 +1264,12 @@
         scriptHasUIConfig = !!parsedSections.hasUIConfig;
         
         const tabs = [];
+        // Two views of one config, both listed whenever the script has a config at all. The form
+        // tab exists even for a script with no form yet: it says so, which is a truer answer than
+        // hiding the tab and making the structure change per script.
+        if (parsedSections.hasConfig) { tabs.push('configUI'); tabs.push('configCode'); }
         if (parsedSections.hasDocs) tabs.push('docs');
-        // Show Configuration whenever @CONFIG_START exists — not only when @UI-style `var x =` rows parse to a form (object-literal configs use the code editor).
-        if (parsedSections.hasConfig) tabs.push('config');
-        tabs.push('script');
+        tabs.push('source');
         updateTabVisibility(tabs);
         
         if (code && code.setValue) {
@@ -1178,7 +1287,12 @@
           }, 10);
         }
         // First view: Configuration if script has config, otherwise Script
-        const initialTab = scriptHasConfig ? 'config' : 'script';
+        // Configuration UI is the default — but only when there is one. Until each script's form
+        // is built (18 slices 2-6), sending a config-block script to an empty form tab would be a
+        // regression dressed as a restructure, so those open on Configuration code.
+        const initialTab = scriptHasConfig
+          ? (scriptHasUIConfig ? 'configUI' : 'configCode')
+          : 'source';
         currentTab = initialTab;
         switchTab(initialTab);
         originalCode = fullCode;
@@ -2372,8 +2486,8 @@
           scriptHasDocs = false;
           scriptHasConfig = false;
           updateTabVisibility(['script']);
-          currentTab = 'script';
-          switchTab('script');
+          currentTab = 'source';
+          switchTab('source');
           scriptTitle.textContent = 'Select a script';
           scriptTitle.classList.remove('editable');
           scriptStatus.textContent = 'Ready';
@@ -2413,8 +2527,8 @@
           scriptHasDocs = false;
           scriptHasConfig = false;
           updateTabVisibility(['script']);
-          currentTab = 'script';
-          switchTab('script');
+          currentTab = 'source';
+          switchTab('source');
           scriptTitle.textContent = 'Select a script';
           scriptTitle.classList.remove('editable');
           scriptStatus.textContent = 'Ready';
@@ -2869,7 +2983,7 @@
       // Toggle line comments for selected lines in CodeMirror
       function toggleLineComments() {
         // Determine which editor is active
-        const activeEditor = currentTab === 'config' ? configEditor : code;
+        const activeEditor = currentTab === 'configCode' ? configEditor : code;
         if (!activeEditor) return;
 
         const doc = activeEditor.getDoc();
@@ -3368,7 +3482,7 @@
                   });
                   if (configCodeContainer) configCodeContainer.style.display = 'none';
                   container.style.display = 'flex';
-                  if (tabConfigEl && scriptHasConfig) switchTab('config');
+                  if (scriptHasConfig) switchTab(scriptHasUIConfig ? 'configUI' : 'configCode');
                 }
               } catch (e) { console.warn('CodeFigUI render failed', e); }
             }
@@ -3714,7 +3828,7 @@
 
       function _codefigUiCommandNames() {
         return ['selectScript', 'listScripts', 'readConfig', 'writeConfig', 'readInfoPanel',
-          'pressImport', 'readButtonState', 'readPreview', 'readTabs'];
+          'pressImport', 'readButtonState', 'readPreview', 'readTabs', 'readForm'];
       }
 
       /**
@@ -3783,9 +3897,32 @@
             });
           }
 
-          case 'readTabs':
-            return Promise.resolve({ current: currentTab, hasDocs: !!scriptHasDocs,
-              hasConfig: !!scriptHasConfig, hasUiConfig: !!scriptHasUIConfig });
+          case 'readForm':
+            // The **rendered** form, read out of the DOM rather than out of the schema. Reading the
+            // schema would only prove the parser agrees with itself; the question worth asking is
+            // whether the control the parser asked for is the control that exists, holding the
+            // value it should. `@rows` shipped with its parse half tested ten ways and its render
+            // half untested, which is what this closes.
+            return Promise.resolve(readRenderedForm());
+
+          case 'readTabs': {
+            var shown = [];
+            [].forEach.call(document.querySelectorAll('.editor-tab'), function (btn) {
+              if (btn.style.display !== 'none') shown.push(btn.getAttribute('data-tab'));
+            });
+            var note = document.getElementById('configStaleNote');
+            var noForm = document.getElementById('configNoForm');
+            return Promise.resolve({
+              current: currentTab,
+              shown: shown,
+              hasDocs: !!scriptHasDocs,
+              hasConfig: !!scriptHasConfig,
+              hasUiConfig: !!scriptHasUIConfig,
+              formReadOnly: !!configFormReadOnly,
+              staleNote: note && note.style.display !== 'none' ? note.textContent : null,
+              noFormNote: noForm && noForm.style.display !== 'none' ? noForm.textContent : null
+            });
+          }
 
           case 'readButtonState': {
             // The derived state itself, not a reading of the DOM — this is the thing three cached
@@ -3816,6 +3953,86 @@
             throw new Error('Unknown UI command "' + command + '". Known: ' +
               _codefigUiCommandNames().join(', '));
         }
+      }
+
+      /** What the form actually rendered: every control, its type, and what it holds. */
+      function readRenderedForm() {
+        var container = document.getElementById('configUIContainer');
+        var shown = !!(container && container.style.display !== 'none');
+        var fields = [];
+
+        function rowVisible(el) {
+          var row = el.closest ? el.closest('.config-ui-field') : null;
+          if (!row) return true;
+          return row.style.display !== 'none';
+        }
+
+        if (container) {
+          container.querySelectorAll('[data-rows-field]').forEach(function (wrap) {
+            var rows = [];
+            wrap.querySelectorAll('.config-ui-row').forEach(function (rowEl) {
+              var row = {};
+              rowEl.querySelectorAll('[data-row-field]').forEach(function (cell) {
+                var key = cell.getAttribute('data-row-field');
+                row[key] = cell.type === 'checkbox' ? cell.checked : cell.value;
+              });
+              rows.push(row);
+            });
+            var tabs = [];
+            wrap.querySelectorAll('.config-ui-rows-tab').forEach(function (tab) {
+              tabs.push({ label: tab.textContent, active: tab.classList.contains('is-active') });
+            });
+            fields.push({
+              name: wrap.getAttribute('data-rows-field'),
+              control: 'rows',
+              tabs: tabs.length > 0 ? tabs : null,
+              rows: rows,
+              visible: rowVisible(wrap)
+            });
+          });
+
+          container.querySelectorAll('[data-field]').forEach(function (el) {
+            if (el.classList.contains('config-ui-multiselect-cb')) return;
+            var name = el.getAttribute('data-field');
+            var control = el.tagName.toLowerCase();
+            if (control === 'input') control = el.type;
+            if (el.classList.contains('config-ui-multiselect')) control = 'multiselect';
+            var entry = { name: name, control: control, visible: rowVisible(el) };
+            if (control === 'multiselect') {
+              entry.value = [];
+              el.querySelectorAll('.config-ui-multiselect-cb:checked').forEach(function (cb) {
+                entry.value.push(cb.value);
+              });
+            } else if (el.type === 'checkbox' || el.type === 'radio') {
+              entry.value = el.checked;
+              if (el.type === 'radio') entry.option = el.value;
+            } else {
+              entry.value = el.value;
+            }
+            if (el.tagName.toLowerCase() === 'select') {
+              entry.options = Array.prototype.map.call(el.options, function (o) { return o.value; });
+            }
+            fields.push(entry);
+          });
+
+          // Fields no control can hold. Reported because "the form dropped it" and "the form has
+          // no control for it" look identical from outside otherwise.
+          container.querySelectorAll('[data-readonly-field]').forEach(function (el) {
+            fields.push({
+              name: el.getAttribute('data-readonly-field'),
+              control: 'unsupported',
+              value: el.textContent,
+              visible: rowVisible(el)
+            });
+          });
+        }
+
+        return {
+          shown: shown,
+          script: currentScript ? currentScript.name : null,
+          hasUiConfig: !!scriptHasUIConfig,
+          fields: fields
+        };
       }
 
       function _codefigUiReport(id, payload) {

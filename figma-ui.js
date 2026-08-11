@@ -35,8 +35,13 @@ const path = require('path');
 const { PORT } = require('./figma-console-server.js');
 const BASE = 'http://127.0.0.1:' + PORT;
 
-/** A UI command is a DOM operation, not a document walk — it should answer in milliseconds. */
-const DEFAULT_TIMEOUT_MS = 20000;
+/**
+ * A UI command is a DOM operation and runs in milliseconds. The wait is **pickup**, and pickup
+ * depends on the plugin's `setInterval` still firing at 1s — which it does not when Figma is in the
+ * background: a browser throttles a hidden page's timers, and the observed cadence was one poll
+ * every 30-60 seconds. So the timeout is sized for a throttled iframe, not for the work.
+ */
+const DEFAULT_TIMEOUT_MS = 90000;
 const POLL_MS = 200;
 
 /**
@@ -52,6 +57,7 @@ const COMMANDS = {
   readConfig: 'the text in the configuration editor',
   writeConfig: 'replace it — text=<...> or --text-file <path>',
   readInfoPanel: 'the results panel: title, text, whose results they are',
+  readForm: 'the rendered form: every control, its type, and what it holds',
   readPreview: 'the Configuration tab preview: whether it is shown, and its text',
   readTabs: 'which tabs this script has and which is current',
   pressImport: "press the import button and wait for it to settle",
@@ -185,18 +191,30 @@ async function main() {
     process.exit(1);
   }
   console.log('→ ' + args.command + ' queued. Waiting for the plugin…');
+  var warnedAboutFocus = false;
 
-  const deadline = Date.now() + args.timeout;
+  const started = Date.now();
+  const deadline = started + args.timeout;
   for (;;) {
     if (Date.now() > deadline) {
       console.error(
         '\n❌ No answer within ' + args.timeout + 'ms.\n' +
-          '   Is the plugin open, on a dev build? A UI command needs the iframe alive, not just the bridge.'
+          '   Three things it could be, in order of likelihood:\n' +
+          '     1. Figma is in the background. A hidden page has its timers throttled, so the\n' +
+          '        plugin polls every 30-60s instead of every second. Bring Figma to the front.\n' +
+          '     2. The plugin is closed. A UI command needs the iframe alive, not just the bridge.\n' +
+          '     3. The plugin is on a production build, where this channel does not exist.'
       );
       process.exit(1);
     }
     const res = await fetch(BASE + '/ui/' + id);
     const cmd = await res.json();
+    if (!warnedAboutFocus && cmd.status === 'queued' && Date.now() - started > 5000) {
+      // Still not picked up after five seconds of one-second polling. Say why now rather than at
+      // the timeout, because the fix takes one click and the wait is otherwise unexplained.
+      console.log('   (not picked up yet — if Figma is in the background its timers are throttled)');
+      warnedAboutFocus = true;
+    }
     if (cmd.status === 'done') {
       warnIfStale(cmd.buildId);
       if (!cmd.ok) {
