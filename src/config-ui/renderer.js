@@ -73,6 +73,31 @@
         rg.appendChild(lbl);
       });
       cw.appendChild(rg);
+    } else if (t === "multiselect" && field.options && field.options.length && !field.optionSource) {
+      // A fixed set of options with `@multi`. This branch did not exist: the multiselect required a
+      // dynamic `optionSource`, so a static list fell through to the text input at the bottom and
+      // rendered an array as `gap,margin` — the corruption class again, arriving by omission.
+      var sbox = document.createElement("div");
+      sbox.id = id;
+      sbox.className = "config-ui-multiselect";
+      sbox.setAttribute("data-field", n);
+      sbox.setAttribute("data-multi", "true");
+      var chosen = Array.isArray(v) ? v.map(String) : (v == null || String(v).trim() === "" ? [] : [String(v)]);
+      field.options.forEach(function (opt) {
+        var lbl = document.createElement("label");
+        lbl.className = "config-ui-multiselect-item";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "config-ui-multiselect-cb";
+        cb.value = opt;
+        cb.checked = chosen.indexOf(opt) !== -1;
+        lbl.appendChild(cb);
+        var sp = document.createElement("span");
+        sp.textContent = opt;
+        lbl.appendChild(sp);
+        sbox.appendChild(lbl);
+      });
+      cw.appendChild(sbox);
     } else if (t === "multiselect" && field.optionSource) {
       var mbox = document.createElement("div");
       mbox.id = id;
@@ -216,18 +241,16 @@
       if (frules && frules.length) {
         wrap3.setAttribute("data-show-when-rules", JSON.stringify(frules));
       }
-      var f = {
-        name: r.name,
-        type: r.inputType,
-        value: r.value,
-        label: r.label,
-        tooltip: r.tooltip,
-        optionSource: r.optionSource,
-        options: r.options,
-        placeholder: r.placeholder,
-        showWhenRules: r.showWhenRules,
-        showWhen: r.showWhen,
-      };
+      // **Copied, not hand-listed.** This was a whitelist of ten property names, and it silently
+      // dropped every property the parser learned after it was written — `@rows` shipped with its
+      // `columns` and `tabs` lost here, so rows rendered with no cells and `@tabs` produced no tabs.
+      // A list that has to be kept in step with another list is the seam this codebase keeps
+      // hitting; the fix is the same one `bridge.js` got. `type` is the only rename.
+      var f = {};
+      for (var key in r) {
+        if (Object.prototype.hasOwnProperty.call(r, key)) f[key] = r[key];
+      }
+      f.type = r.inputType;
       wrap3.appendChild(buildField(f, idx));
       return wrap3;
     }

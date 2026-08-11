@@ -118,3 +118,43 @@ test('a rows field is no longer carried as an unknown annotation', () => {
   assert.equal((f.unknownAnnotations || []).join(' ').indexOf('@tabs'), -1);
   assert.equal(P.serialize(P.parse(LINE + ' @tabs'), { sets: [{ name: 'x' }] }).match(/@rows:/g).length, 1);
 });
+
+// ---------------------------------------------------------------------------
+// What the renderer is handed
+// ---------------------------------------------------------------------------
+
+test('the renderer is handed the whole field, not a list of ten property names', () => {
+  // `@rows` shipped with `columns` and `tabs` dropped here, so rows rendered with no cells and
+  // `@tabs` produced no tabs — invisible to every parser test, because the parser was right.
+  // Found by putting every row type in one form and reading it back through the bridge.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const renderer = fs2.readFileSync(
+    path2.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+  const buildRow = renderer.slice(renderer.indexOf('if (r.type === "field")'));
+  assert.match(buildRow, /for \(var key in r\) \{/, 'the field is copied');
+  assert.equal(/var f = \{\s*\n\s*name: r\.name,/.test(renderer), false,
+    'the hand-written whitelist is back — it will drop the next property the parser learns');
+});
+
+test('a static @multi list is a multiselect, not a text input', () => {
+  // Pre-existing, found by the same sweep: the multiselect branch required a dynamic
+  // `optionSource`, so `@options: a|b|c @multi` fell through and rendered the array as "a,b".
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const renderer = fs2.readFileSync(
+    path2.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+  assert.match(
+    renderer,
+    /t === "multiselect" && field\.options && field\.options\.length && !field\.optionSource/,
+    'a static option list has no branch, so it falls through to the text input'
+  );
+
+  // And the parser calls it a multiselect, which is what makes the branch reachable.
+  const f = P.parse('var picked = ["gap"]; // @options: gap|margin|padding @multi')
+    .rows.filter((r) => r.type === 'field')[0];
+  assert.equal(f.inputType, 'multiselect');
+  assert.deepEqual(f.options, ['gap', 'margin', 'padding']);
+});
