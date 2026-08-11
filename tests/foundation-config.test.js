@@ -739,3 +739,60 @@ test('a portable config from a registry-less file carries no invented viewports'
   assert.deepEqual(config.viewports, []);
   assert.equal(JSON.stringify(config).indexOf('Tight'), -1, 'a density mode is not a viewport');
 });
+
+test('a recorded Grid set comes back as the config that made it', () => {
+  // Grid records a manifest now, like the ramps — plan 19's contract is that a run records the whole
+  // `domains[domain]` slice, and Grid simply predated it, which left its panel with an auto-import
+  // that could never fire.
+  //
+  // The risk worth checking rather than assuming: `foundationSliceKeys` and `foundationDomainKeys`
+  // are hand-written lists, and a grid key missing from either would be dropped on the way in — the
+  // seventh instance of that shape in this codebase. This asserts every field survives, per-mode
+  // payload included.
+  const config = {
+    collectionName: 'Responsive System',
+    group: 'Grid',
+    extensionColumns: 4,
+    distributeToMaxColumns: true,
+    generateOverview: true,
+    modes: [
+      { name: 'desktop', containerWidth: 1920, columns: 12, gap: 40, padding: 80 },
+      { name: 'mobile', containerWidth: 375, columns: 4, gap: 16, padding: 20 }
+    ]
+  };
+
+  const slice = normaliseConfig(config).config.domains.grid;
+  assert.ok(slice, 'grid was not recognised as a domain');
+
+  // Exactly what `foundationAutoImport` does with what it reads back.
+  const back = toDomainConfig({
+    v: 1, collection: 'Responsive System', group: 'Grid', viewports: [], domains: { grid: slice }
+  }, 'grid');
+
+  assert.equal(back.extensionColumns, 4, 'a top-level grid key was dropped');
+  assert.equal(back.distributeToMaxColumns, true);
+  assert.equal(back.generateOverview, true);
+  assert.deepEqual(back.modes.map((m) => m.name), ['desktop', 'mobile'], 'and in the order declared');
+  assert.deepEqual(back.modes[0], {
+    name: 'desktop', containerWidth: 1920, columns: 12, gap: 40, padding: 80
+  }, 'the per-mode payload must survive whole');
+  assert.deepEqual(back.modes[1], {
+    name: 'mobile', containerWidth: 375, columns: 4, gap: 16, padding: 20
+  });
+});
+
+test('a Grid manifest keeps mode order without needing the registry', () => {
+  // The same property the ramps rely on: `viewportOrder` is recorded on the slice, so a file whose
+  // registry is empty still gets its modes back in the order the run used.
+  const slice = normaliseConfig({
+    collectionName: 'RS', group: 'Grid',
+    modes: [
+      { name: 'mobile', containerWidth: 375, columns: 4, gap: 16, padding: 20 },
+      { name: 'desktop', containerWidth: 1920, columns: 12, gap: 40, padding: 80 }
+    ]
+  }).config.domains.grid;
+
+  assert.deepEqual(slice.viewportOrder, ['mobile', 'desktop']);
+  const back = toDomainConfig({ v: 1, collection: 'RS', viewports: [], domains: { grid: slice } }, 'grid');
+  assert.deepEqual(back.modes.map((m) => m.name), ['mobile', 'desktop']);
+});

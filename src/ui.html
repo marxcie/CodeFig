@@ -4458,10 +4458,15 @@
           });
         }
 
+        // Auto-import's answer, reported because it *is* the behaviour: "it was imported
+        // automatically" is a claim, and a claim nothing can read is one nobody can check.
+        var autoNote = document.getElementById('autoImportNote');
         return {
           shown: shown,
           script: currentScript ? currentScript.name : null,
           hasUiConfig: !!scriptHasUIConfig,
+          autoImportNote: autoNote ? autoNote.textContent : null,
+          untouched: configIsUntouched(),
           fields: fields
         };
       }

@@ -26,7 +26,7 @@
 @import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest } from "@Foundation"
 
 // ========================================
 // GRID SYSTEM CONFIGURATION
@@ -384,6 +384,30 @@ createOrUpdateCollection(gridSystemConfig)
     var previewStats = done.previewStats;
     var result = done.result;
     var gridStyleStats = done.gridStyleStats;
+
+    // Record the set, the way the ramps do. Plan 19's contract is that a run records the whole
+    // `normaliseConfig(...).domains[domain]` slice; Grid simply predates it, which is why its panel
+    // had an auto-import that could never fire — a feature that lies. Written last and it cannot fail
+    // the run: the variables and the grid style are real whether or not the record of them is.
+    var manifest = null;
+    try {
+      manifest = writeManifest(result.collection, {
+        domain: 'grid',
+        group: resolveGroup(gridSystemConfig),
+        modes: (gridSystemConfig.modes || []).map(function (m) { return m.name; }),
+        tokens: [],
+        config: normaliseConfig(gridSystemConfig).config.domains.grid
+      });
+      if (manifest && manifest.ok) {
+        console.log('Recorded this set: ' + manifest.key + ' (' + manifest.bytes + ' characters)');
+      } else if (manifest) {
+        console.warn('Variables were written. The set could not be recorded: ' +
+          ((manifest.warnings[0] || {}).message || 'unknown reason'));
+      }
+    } catch (e) {
+      console.warn('Variables were written. The set could not be recorded: ' + (e && e.message ? e.message : e));
+    }
+
     var msg = 'Grid System: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' vars updated';
     if (gridStyleStats.created > 0 || gridStyleStats.updated > 0) {
       msg += '; ' + gridStyleStats.created + ' grid style(s) created, ' + gridStyleStats.updated + ' updated';
@@ -391,6 +415,7 @@ createOrUpdateCollection(gridSystemConfig)
     if (previewStats.created > 0) {
       msg += '; ' + previewStats.created + ' preview frame(s)';
     }
+    if (manifest && manifest.ok) msg += '; set recorded';
     figma.notify(msg);
   })
   .catch(function (error) {

@@ -25,6 +25,13 @@ deleting variable modes they did not recognise.
 
 ### Added
 
+- **A panel fills itself from where it points.** When a collection and group name somewhere CodeFig
+  has already generated, the settings load on their own and a line under Group says so — no button to
+  find, and nothing to press. It never overwrites what you have typed: once you have edited anything,
+  it stops filling and tells you a saved config is there instead.
+- **Grid records what it generated**, the way Spacing and Corner radius already did. That is what
+  lets the panel above fill itself, and what lets a config move between files. Plugin data only —
+  no variable, name or binding is affected.
 - **Pick a collection instead of typing its name.** The collection field is a list of the collections
   in your file, plus *Create a new one* for a name that is not there yet. It stays one setting — the
   name — because a collection whose name does not exist is created when you run, so there is nothing
