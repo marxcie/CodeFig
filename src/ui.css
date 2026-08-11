@@ -1016,7 +1016,11 @@
         min-height: 0;
         width: 100%;
         max-width: 100%;
-        padding: var(--space-lg) var(--panel-padding-x);
+        /* Vertical padding only. The **rows** carry the horizontal padding, so a full-bleed divider
+           is one that simply does not have it. Negating the padding with a negative margin looked
+           equivalent and was not: `overflow-y: auto` makes this a scroll container, which clips the
+           overflow rather than letting it bleed — the right-hand side cut off. */
+        padding: var(--space-lg) 0;
         overflow-y: auto;
         box-sizing: border-box;
         font: var(--font-size-body) var(--font-family-base);
@@ -1071,6 +1075,8 @@
         min-width: 0;
         margin-bottom: var(--space-md);
         flex-shrink: 0;
+        padding-inline: var(--panel-padding-x);
+        box-sizing: border-box;
       }
       .config-ui-form--rows .config-ui-row:last-child {
         margin-bottom: 0;
@@ -1083,8 +1089,9 @@
         margin-bottom: var(--space-md);
       }
 
-      .config-ui-row--divider-section {
-        margin-inline: calc(-1 * var(--panel-padding-x));
+      /* Edge to edge: no horizontal padding, rather than a negative margin trying to escape one. */
+      .config-ui-form--rows .config-ui-row--divider-section {
+        padding-inline: 0;
       }
       .config-ui-row--divider hr {
         border: 0;

@@ -177,8 +177,9 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // # Preview
   // @preview
 
-  // --- @section
-
+  // These two are real settings that appear in none of the three frames, so they have no designed
+  // home yet and sit here without a section of their own. Awaiting a decision: leave them visible,
+  // give them a section, or drop them from the form and leave them to Configuration code.
   // When true: col-s uses span round(s×N÷maxCols) per viewport so grid fractions align (see @DOC)
   distributeToMaxColumns: false,
 
