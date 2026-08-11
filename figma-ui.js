@@ -61,6 +61,8 @@ const COMMANDS = {
   readPreview: 'the Configuration tab preview: whether it is shown, and its text',
   readTabs: 'which tabs this script has and which is current',
   switchTab: 'open a tab — name=configUI|configCode|docs|source',
+  setField: 'type into a control — name=<field> value=<...> [part=<cell|new|option>] [index=<n>]',
+  clickControl: 'press part of a control — name=<field> part=add|remove|tab [index=<n>]',
   pressImport: "press the import button and wait for it to settle",
   readButtonState: 'the import button state, derived — visible, dot, reason'
 };
@@ -119,6 +121,8 @@ function parseArgs(argv) {
       out.json = true;
     } else if (token === '--allow-stale') {
       out.allowStale = true;
+    } else if (token === '--index') {
+      out.args.index = Number(argv[++i]);
     } else if (token === '--text-file') {
       out.args.text = fs.readFileSync(argv[++i], 'utf8');
     } else if (token.indexOf('=') !== -1) {

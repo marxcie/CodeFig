@@ -549,8 +549,8 @@
       }
 
       function syncUIToCode(values) {
-        if (!scriptHasConfig || typeof window.CodeFigConfigUI === 'undefined') return;
         try {
+          if (!scriptHasConfig || typeof window.CodeFigConfigUI === 'undefined') return;
           if (scriptHasUIConfig) {
             // @UI_CONFIG: configEditor is not used; mergeConfigIntoMain parses from main code
             mergeConfigIntoMain();
@@ -561,7 +561,13 @@
             configEditor.setValue(newCode);
             mergeConfigIntoMain();
           }
-        } catch (err) {}
+        } catch (err) {
+          // Swallowed as before: a half-typed config must not throw on every keystroke.
+        } finally {
+          // The settle point a bridge-driven change waits on, so a read straight after a write
+          // cannot observe the config before the edit reached it. Same shape as finishConfigLoad's.
+          _codefigUiSettle();
+        }
       }
 
       // Tab state for script sections (docs / config / script)
@@ -3867,7 +3873,97 @@
 
       function _codefigUiCommandNames() {
         return ['selectScript', 'listScripts', 'readConfig', 'writeConfig', 'readInfoPanel',
-          'pressImport', 'readButtonState', 'readPreview', 'readTabs', 'readForm', 'switchTab'];
+          'pressImport', 'readButtonState', 'readPreview', 'readTabs', 'readForm', 'switchTab',
+          'setField', 'clickControl'];
+      }
+
+      /** Resolvers waiting for a form change to be folded into the config. */
+      var _codefigUiSettleWaiters = [];
+
+      function _codefigUiSettle() {
+        if (_codefigUiSettleWaiters.length === 0) return;
+        var waiters = _codefigUiSettleWaiters;
+        _codefigUiSettleWaiters = [];
+        waiters.forEach(function (resolve) { resolve('change'); });
+      }
+
+      /**
+       * Do something to the form, then wait for it to land.
+       *
+       * The settle point is `syncUIToCode` finishing, the same shape `pressImport` uses: a read
+       * straight after a write must not observe the state before the change reached the config. The
+       * frame fallback is for actions that change no value — clicking a tab inside a control moves
+       * what is visible and fires no change.
+       */
+      function actAndSettle(action) {
+        return new Promise(function (resolve, reject) {
+          var settled = false;
+          function finish(how) {
+            if (settled) return;
+            settled = true;
+            resolve(how);
+          }
+          _codefigUiSettleWaiters.push(finish);
+          try {
+            action();
+          } catch (e) {
+            settled = true;
+            reject(e);
+            return;
+          }
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () { finish('frame'); });
+            });
+          } else {
+            setTimeout(function () { finish('frame'); }, 32);
+          }
+        });
+      }
+
+      /**
+       * The element a named control uses, addressed by **field name and control identity only**.
+       *
+       * No selectors from outside. A selector channel is a short step from an eval channel, and it
+       * would let a command act on something the UI does not regard as a control at all — including
+       * Run, which must stay unreachable: a UI click would bypass the codefig-test filename guard
+       * that `figma:run` carries, and that guard is the only thing standing between a command and
+       * someone's real document.
+       */
+      function uiControlTarget(name, part, index) {
+        var container = document.getElementById('configUIContainer');
+        if (!container) throw new Error('The configuration form is not open');
+        var at = typeof index === 'number' ? index : 0;
+
+        var rows = container.querySelector('[data-rows-field="' + name + '"]');
+        if (rows) {
+          var items = rows.querySelectorAll('.config-ui-rows-item');
+          if (part === 'add') return rows.querySelector('.config-ui-rows-add');
+          if (part === 'remove') {
+            return items[at] ? items[at].querySelector('.config-ui-rows-remove') : null;
+          }
+          if (part === 'tab') {
+            var tabs = rows.querySelectorAll('.config-ui-rows-tab');
+            return tabs[at] || null;
+          }
+          if (part) return items[at] ? items[at].querySelector('[data-row-field="' + part + '"]') : null;
+          return null;
+        }
+
+        var picker = container.querySelector('[data-collection-field="' + name + '"]');
+        if (picker) {
+          if (part === 'new') return picker.querySelector('.config-ui-collection-new');
+          return picker.querySelector('.config-ui-collection-select');
+        }
+
+        var flat = container.querySelectorAll('[data-field="' + name + '"]');
+        if (flat.length === 0) return null;
+        if (flat.length === 1) return flat[0];
+        // A radio group, or a multiselect's checkboxes: the part names the option.
+        for (var i = 0; i < flat.length; i++) {
+          if (flat[i].value === part) return flat[i];
+        }
+        return flat[0];
       }
 
       /**
@@ -3958,6 +4054,51 @@
             }
             switchTab(wanted);
             return Promise.resolve({ current: currentTab });
+          }
+
+          case 'setField': {
+            if (!a.name) throw new Error('setField needs { name }');
+            var target = uiControlTarget(a.name, a.part, a.index);
+            if (!target) {
+              throw new Error('No control named "' + a.name + '"' +
+                (a.part ? ' part "' + a.part + '"' : ''));
+            }
+            var tag = target.tagName.toLowerCase();
+            // Set the value, then dispatch what a keystroke dispatches, and let the existing
+            // listeners do the work. Calling `getValues` or a handler directly would pass while the
+            // control stayed broken — the trap `pressImport` avoided by pressing the button itself.
+            return actAndSettle(function () {
+              if (target.type === 'checkbox' || target.type === 'radio') {
+                target.checked = a.value === true || a.value === 'true';
+              } else {
+                target.value = a.value == null ? '' : String(a.value);
+              }
+              if (tag === 'select' || target.type === 'checkbox' || target.type === 'radio') {
+                target.dispatchEvent(new Event('change', { bubbles: true }));
+              } else {
+                target.dispatchEvent(new Event('input', { bubbles: true }));
+                target.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            }).then(function (how) {
+              return { settled: how, text: currentConfigBlock() };
+            });
+          }
+
+          case 'clickControl': {
+            if (!a.name || !a.part) throw new Error('clickControl needs { name, part }');
+            // Parts of a config control only. There is deliberately no way to reach Run, or anything
+            // else that writes to the document: `figma:run` is the path for that, and it carries the
+            // filename guard a UI click would bypass.
+            if (['add', 'remove', 'tab'].indexOf(a.part) === -1) {
+              throw new Error('clickControl accepts part add, remove or tab — not "' + a.part + '"');
+            }
+            var clickable = uiControlTarget(a.name, a.part, a.index);
+            if (!clickable) throw new Error('No "' + a.part + '" on control "' + a.name + '"');
+            return actAndSettle(function () {
+              clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            }).then(function (how) {
+              return { settled: how, text: currentConfigBlock() };
+            });
           }
 
           case 'readForm':

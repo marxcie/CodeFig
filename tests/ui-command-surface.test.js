@@ -73,3 +73,71 @@ test('there is no way to send code for the iframe to evaluate', () => {
   assert.equal(body.indexOf('eval('), -1, 'handleUiCommand must never evaluate its argument');
   assert.equal(body.indexOf('new Function'), -1, 'nor build a function from it');
 });
+
+// ---------------------------------------------------------------------------
+// The two commands that change things
+// ---------------------------------------------------------------------------
+
+/** The body of one `case` in handleUiCommand. */
+function commandBody(name) {
+  const start = UI.indexOf("case '" + name + "':");
+  assert.notEqual(start, -1, 'no case for ' + name);
+  const end = UI.indexOf("case '", start + 10);
+  return UI.slice(start, end === -1 ? start + 4000 : end);
+}
+
+test('setField goes through the real event path, never a handler', () => {
+  // A command that called `getValues` or an onChange directly would pass while the control stayed
+  // broken. `pressImport` avoided that by pressing the button; these dispatch what a keystroke does
+  // and let the existing listeners run.
+  const body = commandBody('setField');
+  assert.match(body, /dispatchEvent\(new Event\('input', \{ bubbles: true \}\)\)/);
+  assert.match(body, /dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
+  assert.equal(body.indexOf('getValues('), -1, 'setField must not collect values itself');
+  assert.equal(body.indexOf('syncUIToCode('), -1, 'nor call the handler the listeners call');
+  assert.equal(body.indexOf('configUIInstance.setValues'), -1, 'nor set values behind the form');
+});
+
+test('clickControl dispatches a real click, and only on parts of a config control', () => {
+  const body = commandBody('clickControl');
+  assert.match(body, /dispatchEvent\(new MouseEvent\('click', \{ bubbles: true, cancelable: true \}\)\)/);
+  assert.match(body, /\['add', 'remove', 'tab'\]\.indexOf\(a\.part\) === -1/,
+    'the allowed parts are a closed list');
+});
+
+test('no command can reach Run, or anything else that writes to the document', () => {
+  // The one real cost of widening the channel. A UI click on Run would bypass the codefig-test
+  // filename guard `figma:run` carries — which is the only thing between a command and someone's
+  // real document — so Run is not addressable at all rather than guarded twice.
+  const start = UI.indexOf('function handleUiCommand(');
+  const body = UI.slice(start, UI.indexOf('function _codefigUiReport', start));
+  for (const forbidden of ['runBtn', 'runScript(', "post('RUN'", 'executeScript(']) {
+    assert.equal(body.indexOf(forbidden), -1,
+      'handleUiCommand references ' + forbidden + ' — a command must not be able to start a run');
+  }
+});
+
+test('controls are addressed by name and identity, never by a selector from outside', () => {
+  // A selector channel is a short step from an eval channel: it would let a command act on something
+  // the UI does not regard as a control, Run included.
+  const fn = UI.match(/function uiControlTarget\(name, part, index\)[\s\S]*?\n      \}/);
+  assert.ok(fn, 'uiControlTarget not found');
+  assert.equal(/querySelector\((?!['"])/.test(fn[0]), false,
+    'a selector is being built from something other than a literal');
+  assert.match(fn[0], /data-rows-field="' \+ name \+ '"/);
+  assert.match(fn[0], /data-field="' \+ name \+ '"/);
+
+  const setField = commandBody('setField');
+  assert.equal(setField.indexOf('a.selector'), -1, 'no selector argument');
+  assert.equal(setField.indexOf('querySelector'), -1, 'and no selecting of its own');
+});
+
+test('both commands wait for the change to land before answering', () => {
+  // Otherwise a read straight after a write observes the state before the edit reached the config.
+  for (const name of ['setField', 'clickControl']) {
+    assert.match(commandBody(name), /return actAndSettle\(/, name + ' does not wait');
+  }
+  assert.match(UI, /function actAndSettle\(action\)/);
+  // The settle point is the same one the form's own change path ends at.
+  assert.match(UI, /\} finally \{\s*\n\s*\/\/[\s\S]{0,200}_codefigUiSettle\(\);/);
+});
