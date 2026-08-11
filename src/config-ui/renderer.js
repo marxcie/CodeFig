@@ -326,7 +326,7 @@
 
     function selectTab(index) {
       if (!field.tabs) return;
-      body.querySelectorAll(".config-ui-row").forEach(function (el, i) {
+      body.querySelectorAll(".config-ui-rows-item").forEach(function (el, i) {
         el.style.display = i === index ? "" : "none";
       });
       tabBar.querySelectorAll(".config-ui-rows-tab").forEach(function (el, i) {
@@ -341,14 +341,14 @@
 
       list.forEach(function (row, index) {
         var rowEl = document.createElement("div");
-        rowEl.className = "config-ui-row";
+        rowEl.className = "config-ui-rows-item";
         rowEl.setAttribute("data-row-index", String(index));
 
         (field.columns || []).forEach(function (column) {
           var cell = document.createElement("label");
-          cell.className = "config-ui-row-cell";
+          cell.className = "config-ui-rows-cell";
           var caption = document.createElement("span");
-          caption.className = "config-ui-row-cell-label";
+          caption.className = "config-ui-rows-cell-label";
           caption.textContent = column.label;
           cell.appendChild(caption);
           cell.appendChild(buildRowCell(column, row ? row[column.key] : undefined));
@@ -357,7 +357,7 @@
 
         var remove = document.createElement("button");
         remove.type = "button";
-        remove.className = "config-ui-row-remove";
+        remove.className = "config-ui-rows-remove";
         remove.textContent = "Remove";
         // Remove-then-add is how a row is replaced, so removal needs no confirmation here — this
         // control edits a config, and nothing reaches the document until the script runs.
@@ -382,7 +382,7 @@
 
       var add = document.createElement("button");
       add.type = "button";
-      add.className = "config-ui-row-add";
+      add.className = "config-ui-rows-add";
       add.textContent = "Add";
       add.addEventListener("click", function () {
         var next = collectRows(wrap, field);
@@ -439,7 +439,7 @@
   /** The rows of one control, read back out of the DOM in their displayed order. */
   function collectRows(wrap, field) {
     var out = [];
-    wrap.querySelectorAll(".config-ui-row").forEach(function (rowEl) {
+    wrap.querySelectorAll(".config-ui-rows-item").forEach(function (rowEl) {
       var row = {};
       (field.columns || []).forEach(function (column) {
         var el = rowEl.querySelector('[data-row-field="' + column.key + '"]');

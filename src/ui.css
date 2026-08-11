@@ -1883,23 +1883,17 @@
         gap: 8px;
       }
 
-      .config-ui-row {
+      /* One entry of a repeatable group. **Its own class**: `.config-ui-row` is the wrapper on
+         every form row — headings, paragraphs, dividers, fields — so styling that one boxed every
+         config form in the plugin. See the note in CLAUDE.md. */
+      .config-ui-rows-item {
         display: flex;
         flex-wrap: wrap;
         align-items: flex-end;
         gap: 8px;
-        padding: 8px;
-        border: 1px solid rgba(128, 128, 128, 0.22);
-        border-radius: 4px;
       }
 
-      /* A tab per row means one row at a time, so it does not need its own frame. */
-      .config-ui-rows--tabs .config-ui-row {
-        border: none;
-        padding: 0;
-      }
-
-      .config-ui-row-cell {
+      .config-ui-rows-cell {
         display: flex;
         flex-direction: column;
         gap: 3px;
@@ -1907,13 +1901,13 @@
         min-width: 80px;
       }
 
-      .config-ui-row-cell-label {
+      .config-ui-rows-cell-label {
         font-size: 10px;
         opacity: 0.6;
       }
 
-      .config-ui-row-remove,
-      .config-ui-row-add {
+      .config-ui-rows-remove,
+      .config-ui-rows-add {
         padding: 5px 10px;
         font: inherit;
         font-size: 11px;
@@ -1924,7 +1918,7 @@
         cursor: pointer;
       }
 
-      .config-ui-row-add {
+      .config-ui-rows-add {
         align-self: flex-start;
       }
 

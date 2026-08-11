@@ -3881,10 +3881,16 @@
 
           case 'writeConfig': {
             if (typeof a.text !== 'string') throw new Error('writeConfig needs { text }');
-            if (scriptHasUIConfig) throw new Error('This script uses a form, not a config block');
             if (!configEditor) throw new Error('The configuration editor is not open');
+            // Form scripts used to be refused here, which slice 1 made wrong: both tabs are now
+            // editable views of one config, and the block text is the canonical one. Writing it and
+            // re-projecting is exactly what typing into Configuration code does.
+            var previousTab = currentTab;
+            if (!isConfigTab(currentTab)) switchTab('configCode');
             configEditor.setValue(a.text);
             mergeConfigIntoMain();
+            if (scriptHasUIConfig) projectConfigIntoForm();
+            if (isConfigTab(previousTab)) switchTab(previousTab);
             return Promise.resolve({ text: currentConfigBlock() });
           }
 
@@ -3996,7 +4002,7 @@
         if (container) {
           container.querySelectorAll('[data-rows-field]').forEach(function (wrap) {
             var rows = [];
-            wrap.querySelectorAll('.config-ui-row').forEach(function (rowEl) {
+            wrap.querySelectorAll('.config-ui-rows-item').forEach(function (rowEl) {
               var row = {};
               rowEl.querySelectorAll('[data-row-field]').forEach(function (cell) {
                 var key = cell.getAttribute('data-row-field');
