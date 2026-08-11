@@ -398,6 +398,13 @@
         // otherwise claim it.
         // `@preview` — a marker row for a section the panel draws rather than a field. It is a row so
         // the config block can say where it goes, which is also what lets a divider sit before it.
+        if (/^@suggestions\b/.test(c)) {
+          rows.push({ type: "suggestions", raw: line });
+          lastWasBlank = false;
+          i++;
+          continue;
+        }
+
         if (/^@preview\b/.test(c)) {
           rows.push({ type: "preview", raw: line });
           lastWasBlank = false;

@@ -1594,7 +1594,14 @@
         return tab ? tab.textContent : null;
       }
 
+      /** `// @SUGGESTIONS: <fn>`, the same shape as `@PREVIEW:`. */
+      function scriptSuggestionsFunction(code) {
+        const match = /^[^\S\n]*\/\/[^\S\n]*@SUGGESTIONS:[^\S\n]*([A-Za-z_$][\w$]*)/m.exec(code || '');
+        return match ? match[1] : null;
+      }
+
       function buildPreviewSnippet(code, fn, config, domain, seq) {
+        const suggestFn = scriptSuggestionsFunction(code);
         const imports = (window.CodeFigImports && typeof window.CodeFigImports.findImports === 'function')
           ? window.CodeFigImports.findImports(code).map(function (imp) { return imp.statement; })
           : [];
@@ -1602,6 +1609,12 @@
           'window.codefigConfigLoadResult({',
           '  preview: ' + fn + '(' + JSON.stringify(config) + ', ' + JSON.stringify(domain) + ', ' +
             JSON.stringify(activeModeName()) + '),',
+          // The suggestions section, when the script has one. Same run: two sections computed from one
+          // config is one round trip, not two.
+          (suggestFn
+            ? '  suggestions: ' + suggestFn + '(' + JSON.stringify(config) + ', ' +
+              JSON.stringify(domain) + ', ' + JSON.stringify(activeModeName()) + '),'
+            : '  suggestions: null,'),
           '  previewSeq: ' + seq,
           '});'
         ]).join('\n');
@@ -1643,6 +1656,14 @@
         }
         const body = document.getElementById('configPreviewBody');
         if (body) body.innerHTML = html;
+      }
+
+      function renderConfigSuggestions(html) {
+        const slot = document.querySelector('[data-suggestions-slot]');
+        if (!slot) return;
+        // Kept dimmed by the `data-unwired` the renderer set: the numbers are real, the *search* is not
+        // built, and those are different claims.
+        slot.innerHTML = html || '';
       }
 
       /** Debounced: long enough that typing `12` never renders `1`. */
@@ -3761,7 +3782,10 @@
               }
               if (data.preview !== undefined) {
                 configLoadInFlight = false;
-                if (data.previewSeq === _previewSeq) renderConfigPreview(data.preview);
+                if (data.previewSeq === _previewSeq) {
+                  renderConfigPreview(data.preview);
+                  renderConfigSuggestions(data.suggestions);
+                }
                 return;
               }
               if (data.probe) {
@@ -4444,6 +4468,23 @@
           container.querySelectorAll('[data-field]').forEach(function (el) {
             if (el.classList.contains('config-ui-multiselect-cb')) return;
             var name = el.getAttribute('data-field');
+            // How the label sits against its control. The shared alignment rule changed for **every**
+            // form in the plugin, and "does a label look centred" is not something a control list can
+            // answer — so it is measured. Reported, never asserted against a number here: a pixel
+            // assertion would break on a font change.
+            var fieldWrap = el.closest ? el.closest('.config-ui-field') : null;
+            var labelEl = fieldWrap ? fieldWrap.querySelector('.config-ui-field__label') : null;
+            var align = null;
+            if (labelEl) {
+              var lb = labelEl.getBoundingClientRect();
+              var cb = el.getBoundingClientRect();
+              align = {
+                labelHeight: Math.round(lb.height),
+                controlHeight: Math.round(cb.height),
+                // Positive means the label's centre sits below the control's.
+                offCentreBy: Math.round(((lb.top + lb.height / 2) - (cb.top + cb.height / 2)) * 10) / 10
+              };
+            }
             var control = el.tagName.toLowerCase();
             if (control === 'input') control = el.type;
             if (el.classList.contains('config-ui-multiselect')) control = 'multiselect';
@@ -4462,6 +4503,7 @@
             if (el.tagName.toLowerCase() === 'select') {
               entry.options = Array.prototype.map.call(el.options, function (o) { return o.value; });
             }
+            if (align) entry.align = align;
             fields.push(entry);
           });
 
@@ -4530,9 +4572,22 @@
         // Auto-import's answer, reported because it *is* the behaviour: "it was imported
         // automatically" is a claim, and a claim nothing can read is one nobody can check.
         var autoNote = document.getElementById('autoImportNote');
+        // The two edges that have to be the same line: the first tab's and the first row's.
+        var firstTab = document.querySelector('.editor-tab');
+        var firstRow = container ? container.querySelector('.config-ui-row') : null;
+        var edges = null;
+        if (firstTab && firstRow) {
+          edges = {
+            tabLeft: Math.round(firstTab.getBoundingClientRect().left),
+            rowContentLeft: Math.round(firstRow.getBoundingClientRect().left +
+              parseFloat(window.getComputedStyle(firstRow).paddingLeft || '0'))
+          };
+        }
+
         return {
           shown: shown,
           script: currentScript ? currentScript.name : null,
+          edges: edges,
           hasUiConfig: !!scriptHasUIConfig,
           autoImportNote: autoNote ? autoNote.textContent : null,
           // Gone with the untouched rule: loading overwrites, and the safety lives entirely in the

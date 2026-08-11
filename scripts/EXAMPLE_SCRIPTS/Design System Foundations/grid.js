@@ -24,12 +24,13 @@
 
 // The Configuration tab redraws this as you type. Pure: it computes and renders, and touches nothing.
 // @PREVIEW: gridPreviewHtml
+// @SUGGESTIONS: gridSuggestionsHtml
 
 // Import functions from libraries
 @import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
-@import { gridPreviewHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest } from "@Foundation"
+@import { gridPreviewHtml, gridSuggestionsHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest } from "@Foundation"
 
 // ========================================
 // GRID SYSTEM CONFIGURATION
@@ -146,6 +147,9 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 
   // # Preview
   // @preview
+
+  // # Suggested whole number divisions
+  // @suggestions
 
 
   // @CONFIG_END

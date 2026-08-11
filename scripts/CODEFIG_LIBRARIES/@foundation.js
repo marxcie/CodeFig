@@ -1699,6 +1699,102 @@ function gridPreviewHtml(config, domain, modeName) {
   return out.join('');
 }
 
+/**
+ * Is this margin and gap clean for a mode — does its column width come out whole?
+ *
+ * One condition. `colWidth` is the only derived value in a grid, so it is the only one that can come out
+ * fractional; with a whole `colWidth` and a whole gap every span is whole automatically, so there is
+ * nothing more to test. (An earlier version also checked halves, thirds and quarters. They inherit.)
+ */
+function gridDivisionIsClean(mode, margin, gap) {
+  var width = Number(mode && mode.containerWidth);
+  var columns = Number(mode && mode.columns);
+  if (!isFinite(width) || !isFinite(columns) || columns <= 0) return false;
+  var content = width - 2 * margin;
+  if (content <= 0) return false;
+  var colWidth = (content - (columns - 1) * gap) / columns;
+  return colWidth > 0 && Math.abs(colWidth - Math.round(colWidth)) < 1e-9;
+}
+
+/** The modes a margin and gap divide cleanly — what a card's badges say. */
+function gridCleanModes(modes, margin, gap) {
+  var clean = [];
+  var list = Array.isArray(modes) ? modes : [];
+  for (var i = 0; i < list.length; i++) {
+    if (gridDivisionIsClean(list[i], margin, gap)) clean.push(list[i].name);
+  }
+  return clean;
+}
+
+/** The spans a card displays: `col-1`, the halfway span, and the full span. Derived, never hardcoded. */
+function gridCardSpans(mode) {
+  var model = gridPreviewModel(mode, 716);
+  if (!model.ok) return [];
+  var n = model.columns;
+  var wanted = [1, n % 2 === 0 ? n / 2 : Math.ceil(n / 2), n];
+  var seen = {};
+  var out = [];
+  for (var i = 0; i < wanted.length; i++) {
+    var k = wanted[i];
+    if (k < 1 || k > n || seen[k]) continue;
+    seen[k] = true;
+    out.push({ n: k, span: model.spans[k - 1].span });
+  }
+  return out;
+}
+
+/**
+ * The suggestions section.
+ *
+ * **Only the search is missing.** The card for the *current* configuration is drawn from real numbers —
+ * its spans by the same arithmetic the preview uses, its badges by the clean test above — so the layout
+ * can be judged without inventing anything. Finding *alternative* margin and gap pairs is the pass-2
+ * piece, and the section says so rather than showing plausible cards nobody computed.
+ *
+ * Selected means *currently applied*, and it is computed from the values rather than remembered.
+ */
+function gridSuggestionsHtml(config, domain, modeName) {
+  var inner = (config && config.config) || config || {};
+  var modes = Array.isArray(inner.modes) ? inner.modes : [];
+  var mode = null;
+  for (var i = 0; i < modes.length; i++) {
+    if (!modeName || String(modes[i].name).toLowerCase() === String(modeName).toLowerCase()) {
+      mode = modes[i];
+      break;
+    }
+  }
+  if (!mode) mode = modes[0] || null;
+  if (!mode) return '';
+
+  var margin = Number(mode.padding);
+  var gap = Number(mode.gap);
+  var spans = gridCardSpans(mode);
+  if (!spans.length) return '';
+
+  var clean = gridCleanModes(modes, margin, gap);
+  var out = ['<div class="grid-suggestions">'];
+  out.push('<button class="grid-suggestion is-selected" type="button">');
+  out.push('<span class="grid-suggestion-main">');
+  out.push('<span class="grid-suggestion-title">margin ' + gridPreviewNumber(margin) +
+    ' \u00b7 gap ' + gridPreviewNumber(gap) + '</span>');
+  out.push('<span class="grid-suggestion-spans">' + spans.map(function (s) {
+    return 'col-' + s.n + ' ' + gridPreviewNumber(s.span);
+  }).join(' \u00b7 ') + '</span>');
+  out.push('</span>');
+  out.push('<span class="grid-suggestion-badges">Whole numbers:');
+  if (clean.length === 0) {
+    out.push('<span class="grid-suggestion-badge grid-suggestion-badge--none">none</span>');
+  } else {
+    for (var c = 0; c < clean.length; c++) {
+      out.push('<span class="grid-suggestion-badge">' + foundationEscapeHtml(clean[c]) + '</span>');
+    }
+  }
+  out.push('</span>');
+  out.push('</button>');
+  out.push('</div>');
+  return out.join('');
+}
+
 /** Can this key be written without quotes in a JS object literal? */
 function isPlainConfigKey(key) {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(String(key));
