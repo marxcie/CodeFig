@@ -2249,7 +2249,7 @@
           lastOrdering = { at: new Date().toLocaleTimeString() };
           for (var k in extra) lastOrdering[k] = extra[k];
         }
-        if (!api || !api.orderModesByFile) { record({ skipped: 'no config-ui' }); return answer; }
+        if (!api || !api.alignModesToFile) { record({ skipped: 'no config-ui' }); return answer; }
         if (!fileModes.found) { record({ skipped: 'no file modes' }); return answer; }
 
         var wrap = configUIContainer && configUIContainer.querySelector('[data-chips-field]');
@@ -2268,7 +2268,7 @@
         // so a stale success from an earlier call was the answer the instrument gave.
         if (!row) { record({ skipped: 'no "' + field + '" array in the block' }); return answer; }
 
-        var out = api.orderModesByFile(row.value, chipModeIds, fileModes.modes);
+        var out = api.alignModesToFile(row.value, chipModeIds, fileModes.modes);
         chipModeIds = out.ids;
         record({
           entries: row.value.length,

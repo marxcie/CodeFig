@@ -365,7 +365,7 @@ test('the config follows the collection\'s mode order, not the order it was stor
     { name: 'Desktop-large', gap: 48 }, { name: 'Tablet', gap: 24 },
   ];
   const ids = P.matchModeIds(stored, file);
-  const out = P.orderModesByFile(stored, ids, file);
+  const out = P.alignModesToFile(stored, ids, file);
 
   assert.equal(out.changed, true);
   assert.deepEqual(out.entries.map((e) => e.name),
@@ -379,9 +379,9 @@ test('the config follows the collection\'s mode order, not the order it was stor
 test('reordering is idempotent, so it cannot become a rebuild loop', () => {
   // It writes the block, which re-projects the form, which is where auto-import once looped.
   const file = [{ modeId: '1', name: 'A' }, { modeId: '2', name: 'B' }];
-  const once = P.orderModesByFile([{ name: 'B' }, { name: 'A' }], ['2', '1'], file);
+  const once = P.alignModesToFile([{ name: 'B' }, { name: 'A' }], ['2', '1'], file);
   assert.equal(once.changed, true);
-  assert.equal(P.orderModesByFile(once.entries, once.ids, file).changed, false);
+  assert.equal(P.alignModesToFile(once.entries, once.ids, file).changed, false);
 });
 
 test('a renamed chip keeps its position, because the match is by id first', () => {
@@ -393,7 +393,7 @@ test('a renamed chip keeps its position, because the match is by id first', () =
     [{ name: 'Desktop' }, { name: 'Tablet' }, { name: 'Mobile' }], ['1', '2', '3'],
     { op: 'rename', index: 1, from: 'Tablet', to: 'Pad' }
   );
-  const out = P.orderModesByFile(renamed.entries, renamed.ids, file);
+  const out = P.alignModesToFile(renamed.entries, renamed.ids, file);
   assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Pad', 'Mobile']);
   assert.equal(out.changed, false);
 });
@@ -402,7 +402,7 @@ test('a mode the file does not have follows the ones it does, and is never dropp
   // A pasted config, or a mode added and not yet run. It is not evidence of an order, so it does not
   // set one — but losing it would be the loss class this whole area exists to avoid.
   const file = [{ modeId: '1', name: 'Desktop' }, { modeId: '2', name: 'Mobile' }];
-  const out = P.orderModesByFile(
+  const out = P.alignModesToFile(
     [{ name: 'Watch' }, { name: 'Mobile' }, { name: 'Desktop' }], [null, '2', '1'], file
   );
   assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Mobile', 'Watch']);
@@ -509,4 +509,60 @@ test('the structure sniff reads the editor and does not merge into it', () => {
   // And `getFullCode` still merges, because the paths that compose a whole script do need it.
   const full = ui.slice(ui.indexOf('function getFullCode'), ui.indexOf('function getEffectiveContentLength'));
   assert.match(full, /mergeConfigIntoMain\(\)/);
+});
+
+test('a chip shows the name the file has for that mode, not the config\'s spelling', () => {
+  // Márton spotted this in `codefig-test`: the collection\'s modes are `Desktop / Pad / Mobile` and the
+  // panel displayed `desktop / tablet / mobile`. Both were "right" — the chips were drawn from the
+  // config, and `grid.js` ships lowercase keys that `viewportLabel` capitalises on the way into the
+  // document. But the spec is that a chip and a tab show *whatever the API reports for that mode*, so a
+  // panel showing its own keys next to a variables panel showing something else is wrong.
+  const file = [
+    { modeId: '12:0', name: 'Desktop' }, { modeId: '13:2', name: 'Pad' },
+    { modeId: '13:3', name: 'Mobile' },
+  ];
+  const entries = [{ name: 'desktop', gap: 40 }, { name: 'tablet', gap: 24 }, { name: 'mobile', gap: 16 }];
+  const out = P.alignModesToFile(entries, P.matchModeIds(entries, file), file);
+
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Mobile', 'tablet']);
+  assert.equal(out.entries[0].gap, 40, 'the values come with the name');
+  assert.equal(out.entries[1].gap, 16);
+  // `tablet` is not a mode of this file — it was renamed to `Pad` — so it keeps its own name and
+  // follows the modes that exist. Adopting a name for it would be inventing a link.
+  assert.equal(out.entries[2].name, 'tablet');
+  assert.equal(out.ids[2], null);
+
+  assert.equal(P.alignModesToFile(out.entries, out.ids, file).changed, false, 'and it settles');
+});
+
+test('a pending rename survives the file\'s spelling being adopted', () => {
+  // The narrow rule, and a test found it within a minute of the change: adopting the file's name for a
+  // chip that was *renamed* would put the old name straight back and destroy the intent. Only a
+  // spelling difference is adopted, decided by the same `sameModeName` that decides a case difference
+  // is not a rename.
+  const file = [{ modeId: '1', name: 'Desktop' }, { modeId: '2', name: 'Tablet' }];
+  const renamed = P.applyChipOp(
+    [{ name: 'Desktop' }, { name: 'Tablet' }], ['1', '2'],
+    { op: 'rename', index: 1, from: 'Tablet', to: 'Pad' }
+  );
+  const out = P.alignModesToFile(renamed.entries, renamed.ids, file);
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Pad'], 'the new name stands');
+  assert.deepEqual(
+    P.modeIntents('C', out.entries, out.ids, file, []).renames,
+    [{ modeId: '2', from: 'Tablet', to: 'Pad' }],
+    'and the rename still reaches the run'
+  );
+});
+
+test('adopting the file\'s spelling is not a rename of the mode', () => {
+  // The two are deliberately different. The config now says `Desktop`; the mode was always called
+  // `Desktop`. `sameModeName` is what keeps a case difference from reaching `renameMode`, and this must
+  // not go around it.
+  const file = [{ modeId: '1', name: 'Desktop' }];
+  const out = P.alignModesToFile([{ name: 'desktop' }], ['1'], file);
+  assert.equal(out.entries[0].name, 'Desktop');
+  const intents = P.modeIntents('C', out.entries, out.ids, file, []);
+  assert.deepEqual(intents.renames, [], 'nothing is renamed in the document');
+  assert.deepEqual(intents.additions, []);
+  assert.deepEqual(intents.removals, []);
 });

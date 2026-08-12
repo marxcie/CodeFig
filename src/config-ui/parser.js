@@ -996,10 +996,18 @@
    * order and follow the ones it does. They are not evidence of an order, so they do not get to set
    * one, and they are certainly not dropped.
    *
-   * Returns `{ entries, ids, changed }`; `changed` is false when the order already matched, so a
-   * caller can avoid writing the block for nothing.
+   * **It also adopts the file's spelling.** A config ships `desktop` and the collection holds
+   * `Desktop`, because `viewportLabel` capitalises on the way into the document — so an unloaded panel
+   * displayed the script's own keys while the variables panel two inches away said something else.
+   * Márton's spec is that a chip and a tab show *whatever the API reports for that mode*, and the way
+   * to make a view show the file is to give it the file's names rather than to relabel it on the way
+   * out. Case-only differences still never produce a **rename of the mode** — `sameModeName` sees to
+   * that — so this changes what the config says and nothing about what a run does.
+   *
+   * Returns `{ entries, ids, changed }`; `changed` covers order *and* spelling, so a caller can avoid
+   * writing the block for nothing.
    */
-  function orderModesByFile(entries, ids, fileModes) {
+  function alignModesToFile(entries, ids, fileModes) {
     var list = Array.isArray(entries) ? entries.slice() : [];
     var idList = Array.isArray(ids) ? ids.slice() : [];
     while (idList.length < list.length) idList.push(null);
@@ -1031,11 +1039,30 @@
       orderedIds.push(idList[j]);
     }
 
+    // The file's spelling, for the entries that are linked to one of its modes.
+    var nameById = {};
+    file.forEach(function (mode) { nameById[mode.modeId] = mode.name; });
+    var renamed = ordered.map(function (entry, i) {
+      var id = orderedIds[i];
+      var fileName = id ? nameById[id] : null;
+      if (!fileName || !entry || entry.name === fileName) return entry;
+      // **Only a difference in spelling, never a difference in name.** A chip renamed `Tablet` to `Pad`
+      // is a *pending rename of the Figma mode*, and the file still says `Tablet` until the run happens
+      // — so adopting the file's name here would quietly undo what someone just typed. `sameModeName`
+      // is the same predicate that decides a case difference is not a rename; it decides this too, and
+      // the two cannot drift apart because there is one of it.
+      if (!sameModeName(entry.name, fileName)) return entry;
+      var copy = {};
+      // Key by key, so `name` keeps its position — first, where every block writes it.
+      for (var key in entry) copy[key] = key === "name" ? fileName : entry[key];
+      return copy;
+    });
+
     var changed = false;
     for (var k = 0; k < list.length; k++) {
-      if (list[k] !== ordered[k]) { changed = true; break; }
+      if (list[k] !== renamed[k]) { changed = true; break; }
     }
-    return { entries: ordered, ids: orderedIds, changed: changed };
+    return { entries: renamed, ids: orderedIds, changed: changed };
   }
 
   /**
@@ -1705,7 +1732,7 @@
     applyChipOp: applyChipOp,
     modeIntents: modeIntents,
     matchModeIds: matchModeIds,
-    orderModesByFile: orderModesByFile,
+    alignModesToFile: alignModesToFile,
     // Exported because the panel asks the same question when it words the removal note, and "the same
     // mode name" must have exactly one definition. It did not, and the note said "Removing" for a
     // replacement — understating what was about to happen, in the one place that exists to state it.
