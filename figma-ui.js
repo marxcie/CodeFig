@@ -60,8 +60,9 @@ const COMMANDS = {
   readPreview: 'the Configuration tab preview: whether it is shown, and its text',
   readTabs: 'which tabs this script has and which is current',
   switchTab: 'open a tab — name=configUI|configCode|docs|source',
-  setField: 'type into a control — name=<field> value=<...> [part=<cell|new|option>] [index=<n>]',
-  clickControl: 'press part of a control — name=<field> part=add|remove|tab [index=<n>]',
+  setField: 'type into a control — name=<field> value=<...> [part=<cell|new|option|chip|chip-add>] [index=<n>]',
+  clickControl: 'press part of a control — name=<field> part=add|remove|tab|chip-remove [index=<n>]',
+  readModeIntents: 'what a Run would do to the collection\'s modes — renames, removals, additions',
 };
 
 function currentBuildId() {

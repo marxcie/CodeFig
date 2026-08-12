@@ -101,8 +101,8 @@ test('setField goes through the real event path, never a handler', () => {
 test('clickControl dispatches a real click, and only on parts of a config control', () => {
   const body = commandBody('clickControl');
   assert.match(body, /dispatchEvent\(new MouseEvent\('click', \{ bubbles: true, cancelable: true \}\)\)/);
-  assert.match(body, /\['add', 'remove', 'tab'\]\.indexOf\(a\.part\) === -1/,
-    'the allowed parts are a closed list');
+  // The membership of the list is asserted below, on its own. Here: that there *is* one.
+  assert.match(body, /\]\.indexOf\(a\.part\) === -1/, 'the allowed parts are a closed list');
 });
 
 test('no command can reach Run, or anything else that writes to the document', () => {
@@ -140,4 +140,29 @@ test('both commands wait for the change to land before answering', () => {
   assert.match(UI, /function actAndSettle\(action\)/);
   // The settle point is the same one the form's own change path ends at.
   assert.match(UI, /\} finally \{\s*\n\s*\/\/[\s\S]{0,200}_codefigUiSettle\(\);/);
+});
+
+test('an index is coerced, and a bad one is refused rather than becoming zero', () => {
+  // `index=1` reaches the plugin as the string "1". `typeof index === 'number' ? index : 0` sent it to
+  // index 0, so a bridge-driven rename edited the *first* chip and reported success — a verification
+  // that passes while doing the wrong thing is worse than one that fails. On `chip-remove` the same
+  // slip would remove the wrong mode, and removals reach the document.
+  const fn = UI.match(/function uiControlTarget\(name, part, index\)[\s\S]*?\n      \}/)[0];
+  assert.equal(/typeof index === 'number' \? index : 0/.test(fn), false,
+    'a string index is silently becoming 0 again');
+  assert.match(fn, /at = Number\(index\)/);
+  assert.match(fn, /throw new Error\('index must be a whole number/,
+    'and a nonsense index is refused, not defaulted');
+});
+
+test('clickControl still cannot reach anything but a config control', () => {
+  // The allow-list gained `chip-remove` when the mode chips became drivable. It must stay an
+  // allow-list: the moment a part name is accepted because it is not recognised, this channel can
+  // press things the UI does not regard as config — Run included.
+  const body = commandBody('clickControl');
+  const list = body.match(/\[([^\]]*)\]\.indexOf\(a\.part\) === -1/);
+  assert.ok(list, 'the allow-list is gone — clickControl is accepting any part');
+  const parts = list[1].split(',').map((p) => p.trim().replace(/^'|'$/g, ''));
+  assert.deepEqual(parts.slice().sort(), ['add', 'chip-remove', 'remove', 'tab'],
+    'a part was added to the allow-list without being considered here');
 });

@@ -585,7 +585,9 @@
           // **Removed, or replaced.** Adding a chip with the name you just removed is how you replace a
           // mode — the old one goes with its values and a fresh one is created. Same intent, very
           // different outcome, so it does not get the same sentence.
-          const replaced = names.indexOf(mode.name) !== -1;
+          const replaced = names.some(function (chipName) {
+            return window.CodeFigConfigUI.sameModeName(chipName, mode.name);
+          });
           return replaced
             ? 'Replacing mode ' + mode.name + ' at Run — ' + held + ', and it is recreated empty.'
             : 'Removing mode ' + mode.name + ' at Run — ' + held +
@@ -1045,6 +1047,7 @@
         initConfigUI(block || '');
         configLastValues = configUIInstance ? JSON.parse(JSON.stringify(configUIInstance.getValues())) : null;
         syncChipsToPanelState();
+        scheduleFileModes(0);
         // **Rendering the form does not trigger a load.** It used to, and applying a load re-rendered
         // the form, which triggered another — a rebuild every 350ms that destroyed any open inline
         // input or select dropdown between one lap and the next. Loading is a response to the address
@@ -1803,6 +1806,7 @@
 
       var autoImportTimer = null;
       var autoImportSeq = 0;
+      var fileModesTimer = null;
 
       /**
        * Write the config block into the canonical text.
@@ -1851,6 +1855,42 @@
       function scheduleAutoImport() {
         if (autoImportTimer) clearTimeout(autoImportTimer);
         autoImportTimer = setTimeout(requestAutoImport, 350);
+      }
+
+      /**
+       * Read the file's modes for the address the panel is already showing.
+       *
+       * **Opening a panel has to do this**, and it took the plugin to notice. Auto-import fires only
+       * when Collection or Group *changes* — the rule that stopped it rebuilding the form in a loop —
+       * so opening Grid on a file whose collection already exists read no mode table at all. Every
+       * chip then carried no `modeId`, and the first rename was an add with the real mode orphaned:
+       * precisely the failure the ids exist to prevent.
+       *
+       * Safe to do on render, because it **writes nothing**. The loop came from applying a *fill*,
+       * which rewrote the config and re-rendered the form; this only asks what modes the collection
+       * has. Retried rather than dropped when the channel is busy: the preview's debounce owns that
+       * slot about half the time on script open, and one silent run may be in flight.
+       */
+      function scheduleFileModes(attempt) {
+        if (fileModesTimer) clearTimeout(fileModesTimer);
+        fileModesTimer = setTimeout(function () {
+          fileModesTimer = null;
+          if (!scriptHasConfig || !configUIInstance) return;
+          if (!configUIContainer || !configUIContainer.querySelector('[data-chips-field]')) return;
+          var collection = configUIInstance.getValues().collectionName;
+          if (!collection || !String(collection).trim()) return;
+          if (fileModes.collection === collection && fileModes.found) return;
+
+          var seq = ++autoImportSeq;
+          var started = runSilentSnippet([
+            '@import { foundationCollectionModes } from "@Foundation"',
+            '(async function () {',
+            '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ');',
+            '  window.codefigConfigLoadResult({ fileModes: modes, autoImportSeq: ' + seq + ' });',
+            '})();'
+          ].join('\n'));
+          if (!started && (attempt || 0) < 4) scheduleFileModes((attempt || 0) + 1);
+        }, 400);
       }
 
       function requestAutoImport() {
@@ -1902,14 +1942,7 @@
         fileModes = next;
         if (changedCollection) removedModeIds = [];
 
-        var idByName = {};
-        (fileModes.modes || []).forEach(function (mode) { idByName[mode.name] = mode.modeId; });
-
-        var entries = configModeEntries();
-        chipModeIds = entries.map(function (entry) {
-          var name = entry && entry.name;
-          return name && idByName[name] ? idByName[name] : null;
-        });
+        chipModeIds = window.CodeFigConfigUI.matchModeIds(configModeEntries(), fileModes.modes);
         syncChipsToPanelState();
       }
 
@@ -3740,6 +3773,11 @@
                 }
                 return;
               }
+              // The mode table on its own — a panel opening on an address it did not change.
+              if (data.fileModes !== undefined) {
+                if (data.autoImportSeq === autoImportSeq) applyFileModes(data.fileModes);
+                return;
+              }
               if (data.preview !== undefined) {
                 if (data.previewSeq === _previewSeq) {
                   renderConfigPreview(data.preview);
@@ -4018,7 +4056,8 @@
 
       function _codefigUiCommandNames() {
         return ['selectScript', 'listScripts', 'readConfig', 'writeConfig', 'readInfoPanel',
-          'readPreview', 'readTabs', 'readForm', 'switchTab', 'setField', 'clickControl'];
+          'readPreview', 'readTabs', 'readForm', 'switchTab', 'setField', 'clickControl',
+          'readModeIntents'];
       }
 
       /** Resolvers waiting for a form change to be folded into the config. */
@@ -4077,7 +4116,35 @@
       function uiControlTarget(name, part, index) {
         var container = document.getElementById('configUIContainer');
         if (!container) throw new Error('The configuration form is not open');
-        var at = typeof index === 'number' ? index : 0;
+        // **Coerced, not trusted, and never silently zero.** `index=1` arrives from the CLI as the
+        // string "1", and `typeof index === 'number'` sent it to index 0 — so a verification run
+        // renamed the wrong chip and read as a pass. On a `chip-remove` that would remove the wrong
+        // mode, and that one reaches the document at Run. A value that is present and not a number is
+        // refused rather than defaulted.
+        var at = 0;
+        if (index !== undefined && index !== null && index !== '') {
+          at = Number(index);
+          if (!isFinite(at) || at < 0 || Math.floor(at) !== at) {
+            throw new Error('index must be a whole number, got "' + index + '"');
+          }
+        }
+
+        // **Chips first, and by their own part names.** The chips and the tabbed rows control are
+        // both named `modes` — deliberately, because the chips are a view of that same array — so the
+        // rows branch below matched first and the chips were unreachable from outside. `chip-`
+        // prefixed parts say which of the two controls is meant, rather than adding a second argument
+        // that would have to be remembered.
+        var chips = container.querySelector('[data-chips-field="' + name + '"]');
+        if (chips && String(part || '').indexOf('chip') === 0) {
+          var chipList = chips.querySelectorAll('.config-ui-chip');
+          if (part === 'chip-add') return chips.querySelector('.config-ui-chip-add');
+          if (part === 'chip-input') return chips.querySelector('.config-ui-chip-input');
+          if (part === 'chip-remove') {
+            return chipList[at] ? chipList[at].querySelector('.config-ui-chip-remove') : null;
+          }
+          // `chip` and `chip-label`: the label, which is the rename affordance.
+          return chipList[at] ? chipList[at].querySelector('.config-ui-chip-label') : null;
+        }
 
         var rows = container.querySelector('[data-rows-field="' + name + '"]');
         if (rows) {
@@ -4176,10 +4243,23 @@
             });
 
           case 'readPreview': {
+            // Two places a preview can live, and the answer must not depend on knowing which. A
+            // `@preview` marker row puts it **inside the form**, and the panel-level region is hidden
+            // in that case — so reading only the region reported "visible: false, text: ''" for a
+            // preview that was on screen. A reporting gap reads exactly like a broken preview.
+            var slot = document.querySelector('[data-preview-slot]');
+            if (slot) {
+              return Promise.resolve({
+                visible: !!slot.innerHTML,
+                where: 'form',
+                text: slot.innerText || ''
+              });
+            }
             var body = document.getElementById('configPreviewBody');
             var region = document.getElementById('configPreview');
             return Promise.resolve({
               visible: !!(region && region.style.display !== 'none'),
+              where: 'panel',
               text: body ? body.innerText : ''
             });
           }
@@ -4207,6 +4287,30 @@
               throw new Error('No control named "' + a.name + '"' +
                 (a.part ? ' part "' + a.part + '"' : ''));
             }
+            // **A chip rename is three events, not one.** Click the label, type, press Enter — which is
+            // what a person does, and the only path that exercises the listeners that matter. Setting
+            // a value and firing `change` would pass on a control that could not rename at all.
+            if (String(a.part || '').indexOf('chip') === 0) {
+              return actAndSettle(function () {
+                // **A chip edit is three events, not one.** Open the input — by clicking the label to
+                // rename, or the plus to add — then type, then press Enter. That is what a person
+                // does, and the only path that exercises the listeners that matter: setting a value
+                // and firing `change` would pass on a control that could not rename at all.
+                target.dispatchEvent(new Event('click', { bubbles: true }));
+                // Through `uiControlTarget` like every other address, not a selector of its own:
+                // addressing lives in one place, and a command that can build its own selector is a
+                // short step from one that can reach Run.
+                var editor = uiControlTarget(a.name, 'chip-input', a.index);
+                if (!editor) throw new Error('That chip gesture opened no input');
+                editor.value = a.value == null ? '' : String(a.value);
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
+                var enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+                editor.dispatchEvent(enter);
+              }).then(function (how) {
+                return { settled: how, text: currentConfigBlock() };
+              });
+            }
+
             var tag = target.tagName.toLowerCase();
             // Set the value, then dispatch what a keystroke dispatches, and let the existing
             // listeners do the work. Calling `getValues` or a handler directly would pass while the
@@ -4233,8 +4337,13 @@
             // Parts of a config control only. There is deliberately no way to reach Run, or anything
             // else that writes to the document: `figma:run` is the path for that, and it carries the
             // filename guard a UI click would bypass.
-            if (['add', 'remove', 'tab'].indexOf(a.part) === -1) {
-              throw new Error('clickControl accepts part add, remove or tab — not "' + a.part + '"');
+            // An allow-list, and it stays one: a click that can reach anything the UI does not regard
+            // as part of a config control is a click that can eventually reach Run. `chip-remove` is
+            // here because removing a mode is a click; renaming and adding are not — they are three
+            // events, so they go through `setField` as a whole gesture.
+            if (['add', 'remove', 'tab', 'chip-remove'].indexOf(a.part) === -1) {
+              throw new Error('clickControl accepts part add, remove, tab or chip-remove — not "' +
+                a.part + '"');
             }
             var clickable = uiControlTarget(a.name, a.part, a.index);
             if (!clickable) throw new Error('No "' + a.part + '" on control "' + a.name + '"');
@@ -4271,6 +4380,18 @@
               noFormNote: noForm && noForm.style.display !== 'none' ? noForm.textContent : null
             });
           }
+
+          // What a Run would do to the collection's modes. **Read-only** — it derives the answer and
+          // hands it back, from the same call `runCurrentScript` makes, and touches nothing. Without
+          // it the one thing worth verifying about chips is invisible from outside: whether a rename
+          // is going to be a rename.
+          case 'readModeIntents':
+            return Promise.resolve({
+              intents: currentModeIntents(),
+              fileModes: fileModes,
+              chipModeIds: chipModeIds,
+              removedModeIds: removedModeIds
+            });
 
           default:
             throw new Error('Unknown UI command "' + command + '". Known: ' +
@@ -4442,15 +4563,22 @@
             wrap.querySelectorAll('.config-ui-chip').forEach(function (chip) {
               chips.push({
                 name: chip.getAttribute('data-chip-name'),
+                // The link to the file. Reported because "this rename will be a rename" and "this
+                // rename will orphan the mode" look identical without it — which is how a missing
+                // mode-table read survived being reasoned about twice.
+                modeId: chip.getAttribute('data-mode-id'),
                 placeholder: chip.classList.contains('config-ui-chip--placeholder'),
                 removable: !!chip.querySelector('.config-ui-chip-remove'),
                 draggable: chip.getAttribute('draggable') === 'true'
               });
             });
+            var removalRow = wrap.closest ? wrap.closest('.config-ui-row') : null;
+            var removalNote = removalRow ? removalRow.querySelector('.config-ui-chips-removal') : null;
             fields.push({
               name: wrap.getAttribute('data-chips-field'),
               control: 'chips',
               chips: chips,
+              pending: removalNote ? removalNote.textContent : null,
               placeholder: wrap.getAttribute('data-placeholder') === 'true',
               editing: !!wrap.querySelector('.config-ui-chip-input'),
               visible: rowVisible(wrap)

@@ -996,10 +996,28 @@
   }
 
   /** The rows of one control, read back out of the DOM in their displayed order. */
+  /**
+   * Read the rows back — **over** what was there, never from scratch.
+   *
+   * A cell that is not rendered is not a cell whose value is empty. Under `@tabs` the `name` column
+   * is deliberately not drawn, because the chips above own the name; collecting only from rendered
+   * cells therefore *deleted every mode's name* on the first edit to any field in the form. Then the
+   * chips had nothing to show, the ids could not be matched, and a rename would have become an add —
+   * three symptoms, one cause, and the config on disk quietly lost a key.
+   *
+   * The same rule already exists one layer up, where an object no control claims is marked
+   * `unsupported` and left out of `getValues` rather than collected as `"[object Object]"`. This is
+   * that rule for the inside of a row: the panel may only overwrite what it actually shows.
+   */
   function collectRows(wrap, field) {
     var out = [];
-    wrap.querySelectorAll(".config-ui-rows-item").forEach(function (rowEl) {
+    var existing = Array.isArray(field.value) ? field.value : [];
+    wrap.querySelectorAll(".config-ui-rows-item").forEach(function (rowEl, index) {
       var row = {};
+      var was = existing[index];
+      if (was && typeof was === "object") {
+        for (var key in was) row[key] = was[key];
+      }
       (field.columns || []).forEach(function (column) {
         var el = rowEl.querySelector('[data-row-field="' + column.key + '"]');
         if (!el) return;

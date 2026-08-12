@@ -285,3 +285,64 @@ test('a run with no panel sends no intents, and grid falls back to matching name
   assert.match(code, /codefigModeIntents: msg\.modeIntents \|\| null/,
     'the sandbox passes them through, and null is the CLI case');
 });
+
+test('an edit anywhere in the form keeps what the form does not show', () => {
+  // Found in the plugin, not here: the config block had lost `name` from every mode, so the chips had
+  // nothing to show and no id could be matched. One cause, three symptoms.
+  //
+  // Under `@tabs` the `name` column is deliberately not rendered — the chips above own the name — and
+  // `collectRows` built each entry from the rendered cells alone. So the first edit to *any* field in
+  // the form deleted every mode's name from the config. A cell that is not rendered is not a cell
+  // whose value is empty.
+  const schema = P.parse(BLOCK);
+  const container = document.createElement('div');
+  R.buildForm(schema, container);
+
+  let values = null;
+  R.attachListeners(container, schema, (v) => { values = v; });
+
+  // An edit to a cell that *is* rendered, in one mode.
+  const gap = container.querySelectorAll('[data-row-field="containerWidth"]')[1];
+  gap.value = '900';
+  gap.dispatchEvent(new shim.Event('change', { bubbles: true }));
+
+  assert.deepEqual(values.modes.map((m) => m.name), ['Desktop', 'Tablet', 'Mobile'],
+    'the names the tabs never render must survive the tabs being read');
+  assert.equal(values.modes[1].containerWidth, 900, 'and the edit still lands');
+  assert.equal(values.modes[1].columns, 8, 'and its neighbours in the same row are untouched');
+});
+
+test('a key no column claims survives too, not just name', () => {
+  // The rule is general: the panel may overwrite what it shows and nothing else. A per-mode setting a
+  // future panel adds must not be deleted by this one.
+  const block = BLOCK.replace(
+    '{ name: "Tablet", containerWidth: 834, columns: 8 },',
+    '{ name: "Tablet", containerWidth: 834, columns: 8, density: "compact" },'
+  );
+  const schema = P.parse(block);
+  const container = document.createElement('div');
+  R.buildForm(schema, container);
+  let values = null;
+  R.attachListeners(container, schema, (v) => { values = v; });
+
+  const cell = container.querySelectorAll('[data-row-field="columns"]')[0];
+  cell.value = '16';
+  cell.dispatchEvent(new shim.Event('change', { bubbles: true }));
+
+  assert.equal(values.modes[1].density, 'compact');
+  assert.equal(values.modes[0].columns, 16);
+});
+
+test('the note calls a replacement a replacement, whatever the casing', () => {
+  // Found in the plugin. The config writes `mobile`, the file holds `Mobile` (the generator
+  // capitalises), so a case-sensitive check read the re-added chip as a different mode and the note
+  // said "Removing" for a replacement — understating the outcome in the one place that exists to
+  // state it. One definition of "the same mode name", used by both the intents and the wording.
+  assert.equal(P.sameModeName('mobile', 'Mobile'), true);
+  assert.equal(P.sameModeName(' Mobile ', 'mobile'), true);
+  assert.equal(P.sameModeName('Mobile', 'Desktop'), false);
+
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  assert.match(ui, /sameModeName\(chipName, mode\.name\)/,
+    'the note is comparing names some other way again');
+});

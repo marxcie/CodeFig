@@ -936,6 +936,50 @@
   }
 
   /**
+   * Are these two the same mode name?
+   *
+   * Case-insensitively, and the reason is not tolerance — it is that **the generator makes the
+   * difference itself**. A config block writes viewport keys (`desktop`), and `viewportLabel` in
+   * `@Foundation` capitalises the first letter on the way to the document, so the collection holds
+   * `Desktop`. Every real file therefore disagrees with every shipped config, in a way nobody chose.
+   *
+   * Two consequences, both wanted:
+   *   - a chip can be linked to the mode it actually came from, instead of every mode reading as new;
+   *   - opening a panel never proposes renaming `Desktop` to `desktop`. That rename would be silent,
+   *     wrong, and undone by the next run's own capitalisation anyway.
+   *
+   * A deliberate case-only rename by hand is therefore not applied. That is the honest outcome rather
+   * than a lie: `setupModes` would capitalise it straight back.
+   */
+  function sameModeName(a, b) {
+    if (typeof a !== "string" || typeof b !== "string") return false;
+    return a.trim().toLowerCase() === b.trim().toLowerCase();
+  }
+
+  /**
+   * Link a config's mode entries to the file's modes, by name, once.
+   *
+   * The only place a name match is sound: a config that was just read from this file, or is about to
+   * be, agrees with it by definition. Everywhere after this the link is positional and travels with
+   * the chip operation, because a renamed chip no longer matches the name the file has.
+   *
+   * **Ambiguity yields nothing.** If two of the file's modes fold to the same name, neither is linked:
+   * an unlinked chip is treated as a new mode, which adds. A wrong link would rename the wrong mode.
+   */
+  function matchModeIds(entries, fileModes) {
+    var file = Array.isArray(fileModes) ? fileModes : [];
+    var seen = {};
+    file.forEach(function (mode) {
+      var key = String(mode.name || "").trim().toLowerCase();
+      seen[key] = Object.prototype.hasOwnProperty.call(seen, key) ? null : mode.modeId;
+    });
+    return (Array.isArray(entries) ? entries : []).map(function (entry) {
+      var key = String((entry && entry.name) || "").trim().toLowerCase();
+      return Object.prototype.hasOwnProperty.call(seen, key) ? seen[key] : null;
+    });
+  }
+
+  /**
    * What a run should do to the collection's modes: the panel's chips against the file's modes.
    *
    * Derived, not remembered — with one exception, and the exception is the point. Renames and
@@ -971,7 +1015,7 @@
         out.additions.push(name);
         return;
       }
-      if (was !== name) out.renames.push({ modeId: id, from: was, to: name });
+      if (!sameModeName(was, name)) out.renames.push({ modeId: id, from: was, to: name });
     });
 
     var carried = {};
@@ -1593,6 +1637,11 @@
     fillConfigBlock: fillConfigBlock,
     applyChipOp: applyChipOp,
     modeIntents: modeIntents,
+    matchModeIds: matchModeIds,
+    // Exported because the panel asks the same question when it words the removal note, and "the same
+    // mode name" must have exactly one definition. It did not, and the note said "Removing" for a
+    // replacement — understating what was about to happen, in the one place that exists to state it.
+    sameModeName: sameModeName,
     parseConfigBlockObject: parseConfigBlockObject,
     hasFileFields: hasFileFields
   };

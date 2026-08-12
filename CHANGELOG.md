@@ -87,6 +87,14 @@ deleting variable modes they did not recognise.
 - **A config pasted from another file still never deletes a mode.** A mode this config has not heard of
   is left exactly where it is, values and all. The only thing that removes a mode is clicking its dash.
 
+### Fixed
+
+- **Editing a settings form no longer drops a mode's name.** Under the mode tabs the name is not shown
+  — the chips above it are the name — and reading the tabs back rebuilt each mode from the fields it
+  could see, so the first edit to *any* setting deleted every mode's name from the config. Nothing in
+  your file was affected; the config in the editor was. A panel now only overwrites what it actually
+  shows, so a setting it has no field for survives being read.
+
 ### Removed
 
 - **The import button is gone.** Auto-import replaced it: choose a Collection and a Group, and a
