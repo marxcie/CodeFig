@@ -1977,8 +1977,13 @@
          Scoped to this control's own class rather than changing the shared rule, per the note in
          CLAUDE.md: an existing rule leaking *into* a new control is the same mistake as a new rule
          leaking out of one. */
-      .config-ui-rows-cell .config-ui-input,
-      .config-ui-rows-cell .config-ui-textarea {
+      /* **Only the table form.** A row rendered as a strip of cells fills its column, because the
+         column *is* the field's width there. Under `@tabs` a cell is an ordinary field on its own line,
+         and inheriting the 100% made every control the full width of the control column — a Scaling
+         method dropdown and an Extra spacings input running the whole panel for no reason, while the
+         identical controls in General sat at 70%. Two layouts, one rule, and the wrong one won. */
+      .config-ui-rows-cell:not(.config-ui-rows-cell--stacked) .config-ui-input,
+      .config-ui-rows-cell:not(.config-ui-rows-cell--stacked) .config-ui-textarea {
         width: 100%;
       }
 
@@ -2370,7 +2375,9 @@
         display: grid;
         grid-template-columns: 3fr 7fr;
         column-gap: var(--space-md);
-        align-items: start;
+        /* Centred, so a token name sits level with the middle of its bar. At `4xl` the bar is 356px
+           tall and a top-aligned label reads as belonging to the row above it. */
+        align-items: center;
         min-height: 18px;
       }
 
@@ -2378,7 +2385,7 @@
         display: grid;
         grid-template-columns: 140px 56px 1fr;
         column-gap: var(--space-md);
-        align-items: start;
+        align-items: center;
       }
 
       .spacing-preview-name {
@@ -2392,7 +2399,6 @@
         width: 140px;
         min-height: 1px;
         background: #17976a;
-        align-self: start;
       }
 
       .spacing-preview-value {
@@ -2439,9 +2445,12 @@
 
       .type-specimen {
         width: 100%;
-        /* A heading ramp's top step is wider than the panel by design. Scrolling keeps the sample at
-           its real size, which is the only reason to draw it at all. */
-        overflow-x: auto;
+        /* **Cut off, not wrapped and not scrolled.** A heading ramp's top step is wider than the panel
+           by design, and the frame shows it running off the right edge mid-word. Wrapping would make a
+           two-line sample four lines and destroy the comparison the specimen exists for; scrolling
+           would hide the overflow behind a gesture. Clipping says "this is bigger than the panel",
+           which is true and is part of what you are judging. */
+        overflow: hidden;
       }
 
       .type-specimen-family {

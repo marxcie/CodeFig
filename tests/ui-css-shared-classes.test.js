@@ -90,13 +90,23 @@ test('the classes the renderer writes are the classes the stylesheet defines', (
     missing.join(', '));
 });
 
-test('a rows cell sizes its own control, rather than inheriting the flat layout’s 70%', () => {
-  // `.config-ui-input--text` is `width: 70%`, which is correct for the flat label/control layout and
-  // wrong inside a row: it left 30% of every cell empty, so a gap the CSS declared as 8px measured
-  // 37px. Pinned because the scoped override looks redundant to anyone who has not measured it.
-  assert.match(CSS, /\.config-ui-rows-cell \.config-ui-input,[\s\S]{0,80}width: 100%/);
+test('a rows cell sizes its control by which of the two layouts it is in', () => {
+  // `.config-ui-input--text` is `width: 70%`, correct for the flat label/control layout and wrong
+  // inside a **table** row: it left 30% of every cell empty, so a gap the CSS declared as 8px measured
+  // 37px. That is why the 100% override exists.
+  //
+  // It then applied to the **tabbed** layout too, where a cell is an ordinary field on its own line —
+  // so a Scaling method dropdown and an Extra spacings input ran the full width of the control column
+  // while the identical controls in General sat at 70%. Two layouts, one rule, and the wrong one won.
+  // Both halves are pinned here because each looks redundant to anyone who has not seen the other.
+  assert.match(CSS, /\.config-ui-rows-cell:not\(\.config-ui-rows-cell--stacked\) \.config-ui-input,[\s\S]{0,140}width: 100%/,
+    'the table form fills its cell');
+  assert.doesNotMatch(CSS, /\n\s*\.config-ui-rows-cell \.config-ui-input,/,
+    'and the unscoped rule is gone, or the tabbed form inherits it again');
   assert.match(CSS, /\.config-ui-input--text,[\s\S]{0,120}width: 70%/,
     'the shared rule is still there — the fix is scoped, not a change to it');
+  // A number is 96px in either layout: it is a number, and its width says so.
+  assert.match(CSS, /\.config-ui-rows-cell \.config-ui-input--number \{\s*\n\s*width: 96px/);
 });
 
 test('a rows control is a section: no label, full width', () => {
