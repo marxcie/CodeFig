@@ -471,6 +471,79 @@ async function getOrCreateCollection(name) {
 }
 
 /**
+ * The collection's default mode — where a value goes when nobody said which mode.
+ *
+ * Figma marks one mode as default; a collection always has at least one, so this only returns null
+ * for a missing collection.
+ */
+function getDefaultMode(collection) {
+  if (!collection || !collection.modes || !collection.modes.length) return null;
+  if (collection.defaultModeId) {
+    var marked = collection.modes.find(function(m) { return m.modeId === collection.defaultModeId; });
+    if (marked) return marked;
+  }
+  return collection.modes[0];
+}
+
+/**
+ * Get or create a mode by name — `getOrCreateCollection` one level down, and the script-side half of
+ * the `@mode` picker.
+ *
+ * Returns the mode (`{ modeId, name }`), so a caller can write values without a second lookup.
+ *
+ * Three things worth knowing before calling it:
+ * - **An empty name is not a mode called "".** It means "wherever this collection puts values by
+ *   default", which is what the picker sends when a single-mode collection made the question moot.
+ * - **Names are matched the way Figma compares them** — trimmed and case-insensitively — because
+ *   Figma refuses two modes differing only in case, so treating "Light" and "light" as different
+ *   here would ask for a mode it will not create.
+ * - **It creates, and creating can fail.** `addMode` throws when the file's per-collection mode
+ *   budget is spent, and the number depends on the plan. That is re-thrown with the collection and
+ *   the count, because "modes are limited" without either is a message you cannot act on.
+ */
+function getOrCreateMode(collection, modeName) {
+  if (!collection) return null;
+  var wanted = modeName != null ? String(modeName).trim() : '';
+  if (!wanted) return getDefaultMode(collection);
+
+  var existing = collection.modes.find(function(mode) {
+    return String(mode.name).trim().toLowerCase() === wanted.toLowerCase();
+  });
+  if (existing) return existing;
+
+  // A collection Figma has just created carries one mode called "Mode 1" that nobody asked for.
+  // Naming the first mode is a rename of that one, not a second mode beside it — otherwise choosing
+  // "New mode" on a new collection leaves every collection with a stray empty column.
+  if (collection.modes.length === 1 && collection.modes[0].name === 'Mode 1' &&
+      typeof collection.renameMode === 'function') {
+    collection.renameMode(collection.modes[0].modeId, wanted);
+    console.log('Renamed the default mode to: ' + wanted);
+    return collection.modes[0];
+  }
+
+  var newId = null;
+  try {
+    newId = collection.addMode(wanted);
+  } catch (e) {
+    throw new Error(
+      'Mode limit reached for collection "' + collection.name + '": Figma allowed ' +
+      collection.modes.length + ' mode(s), and "' + wanted + '" would be one more. ' +
+      'The limit depends on your Figma plan.'
+    );
+  }
+  console.log('Created mode: ' + wanted + ' in ' + collection.name);
+  // By the id `addMode` hands back where there is one. Figma appends a suffix when a name collides,
+  // so the mode that now exists is not always called what was asked for, and looking it up by name
+  // would come back empty on exactly the file where that happened.
+  var created = newId
+    ? collection.modes.find(function(mode) { return mode.modeId === newId; })
+    : null;
+  return created || collection.modes.find(function(mode) {
+    return String(mode.name).trim().toLowerCase() === wanted.toLowerCase();
+  });
+}
+
+/**
  * What to say when a collection's modes are right but their order is not.
  *
  * The old wording told you to delete the collection and re-run. That trades **every binding in

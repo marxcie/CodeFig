@@ -25,6 +25,24 @@ deleting variable modes they did not recognise.
 
 ### Added
 
+- **A settings panel fills itself from a set CodeFig never made.** Point Grid at a collection and group
+  holding a grid — one built years before this plugin, or by hand — and the settings load from the
+  **variables themselves**, matched by name and structure: `columns`, `gap`, `padding`,
+  `viewport-width` and the `col-1…N` series. No id, no record, nothing CodeFig had to have written
+  first. A value the set does not carry is worked out from the ones it does, and the panel says which
+  of the two happened. It then checks itself and tells you whether running would change any of your
+  values — and names what could not come back rather than leaving it at a default that implies it was
+  read: *Generate overview* is not a variable, and *Extra columns* is inferred from how many `col-*`
+  variables there are.
+- **Grid suggests margin and gap pairs that divide into whole numbers.** The Suggested whole number
+  divisions section is live: it searches whole margins and gaps around what you have, keeps the pairs
+  where every column comes out a whole number, and ranks them by how many of your modes they are clean
+  for, then by how little they move your values, then towards round numbers — a 79px margin is
+  arithmetically as good as 80 and nobody wants one. Your current pair is always the first card when it
+  divides cleanly. **Clicking a card changes the mode you are looking at and no other**: the badges say
+  where else the pair would work, they are not a promise to write it. Nothing is applied by looking —
+  only by clicking. When nothing in range divides, it says so and says what it searched, and when there
+  are more results than cards it says how many.
 - **A Style & UI reference, inside Help & documentation.** Every control a script's settings form can
   render, live in that script's own Configuration UI tab, with the exact line that produces each one
   written underneath it — so a change can be asked for by pointing at the thing rather than describing
@@ -47,6 +65,14 @@ deleting variable modes they did not recognise.
   extra for a config to remember. Which of the two is about to happen is said before you run:
   *"Brand tokens" doesn't exist in this file — it will be created.* That also covers a config pasted
   from another file, where the collection genuinely may not be here.
+- **Pick a mode the same way you pick a collection.** A settings form can now offer the modes of
+  whichever collection it is pointed at, plus *New mode* and a name — created on Run, exactly as a
+  new collection is. It follows the collection picker above it, so changing collection changes the
+  modes on offer — and empties it, because a mode you picked in one collection is not a mode of the
+  next one. Left empty, values go to the collection's default mode. A config that arrives naming a
+  mode this file does not have says so before you run, rather than creating it quietly.
+  **Selection to variables** uses it; any script can, with `// @mode: targetCollection` on a var line
+  and `getOrCreateMode` from `@Variables`.
 - **Design System Foundations scripts have a form.** Their settings were only ever editable as code,
   because the form could not read the shape those blocks are written in. It can now, so every one of
   them opens on Configuration UI, and the config block is still exactly the thing you paste. Settings
@@ -89,6 +115,29 @@ deleting variable modes they did not recognise.
 
 ### Fixed
 
+- **Modes are shown in the collection's order.** A loaded config listed its modes in whatever order it
+  had been stored in, which on a five-viewport system — Desktop-large, Desktop, Tablet, Tablet-small,
+  Mobile — reads as no order at all. The chips and the Mode settings tabs now follow the order Figma
+  has for that collection, which is the order you see in the variables panel and the one the plugin
+  cannot change. A mode the file does not have yet follows the ones it does, rather than being dropped
+  or setting the order itself.
+- **Applying a suggestion or editing a mode chip keeps you in the mode you were editing.** The panel
+  rebuilt itself after either and landed back on the first tab, so a change made in Tablet looked like
+  it had gone to Desktop — the preview and the suggestions followed the jump too.
+- **Loading a config no longer gets undone a moment later.** When settings loaded from a file, the form
+  had not caught up with the text, and the next thing that touched the panel wrote the old values back
+  over the new ones. Affected every automatic load, not just the recognised ones.
+- **Selection to variables shows its results.** The Info panel it promises had never appeared: the
+  call that opens it carried two functions, which cannot cross into the panel, so it threw before
+  drawing anything and took the rest of the run's reporting with it. Variables were still created —
+  only the list of what happened was missing.
+
+- **"New collection" now gives you somewhere to type the name.** Choosing it from any collection
+  picker left the select sitting on an option that appeared to do nothing: the name field only ever
+  revealed itself for a collection name that arrived in the config already, which is the pasted-config
+  case rather than the one you click. It also no longer disappears from under you when the file's
+  collection list finishes loading a moment after you picked.
+
 - **Editing a settings form no longer drops a mode's name.** Under the mode tabs the name is not shown
   — the chips above it are the name — and reading the tabs back rebuilt each mode from the fields it
   could see, so the first edit to *any* setting deleted every mode's name from the config. Nothing in
@@ -105,6 +154,16 @@ deleting variable modes they did not recognise.
   unchanged until you run.
 
 ### Changed
+
+- **Selection to variables picks its collection the same way every other script does.** The dropdown
+  now lists this file's collections with a **New collection** entry that reveals a name field, instead
+  of a *New collection* mode that took the collection name off the front of each layer name. **This
+  changes what your layer names mean:** a layer called `color - bark/bark/350` used to make collection
+  `color - bark` and variable `bark/350`, and now makes variable `color - bark/bark/350` in whichever
+  collection you picked. Name layers by the variable path alone — `bark/350` — and choose the
+  collection above. The old rule was also inconsistent with itself: picking an existing collection
+  already treated the whole layer name as the path, so the same layers landed in two different places
+  depending on a dropdown.
 
 - **A settings form's heading sizes now step evenly:** 16 / 14 / 12, two pixels a level, with the
   smallest told apart from body copy by its weight. They were 20 / 14 / 14 — a jump, then no step at

@@ -126,6 +126,30 @@ function createBridgeServer(options) {
   const uiQueue = createQueue('ui');
   const jobs = jobQueue.entries;
 
+  /**
+   * Which plugin instance is out there, and when it was last heard from.
+   *
+   * **Why it exists.** `figma-sync` used to answer "has the reload happened yet?" by enqueuing a UI
+   * command and waiting for the iframe to poll for it. A backgrounded Figma throttles that poll to
+   * roughly once a minute, so a reload that took a second was reported minutes later — which is
+   * long enough that the loop stopped being usable and turned back into "tell me when you're done".
+   *
+   * The plugin now says so itself: one POST at boot, before it can be asked anything. That is the
+   * signal, and it costs one local HTTP call to read.
+   *
+   * Two fields, because one cannot answer the question:
+   *   `buildId`  — which bundle announced. Says *what* is running.
+   *   `lastSeen` — any request from the plugin, announce or poll. Says whether it is still there,
+   *                so a build id left behind by a Figma that has since been closed is not mistaken
+   *                for a live plugin.
+   */
+  const presence = { buildId: null, announcedAt: null, lastSeen: null };
+
+  /** Called on every plugin-originated request. The plugin polls, so this ticks on its own. */
+  function sawPlugin(now) {
+    presence.lastSeen = now;
+  }
+
   const server = http.createServer((req, res) => {
     // CORS headers - must be in every response
     const corsHeaders = {
@@ -146,10 +170,43 @@ function createBridgeServer(options) {
     jobQueue.expire(now);
     uiQueue.expire(now);
 
+    // --- Presence ------------------------------------------------------------
+
+    // The plugin, on boot: "I am here, running this build." Fire and forget from its side.
+    if (req.method === 'POST' && url === '/hello') {
+      readBody(req, (body) => {
+        let parsed = {};
+        try {
+          parsed = body ? JSON.parse(body) : {};
+        } catch (err) {
+          json(res, 400, { error: 'Hello body is not JSON: ' + err.message }, corsHeaders);
+          return;
+        }
+        presence.buildId = parsed.buildId != null ? String(parsed.buildId) : null;
+        presence.announcedAt = now;
+        sawPlugin(now);
+        json(res, 200, { ok: true }, corsHeaders);
+      });
+      return;
+    }
+
+    // The CLI: "is a plugin out there, and which build is it?" `now` travels with the answer so the
+    // caller measures staleness against this clock rather than its own.
+    if (req.method === 'GET' && url === '/presence') {
+      json(res, 200, {
+        buildId: presence.buildId,
+        announcedAt: presence.announcedAt,
+        lastSeen: presence.lastSeen,
+        now: now
+      }, corsHeaders);
+      return;
+    }
+
     // --- Job queue -----------------------------------------------------------
 
     // The plugin asks for work. 204 rather than an empty job so an idle poll is cheap.
     if (req.method === 'GET' && url === '/jobs/next') {
+      sawPlugin(now);
       const job = jobQueue.takeNext();
       if (!job) {
         res.writeHead(204, corsHeaders);
@@ -188,6 +245,10 @@ function createBridgeServer(options) {
           return;
         }
         jobQueue.complete(job, parsed);
+        // A result carries the build that produced it, so a plugin too old to announce is still
+        // identified — which is what makes the very reload that *introduces* announcing detectable.
+        if (job.buildId) presence.buildId = job.buildId;
+        sawPlugin(Date.now());
         res.writeHead(204, corsHeaders);
         res.end();
       });
@@ -221,6 +282,7 @@ function createBridgeServer(options) {
     // --- UI commands ---------------------------------------------------------
 
     if (req.method === 'GET' && url === '/ui/next') {
+      sawPlugin(now);
       const cmd = uiQueue.takeNext();
       if (!cmd) {
         res.writeHead(204, corsHeaders);
@@ -258,6 +320,8 @@ function createBridgeServer(options) {
           return;
         }
         uiQueue.complete(cmd, parsed);
+        if (cmd.buildId) presence.buildId = cmd.buildId;
+        sawPlugin(Date.now());
         // A UI command answers with a value, not a log. Kept separate from `output` so a
         // structured answer is never flattened into a string on the way back.
         cmd.result = parsed.result !== undefined ? parsed.result : null;

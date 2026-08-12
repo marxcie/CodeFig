@@ -160,6 +160,8 @@
       cw.appendChild(sel2);
     } else if (t === "collection") {
       cw.appendChild(buildCollectionControl(field, v == null ? "" : String(v)));
+    } else if (t === "mode") {
+      cw.appendChild(buildModeControl(field, v == null ? "" : String(v)));
     } else if (t === "rows") {
       cw.appendChild(buildRowsControl(field, Array.isArray(v) ? v : []));
     } else if (t === "unsupported") {
@@ -207,6 +209,23 @@
     }
     wrap.appendChild(row);
     return wrap;
+  }
+
+  /**
+   * The collection a `@mode` row follows, as the block spells it: the field it names, or — written
+   * bare — the block's only collection picker. The same rule `collectionWrapForMode` applies to the
+   * rendered form, against the schema instead.
+   */
+  function seedCollectionValue(row, schema) {
+    var rows = (schema && schema.rows) || [];
+    var candidates = rows.filter(function (other) {
+      return other.type === "field" && other.inputType === "collection";
+    });
+    if (row.collectionField) {
+      var named = candidates.filter(function (other) { return other.name === row.collectionField; })[0];
+      return named ? named.value : "";
+    }
+    return candidates.length === 1 ? candidates[0].value : "";
   }
 
   function buildRow(r, idx, schema) {
@@ -313,6 +332,9 @@
         if (Object.prototype.hasOwnProperty.call(r, key)) f[key] = r[key];
       }
       f.type = r.inputType;
+      // The value of the collection this mode picker follows, read from the block rather than from
+      // the DOM: at this point the collection picker may not have been built yet.
+      if (r.inputType === "mode") f.collectionValue = seedCollectionValue(r, schema);
       wrap3.appendChild(buildField(f, idx));
       return wrap3;
     }
@@ -706,7 +728,9 @@
    */
   function buildCollectionControl(field, value) {
     var wrap = document.createElement("div");
-    wrap.className = "config-ui-collection";
+    // Two classes, two jobs: `config-ui-picker` is the layout every select-plus-input control shares,
+    // `config-ui-collection` is this one's name and what the DOM is addressed by.
+    wrap.className = "config-ui-collection config-ui-picker";
     wrap.setAttribute("data-collection-field", field.name);
     // Local collections only, and no empty "(all)" entry: `variableCollections` is a *filter*
     // source, which is a different question from "where should this be written".
@@ -727,8 +751,32 @@
     wrap.appendChild(newName);
 
     var note = document.createElement("div");
-    note.className = "config-ui-collection-note";
+    // The panel's note style, the same one `@helper:` uses. It had a private copy of those three
+    // declarations; a note under a control is a note under a control.
+    note.className = "config-ui-collection-note config-ui-field-note";
     wrap.appendChild(note);
+
+    // **Revealing the name input is the select's own business.** The form's change listener collects
+    // values and re-serialises the block; nothing on that path can see that the *sentinel* was
+    // chosen, because `readCollectionControl` reports the empty text input, not the option. So
+    // without this, picking "New collection" produced a select that visibly did nothing — the input
+    // only ever appeared for a value that arrived already absent from the file, which is the pasted
+    // config case rather than the one anybody clicks.
+    //
+    // The note stays hidden while creating deliberately: it exists to point out a name that *turned
+    // out* not to be in this file, and repeating that above an input labelled "New collection name"
+    // is saying the same thing twice.
+    select.addEventListener("change", function () {
+      var creating = select.value === collectionNewSentinel();
+      newName.style.display = creating ? "block" : "none";
+      if (creating) {
+        if (typeof newName.focus === "function") newName.focus();
+      } else {
+        newName.value = "";
+      }
+      note.style.display = "none";
+      note.textContent = "";
+    });
 
     // Populated for real when the option list arrives; until then the value it already has is the
     // only option, so the control never renders empty.
@@ -764,6 +812,11 @@
 
     var list = Array.isArray(names) ? names.filter(Boolean) : [];
     var inList = list.indexOf(value) !== -1;
+    // Read before the options are thrown away. A select already sitting on the sentinel is a choice
+    // somebody made, and the list arriving a moment later must not undo it merely because they have
+    // not finished typing the name — which is the state the control is in for as long as it takes to
+    // reach the keyboard.
+    var chosenNew = select.value === collectionNewSentinel();
 
     select.innerHTML = "";
     // Shown when nothing is chosen, but **not an item in the list**: it is a prompt, and picking it would
@@ -799,14 +852,16 @@
 
     // A value that is not one of this file's collections is the create case, whether it was typed
     // here or arrived in a pasted config.
-    var creating = !!value && !inList;
+    var creating = chosenNew || (!!value && !inList);
     select.value = creating ? collectionNewSentinel() : value;
     if (newName) {
       newName.style.display = creating ? "block" : "none";
       newName.value = creating ? value : "";
     }
     if (note) {
-      if (creating && known) {
+      // Only for a name that *turned out* not to be here. Someone who chose "New collection" is
+      // already looking at an input that says so.
+      if (creating && known && value && !chosenNew) {
         note.style.display = "block";
         note.textContent = '"' + value + '" doesn\'t exist in this file \u2014 it will be created.';
       } else {
@@ -814,6 +869,274 @@
         note.textContent = "";
       }
     }
+  }
+
+  /**
+   * The mode picker: the collection picker one level down, and dependent on it.
+   *
+   * Same shape — a select of what is there, plus *New mode* revealing a name input, both writing one
+   * string, because `getOrCreateMode` creates a name it cannot find. What is different comes from a
+   * mode only existing *inside* a collection: **it follows another field**. The list is the modes of
+   * whatever the collection picker currently holds, so it is re-fetched when that changes — and
+   * **reset**, because everything it was showing belonged to the collection that is no longer chosen.
+   *
+   * It is always there, including for a collection with a single mode: there is still a mode to name
+   * and *New mode* to reach, and a control that comes and goes reads as the panel breaking. (An
+   * earlier build hid it in that case, on the reasoning that Figma does not name a single-mode column
+   * either. That reasoning was about Figma's *variables table*, not about a settings form, and it
+   * took the add-a-mode affordance with it.)
+   *
+   * All of that is behaviour. It looks like a dropdown with a text input under it, because that is
+   * what it is: the same `config-ui-picker` layout and the same input classes the collection picker
+   * uses, with no appearance of its own.
+   */
+  function buildModeControl(field, value) {
+    var wrap = document.createElement("div");
+    wrap.className = "config-ui-mode config-ui-picker";
+    wrap.setAttribute("data-mode-field", field.name);
+    // Which collection picker this one follows. Absent for a bare `@mode`, which resolves against the
+    // form instead — see `collectionWrapForMode`.
+    if (field.collectionField) {
+      wrap.setAttribute("data-mode-collection-field", field.collectionField);
+    }
+    wrap.setAttribute("data-initial-value", value);
+
+    // No `data-field` on either part, for the reason the collection picker has none: the flat
+    // collector would report the sentinel as the value.
+    var select = document.createElement("select");
+    select.className = "config-ui-input config-ui-input--select config-ui-mode-select";
+    wrap.appendChild(select);
+
+    var newName = document.createElement("input");
+    newName.type = "text";
+    newName.className = "config-ui-input config-ui-input--text config-ui-mode-new";
+    newName.setAttribute("placeholder", "New mode name");
+    newName.setAttribute("data-mode-new-label", "New mode name");
+    newName.style.display = "none";
+    wrap.appendChild(newName);
+
+    var note = document.createElement("div");
+    note.className = "config-ui-mode-note config-ui-field-note";
+    wrap.appendChild(note);
+
+    // The select reveals its own input, for the reason the collection picker's does: nothing on the
+    // form's change path can tell that the *sentinel* was chosen, because `readModeControl` reports
+    // the empty text input rather than the option.
+    select.addEventListener("change", function () {
+      var creating = select.value === modeNewSentinel();
+      newName.style.display = creating ? "block" : "none";
+      if (creating) {
+        if (typeof newName.focus === "function") newName.focus();
+      } else {
+        newName.value = "";
+      }
+      renderModeNote(wrap);
+    });
+
+    // Seeded from the block — the collection this field follows, and the mode the config names — so
+    // the control shows its configured answer rather than an empty menu for as long as the round trip
+    // takes. No `exists`: nothing has been read yet, and a control that has not looked must not say
+    // whether a mode is there. Without a collection there is nothing to ask about, and it says so.
+    var seed = field.collectionValue == null ? "" : String(field.collectionValue);
+    populateModeControl(wrap, seed && value ? [value] : [], value, { collection: seed });
+    return wrap;
+  }
+
+  /**
+   * The note, recomputed from what the control is showing — the half of it that a *click* can change.
+   *
+   * `populateModeControl` writes the note when an answer arrives, which covers a config that arrived
+   * naming a mode. It does not cover somebody choosing "New mode" a moment later, because nothing
+   * repopulates on a click: the line saying the mode arrives with the collection appeared only for a
+   * pasted config and never for the case it was written for.
+   *
+   * Only the new-collection line lives here. Choosing "New mode" on a collection that exists needs no
+   * note — the input above it already says what is about to happen, and the collection picker learned
+   * the same lesson.
+   */
+  function renderModeNote(wrap) {
+    var select = wrap.querySelector(".config-ui-mode-select");
+    var note = wrap.querySelector(".config-ui-mode-note");
+    if (!select || !note) return;
+    var creating = select.value === modeNewSentinel();
+    var collection = wrap.getAttribute("data-mode-collection") || "";
+    var text = creating && collection && wrap.getAttribute("data-mode-exists") === "false"
+      ? "Created with the collection at Run."
+      : "";
+    note.textContent = text;
+    note.style.display = text ? "block" : "none";
+  }
+
+  /** The sentinel the select uses for "create a new one". Never a mode name. */
+  function modeNewSentinel() {
+    return "\u0000codefig-new-mode";
+  }
+
+  /** Mode names as Figma compares them: it refuses two modes differing only in case or padding. */
+  function sameModeText(a, b) {
+    return String(a == null ? "" : a).trim().toLowerCase() ===
+      String(b == null ? "" : b).trim().toLowerCase();
+  }
+
+  /**
+   * Fill the mode picker from one collection's modes.
+   *
+   * `state` is what the backend answered about that collection, and the cases it separates are the
+   * whole of this control:
+   *   `{ collection: "" }`            — no collection chosen. Nothing to ask, nothing to offer.
+   *   `{ collection: n }`             — asked, not yet answered. The configured mode is shown and
+   *                                     nothing is claimed about it: before the answer, a name that
+   *                                     is not in the list is not evidence that it is not there.
+   *   `{ collection: n, exists: false }` — a collection about to be created. Only *New mode* is true,
+   *                                     and a name typed here names the mode it is created with.
+   *   `{ collection: n, exists: true }`  — its modes, plus *New mode*.
+   *
+   * Carrying an `exists` at all is what marks an answer, which is why the two states that have not
+   * heard back omit it rather than guessing `false`.
+   */
+  function populateModeControl(wrap, names, value, state) {
+    var select = wrap.querySelector(".config-ui-mode-select");
+    var newName = wrap.querySelector(".config-ui-mode-new");
+    var note = wrap.querySelector(".config-ui-mode-note");
+    if (!select) return;
+
+    var st = state || {};
+    var collection = st.collection == null ? "" : String(st.collection);
+    var answered = Object.prototype.hasOwnProperty.call(st, "exists");
+    var exists = !!st.exists;
+    // Recorded on the wrap, because a later click has to be able to tell "this collection is about to
+    // be created" from "it is there" without a second round trip.
+    //
+    // **Only this one.** `data-mode-collection` is the other half of the pair and is written by
+    // `refreshModePickers` alone, where it means *asked* — writing it here too would have made every
+    // first render look like a request already in flight, and the modes would never have been
+    // fetched at all.
+    wrap.setAttribute("data-mode-exists", answered ? (exists ? "true" : "false") : "");
+    var list = Array.isArray(names) ? names.filter(Boolean) : [];
+    var inList = list.some(function (n) { return sameModeText(n, value); });
+    // Read before the options are thrown away, for the reason the collection picker reads it: an
+    // answer arriving while somebody is halfway through typing a name must not undo their choice.
+    var chosenNew = select.value === modeNewSentinel();
+
+    select.innerHTML = "";
+    var placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = collection
+      ? "Select mode or create a new one"
+      : "Pick a collection first";
+    placeholder.disabled = true;
+    placeholder.hidden = !!collection;
+    select.appendChild(placeholder);
+    select.disabled = !collection;
+
+    list.forEach(function (name) {
+      var o = document.createElement("option");
+      o.value = name;
+      o.textContent = name;
+      select.appendChild(o);
+    });
+
+    if (collection) {
+      if (list.length > 0) {
+        var rule = document.createElement("option");
+        rule.disabled = true;
+        rule.textContent = "──────────";
+        select.appendChild(rule);
+      }
+      var create = document.createElement("option");
+      create.value = modeNewSentinel();
+      create.textContent = "New mode";
+      select.appendChild(create);
+    }
+
+    var creating = !!collection && (chosenNew || (!!value && !inList));
+    select.value = creating ? modeNewSentinel() : inList ? matchedName(list, value) : "";
+    if (newName) {
+      newName.style.display = creating ? "block" : "none";
+      newName.value = creating ? value : "";
+    }
+    if (note) {
+      var text = "";
+      if (!answered) {
+        text = "";
+      } else if (creating && collection && !exists) {
+        // The new-collection case the whole row exists for: there is nothing to list because the
+        // collection itself is not there yet, and this name is what its first mode will be called.
+        text = "Created with the collection at Run.";
+      } else if (creating && exists && value && !chosenNew) {
+        text = '"' + value + '" isn\'t a mode of ' + collection + " — it will be created.";
+      }
+      note.textContent = text;
+      note.style.display = text ? "block" : "none";
+    }
+
+  }
+
+  /** The option that answers to this value, so a differently-cased config still selects it. */
+  function matchedName(list, value) {
+    for (var i = 0; i < list.length; i++) {
+      if (sameModeText(list[i], value)) return list[i];
+    }
+    return "";
+  }
+
+  /**
+   * Put the picker back to "Select mode or create a new one".
+   *
+   * Called when the collection underneath it changes, because every part of what it was showing
+   * belonged to the collection that is no longer selected. Leaving the name behind was worse than
+   * stale: a mode chosen in one collection reappeared as a *new mode about to be created* in the
+   * next, so switching collection quietly queued up a mode nobody asked for.
+   *
+   * The stored value goes too — it is what a redraw falls back to, and a reset it can undo is not a
+   * reset.
+   */
+  function resetModeControl(wrap) {
+    var select = wrap.querySelector(".config-ui-mode-select");
+    var newName = wrap.querySelector(".config-ui-mode-new");
+    var note = wrap.querySelector(".config-ui-mode-note");
+    wrap.setAttribute("data-initial-value", "");
+    if (select) select.value = "";
+    if (newName) {
+      newName.value = "";
+      newName.style.display = "none";
+    }
+    if (note) {
+      note.textContent = "";
+      note.style.display = "none";
+    }
+  }
+
+  /** What the picker holds: the typed name when creating, the chosen one otherwise. */
+  function readModeControl(wrap) {
+    var select = wrap.querySelector(".config-ui-mode-select");
+    var newName = wrap.querySelector(".config-ui-mode-new");
+    if (!select) return "";
+    if (select.value === modeNewSentinel()) return newName ? newName.value : "";
+    return select.value;
+  }
+
+  /**
+   * The value to redraw a mode picker with: what it is showing, or — while it is showing nothing,
+   * which is every moment before the first answer arrives — what the config gave it.
+   *
+   * Without the fallback, the list landing a beat after render would repopulate the control with the
+   * empty select it is still displaying and lose the configured mode name.
+   */
+  function currentModeValue(wrap) {
+    return readModeControl(wrap) || wrap.getAttribute("data-initial-value") || "";
+  }
+
+  /**
+   * The collection picker a mode picker follows: the one it names, or — written bare — the form's
+   * only one. With several and no name, it follows none, which is the state the placeholder
+   * describes rather than a guess between two targets.
+   */
+  function collectionWrapForMode(container, wrap) {
+    var named = wrap.getAttribute("data-mode-collection-field");
+    if (named) return container.querySelector('[data-collection-field="' + named + '"]');
+    var all = container.querySelectorAll("[data-collection-field]");
+    return all.length === 1 ? all[0] : null;
   }
 
   /** What the picker holds: the typed name when creating, the chosen one otherwise. */
@@ -1053,6 +1376,10 @@
         var n = wrap.getAttribute("data-collection-field");
         if (n) vals[n] = readCollectionControl(wrap);
       });
+      container.querySelectorAll("[data-mode-field]").forEach(function (wrap) {
+        var n = wrap.getAttribute("data-mode-field");
+        if (n) vals[n] = readModeControl(wrap);
+      });
       container.querySelectorAll("[data-rows-field]").forEach(function (wrap) {
         var n = wrap.getAttribute("data-rows-field");
         if (!n) return;
@@ -1117,7 +1444,48 @@
       });
     }
 
+    /**
+     * Point every mode picker at the collection it follows, and ask for that collection's modes.
+     *
+     * The list is a property of another field's value, so this runs on every change rather than once:
+     * switching collection re-asks, and the answer arrives through the same `OPTIONS` message the
+     * dynamic option sources use. `data-mode-collection` records which collection the control is
+     * currently showing, so an unrelated keystroke does not send a request per character.
+     */
+    function refreshModePickers() {
+      container.querySelectorAll("[data-mode-field]").forEach(function (wrap) {
+        var collectionWrap = collectionWrapForMode(container, wrap);
+        var name = collectionWrap ? readCollectionControl(collectionWrap) : "";
+        var previous = wrap.getAttribute("data-mode-collection");
+        if (previous === name) return;
+        wrap.setAttribute("data-mode-collection", name);
+        // A *change* of collection, as against the first look at one. Only the change discards what
+        // the picker holds: on the first pass the value came from the config, and a config that names
+        // a mode is answering the question, not carrying an answer over from somewhere else.
+        if (previous !== null) resetModeControl(wrap);
+        if (!name) {
+          // Nothing to ask about. Said by the control rather than left as a stale list from the
+          // collection that was chosen a moment ago.
+          populateModeControl(wrap, [], currentModeValue(wrap), { collection: "" });
+          return;
+        }
+        if (typeof parent !== "undefined" && parent.postMessage) {
+          parent.postMessage(
+            {
+              pluginMessage: {
+                type: "GET_OPTIONS",
+                optionSource: "collectionModes",
+                collection: name,
+              },
+            },
+            "*"
+          );
+        }
+      });
+    }
+
     applyVisibility();
+    refreshModePickers();
     /**
      * Is this event a control changing?
      *
@@ -1138,22 +1506,29 @@
       if (target.getAttribute("data-rows-field")) return true;
       if (target.classList && target.classList.contains("config-ui-multiselect-cb")) return true;
       if (typeof target.closest === "function" && target.closest("[data-collection-field]")) return true;
+      if (typeof target.closest === "function" && target.closest("[data-mode-field]")) return true;
       return false;
     }
 
     container.addEventListener("change", function (e) {
       if (isControlEvent(e.target)) {
         applyVisibility();
+        refreshModePickers();
         onChange(getValues());
       }
     });
     container.addEventListener("input", function (e) {
       if (isControlEvent(e.target) && e.target.type !== "checkbox") {
         applyVisibility();
+        refreshModePickers();
         onChange(getValues());
       }
     });
-    return { getValues: getValues, applyVisibility: applyVisibility };
+    return {
+      getValues: getValues,
+      applyVisibility: applyVisibility,
+      refreshModePickers: refreshModePickers,
+    };
   }
 
   // The renderer's public API. `bridge.js` copies this object onto `window.CodeFigConfigUI` the same
@@ -1166,6 +1541,11 @@
     // The collection list is a backend round trip, so `ui.html` fills the picker when it arrives.
     populateCollectionControl: populateCollectionControl,
     readCollectionControl: readCollectionControl,
+    // The mode list is the same round trip, one level down: which collection to ask about comes from
+    // the collection picker, so `ui.html` fills these by the collection name they are showing.
+    populateModeControl: populateModeControl,
+    readModeControl: readModeControl,
+    currentModeValue: currentModeValue,
     readChipsControl: readChipsControl,
     // A `modeId` is file-specific and never travels in a config, so the panel holds the list and
     // hangs it back on the chips after every redraw.

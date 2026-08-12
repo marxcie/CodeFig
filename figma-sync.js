@@ -29,8 +29,32 @@ const { PORT } = require('./figma-console-server.js');
 const BASE = 'http://127.0.0.1:' + PORT;
 
 const DEFAULT_TIMEOUT_MS = 600000;
-/** Slow on purpose: each tick enqueues a command, and a throttled iframe answers about once a minute. */
-const POLL_MS = 3000;
+/** The bridge's own memory, read over loopback. Nothing is asked of the plugin, so this can be tight. */
+const POLL_MS = 300;
+/**
+ * How long a plugin stays "here" without a word.
+ *
+ * Generous, because the thing that goes quiet is a *backgrounded* Figma: its timers are throttled to
+ * roughly one tick a minute, and that plugin is running perfectly well. This window only has to be
+ * long enough not to call it gone.
+ */
+const PRESENCE_FRESH_MS = 90000;
+
+/** What the bridge has heard from the plugin: which build announced, and how long ago. */
+async function presence() {
+  try {
+    const res = await fetch(BASE + '/presence');
+    if (res.status === 404) return { error: 'no-presence-route' };
+    if (!res.ok) return { error: 'bridge-down' };
+    const body = await res.json();
+    return {
+      buildId: body.buildId || null,
+      here: body.lastSeen != null && body.now - body.lastSeen <= PRESENCE_FRESH_MS
+    };
+  } catch (err) {
+    return { error: 'bridge-down' };
+  }
+}
 
 function buildIdOnDisk() {
   try {
@@ -75,7 +99,7 @@ async function main() {
   const at = argv.indexOf('--timeout');
   const timeout = at === -1 ? DEFAULT_TIMEOUT_MS : Number(argv[at + 1]) || DEFAULT_TIMEOUT_MS;
 
-  const wanted = buildIdOnDisk();
+  let wanted = buildIdOnDisk();
   if (!wanted) {
     console.error('❌ No dist/build-id.txt. Run `npm run build:dev` first.');
     process.exit(1);
@@ -83,34 +107,78 @@ async function main() {
 
   const deadline = Date.now() + timeout;
   let asked = false;
+  let probing = false;
+  let seen = null;
 
+  /**
+   * The reload is **announced**, so this loop only reads what the bridge already knows — a loopback
+   * call every 300ms, and nothing asked of the iframe.
+   *
+   * The old probe stays as a fallback, one at a time in the background, for the one case announcing
+   * cannot cover: a plugin running a bundle from *before* announcing existed, which is exactly the
+   * reload that introduces it. Its answer carries a build id too, and the bridge records that, so
+   * the probe feeds the same loop rather than racing it.
+   */
   for (;;) {
-    const answer = await reportedBuildId(15000);
+    // **Re-read on every tick.** `npm run dev` watches `src/` and `scripts/`, so a save while this is
+    // waiting produces a *new* build id — and a target read once at startup is then a build that no
+    // longer exists on disk and can never arrive. That is how a 600-second wait ended in "gave up"
+    // while the plugin was, in fact, running the newest build. The question is always "is the plugin
+    // on what is on disk *now*", so the answer has to be re-asked.
+    const onDisk = buildIdOnDisk();
+    if (onDisk && onDisk !== wanted) {
+      if (!quiet) console.log('   (a rebuild landed — now waiting for ' + onDisk + ')');
+      wanted = onDisk;
+      asked = false;
+    }
 
-    if (answer.buildId === wanted) {
+    const now = await presence();
+
+    if (now.buildId === wanted && now.here) {
       if (!quiet) console.log('✅ The plugin is running ' + wanted + '.');
       process.exit(0);
     }
+    if (now.buildId) seen = now.buildId;
+
+    if (now.error === 'no-presence-route' && !probing) {
+      // An old bridge has no presence to read; fall back to asking, every time round.
+      probing = true;
+      reportedBuildId(15000).then(function (answer) {
+        if (answer.buildId === wanted) {
+          if (!quiet) console.log('✅ The plugin is running ' + wanted + '.');
+          process.exit(0);
+        }
+        if (answer.buildId) seen = answer.buildId;
+        probing = false;
+      });
+    } else if (!now.error && !now.here && !probing) {
+      // Announced nothing and said nothing: either no plugin, or one too old to announce. Asking is
+      // the only way to tell those apart, and its result updates presence for the next tick.
+      probing = true;
+      reportedBuildId(15000).then(function (answer) {
+        if (answer.buildId) seen = answer.buildId;
+        probing = false;
+      });
+    }
 
     if (!asked && !quiet) {
-      if (answer.error === 'bridge-down') {
+      if (now.error === 'bridge-down') {
         console.log('The dev bridge is not listening. Start `npm run dev`, then reload CodeFig.');
-      } else if (answer.error === 'no-ui-routes') {
-        console.log('The bridge predates the /ui routes. Restart `npm run dev`.');
-      } else if (answer.error === 'no-answer') {
-        console.log('No answer from the plugin. Open CodeFig on a dev build, and bring Figma to the');
-        console.log('front — a backgrounded page has its timers throttled.');
+      } else if (now.error === 'no-presence-route') {
+        console.log('The bridge predates /presence — restart `npm run dev` for instant reload');
+        console.log('detection. Falling back to asking the plugin, which a backgrounded Figma');
+        console.log('answers about once a minute.');
       } else {
         console.log('⏳ Reload CodeFig in Figma — close and reopen it.');
-        console.log('   plugin ' + (answer.buildId || 'unknown') + ' → waiting for ' + wanted);
+        console.log('   plugin ' + (seen || 'unknown') + ' → waiting for ' + wanted);
       }
-      console.log('   (this command waits, so nothing else needs saying)');
+      console.log('   (this command waits, and returns the moment the plugin comes back)');
       asked = true;
     }
 
     if (Date.now() > deadline) {
       console.error('\n❌ Gave up after ' + Math.round(timeout / 1000) + 's. The plugin is still on ' +
-        (answer.buildId || 'an unknown build') + '.');
+        (seen || 'an unknown build') + '.');
       process.exit(1);
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));

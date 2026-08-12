@@ -278,6 +278,37 @@ figma.ui.onmessage = (msg) => {
       });
       return;
     }
+    // The modes of one named collection, for the mode picker. Unlike every other option source this
+    // one takes an argument, so the answer carries the collection back: two pickers pointed at
+    // different collections receive both replies, and each has to be able to tell which is its own.
+    // `exists` is the difference between "no modes" and "no collection", which is the whole of what
+    // the control says when a new collection is about to be created.
+    if (optionSource === 'collectionModes') {
+      const wanted = msg.collection == null ? '' : String(msg.collection).trim();
+      figma.variables.getLocalVariableCollectionsAsync().then((collections) => {
+        const match = (collections || []).filter(
+          (c) => c && String(c.name).trim().toLowerCase() === wanted.toLowerCase()
+        )[0];
+        const modes = match && match.modes ? match.modes : [];
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource,
+          collection: wanted,
+          exists: !!match,
+          options: modes.map((m) => m && m.name).filter((n) => n != null && String(n).trim() !== '')
+        });
+      }).catch((err) => {
+        console.error('Backend: collectionModes fetch failed', err);
+        figma.ui.postMessage({
+          type: 'OPTIONS',
+          optionSource: optionSource,
+          collection: wanted,
+          exists: false,
+          options: []
+        });
+      });
+      return;
+    }
     if (optionSource === 'variableCollections') {
       Promise.all([
         figma.variables.getLocalVariableCollectionsAsync(),
@@ -325,32 +356,6 @@ figma.ui.onmessage = (msg) => {
           type: 'OPTIONS',
           optionSource: optionSource || '',
           options: []
-        });
-      });
-      return;
-    }
-    if (optionSource === 'localVariableCollectionsTarget') {
-      figma.variables.getLocalVariableCollectionsAsync().then((localCollections) => {
-        const names = (localCollections || []).map((c) => c && c.name).filter((n) => n != null && String(n).trim() !== '');
-        const sorted = [...new Set(names)].sort((a, b) => String(a).localeCompare(String(b)));
-        const options = ['__NEW__'].concat(sorted);
-        const optionGroups: { label: string; values: string[] }[] = [
-          { label: 'Target', values: ['__NEW__'] }
-        ];
-        if (sorted.length) optionGroups.push({ label: 'This file', values: sorted });
-        figma.ui.postMessage({
-          type: 'OPTIONS',
-          optionSource: optionSource || '',
-          options,
-          optionGroups
-        });
-      }).catch((err) => {
-        console.error('Backend: localVariableCollectionsTarget fetch failed', err);
-        figma.ui.postMessage({
-          type: 'OPTIONS',
-          optionSource: optionSource || '',
-          options: ['__NEW__'],
-          optionGroups: [{ label: 'Target', values: ['__NEW__'] }]
         });
       });
       return;

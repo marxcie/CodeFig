@@ -593,6 +593,19 @@
           inputType = "collection";
         }
 
+        // The mode picker: the same control one level down. A mode only means anything inside a
+        // collection, so this field names the collection field it follows — `@mode: targetCollection`
+        // — and written bare it binds to the block's only collection picker, which is what a script
+        // with one target has.
+        //
+        // What is *recorded* is what was written, never the resolved name: a bare `@mode` that
+        // serialised as `@mode: targetCollection` would silently rewrite somebody's block on the
+        // first keystroke in an unrelated field, since the whole block is re-emitted on every change.
+        var modeMatch = tip.match(/@mode\b(?::\s*([A-Za-z0-9_$]+))?/);
+        if (modeMatch && typeof val === "string") {
+          inputType = "mode";
+        }
+
         // A repeatable group: a list of objects, edited as rows. Claimed before the fallback
         // below, which is what an unclaimed array falls into.
         var rowsMatch = tip.match(/@rows:\s*(.+?)(?=\s+@|$)/);
@@ -622,6 +635,11 @@
         };
         if (phMatch) f.placeholder = phMatch[1];
         if (helperMatch) f.helper = helperMatch[1].trim();
+        if (inputType === "mode") {
+          // `null` for a bare `@mode`, and it stays null: resolution happens against the rendered
+          // form, so the two spellings serialise back exactly as they were written.
+          f.collectionField = modeMatch[1] ? modeMatch[1] : null;
+        }
         // Which syntax this row was written in, so serialize puts it back the same way. A block is
         // one or the other in practice, but recording it per row means a mixed block round-trips too.
         f.syntax = syntax;
@@ -638,7 +656,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|tabs|collection|helper)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|tabs|collection|mode|helper)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -810,6 +828,9 @@
         if (r.inputType === "multiselect") parts.push("@multi");
         if (r.inputType === "textarea") parts.push("@textarea");
         if (r.inputType === "collection") parts.push("@collection");
+        if (r.inputType === "mode") {
+          parts.push("@mode" + (r.collectionField ? ": " + r.collectionField : ""));
+        }
         if (r.inputType === "rows" && r.columns) {
           parts.push("@rows: " + r.columns.map(function (c) {
             var spec = c.type === "select" ? "(" + (c.options || []).join("|") + ")" : c.type;

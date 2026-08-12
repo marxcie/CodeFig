@@ -187,6 +187,7 @@
 // | `@helper: Text` | a 10px note under the control, not under the row. **Last on the line:** a note runs to the end of it, so it can mention an `@annotation` without being cut in half |
 // | `@showWhen: field=value` | the row appears only when that field holds one of those values |
 // | `@collection` | collection picker: this file's collections, plus **New collection** |
+// | `@mode: field` | mode picker: the modes of the collection that `field` holds, plus **New mode**. Written bare it follows the block's only `@collection`. Changing that collection resets it — the modes on offer are the new collection's |
 // | `@collectionModes: Title` | the mode chips — a marker row of its own, reading names from the `modes` field |
 // | `@rows: key:type=Label\|…` | a table, one line per array entry |
 // | `@rows: …` + `@tabs` | the same array as one tab per entry, fields stacked and labelled |
@@ -258,6 +259,7 @@ var dependent = ""; // @showWhen: toggle=true @label: Only while Checkbox is on 
 //
 // # Collections and modes
 var collectionName = "Responsive System"; // @collection @label: Collection @helper: @collection — this file's collections, plus New collection
+var collectionMode = "Desktop"; // @mode: collectionName @label: Mode @helper: @mode: collectionName — the modes of the collection above, plus New mode
 // @collectionModes: Collection modes
 // The chips read their names from the modes field below, so the two cannot disagree. Click a chip to
 // rename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run.

@@ -535,7 +535,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-collectionName-10">Collection</label>
               <div class="config-ui-field__control">
-                <div class="config-ui-collection" data-collection-field="collectionName" data-option-source="localCollections" data-initial-value="Responsive System">
+                <div class="config-ui-collection config-ui-picker" data-collection-field="collectionName" data-option-source="localCollections" data-initial-value="Responsive System">
                   <select class="config-ui-input config-ui-input--select config-ui-collection-select" value="Responsive System">
                     <option value="" disabled hidden>Select target collection or create a new one</option>
                     <option value="Responsive System">Responsive System</option>
@@ -545,14 +545,34 @@
                     <option value="codefig-new">New collection</option>
                   </select>
                   <input type="text" class="config-ui-input config-ui-input--text config-ui-collection-new" placeholder="New collection name" data-collection-new-label="New collection name" value="">
-                  <div class="config-ui-collection-note"></div>
+                  <div class="config-ui-collection-note config-ui-field-note"></div>
                 </div>
               </div>
               <div class="config-ui-field-note">@collection — this file's collections, plus New collection</div>
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--chips" data-row-index="31">
+        <div class="config-ui-row config-ui-row--field" data-row-index="31">
+          <div class="config-ui-field config-ui-field--mode" title="@mode: collectionName">
+            <div class="config-ui-field__row">
+              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-collectionMode-11">Mode</label>
+              <div class="config-ui-field__control">
+                <div class="config-ui-mode config-ui-picker" data-mode-field="collectionMode" data-mode-collection-field="collectionName" data-initial-value="Desktop" data-mode-exists="">
+                  <select class="config-ui-input config-ui-input--select config-ui-mode-select" value="Desktop">
+                    <option value="" disabled hidden>Select mode or create a new one</option>
+                    <option value="Desktop">Desktop</option>
+                    <option disabled>──────────</option>
+                    <option value="codefig-new-mode">New mode</option>
+                  </select>
+                  <input type="text" class="config-ui-input config-ui-input--text config-ui-mode-new" placeholder="New mode name" data-mode-new-label="New mode name" value="">
+                  <div class="config-ui-mode-note config-ui-field-note"></div>
+                </div>
+              </div>
+              <div class="config-ui-field-note">@mode: collectionName — the modes of the collection above, plus New mode</div>
+            </div>
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--field config-ui-row--chips" data-row-index="32">
           <div class="config-ui-field config-ui-field--chips">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label">Collection modes</label>
@@ -576,12 +596,12 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="32">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="33">
           <div class="docs-rendered">
             The chips read their names from the modes field below, so the two cannot disagree. Click a chip to  <br>rename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="33">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="34">
           <div class="config-ui-field config-ui-field--rows" title="@rows: name:text=Mode|width:number=Width|columns:number=Columns @tabs">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -628,16 +648,16 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="34"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="35">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="35"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="36">
           <h1 class="config-ui-heading">Table rows</h1>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="36">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="37">
           <div class="docs-rendered">
             The same annotation without @tabs: one line per entry, with Add and Remove.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="37">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="38">
           <div class="config-ui-field config-ui-field--rows" title="@rows: label:text=Name|min:number=Min width">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -672,14 +692,14 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="38"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="39">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="39"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="40">
           <h1 class="config-ui-heading">What the form cannot hold</h1>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="40">
+        <div class="config-ui-row config-ui-row--field" data-row-index="41">
           <div class="config-ui-field config-ui-field--unsupported">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label" for="config-ui-nested-13">Nested object</label>
+              <label class="config-ui-field__label" for="config-ui-nested-14">Nested object</label>
               <div class="config-ui-field__control">
                 <pre class="config-ui-readonly" aria-readonly="true" data-readonly-field="nested" title="Edit this one in the Script tab — no form control can hold it">{
   "outer": {
@@ -691,7 +711,7 @@
             </div>
           </div>
         </div>
-        <div data-row-index="41"></div>
+        <div data-row-index="42"></div>
       </div>
       </div>
     </div>

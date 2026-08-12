@@ -3,12 +3,21 @@
 // # Selection to variables
 // Recursively walks the selection and creates or updates variables from layer names and values.
 //
-// ## Layer naming
-// When **Target collection** is **New collection** (default), the first `/` segment is the collection name and the rest is the variable path.
-// - `bark/900` → collection `bark`, variable `900`
-// - `colors/primitives/bark/900` → collection `colors`, variable `primitives/bark/900`
+// ## Collection
+// Pick a collection in this file, or choose **New collection** and type a name — a name that is not
+// in this file is created on Run. Same control as the Design System Foundations scripts.
 //
-// When an existing collection is chosen, the full layer name is the variable path (slashes included).
+// ## Mode
+// Which mode the values are written to, chosen the same way: a mode of that collection, or **New
+// mode** and a name, created on Run. Left empty, the values go to the collection's default mode.
+//
+// Changing the collection empties it, because the modes on offer are the new collection's.
+//
+// ## Layer naming
+// The layer name is the variable path *inside* that collection; slashes are groups.
+// - `bark/350` → group `bark`, variable `350`
+// - `primitives/bark/350` → group `primitives/bark`, variable `350`
+// - `350` → variable `350` at the collection root
 //
 // ## Variable type
 // | Type | Layer | Value |
@@ -25,27 +34,23 @@
 // @DOC_END
 
 @import { collectNodesAsync, showProgress, finishCodefigRunProgress } from "@Core Library"
-@import { getOrCreateCollection, getCollection, createOrUpdateVariable } from "@Variables"
+@import { getOrCreateCollection, getCollection, createOrUpdateVariable, getOrCreateMode, getDefaultMode, getModeByName } from "@Variables"
 @import { displayResults, createSelectableResult } from "@InfoPanel"
 
 // @UI_CONFIG_START
 // # Selection to variables
-var targetCollection = "__NEW__"; // @options: localVariableCollectionsTarget
-// **New collection** derives the collection from the first path segment. Pick an existing collection to send all variables there.
+// Where the variables go. Pick a collection in this file, or choose "New collection" and type a
+// name — a name that is not in this file is created on Run.
+var targetCollection = ""; // @collection @label: Collection
+// Which mode the values are written to. Empty means the collection's default mode.
+var targetMode = ""; // @mode: targetCollection @label: Mode
 //
 var variableType = "Color"; // @options: Color|Number|String
 // Color: solid fill on shapes. Number / String: text layers.
 // @UI_CONFIG_END
 
-var TARGET_NEW = "__NEW__";
-
 function trimTarget(v) {
   return v != null ? String(v).trim() : "";
-}
-
-function isNewCollectionTarget(target) {
-  var t = trimTarget(target);
-  return !t || t === TARGET_NEW;
 }
 
 function figmaVariableType(uiType) {
@@ -63,26 +68,14 @@ function normalizeLayerPath(name) {
   return s;
 }
 
-function resolveCollectionAndVariable(layerPath, target) {
+// The layer name is the variable path inside the chosen collection — nothing is peeled off the
+// front. The collection comes from the picker, which is the whole point of standardising on it:
+// one place says where variables go, and `bark/350` means the same thing whether that collection
+// already exists or is about to.
+function resolveVariableName(layerPath) {
   var path = normalizeLayerPath(layerPath);
   if (!path) return { error: "Empty layer name" };
-
-  if (isNewCollectionTarget(target)) {
-    var slash = path.indexOf("/");
-    if (slash === -1) {
-      return {
-        error: 'Layer "' + path + '" needs collection/variable (e.g. bark/900) when New collection is selected',
-      };
-    }
-    var collectionName = path.slice(0, slash);
-    var variableName = path.slice(slash + 1);
-    if (!collectionName || !variableName) {
-      return { error: 'Invalid path in layer "' + path + '"' };
-    }
-    return { collectionName: collectionName, variableName: variableName, fromLayer: true };
-  }
-
-  return { collectionName: trimTarget(target), variableName: path, fromLayer: false };
+  return { variableName: path };
 }
 
 function hasSolidFill(node) {
@@ -125,16 +118,6 @@ function extractValue(node, type) {
   return null;
 }
 
-function defaultModeName(collection) {
-  if (!collection || !collection.modes || !collection.modes.length) return "Mode 1";
-  if (collection.defaultModeId) {
-    for (var i = 0; i < collection.modes.length; i++) {
-      if (collection.modes[i].modeId === collection.defaultModeId) return collection.modes[i].name;
-    }
-  }
-  return collection.modes[0].name;
-}
-
 function formatValuePreview(type, value) {
   if (value == null) return "—";
   if (type === "COLOR" && typeof value.r === "number") {
@@ -154,7 +137,7 @@ function nodeFilterForType(type) {
   };
 }
 
-function buildNotifyMessage(stats, collectionMeta) {
+function buildNotifyMessage(stats, collectionName, collectionCreated, modeName, modeCreated) {
   var actionParts = [];
   if (stats.created) actionParts.push(stats.created + " created");
   if (stats.updated) actionParts.push(stats.updated + " updated");
@@ -166,18 +149,10 @@ function buildNotifyMessage(stats, collectionMeta) {
 
   var msg = actionParts.join(", ");
   if (stats.skipped) msg += " · " + stats.skipped + " skipped";
-
-  var colNames = Object.keys(collectionMeta).sort();
-  if (colNames.length) {
-    var colParts = [];
-    for (var c = 0; c < colNames.length; c++) {
-      var cn = colNames[c];
-      colParts.push(collectionMeta[cn].created ? cn + " (new)" : cn);
-    }
-    var colShow =
-      colParts.length <= 3 ? colParts.join(", ") : colParts.slice(0, 2).join(", ") + " +" + (colParts.length - 2);
-    msg += " · " + colShow;
-  }
+  msg += " · " + collectionName + (collectionCreated ? " (new)" : "");
+  // The mode only earns its place in the summary when it was a choice: naming the one mode of a
+  // single-mode collection is noise, and creating one is the thing worth reading twice.
+  if (modeName && modeCreated) msg += " / " + modeName + " (new mode)";
 
   return msg;
 }
@@ -190,23 +165,11 @@ function buildNotifyMessage(stats, collectionMeta) {
   }
 
   var resolvedType = figmaVariableType(typeof variableType !== "undefined" ? variableType : "Color");
-  var target = trimTarget(typeof targetCollection !== "undefined" ? targetCollection : "");
-  var collectionCache = {};
-  var collectionMeta = {};
+  var collectionName = trimTarget(typeof targetCollection !== "undefined" ? targetCollection : "");
 
-  async function getCollectionForName(name, fromLayer) {
-    if (collectionCache[name]) return collectionCache[name];
-    var col = null;
-    if (fromLayer || isNewCollectionTarget(target)) {
-      var existed = await getCollection(name);
-      col = await getOrCreateCollection(name);
-      if (!collectionMeta[name]) collectionMeta[name] = { created: !existed };
-    } else {
-      col = await getCollection(name);
-      if (col && !collectionMeta[name]) collectionMeta[name] = { created: false };
-    }
-    collectionCache[name] = col;
-    return col;
+  if (!collectionName) {
+    figma.notify("Pick a collection, or choose New collection and type a name");
+    return;
   }
 
   var nodes = await collectNodesAsync(selection, {
@@ -225,6 +188,38 @@ function buildNotifyMessage(stats, collectionMeta) {
     return;
   }
 
+  // Asked before creating, so the summary can say whether the collection is new — the picker's
+  // "New collection" is an instruction, not a promise the name is absent.
+  var collectionCreated = !(await getCollection(collectionName));
+  var collection = await getOrCreateCollection(collectionName);
+  if (!collection) {
+    figma.notify('Could not open or create collection "' + collectionName + '"');
+    finishCodefigRunProgress();
+    return;
+  }
+  // The ids that were there before, so "new" is decided by which mode came back rather than by
+  // comparing names — `getOrCreateMode` matches the way Figma does, and a rename of a new
+  // collection's default mode is not a mode being added.
+  var requestedMode = trimTarget(typeof targetMode !== "undefined" ? targetMode : "");
+  var modeIdsBefore = collection.modes.map(function (m) {
+    return m.modeId;
+  });
+  var mode;
+  try {
+    mode = getOrCreateMode(collection, requestedMode);
+  } catch (err) {
+    figma.notify(err && err.message ? err.message : String(err), { timeout: 8000 });
+    finishCodefigRunProgress();
+    return;
+  }
+  if (!mode) {
+    figma.notify('Could not open or create mode "' + requestedMode + '"');
+    finishCodefigRunProgress();
+    return;
+  }
+  var modeName = mode.name;
+  var modeCreated = modeIdsBefore.indexOf(mode.modeId) === -1;
+
   var stats = { created: 0, updated: 0, skipped: 0 };
   var results = [];
   var total = nodes.length;
@@ -233,8 +228,7 @@ function buildNotifyMessage(stats, collectionMeta) {
     if (i % 25 === 0) showProgress(i, total, "Creating variables");
 
     var node = nodes[i];
-    var layerPath = normalizeLayerPath(node.name);
-    var resolved = resolveCollectionAndVariable(layerPath, target);
+    var resolved = resolveVariableName(node.name);
 
     if (resolved.error) {
       stats.skipped++;
@@ -255,21 +249,6 @@ function buildNotifyMessage(stats, collectionMeta) {
       continue;
     }
 
-    var collection = await getCollectionForName(resolved.collectionName, resolved.fromLayer);
-    if (!collection) {
-      stats.skipped++;
-      results.push(
-        createSelectableResult(
-          node.name,
-          node.id,
-          'Collection "' + resolved.collectionName + '" not found',
-          "warning"
-        )
-      );
-      continue;
-    }
-
-    var modeName = defaultModeName(collection);
     var action = await createOrUpdateVariable(collection, resolved.variableName, {
       type: resolvedType,
       values: (function () {
@@ -284,7 +263,7 @@ function buildNotifyMessage(stats, collectionMeta) {
 
     results.push(
       createSelectableResult(
-        resolved.collectionName + " / " + resolved.variableName,
+        collectionName + " / " + resolved.variableName,
         node.id,
         formatValuePreview(resolvedType, value) + " · " + node.name + " (" + action + ")",
         "success"
@@ -294,22 +273,16 @@ function buildNotifyMessage(stats, collectionMeta) {
 
   finishCodefigRunProgress();
 
-  var summary = buildNotifyMessage(stats, collectionMeta);
+  var summary = buildNotifyMessage(stats, collectionName, collectionCreated, modeName, modeCreated);
 
+  // **No `grouping`.** It carried `getGroupKey` / `getGroupTitle` functions, and the panel is
+  // reached by `postMessage` — so the whole call threw `Cannot unwrap function` before anything was
+  // shown, and the run never signalled completion. The panel groups by `node` or `property` and by
+  // nothing else; `severity` was never one of them, and every row shows its own severity anyway.
   displayResults({
     title: "Selection to variables",
     results: results,
     type: stats.skipped && !stats.created && !stats.updated ? "warning" : "success",
-    grouping: {
-      modes: ["severity"],
-      default: "severity",
-      getGroupKey: function (r) {
-        return r.severity || "Other";
-      },
-      getGroupTitle: function (key) {
-        return key;
-      },
-    },
   });
 
   figma.notify(summary, { timeout: summary.length > 80 ? 8000 : 5000 });
