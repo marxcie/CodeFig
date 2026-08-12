@@ -2470,6 +2470,19 @@
           lastAutoImport.note = recognitionNote(found, where) + summary;
         }
         setAutoImportNote(lastAutoImport.note);
+
+        // **And say it out loud, once.** The note under Group is the full account — where it came from,
+        // whether running would change anything, what could not be recovered — and it is easy to miss
+        // when the thing that changed is further down the panel. A toast is one line and it is the only
+        // moment the settings under your cursor were replaced by something read from the file.
+        //
+        // Only on a load that happened. Every keystroke in Group asks a question, and the ones that
+        // find nothing say nothing.
+        post('NOTIFY', {
+          message: (found.source === 'recorded' ? 'Loaded the saved ' : 'Read the ') +
+            configPreviewDomainLabel() + ' settings from ' + where +
+            (found.source === 'recorded' ? '.' : ' variables.')
+        });
       }
 
       /**

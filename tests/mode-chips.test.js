@@ -566,3 +566,19 @@ test('adopting the file\'s spelling is not a rename of the mode', () => {
   assert.deepEqual(intents.additions, []);
   assert.deepEqual(intents.removals, []);
 });
+
+test('a load says so out loud, once, and only when it happened', () => {
+  // The note under Group is the full account and sits above the thing that changed; a toast is the one
+  // line that cannot be missed. Márton asked for it, and the constraint is that every keystroke in
+  // Group asks the file a question — the ones that find nothing must stay quiet.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
+
+  const notifyAt = apply.indexOf("post('NOTIFY'");
+  const guardAt = apply.indexOf("found.source !== 'recognised'");
+  assert.ok(notifyAt > 0 && notifyAt > guardAt,
+    'the toast sits after the "nothing found" guard, so a miss is silent');
+  assert.match(apply, /Loaded the saved /);
+  assert.match(apply, /Read the /);
+  assert.equal((apply.match(/post\('NOTIFY'/g) || []).length, 1, 'one toast per load, not two');
+});
