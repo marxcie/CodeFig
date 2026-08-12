@@ -633,11 +633,10 @@
 
         const values = {};
         values[field] = next.entries;
-        writeConfigBlockText(api.serialize(schema, values));
-
         // The Mode settings tabs are drawn from this array, so they follow the chips by being rebuilt
-        // from the same text — rather than by a second code path that keeps them in step.
-        projectConfigIntoForm();
+        // from the same text — `writeConfigBlockText` re-projects the form, so there is nothing to do
+        // here but write it.
+        writeConfigBlockText(api.serialize(schema, values));
         scheduleConfigPreview();
       }
 
@@ -1695,6 +1694,23 @@
         return match ? match[1] : null;
       }
 
+      /**
+       * The open script's own `@import` lines.
+       *
+       * One list, and it is the script's. Any snippet that calls a library function whose own calls
+       * reach *another* library needs them, because `@import` is textual and follows calls only inside
+       * one file. The script's list is already complete and already checked by `validateResolvedCalls`.
+       */
+      function scriptImportLines() {
+        if (!currentScript || !window.CodeFigImports ||
+            typeof window.CodeFigImports.findImports !== 'function') {
+          return [];
+        }
+        return window.CodeFigImports.findImports(currentScript.code || '').map(function (imp) {
+          return imp.statement;
+        });
+      }
+
       function buildPreviewSnippet(code, fn, config, domain, seq) {
         const suggestFn = scriptSuggestionsFunction(code);
         const imports = (window.CodeFigImports && typeof window.CodeFigImports.findImports === 'function')
@@ -1807,6 +1823,24 @@
       var autoImportTimer = null;
       var autoImportSeq = 0;
       var fileModesTimer = null;
+      // **Its own counter.** The mode-table read used to bump `autoImportSeq`, which is the number the
+      // auto-import reply is checked against — so a table read starting while a fill was in flight
+      // made the fill's answer look stale and it was dropped on arrival. The symptom was exact and
+      // misleading: the chips got their ids (the table reply was fresh) and the config was never
+      // filled, which reads as "recognition does not work" rather than "two requests are sharing a
+      // sequence number".
+      var fileModesSeq = 0;
+      /**
+       * What auto-import last did, for the bridge to read back.
+       *
+       * A silent run leaves no trace on purpose — no console bridge, no toast — which is right for
+       * something that fires on every address change and wrong when it does not work. Then the only
+       * symptom is a config that did not fill, and that has five possible causes: the request was
+       * never made, it was refused because the channel was busy, the reply was discarded as stale, the
+       * source was `none`, or the fill itself found nothing to do. This says which.
+       */
+      var lastAutoImport = { at: null, requested: false, refused: false, source: null,
+        summary: null, note: null, seq: null };
 
       /**
        * Write the config block into the canonical text.
@@ -1828,6 +1862,18 @@
         if (next === mainCode) return;
         code.setValue(next);
         if (configEditor) configEditor.setValue(currentConfigBlock());
+
+        // **And bring the form with it.** `mergeConfigIntoMain` treats the form as authoritative
+        // while the Configuration UI tab is the view you are in — which is right for something you
+        // typed, and wrong for text written behind the form's back. Auto-import filled the block
+        // correctly and the very next merge (an autosave through `getFullCode`, a preview, any
+        // change at all) serialised the form's *old* values straight back over it. The trace read
+        // `filled: 1440, afterWrite: 1440, later: 1920` — the write landed and was undone.
+        //
+        // Here rather than in each caller: this is the only place that writes the block
+        // programmatically, so this is the only place that can guarantee the two agree. Rendering
+        // fires no change event, so it cannot start the load loop that a tab switch once did.
+        if (isConfigTab(currentTab) && configUIInstance) projectConfigIntoForm();
       }
 
       /** The note under Group, which is where the answer belongs. */
@@ -1880,20 +1926,23 @@
           var collection = configUIInstance.getValues().collectionName;
           if (!collection || !String(collection).trim()) return;
           if (fileModes.collection === collection && fileModes.found) return;
+          // An auto-import is already queued, and it brings the table with it. Asking again would be
+          // a second read of the same thing and a second thing to sequence.
+          if (autoImportTimer) return;
 
-          var seq = ++autoImportSeq;
+          var seq = ++fileModesSeq;
           var started = runSilentSnippet([
             '@import { foundationCollectionModes } from "@Foundation"',
             '(async function () {',
             '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ');',
-            '  window.codefigConfigLoadResult({ fileModes: modes, autoImportSeq: ' + seq + ' });',
+            '  window.codefigConfigLoadResult({ fileModes: modes, fileModesSeq: ' + seq + ' });',
             '})();'
           ].join('\n'));
           if (!started && (attempt || 0) < 4) scheduleFileModes((attempt || 0) + 1);
         }, 400);
       }
 
-      function requestAutoImport() {
+      function requestAutoImport(attempt) {
         autoImportTimer = null;
         if (!scriptHasConfig || !configUIInstance) return;
         var values = configUIInstance.getValues();
@@ -1908,10 +1957,20 @@
         if (!domain) return;
 
         var seq = ++autoImportSeq;
+        lastAutoImport = { at: new Date().toLocaleTimeString(), requested: true, refused: false,
+          source: null, summary: null, note: null, seq: seq };
         // **One read, two answers.** The recorded config and the collection's live mode table are
         // both needed the moment the address resolves, and only one silent run may be in flight —
         // two snippets would mean the second is refused about half the time.
-        runSilentSnippet([
+        //
+        // The script's own `@import` lines come first, the same way `buildPreviewSnippet` does it, and
+        // for the same reason: `@import` follows calls only *within* one source file, so a library
+        // function that calls into another library resolves in its **consumer's** context.
+        // `gridRecognise` calls `calculateColumnWidth` from `@Core Library`; the open script already
+        // imports it and is checked by `validateResolvedCalls`. Hand-listing it here would be a second
+        // list to forget — and the failure is a `ReferenceError` swallowed by a caller's try/catch,
+        // seen as "recognition does nothing".
+        var started = runSilentSnippet(scriptImportLines().concat([
           '@import { foundationAutoImport, foundationCollectionModes } from "@Foundation"',
           '(async function () {',
           '  var found = await foundationAutoImport(' +
@@ -1922,7 +1981,19 @@
           '    autoImport: found, fileModes: modes, autoImportSeq: ' + seq,
           '  });',
           '})();'
-        ].join('\n'));
+        ]).join('\n'));
+        // **Refused is not the same as failed, and it used to look the same.** One silent run may be
+        // in flight, and the live preview is debounced 50ms behind this — so a fill could simply be
+        // dropped on the floor whenever the preview got there first. Retried rather than lost.
+        if (!started) {
+          lastAutoImport.refused = true;
+          if ((attempt || 0) < 4) {
+            autoImportTimer = setTimeout(function () {
+              autoImportTimer = null;
+              requestAutoImport((attempt || 0) + 1);
+            }, 400);
+          }
+        }
       }
 
       /**
@@ -1987,7 +2058,9 @@
        * was written for them. So an auto-import is as non-destructive as a manual one was.
        */
       function applyAutoImport(found) {
-        if (!found || found.source !== 'recorded' || !found.config) {
+        lastAutoImport.source = found ? found.source : 'no-answer';
+        if (!found || !found.config ||
+            (found.source !== 'recorded' && found.source !== 'recognised')) {
           setAutoImportNote(null);
           return;
         }
@@ -2002,11 +2075,83 @@
         var filled = fill(currentConfigBlock(), found.config);
         // Straight into the canonical text, with no tab switching. Switching to Configuration code and
         // back was what rebuilt the form, and a rebuild is what made this loop.
+        //
+        // Traced, because "the fill reported success and the block did not change" has two very
+        // different causes — the write not landing, or something overwriting it a moment later — and
+        // they are indistinguishable from outside. `later` is read after the current task and the
+        // debounces have run, which is when an overwrite would have happened.
+        // Length, not content: every domain's block is different and none of them is this code's
+        // business. Three numbers are enough to tell the two failures apart — a write that never
+        // landed (`afterWrite` equals `before`) from one that was undone (`later` equals `before`
+        // while `afterWrite` did not).
+        function blockSize(text) { return (text || '').length; }
+        lastAutoImport.trace = {
+          before: blockSize(currentConfigBlock()),
+          filled: blockSize(filled.text)
+        };
         writeConfigBlockText(filled.text);
+        lastAutoImport.trace.afterWrite = blockSize(currentConfigBlock());
+        setTimeout(function () {
+          lastAutoImport.trace.later = blockSize(currentConfigBlock());
+          lastAutoImport.trace.stuck = lastAutoImport.trace.later === lastAutoImport.trace.afterWrite;
+        }, 800);
 
-        setAutoImportNote('As this Collection and Group combination contains a ' +
-          configPreviewDomainLabel() + ' set, it was imported automatically.' +
-          (filled.summary && filled.summary.indexOf('Nothing to fill') === -1 ? ' ' + filled.summary : ''));
+        var summary = filled.summary && filled.summary.indexOf('Nothing to fill') === -1
+          ? ' ' + filled.summary : '';
+
+        lastAutoImport.summary = filled.summary || null;
+        if (found.source === 'recorded') {
+          lastAutoImport.note = 'As this Collection and Group combination contains a ' +
+            configPreviewDomainLabel() + ' set, it was imported automatically.' + summary;
+        } else {
+          lastAutoImport.note = recognitionNote(found, where) + summary;
+        }
+        setAutoImportNote(lastAutoImport.note);
+      }
+
+      /**
+       * What recognition actually did, in one line, without overstating it.
+       *
+       * Three separate claims, and collapsing them is the failure mode Márton named: a recovery that
+       * quietly leaves two flags at their defaults while implying it read everything costs an
+       * afternoon later.
+       *
+       *   1. **Where it came from.** Not a record CodeFig kept — the variables themselves, read by
+       *      name. Worth saying, because it means the answer is a reading of your file rather than of
+       *      our bookkeeping.
+       *   2. **Whether it agrees.** The recognised config is used to recompute every `col-N`. All
+       *      matching means running changes nothing; any mismatch is what a run would overwrite, and
+       *      it is named with a number rather than hinted at.
+       *   3. **What could not come back.** `generateOverview` was never a variable, and Extra columns
+       *      is inferred from the length of the `col-*` series rather than read.
+       */
+      function recognitionNote(found, where) {
+        var r = found.recognition || {};
+        var parts = ['No ' + configPreviewDomainLabel() +
+          ' set is recorded for ' + where + ', so the settings were read from the variables there.'];
+
+        var wrong = (r.mismatched || []).length;
+        if (r.checked) {
+          if (!wrong) {
+            parts.push('All ' + r.checked + ' column values match what this config generates, ' +
+              'so running would change none of them.');
+          } else {
+            var first = r.mismatched[0];
+            parts.push(wrong + ' of ' + r.checked + ' column values differ from what this config ' +
+              'generates — running would change them, starting with ' + first.name + ' in ' +
+              first.mode + ' (' + first.stored + ' \u2192 ' + Math.round(first.wouldBe * 100) / 100 + ').');
+          }
+        }
+
+        var couldNot = [];
+        if ((r.missing || []).indexOf('generateOverview') !== -1) {
+          couldNot.push('Generate overview is not a variable, so it stays off');
+        }
+        if (r.extensionColumnsInferred) {
+          couldNot.push('Extra columns is inferred from how many col-* variables there are');
+        }
+        if (couldNot.length) parts.push(couldNot.join('; ') + '.');
+        return parts.join(' ');
       }
 
       /** The domain, as a person would name it. */
@@ -3571,7 +3716,6 @@
             const optionGroups = msg.optionGroups;
             function collectionOptionLabel(opt, source) {
               if (source === 'variableCollections' && opt === '') return '(all collections)';
-              if (source === 'localVariableCollectionsTarget' && opt === '__NEW__') return 'New collection';
               return opt;
             }
             const useGroupedCollections =
@@ -3579,8 +3723,7 @@
               Array.isArray(optionGroups) &&
               optionGroups.length > 0 &&
               (optionSource === 'variableCollections' ||
-                optionSource === 'localVariableCollections' ||
-                optionSource === 'localVariableCollectionsTarget');
+                optionSource === 'localVariableCollections');
             document.querySelectorAll('select[data-option-source="' + optionSource + '"]').forEach(function (sel) {
               const initial = sel.getAttribute('data-initial-value') || '';
               sel.innerHTML = '';
@@ -3775,7 +3918,7 @@
               }
               // The mode table on its own — a panel opening on an address it did not change.
               if (data.fileModes !== undefined) {
-                if (data.autoImportSeq === autoImportSeq) applyFileModes(data.fileModes);
+                if (data.fileModesSeq === fileModesSeq) applyFileModes(data.fileModes);
                 return;
               }
               if (data.preview !== undefined) {
@@ -4057,7 +4200,7 @@
       function _codefigUiCommandNames() {
         return ['selectScript', 'listScripts', 'readConfig', 'writeConfig', 'readInfoPanel',
           'readPreview', 'readTabs', 'readForm', 'switchTab', 'setField', 'clickControl',
-          'readModeIntents'];
+          'readModeIntents', 'readAutoImport'];
       }
 
       /** Resolvers waiting for a form change to be folded into the config. */
@@ -4385,6 +4528,9 @@
           // hands it back, from the same call `runCurrentScript` makes, and touches nothing. Without
           // it the one thing worth verifying about chips is invisible from outside: whether a rename
           // is going to be a rename.
+          case 'readAutoImport':
+            return Promise.resolve(lastAutoImport);
+
           case 'readModeIntents':
             return Promise.resolve({
               intents: currentModeIntents(),

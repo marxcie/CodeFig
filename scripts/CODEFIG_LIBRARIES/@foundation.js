@@ -741,10 +741,15 @@ async function readFoundation(options) {
  *
  * → { source: 'recorded' | 'none', config, group, collection, tokens, modes }
  *
- * `recognised` — fitting a scale from the variables that are already there — is the third answer and
- * is not wired yet: `adoptRamp` records as it fits, and auto-import must not write. Splitting the fit
- * from the record is its own step, so this reports `none` and the defaults stand, which is the
- * honest outcome rather than a half one.
+ * Three answers, in order:
+ *   `recorded`   — a manifest CodeFig wrote at generation time. Exact, and only present on a set made
+ *                  after manifests existed.
+ *   `recognised` — the variables themselves, read by name and structure (`gridRecognise`). This is
+ *                  what makes a set made before manifests — or by hand to the same scheme — come back.
+ *                  Grid only for now: the ramp domains recognise through `adoptRamp`, which *records*
+ *                  as it fits, and auto-import must not write. Splitting the fit from the record is
+ *                  its own step.
+ *   `none`       — the defaults stand, and the panel says so.
  */
 async function foundationAutoImport(collectionName, group, domain) {
   var answer = {
@@ -758,7 +763,26 @@ async function foundationAutoImport(collectionName, group, domain) {
   if (!collection) return answer;
 
   var read = readManifest(collection, domain, group == null ? '' : group);
-  if (!read.manifest) return answer;
+  if (!read.manifest) {
+    // Nothing recorded. For Grid, read the variables instead — a set that predates manifests is the
+    // common case, not the exotic one.
+    if (domain === 'grid') {
+      var seen = await gridRecognise(collectionName, group == null ? '' : group);
+      if (seen.found) {
+        answer.source = 'recognised';
+        answer.config = seen.config;
+        answer.modes = (seen.config.modes || []).map(function (m) { return m.name; });
+        answer.recognition = {
+          checked: seen.checked,
+          mismatched: seen.mismatched,
+          missing: seen.missing,
+          sources: seen.sources,
+          extensionColumnsInferred: seen.extensionColumnsInferred
+        };
+      }
+    }
+    return answer;
+  }
 
   // A manifest carries the slice; `toDomainConfig` needs a v1 around it. `viewportOrder` is recorded
   // on the slice at generation time, so the modes survive even when this file's registry is empty —
@@ -827,6 +851,210 @@ async function foundationCollectionModes(collectionName) {
   answer.modes = modes.map(function (mode) {
     return { modeId: mode.modeId, name: mode.name, valueCount: counts[mode.modeId] || 0 };
   });
+  return answer;
+}
+
+/**
+ * Read a Grid set out of the variables that are already there — **by name and structure, never by id**.
+ *
+ * This is auto-import's second answer, and the reason it exists: a manifest is only present on a set
+ * CodeFig generated *after* manifests existed. Every grid made before that, and every grid made by
+ * hand to the same scheme, has nothing recorded — so recognition matches on what is visible:
+ *
+ *     <group>/columns   <group>/gap   <group>/padding   <group>/viewport-width   <group>/col-1 … col-N
+ *
+ * per mode of the collection. Nothing about a variable id enters into it, which is what makes it
+ * backward compatible: rename the collection, rename the modes, regenerate the variables — as long as
+ * the names still read like a grid, it comes back.
+ *
+ * **Each of the four can also be derived**, because an older set may not have all of them and the
+ * `col-N` series carries the same information:
+ *
+ *     colWidth = col-1                      gap = col-2 - 2·col-1
+ *     content  = col-<columns>              columns = where col-N stops growing
+ *     width    = content + 2·padding        padding = (width - content) / 2
+ *
+ * Every value says where it came from (`sources`), because "read from your file" and "worked out from
+ * the other numbers" are different claims and the second one can be wrong.
+ *
+ * It then **checks itself**: the recognised config is used to recompute every `col-N` in every mode and
+ * compared with what is actually stored. That is the difference between "this is your grid" and "this
+ * is a grid that would overwrite yours" — the mismatches are what a run would change, and they are
+ * reported rather than discovered afterwards.
+ *
+ * Writes nothing. Requires `calculateColumnWidth` from `@Core Library`.
+ */
+/**
+ * Float noise off a derived value, and nothing else.
+ *
+ * Figma stores numbers as 32-bit floats, so a value that went in as `1440` can come back out of the
+ * `col-N` series as `1439.9999694824219` once it has been through a division and an addition. Read
+ * values are left exactly as the file has them; only **derived** ones are tidied, because the noise is
+ * ours rather than the file's — and `containerWidth: 1439.9999694824219` in a config block a person
+ * reads and pastes is not a recognition, it is a disfigurement.
+ *
+ * Within a hundredth of a whole number, take the whole number; otherwise keep two decimals. A grid
+ * genuinely built on 1439.5 survives; one built on 1440 comes back as 1440.
+ */
+function tidyRecognisedNumber(n) {
+  if (typeof n !== 'number' || !isFinite(n)) return n;
+  var whole = Math.round(n);
+  if (Math.abs(n - whole) < 0.01) return whole;
+  return Math.round(n * 100) / 100;
+}
+
+async function gridRecognise(collectionName, group) {
+  var answer = {
+    found: false, collection: collectionName || null, group: group == null ? '' : group,
+    config: null, checked: 0, mismatched: [], missing: [], notes: []
+  };
+  if (!collectionName) return answer;
+
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
+  if (!collection) return answer;
+
+  var prefix = namePrefix(answer.group);
+  var byName = {};
+  var ids = collection.variableIds || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    if (!variable || variable.resolvedType !== 'FLOAT') continue;
+    if (variable.name.indexOf(prefix) !== 0) continue;
+    byName[variable.name.slice(prefix.length)] = variable;
+  }
+
+  // The `col-N` series is the load-bearing part: without it there is no grid to recognise, whatever
+  // else happens to be named `columns`.
+  var highestCol = 0;
+  for (var key in byName) {
+    var m = /^col-(\d+)$/.exec(key);
+    if (m) highestCol = Math.max(highestCol, Number(m[1]));
+  }
+  if (highestCol === 0) {
+    answer.notes.push('No ' + prefix + 'col-1 … col-N variables, so there is no grid here to read.');
+    return answer;
+  }
+
+  function valueIn(name, modeId) {
+    var variable = byName[name];
+    if (!variable) return null;
+    var v = variable.valuesByMode ? variable.valuesByMode[modeId] : undefined;
+    return typeof v === 'number' ? v : null;
+  }
+
+  var modes = [];
+  var maxColumns = 0;
+  (collection.modes || []).forEach(function (mode) {
+    var sources = {};
+    var col1 = valueIn('col-1', mode.modeId);
+
+    var columns = valueIn('columns', mode.modeId);
+    if (columns !== null) sources.columns = 'variable';
+    else {
+      // Where the series stops growing: `col-N` is clamped to the content width once N passes the
+      // column count, so the first repeat is the count itself.
+      for (var n = 2; n <= highestCol; n++) {
+        var here = valueIn('col-' + n, mode.modeId);
+        var before = valueIn('col-' + (n - 1), mode.modeId);
+        if (here !== null && before !== null && here === before) { columns = n - 1; break; }
+      }
+      if (columns === null) columns = highestCol;
+      sources.columns = 'derived';
+    }
+
+    var gap = valueIn('gap', mode.modeId);
+    if (gap !== null) sources.gap = 'variable';
+    else {
+      var col2 = valueIn('col-2', mode.modeId);
+      gap = col1 !== null && col2 !== null ? tidyRecognisedNumber(col2 - 2 * col1) : 0;
+      sources.gap = col1 !== null && col2 !== null ? 'derived' : 'default';
+    }
+
+    var content = col1 !== null && columns
+      ? col1 * columns + gap * (columns - 1)
+      : null;
+
+    var padding = valueIn('padding', mode.modeId);
+    var width = valueIn('viewport-width', mode.modeId);
+    if (padding !== null) sources.padding = 'variable';
+    if (width !== null) sources.containerWidth = 'variable';
+
+    if (padding === null && width !== null && content !== null) {
+      padding = tidyRecognisedNumber((width - content) / 2);
+      sources.padding = 'derived';
+    }
+    if (width === null && padding !== null && content !== null) {
+      width = tidyRecognisedNumber(content + padding * 2);
+      sources.containerWidth = 'derived';
+    }
+    if (padding === null) { padding = 0; sources.padding = 'default'; }
+    if (width === null) { width = content === null ? 0 : content; sources.containerWidth = 'default'; }
+
+    if (columns > maxColumns) maxColumns = columns;
+    modes.push({
+      name: mode.name,
+      containerWidth: width,
+      columns: columns,
+      gap: gap,
+      padding: padding,
+      sources: sources
+    });
+  });
+
+  if (!modes.length) return answer;
+
+  // Extra columns are not a variable of their own: they are the tail of the series past the widest
+  // mode's column count. Inferred, and said to be — an inference presented as a reading is the
+  // half-truth worth avoiding here.
+  var extensionColumns = Math.max(0, highestCol - maxColumns);
+
+  answer.found = true;
+  answer.config = {
+    collectionName: collectionName,
+    group: answer.group,
+    extensionColumns: extensionColumns,
+    modes: modes.map(function (mode) {
+      return {
+        name: mode.name,
+        containerWidth: mode.containerWidth,
+        columns: mode.columns,
+        gap: mode.gap,
+        padding: mode.padding
+      };
+    })
+  };
+  answer.sources = {};
+  modes.forEach(function (mode) { answer.sources[mode.name] = mode.sources; });
+  answer.extensionColumnsInferred = true;
+
+  // Nothing records these, so they cannot come back. Named rather than left at a default that implies
+  // it was read.
+  answer.missing.push('generateOverview');
+
+  // Self-check: does this config reproduce what is stored?
+  (collection.modes || []).forEach(function (mode, index) {
+    var vc = modes[index];
+    for (var n = 1; n <= highestCol; n++) {
+      var actual = valueIn('col-' + n, mode.modeId);
+      if (actual === null) continue;
+      var expected = n > vc.columns && n <= maxColumns
+        ? vc.containerWidth - vc.padding * 2
+        : calculateColumnWidth(vc) * n + vc.gap * (n - 1);
+      answer.checked++;
+      if (Math.abs(expected - actual) > 0.01) {
+        // Rounded for reading. Anything reported here already differs by more than the tolerance
+        // above, so two decimals cannot hide a real difference — and eleven of them help nobody.
+        answer.mismatched.push({
+          mode: mode.name,
+          name: prefix + 'col-' + n,
+          stored: tidyRecognisedNumber(actual),
+          wouldBe: tidyRecognisedNumber(expected)
+        });
+      }
+    }
+  });
+
   return answer;
 }
 
