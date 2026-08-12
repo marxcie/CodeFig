@@ -346,3 +346,75 @@ test('the note calls a replacement a replacement, whatever the casing', () => {
   assert.match(ui, /sameModeName\(chipName, mode\.name\)/,
     'the note is comparing names some other way again');
 });
+
+// ---------------------------------------------------------------------------
+// Chip and tab order
+// ---------------------------------------------------------------------------
+
+test('the config follows the collection\'s mode order, not the order it was stored in', () => {
+  // Márton's file has Desktop-large · Desktop · Tablet · Tablet-small · Mobile, and a loaded config
+  // showed them in no order at all — a manifest's write order, or a paste's. The chips and the Mode
+  // settings tabs are drawn from this array, so this *is* "chip order is mode order".
+  const file = [
+    { modeId: '1', name: 'Desktop-large' }, { modeId: '2', name: 'Desktop' },
+    { modeId: '3', name: 'Tablet' }, { modeId: '4', name: 'Tablet-small' },
+    { modeId: '5', name: 'Mobile' },
+  ];
+  const stored = [
+    { name: 'Mobile', gap: 16 }, { name: 'Desktop', gap: 40 }, { name: 'Tablet-small', gap: 20 },
+    { name: 'Desktop-large', gap: 48 }, { name: 'Tablet', gap: 24 },
+  ];
+  const ids = P.matchModeIds(stored, file);
+  const out = P.orderModesByFile(stored, ids, file);
+
+  assert.equal(out.changed, true);
+  assert.deepEqual(out.entries.map((e) => e.name),
+    ['Desktop-large', 'Desktop', 'Tablet', 'Tablet-small', 'Mobile']);
+  assert.deepEqual(out.ids, ['1', '2', '3', '4', '5'], 'and the ids move with them');
+  // Each mode keeps its own settings — this is a reorder, not a rewrite.
+  assert.equal(out.entries[4].gap, 16);
+  assert.equal(out.entries[0].gap, 48);
+});
+
+test('reordering is idempotent, so it cannot become a rebuild loop', () => {
+  // It writes the block, which re-projects the form, which is where auto-import once looped.
+  const file = [{ modeId: '1', name: 'A' }, { modeId: '2', name: 'B' }];
+  const once = P.orderModesByFile([{ name: 'B' }, { name: 'A' }], ['2', '1'], file);
+  assert.equal(once.changed, true);
+  assert.equal(P.orderModesByFile(once.entries, once.ids, file).changed, false);
+});
+
+test('a renamed chip keeps its position, because the match is by id first', () => {
+  // The file still calls it Tablet; the config calls it Pad. Matching on names would drop it to the
+  // end as an unknown mode, which is the same class of mistake as treating a rename as an add.
+  const file = [{ modeId: '1', name: 'Desktop' }, { modeId: '2', name: 'Tablet' },
+    { modeId: '3', name: 'Mobile' }];
+  const renamed = P.applyChipOp(
+    [{ name: 'Desktop' }, { name: 'Tablet' }, { name: 'Mobile' }], ['1', '2', '3'],
+    { op: 'rename', index: 1, from: 'Tablet', to: 'Pad' }
+  );
+  const out = P.orderModesByFile(renamed.entries, renamed.ids, file);
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Pad', 'Mobile']);
+  assert.equal(out.changed, false);
+});
+
+test('a mode the file does not have follows the ones it does, and is never dropped', () => {
+  // A pasted config, or a mode added and not yet run. It is not evidence of an order, so it does not
+  // set one — but losing it would be the loss class this whole area exists to avoid.
+  const file = [{ modeId: '1', name: 'Desktop' }, { modeId: '2', name: 'Mobile' }];
+  const out = P.orderModesByFile(
+    [{ name: 'Watch' }, { name: 'Mobile' }, { name: 'Desktop' }], [null, '2', '1'], file
+  );
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Mobile', 'Watch']);
+  assert.equal(out.ids[2], null);
+});
+
+test('the reorder runs after the fill, not before it', () => {
+  // `fillConfigBlock` inserts entries in the *incoming* config's order, so reordering first would be
+  // undone by the fill that follows — and the symptom would be "sometimes it is sorted".
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const handler = ui.slice(ui.indexOf("if (data.autoImport !== undefined)"));
+  const fillAt = handler.indexOf('applyAutoImport(data.autoImport)');
+  const orderAt = handler.indexOf('orderConfigModesToFile()');
+  assert.ok(fillAt > 0 && orderAt > fillAt, 'the reorder must come after the fill');
+});

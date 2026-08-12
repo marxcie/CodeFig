@@ -980,6 +980,65 @@
   }
 
   /**
+   * Put the config's mode entries in the **collection's** order.
+   *
+   * The chips and the Mode settings tabs are drawn from this array, so this is what "chip order is
+   * mode order" actually requires. Without it the order is whatever the config happened to hold: a
+   * manifest's write order, a pasted block's order, or the order someone typed them in — which on a
+   * five-mode system reads as no order at all.
+   *
+   * **The file wins, and that is not arbitrary.** For a collection that already has variables the
+   * plugin API cannot reorder modes, so Figma's order is the one you see in the variables panel and
+   * the one nothing else can change. A config that disagrees is a config that displays its modes in an
+   * order the document does not have.
+   *
+   * Entries the file does not have — a new mode, or one from a pasted config — keep their relative
+   * order and follow the ones it does. They are not evidence of an order, so they do not get to set
+   * one, and they are certainly not dropped.
+   *
+   * Returns `{ entries, ids, changed }`; `changed` is false when the order already matched, so a
+   * caller can avoid writing the block for nothing.
+   */
+  function orderModesByFile(entries, ids, fileModes) {
+    var list = Array.isArray(entries) ? entries.slice() : [];
+    var idList = Array.isArray(ids) ? ids.slice() : [];
+    while (idList.length < list.length) idList.push(null);
+    var file = Array.isArray(fileModes) ? fileModes : [];
+    if (!list.length || !file.length) return { entries: list, ids: idList, changed: false };
+
+    var taken = {};
+    var ordered = [];
+    var orderedIds = [];
+
+    file.forEach(function (mode) {
+      for (var i = 0; i < list.length; i++) {
+        if (taken[i]) continue;
+        // By id where the panel has one, by name otherwise — a renamed chip no longer matches the
+        // file's name for its mode, and it must still land in that mode's position.
+        var matches = idList[i] ? idList[i] === mode.modeId
+          : sameModeName(list[i] && list[i].name, mode.name);
+        if (!matches) continue;
+        taken[i] = true;
+        ordered.push(list[i]);
+        orderedIds.push(idList[i]);
+        return;
+      }
+    });
+
+    for (var j = 0; j < list.length; j++) {
+      if (taken[j]) continue;
+      ordered.push(list[j]);
+      orderedIds.push(idList[j]);
+    }
+
+    var changed = false;
+    for (var k = 0; k < list.length; k++) {
+      if (list[k] !== ordered[k]) { changed = true; break; }
+    }
+    return { entries: ordered, ids: orderedIds, changed: changed };
+  }
+
+  /**
    * What a run should do to the collection's modes: the panel's chips against the file's modes.
    *
    * Derived, not remembered — with one exception, and the exception is the point. Renames and
@@ -1638,6 +1697,7 @@
     applyChipOp: applyChipOp,
     modeIntents: modeIntents,
     matchModeIds: matchModeIds,
+    orderModesByFile: orderModesByFile,
     // Exported because the panel asks the same question when it words the removal note, and "the same
     // mode name" must have exactly one definition. It did not, and the note said "Removing" for a
     // replacement — understating what was about to happen, in the one place that exists to state it.

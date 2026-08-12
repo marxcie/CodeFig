@@ -2124,6 +2124,47 @@
         syncChipsToPanelState();
       }
 
+      /**
+       * Put the config's modes in the collection's order, and write it if that changed anything.
+       *
+       * Called after a load rather than during one, because a fill inserts entries in the *incoming*
+       * config's order — so reordering first would be undone by the fill that follows. Both load paths
+       * end here.
+       *
+       * Writing the block on load is deliberate and bounded: it happens only when the order actually
+       * differs, `writeConfigBlockText` returns early when the text is unchanged, and the reorder is
+       * idempotent — so this cannot become the rebuild loop that auto-import once was.
+       */
+      function orderConfigModesToFile() {
+        var api = window.CodeFigConfigUI;
+        if (!api || !api.orderModesByFile || !fileModes.found) return;
+        var wrap = configUIContainer && configUIContainer.querySelector('[data-chips-field]');
+        var field = (wrap && wrap.getAttribute('data-chips-field')) || 'modes';
+
+        var schema;
+        try {
+          schema = api.parse(currentConfigBlock());
+        } catch (e) {
+          return;
+        }
+        var row = (schema.rows || []).filter(function (r) {
+          return r.type === 'field' && r.name === field && Array.isArray(r.value);
+        })[0];
+        if (!row) return;
+
+        var out = api.orderModesByFile(row.value, chipModeIds, fileModes.modes);
+        chipModeIds = out.ids;
+        if (!out.changed) {
+          syncChipsToPanelState();
+          return;
+        }
+        var values = {};
+        values[field] = out.entries;
+        // Re-projects the form, so the chips and the Mode settings tabs redraw in this order from the
+        // one text — the same path a chip edit and a suggestion take.
+        writeConfigBlockText(api.serialize(schema, values));
+      }
+
       /** The config's per-mode array, or [] — read from the block, which is the truth. */
       function configModeEntries() {
         if (!window.CodeFigConfigUI) return [];
@@ -4040,12 +4081,17 @@
                 if (data.autoImportSeq === autoImportSeq) {
                   applyFileModes(data.fileModes);
                   applyAutoImport(data.autoImport);
+                  // Last, because a fill inserts entries in the incoming config's order.
+                  orderConfigModesToFile();
                 }
                 return;
               }
               // The mode table on its own — a panel opening on an address it did not change.
               if (data.fileModes !== undefined) {
-                if (data.fileModesSeq === fileModesSeq) applyFileModes(data.fileModes);
+                if (data.fileModesSeq === fileModesSeq) {
+                  applyFileModes(data.fileModes);
+                  orderConfigModesToFile();
+                }
                 return;
               }
               if (data.preview !== undefined) {
