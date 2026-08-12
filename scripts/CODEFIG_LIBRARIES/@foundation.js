@@ -2032,44 +2032,184 @@ function gridCardSpans(mode) {
  *
  * Selected means *currently applied*, and it is computed from the values rather than remembered.
  */
-function gridSuggestionsHtml(config, domain, modeName) {
-  var inner = (config && config.config) || config || {};
-  var modes = Array.isArray(inner.modes) ? inner.modes : [];
+/**
+ * How round a number is: divisible by 8 beats 4 beats 2 beats anything.
+ *
+ * The third tie-break, and the least mathematical thing here on purpose. `margin 79 · gap 26` is
+ * exactly as clean as `margin 80 · gap 24` — the arithmetic cannot tell them apart, and nobody wants
+ * a 79px margin. Free numbers stay allowed, as Márton decided; they rank last among equals rather
+ * than being excluded.
+ */
+function gridRoundness(n) {
+  var v = Math.abs(Number(n));
+  if (!isFinite(v)) return 0;
+  if (v % 8 === 0) return 3;
+  if (v % 4 === 0) return 2;
+  if (v % 2 === 0) return 1;
+  return 0;
+}
+
+/** The range the search covers, stated so the empty result can name it. */
+function gridSearchRadius() {
+  return 24;
+}
+
+/**
+ * Whole margin and gap pairs that divide cleanly, ranked.
+ *
+ * The search varies **whole** margins and **whole** gaps around the mode's current values, which is
+ * why it can never emit the one case that would break the definition of clean: a fractional gap. See
+ * `gridDivisionIsClean` — clean means `colWidth` is a whole number and nothing else, because every
+ * span inherits from it.
+ *
+ * Ranked in three levels, each breaking ties in the one above:
+ *   **a.** how many modes the pair is clean for, descending — that is what the badges say;
+ *   **b.** how little it moves, ascending — `|m - m₀| + |g - g₀|`, so a 1px change beats a 12px one;
+ *   **c.** roundness, descending, as the tie-break.
+ *
+ * The currently applied pair needs no special case: if it is clean it moves zero pixels and lands
+ * first by (b). If it is not clean, nothing is selected, which is a real and useful state — the fields
+ * hold something that does not divide, and the list is what would.
+ *
+ * Returns the whole answer including what it searched and how many it found, because a capped list
+ * that does not say it was capped reads as "this is all there is".
+ */
+function gridSuggestions(modes, modeName, cap) {
+  var list = Array.isArray(modes) ? modes : [];
   var mode = null;
-  for (var i = 0; i < modes.length; i++) {
-    if (!modeName || String(modes[i].name).toLowerCase() === String(modeName).toLowerCase()) {
-      mode = modes[i];
+  var i;
+  for (i = 0; i < list.length; i++) {
+    if (!modeName || String(list[i].name).toLowerCase() === String(modeName).toLowerCase()) {
+      mode = list[i];
       break;
     }
   }
-  if (!mode) mode = modes[0] || null;
-  if (!mode) return '';
+  if (!mode) mode = list[0] || null;
 
-  var margin = Number(mode.padding);
-  var gap = Number(mode.gap);
-  var spans = gridCardSpans(mode);
-  if (!spans.length) return '';
+  var answer = {
+    mode: mode ? mode.name : null, ok: false, current: null, range: null,
+    found: 0, shown: [], cap: cap || 6
+  };
+  if (!mode) return answer;
 
-  var clean = gridCleanModes(modes, margin, gap);
-  var out = ['<div class="grid-suggestions">'];
-  out.push('<button class="grid-suggestion is-selected" type="button">');
-  out.push('<span class="grid-suggestion-main">');
-  out.push('<span class="grid-suggestion-title">margin ' + gridPreviewNumber(margin) +
-    ' \u00b7 gap ' + gridPreviewNumber(gap) + '</span>');
-  out.push('<span class="grid-suggestion-spans">' + spans.map(function (s) {
-    return 'col-' + s.n + ' ' + gridPreviewNumber(s.span);
-  }).join(' \u00b7 ') + '</span>');
-  out.push('</span>');
-  out.push('<span class="grid-suggestion-badges">Whole numbers:');
-  if (clean.length === 0) {
-    out.push('<span class="grid-suggestion-badge grid-suggestion-badge--none">none</span>');
-  } else {
-    for (var c = 0; c < clean.length; c++) {
-      out.push('<span class="grid-suggestion-badge">' + foundationEscapeHtml(clean[c]) + '</span>');
+  var m0 = Number(mode.padding);
+  var g0 = Number(mode.gap);
+  var width = Number(mode.containerWidth);
+  var columns = Number(mode.columns);
+  if (!isFinite(m0) || !isFinite(g0) || !isFinite(width) || !isFinite(columns) || columns <= 0) {
+    return answer;
+  }
+  answer.ok = true;
+  answer.current = {
+    margin: m0, gap: g0, clean: gridDivisionIsClean(mode, m0, g0)
+  };
+
+  var radius = gridSearchRadius();
+  var mFrom = Math.max(0, Math.floor(m0) - radius);
+  var mTo = Math.floor(m0) + radius;
+  var gFrom = Math.max(0, Math.floor(g0) - radius);
+  var gTo = Math.floor(g0) + radius;
+  answer.range = { marginFrom: mFrom, marginTo: mTo, gapFrom: gFrom, gapTo: gTo };
+
+  var hits = [];
+  for (var m = mFrom; m <= mTo; m++) {
+    // A margin that leaves no content is not a grid, whatever it divides into.
+    if (width - 2 * m <= 0) continue;
+    for (var g = gFrom; g <= gTo; g++) {
+      if (!gridDivisionIsClean(mode, m, g)) continue;
+      var cleanFor = gridCleanModes(list, m, g);
+      hits.push({
+        margin: m,
+        gap: g,
+        cleanModes: cleanFor,
+        moved: Math.abs(m - m0) + Math.abs(g - g0),
+        roundness: gridRoundness(m) + gridRoundness(g),
+        selected: m === m0 && g === g0
+      });
     }
   }
-  out.push('</span>');
-  out.push('</button>');
+
+  hits.sort(function (a, b) {
+    // **The current pair comes first when it is clean.** Its own rule, because the derivation this
+    // rested on is false: plan 18 recorded that no special case was needed since a clean current pair
+    // moves zero pixels and wins on (b). It does not — (a) outranks (b), so a pair clean for two modes
+    // buries it. Real example, from grid.js's own defaults: standing in Tablet, `margin 40 · gap 24` is
+    // clean for Tablet and vanished from the list under pairs clean for Desktop *and* Tablet. A panel
+    // whose suggestions omit the configuration you are looking at is telling you it is not an option.
+    if (a.selected !== b.selected) return a.selected ? -1 : 1;
+    if (b.cleanModes.length !== a.cleanModes.length) return b.cleanModes.length - a.cleanModes.length;
+    if (a.moved !== b.moved) return a.moved - b.moved;
+    if (b.roundness !== a.roundness) return b.roundness - a.roundness;
+    // Last resort so the order is stable rather than engine-dependent.
+    if (a.margin !== b.margin) return a.margin - b.margin;
+    return a.gap - b.gap;
+  });
+
+  answer.found = hits.length;
+  answer.shown = hits.slice(0, answer.cap).map(function (hit) {
+    // The spans a card shows are this mode's, with the *candidate* values applied — otherwise a card
+    // would advertise numbers belonging to the configuration it is offering to replace.
+    var candidate = {
+      name: mode.name, containerWidth: width, columns: columns, gap: hit.gap, padding: hit.margin
+    };
+    hit.spans = gridCardSpans(candidate);
+    return hit;
+  });
+  return answer;
+}
+
+function gridSuggestionsHtml(config, domain, modeName) {
+  var inner = (config && config.config) || config || {};
+  var modes = Array.isArray(inner.modes) ? inner.modes : [];
+  var answer = gridSuggestions(modes, modeName, 6);
+  if (!answer.ok) return '';
+
+  var out = ['<div class="grid-suggestions">'];
+
+  // **An empty section is indistinguishable from a broken one**, so it says what it searched. The
+  // range is real numbers rather than a shrug: someone who reads "between margin 56 and 104" knows
+  // whether widening it is worth trying, and someone who reads nothing does not know the search ran.
+  if (!answer.shown.length) {
+    var r = answer.range;
+    out.push('<p class="grid-suggestions-empty">No whole-number combination between margin ' +
+      r.marginFrom + '\u2013' + r.marginTo + ' and gap ' + r.gapFrom + '\u2013' + r.gapTo +
+      '. Widen the range by changing the width, or change the column count.</p>');
+    out.push('</div>');
+    return out.join('');
+  }
+
+  answer.shown.forEach(function (hit) {
+    // Every card is clickable, the selected one included: re-applying the same values is a no-op and
+    // cheaper than reasoning about whether to disable it. `data-` carries what a click applies —
+    // margin and gap only, to the mode being shown. The badges stay informational.
+    out.push('<button class="grid-suggestion' + (hit.selected ? ' is-selected' : '') +
+      '" type="button" data-suggestion-margin="' + hit.margin +
+      '" data-suggestion-gap="' + hit.gap + '">');
+    out.push('<span class="grid-suggestion-main">');
+    out.push('<span class="grid-suggestion-title">margin ' + gridPreviewNumber(hit.margin) +
+      ' \u00b7 gap ' + gridPreviewNumber(hit.gap) + '</span>');
+    out.push('<span class="grid-suggestion-spans">' + hit.spans.map(function (span) {
+      return 'col-' + span.n + ' ' + gridPreviewNumber(span.span);
+    }).join(' \u00b7 ') + '</span>');
+    out.push('</span>');
+    out.push('<span class="grid-suggestion-badges">Whole numbers:');
+    if (!hit.cleanModes.length) {
+      out.push('<span class="grid-suggestion-badge grid-suggestion-badge--none">none</span>');
+    } else {
+      hit.cleanModes.forEach(function (name) {
+        out.push('<span class="grid-suggestion-badge">' + foundationEscapeHtml(name) + '</span>');
+      });
+    }
+    out.push('</span>');
+    out.push('</button>');
+  });
+
+  // **Say when the list was cut.** The standing rule about silent truncation: a capped list that does
+  // not mention the cap reads as "this is all there is", and here that would be wrong by hundreds.
+  if (answer.found > answer.shown.length) {
+    out.push('<p class="grid-suggestions-more">Showing ' + answer.shown.length + ' of ' +
+      answer.found + ' whole-number combinations, closest to your values first.</p>');
+  }
   out.push('</div>');
   return out.join('');
 }

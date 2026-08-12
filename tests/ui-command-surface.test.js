@@ -163,6 +163,8 @@ test('clickControl still cannot reach anything but a config control', () => {
   const list = body.match(/\[([^\]]*)\]\.indexOf\(a\.part\) === -1/);
   assert.ok(list, 'the allow-list is gone — clickControl is accepting any part');
   const parts = list[1].split(',').map((p) => p.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(parts.slice().sort(), ['add', 'chip-remove', 'remove', 'tab'],
+  assert.deepEqual(parts.slice().sort(), ['add', 'card', 'chip-remove', 'remove', 'tab'],
     'a part was added to the allow-list without being considered here');
+  // `card` is a suggestion card. It applies margin and gap to the mode on screen — a config edit, the
+  // same class as typing in the fields — and it cannot reach a run.
 });

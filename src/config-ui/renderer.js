@@ -267,7 +267,6 @@
       suggestSlot.setAttribute("data-suggestions-slot", "true");
       // The search for alternatives is not built. Dimmed and captioned rather than absent, so the
       // panel reports how far along it is instead of looking finished.
-      suggestSlot.setAttribute("data-unwired", "The search for alternative margin and gap pairs is not built yet — this is the current configuration.");
       return suggestSlot;
     }
     if (r.type === "preview") {

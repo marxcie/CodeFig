@@ -183,6 +183,25 @@
         }
       }
 
+      /**
+       * Tell the dev bridge this window exists, and which build it is running.
+       *
+       * **Figma cannot reload a plugin from outside it**, so a dev loop is: build, somebody clicks
+       * reload, verify. The middle step used to be found by *asking* — `figma-sync` queued a UI
+       * command and waited for this iframe to poll for it, and a backgrounded Figma throttles that
+       * poll to about once a minute. A one-second reload was reported minutes later, which is long
+       * enough that the loop was not worth using.
+       *
+       * Announcing inverts it: the news travels the moment the window opens, before anything can be
+       * asked of it. Fire and forget — `_codefigBridgeFetch` is a no-op outside dev builds and
+       * swallows a bridge that is not running, which is the normal case.
+       */
+      _codefigBridgeFetch('/hello', {
+        method: 'POST',
+        body: JSON.stringify({ buildId: CODEFIG_BUILD_ID }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+
       // === UI debug: send to backend (shows in figma-console.log when npm run dev) ===
       var DEBUG_UI = false; // Set true for verbose logging; errors always forwarded
       function uiDebugLog() {
@@ -643,6 +662,13 @@
       // Once, on the container that survives every render. Attaching inside the render would stack a
       // listener per rebuild.
       if (configUIContainer) {
+        // A suggestion card. Delegated, because the section is replaced wholesale on every recompute
+        // and a listener attached to a card would be thrown away with it.
+        configUIContainer.addEventListener('click', function (e) {
+          var target = e.target;
+          var card = target && target.closest ? target.closest('.grid-suggestion') : null;
+          if (card) applySuggestion(card);
+        });
         configUIContainer.addEventListener('change', function (e) {
           const target = e.target;
           if (!target || !target.getAttribute) return;
@@ -987,6 +1013,14 @@
         const note = document.getElementById('configStaleNote');
         const noForm = document.getElementById('configNoForm');
         const block = currentConfigBlock();
+        // **Which mode you were looking at survives the rebuild.**
+        //
+        // Every programmatic write re-projects the form, and a fresh form draws its first tab active.
+        // So applying a suggestion while standing in Tablet wrote Tablet correctly and then threw you
+        // back to Desktop — with the preview and the suggestion list following, which reads as the
+        // click having gone to the wrong mode. Chip edits do the same thing. The tab is remembered by
+        // *name* rather than index, because the rebuild may have added, removed or reordered them.
+        const wasShowing = activeModeName();
 
         if (configCodeContainer) configCodeContainer.style.display = 'none';
 
@@ -1045,6 +1079,7 @@
         configFormReadOnly = false;
         initConfigUI(block || '');
         configLastValues = configUIInstance ? JSON.parse(JSON.stringify(configUIInstance.getValues())) : null;
+        restoreActiveMode(wasShowing);
         syncChipsToPanelState();
         scheduleFileModes(0);
         // **Rendering the form does not trigger a load.** It used to, and applying a load re-rendered
@@ -1066,6 +1101,27 @@
             note.style.display = 'none';
           }
         }
+      }
+
+      /**
+       * Put the mode tab back after a rebuild, through the same click a person would make.
+       *
+       * Dispatching the real event rather than setting a class: the tab strip's own listener is what
+       * shows the matching fields, and reproducing that here would be a second implementation of it —
+       * one that stops matching the first time the strip changes.
+       */
+      function restoreActiveMode(name) {
+        if (!name || !configUIContainer) return;
+        const tabs = configUIContainer.querySelectorAll('.config-ui-rows-tab');
+        for (let i = 0; i < tabs.length; i++) {
+          if (tabs[i].textContent !== name) continue;
+          if (!tabs[i].classList.contains('is-active')) {
+            tabs[i].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          }
+          return;
+        }
+        // The mode is gone — removed, or renamed by the very edit that caused this rebuild. The first
+        // tab is then the right answer, and it is already active.
       }
 
       let structureSyncTimeout = null;
@@ -1772,9 +1828,60 @@
       function renderConfigSuggestions(html) {
         const slot = document.querySelector('[data-suggestions-slot]');
         if (!slot) return;
-        // Kept dimmed by the `data-unwired` the renderer set: the numbers are real, the *search* is not
-        // built, and those are different claims.
         slot.innerHTML = html || '';
+      }
+
+      /**
+       * Apply a suggestion — **only on a click, and only to the mode you are looking at.**
+       *
+       * Two rules, both Márton's, and both about not doing more than was asked:
+       *
+       * The section recomputes on every keystroke, so nothing about *rendering* a card may write a
+       * value. The arrow points fields → cards until a click points it back, which is why this is a
+       * listener rather than anything the renderer does.
+       *
+       * And a card's badges say which other modes the pair would also divide cleanly — they are not a
+       * promise to write them. Applying while standing in Desktop changes Desktop and nothing else;
+       * getting it onto Tablet means going to Tablet. One gesture writing three modes is the kind of
+       * thing you only notice afterwards.
+       */
+      function applySuggestion(card) {
+        var margin = Number(card.getAttribute('data-suggestion-margin'));
+        var gap = Number(card.getAttribute('data-suggestion-gap'));
+        if (!isFinite(margin) || !isFinite(gap)) return;
+        var api = window.CodeFigConfigUI;
+        if (!api) return;
+
+        var schema;
+        try {
+          schema = api.parse(currentConfigBlock());
+        } catch (e) {
+          return;
+        }
+        var row = (schema.rows || []).filter(function (r) {
+          return r.type === 'field' && r.inputType === 'rows' && Array.isArray(r.value);
+        })[0];
+        if (!row) return;
+
+        var wanted = activeModeName();
+        var entries = row.value.map(function (entry) {
+          var isTarget = wanted
+            ? api.sameModeName(entry && entry.name, wanted)
+            : row.value.indexOf(entry) === 0;
+          if (!isTarget) return entry;
+          var next = {};
+          for (var key in entry) next[key] = entry[key];
+          next.padding = margin;
+          next.gap = gap;
+          return next;
+        });
+
+        var values = {};
+        values[row.name] = entries;
+        // `writeConfigBlockText` re-projects the form, so the fields, the preview and the cards all
+        // catch up from the one text — the same path a chip edit takes.
+        writeConfigBlockText(api.serialize(schema, values));
+        scheduleConfigPreview();
       }
 
       /** Debounced: long enough that typing `12` never renders `1`. */
@@ -3833,6 +3940,26 @@
                 }
               });
 
+            // The mode pickers, matched by the collection they are currently showing rather than by
+            // the option source: this answer is about one collection, and a second picker pointed at
+            // another one must not take it.
+            if (optionSource === 'collectionModes') {
+              var answeredFor = msg.collection == null ? '' : String(msg.collection);
+              document
+                .querySelectorAll('[data-mode-field]')
+                .forEach(function (wrap) {
+                  if ((wrap.getAttribute('data-mode-collection') || '') !== answeredFor) return;
+                  if (!window.CodeFigConfigUI || !window.CodeFigConfigUI.populateModeControl) return;
+                  var value = window.CodeFigConfigUI.currentModeValue
+                    ? window.CodeFigConfigUI.currentModeValue(wrap)
+                    : wrap.getAttribute('data-initial-value') || '';
+                  window.CodeFigConfigUI.populateModeControl(wrap, options, value, {
+                    collection: answeredFor,
+                    exists: !!msg.exists
+                  });
+                });
+            }
+
             document
               .querySelectorAll('.config-ui-multiselect[data-option-source="' + optionSource + '"]')
               .forEach(function (box) {
@@ -4272,6 +4399,14 @@
           }
         }
 
+        // A suggestion card, addressed by position in the list the panel is showing. `name` is the
+        // section rather than a field, because the cards belong to no field — they *offer* values to
+        // one. A click applies margin and gap to the mode on screen and writes nothing else.
+        if (name === 'suggestions') {
+          var cards = container.querySelectorAll('.grid-suggestion');
+          return cards[at] || null;
+        }
+
         // **Chips first, and by their own part names.** The chips and the tabbed rows control are
         // both named `modes` — deliberately, because the chips are a view of that same array — so the
         // rows branch below matched first and the chips were unreachable from outside. `chip-`
@@ -4308,6 +4443,12 @@
         if (picker) {
           if (part === 'new') return picker.querySelector('.config-ui-collection-new');
           return picker.querySelector('.config-ui-collection-select');
+        }
+
+        var modePicker = container.querySelector('[data-mode-field="' + name + '"]');
+        if (modePicker) {
+          if (part === 'new') return modePicker.querySelector('.config-ui-mode-new');
+          return modePicker.querySelector('.config-ui-mode-select');
         }
 
         var flat = container.querySelectorAll('[data-field="' + name + '"]');
@@ -4390,12 +4531,35 @@
             // `@preview` marker row puts it **inside the form**, and the panel-level region is hidden
             // in that case — so reading only the region reported "visible: false, text: ''" for a
             // preview that was on screen. A reporting gap reads exactly like a broken preview.
+            // Both halves. The preview and the suggestions are computed by one silent run from one
+            // config, so reading one without the other invites the conclusion that the missing one is
+            // broken — which is exactly what "suggestions block present: False" meant a moment ago,
+            // when the section was on screen and this command simply did not look at it.
+            var suggestSlot = document.querySelector('[data-suggestions-slot]');
+            var suggestions = suggestSlot ? {
+              visible: !!suggestSlot.innerHTML,
+              cards: [].map.call(suggestSlot.querySelectorAll('.grid-suggestion'), function (card) {
+                return {
+                  margin: Number(card.getAttribute('data-suggestion-margin')),
+                  gap: Number(card.getAttribute('data-suggestion-gap')),
+                  selected: card.classList.contains('is-selected'),
+                  badges: [].map.call(card.querySelectorAll('.grid-suggestion-badge'), function (b) {
+                    return b.textContent;
+                  }),
+                  text: card.innerText || ''
+                };
+              }),
+              note: (suggestSlot.querySelector('.grid-suggestions-more') ||
+                suggestSlot.querySelector('.grid-suggestions-empty') || {}).textContent || null
+            } : null;
+
             var slot = document.querySelector('[data-preview-slot]');
             if (slot) {
               return Promise.resolve({
                 visible: !!slot.innerHTML,
                 where: 'form',
-                text: slot.innerText || ''
+                text: slot.innerText || '',
+                suggestions: suggestions
               });
             }
             var body = document.getElementById('configPreviewBody');
@@ -4403,7 +4567,8 @@
             return Promise.resolve({
               visible: !!(region && region.style.display !== 'none'),
               where: 'panel',
-              text: body ? body.innerText : ''
+              text: body ? body.innerText : '',
+              suggestions: suggestions
             });
           }
 
@@ -4455,6 +4620,38 @@
             }
 
             var tag = target.tagName.toLowerCase();
+
+            // **A name that is not in a picker's list is two events, not one.** Choose "New
+            // collection" / "New mode", then type. Assigning a value a `<select>` has no option for
+            // is a no-op in the DOM, so this arrived as "the field went empty" — which made the whole
+            // create path, on both pickers, undrivable from the terminal and therefore unverifiable.
+            // The sentinel itself is a NUL-prefixed string and cannot travel through a shell, so the
+            // gesture is named by what it does rather than by the value it sets.
+            var pickerNew = tag === 'select' && target.classList &&
+              (target.classList.contains('config-ui-collection-select') ||
+                target.classList.contains('config-ui-mode-select'))
+              ? Array.prototype.filter.call(target.options, function (o) {
+                  return o.value && o.value.charCodeAt(0) === 0;
+                })[0]
+              : null;
+            var wanted = a.value == null ? '' : String(a.value);
+            var alreadyListed = Array.prototype.some.call(target.options || [], function (o) {
+              return o.value === wanted;
+            });
+            if (pickerNew && wanted && !alreadyListed) {
+              return actAndSettle(function () {
+                target.value = pickerNew.value;
+                target.dispatchEvent(new Event('change', { bubbles: true }));
+                var typed = uiControlTarget(a.name, 'new', a.index);
+                if (!typed) throw new Error('That picker revealed no name input');
+                typed.value = wanted;
+                typed.dispatchEvent(new Event('input', { bubbles: true }));
+                typed.dispatchEvent(new Event('change', { bubbles: true }));
+              }).then(function (how) {
+                return { settled: how, text: currentConfigBlock() };
+              });
+            }
+
             // Set the value, then dispatch what a keystroke dispatches, and let the existing
             // listeners do the work. Calling `getValues` or a handler directly would pass while the
             // control stayed broken, which is the whole point of driving the real event path.
@@ -4484,9 +4681,9 @@
             // as part of a config control is a click that can eventually reach Run. `chip-remove` is
             // here because removing a mode is a click; renaming and adding are not — they are three
             // events, so they go through `setField` as a whole gesture.
-            if (['add', 'remove', 'tab', 'chip-remove'].indexOf(a.part) === -1) {
-              throw new Error('clickControl accepts part add, remove, tab or chip-remove — not "' +
-                a.part + '"');
+            if (['add', 'remove', 'tab', 'chip-remove', 'card'].indexOf(a.part) === -1) {
+              throw new Error('clickControl accepts part add, remove, tab, chip-remove or card — ' +
+                'not "' + a.part + '"');
             }
             var clickable = uiControlTarget(a.name, a.part, a.index);
             if (!clickable) throw new Error('No "' + a.part + '" on control "' + a.name + '"');
@@ -4552,9 +4749,15 @@
         var fields = [];
 
         function rowVisible(el) {
-          var row = el.closest ? el.closest('.config-ui-field') : null;
-          if (!row) return true;
-          return row.style.display !== 'none';
+          if (!el.closest) return true;
+          // Both, because visibility is set on whichever wrapper carries the rule: `@showWhen` marks
+          // the field *and* its row, and a mode picker with nothing to decide hides the row alone —
+          // reporting that one as visible would say the panel shows a control it does not.
+          var field = el.closest('.config-ui-field');
+          var row = el.closest('.config-ui-row');
+          if (field && field.style.display === 'none') return false;
+          if (row && row.style.display === 'none') return false;
+          return true;
         }
 
         if (container) {
@@ -4571,6 +4774,29 @@
               value: window.CodeFigConfigUI && window.CodeFigConfigUI.readCollectionControl
                 ? window.CodeFigConfigUI.readCollectionControl(wrap)
                 : null,
+              options: select ? Array.prototype.map.call(select.options, function (o) {
+                return o.textContent;
+              }) : [],
+              creating: !!(newName && newName.style.display !== 'none'),
+              note: note && note.style.display !== 'none' ? note.textContent : null,
+              visible: rowVisible(wrap)
+            });
+          });
+
+          // The mode picker, for the same reason: its parts carry no `data-field` either, and it has
+          // one state no other control has — hidden because the collection has a single mode, which
+          // is a rendering decision worth being able to observe from the terminal.
+          container.querySelectorAll('[data-mode-field]').forEach(function (wrap) {
+            var select = wrap.querySelector('.config-ui-mode-select');
+            var newName = wrap.querySelector('.config-ui-mode-new');
+            var note = wrap.querySelector('.config-ui-mode-note');
+            fields.push({
+              name: wrap.getAttribute('data-mode-field'),
+              control: 'mode',
+              value: window.CodeFigConfigUI && window.CodeFigConfigUI.readModeControl
+                ? window.CodeFigConfigUI.readModeControl(wrap)
+                : null,
+              collection: wrap.getAttribute('data-mode-collection') || '',
               options: select ? Array.prototype.map.call(select.options, function (o) {
                 return o.textContent;
               }) : [],
