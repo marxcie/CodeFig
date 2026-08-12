@@ -1620,8 +1620,16 @@
     });
 
     if (report.reordered.length > 0) {
-      parts.push("This file lists them in a different order; the block's order was kept, " +
-        "so its comments stay with what they describe.");
+      // **States the fact, and claims nothing about what happens next.** It used to say "the block's
+      // order was kept, so its comments stay with what they describe" — true of the fill, and false
+      // of the outcome once the panel started putting a collection's modes into the collection's own
+      // order. A message that describes a policy another step reverses is worse than a shorter one:
+      // Márton read that sentence under a list that was visibly in the wrong order.
+      var paths = [];
+      report.reordered.forEach(function (entry) {
+        if (paths.indexOf(entry.path) === -1) paths.push(entry.path);
+      });
+      parts.push("This file lists " + paths.join(" and ") + " in a different order.");
     }
     if (parts.length === 0) parts.push("Nothing to fill — the block already matches this file.");
     return parts.join(" ");

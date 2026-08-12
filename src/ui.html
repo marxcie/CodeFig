@@ -1880,7 +1880,7 @@
         values[row.name] = entries;
         // `writeConfigBlockText` re-projects the form, so the fields, the preview and the cards all
         // catch up from the one text — the same path a chip edit takes.
-        writeConfigBlockText(api.serialize(schema, values));
+        writeConfigBlockText(api.serialize(schema, values), 'suggestion');
         scheduleConfigPreview();
       }
 
@@ -1956,7 +1956,16 @@
        * because switching tabs to reach the editor is what rebuilt the form, and rebuilding the form
        * is what turned auto-import into a loop.
        */
-      function writeConfigBlockText(text) {
+      /**
+       * The last few block writes, with who made them.
+       *
+       * "The order is wrong" has as many candidate causes as there are writers of this block — a fill,
+       * a reorder, a chip edit, a suggestion, the form syncing itself — and from outside they are
+       * indistinguishable. Recording the writer and the resulting mode order turns that into a reading.
+       */
+      var blockWrites = [];
+
+      function writeConfigBlockText(text, by) {
         if (!scriptHasConfig || !parsedSections || !code) return;
         var mainCode = code.getValue();
         var startMarker = parsedSections.configStartMarker || '// @CONFIG_START';
@@ -1980,6 +1989,15 @@
         // Here rather than in each caller: this is the only place that writes the block
         // programmatically, so this is the only place that can guarantee the two agree. Rendering
         // fires no change event, so it cannot start the load loop that a tab switch once did.
+        blockWrites.push({
+          by: by || 'unknown',
+          at: new Date().toLocaleTimeString(),
+          modes: (text.match(/name: "([^"]+)"/g) || []).map(function (m) {
+            return m.slice(7, -1);
+          }).join(' \u2192 ')
+        });
+        if (blockWrites.length > 8) blockWrites.shift();
+
         if (isConfigTab(currentTab) && configUIInstance) projectConfigIntoForm();
       }
 
@@ -2135,34 +2153,67 @@
        * differs, `writeConfigBlockText` returns early when the text is unchanged, and the reorder is
        * idempotent — so this cannot become the rebuild loop that auto-import once was.
        */
-      function orderConfigModesToFile() {
+      var lastOrdering = null;
+
+      /**
+       * The same block text, with its modes in the collection's order.
+       *
+       * **Takes the text rather than reading it**, and that is the whole point. This used to be a step
+       * that ran after a fill and re-read the block for itself — and it read the block as it was
+       * *before* the fill: `entries: 3, from "desktop → tablet → mobile", changed: false`, recorded in
+       * the same second as a write of five modes in the wrong order. Two writers and one stale read.
+       *
+       * Now the caller hands over the text it is about to write, this returns the ordered version, and
+       * **one write** carries both. There is no window between them to lose.
+       */
+      function orderedModesInBlock(text) {
         var api = window.CodeFigConfigUI;
-        if (!api || !api.orderModesByFile || !fileModes.found) return;
+        var answer = { text: text, changed: false };
+        function record(extra) {
+          lastOrdering = { at: new Date().toLocaleTimeString() };
+          for (var k in extra) lastOrdering[k] = extra[k];
+        }
+        if (!api || !api.orderModesByFile) { record({ skipped: 'no config-ui' }); return answer; }
+        if (!fileModes.found) { record({ skipped: 'no file modes' }); return answer; }
+
         var wrap = configUIContainer && configUIContainer.querySelector('[data-chips-field]');
         var field = (wrap && wrap.getAttribute('data-chips-field')) || 'modes';
-
         var schema;
         try {
-          schema = api.parse(currentConfigBlock());
+          schema = api.parse(text);
         } catch (e) {
-          return;
+          record({ skipped: 'block does not parse' });
+          return answer;
         }
         var row = (schema.rows || []).filter(function (r) {
           return r.type === 'field' && r.name === field && Array.isArray(r.value);
         })[0];
-        if (!row) return;
+        // Every exit records something. The bug above hid *because* the early exits recorded nothing,
+        // so a stale success from an earlier call was the answer the instrument gave.
+        if (!row) { record({ skipped: 'no "' + field + '" array in the block' }); return answer; }
 
         var out = api.orderModesByFile(row.value, chipModeIds, fileModes.modes);
         chipModeIds = out.ids;
-        if (!out.changed) {
-          syncChipsToPanelState();
-          return;
-        }
+        record({
+          entries: row.value.length,
+          from: row.value.map(function (e) { return e && e.name; }).join(' \u2192 '),
+          to: out.entries.map(function (e) { return e && e.name; }).join(' \u2192 '),
+          changed: out.changed
+        });
+        if (!out.changed) return answer;
+
         var values = {};
         values[field] = out.entries;
-        // Re-projects the form, so the chips and the Mode settings tabs redraw in this order from the
-        // one text — the same path a chip edit and a suggestion take.
-        writeConfigBlockText(api.serialize(schema, values));
+        answer.text = api.serialize(schema, values);
+        answer.changed = true;
+        return answer;
+      }
+
+      /** For a load that brought no config of its own: order what the block already holds. */
+      function orderConfigModesToFile() {
+        var out = orderedModesInBlock(currentConfigBlock());
+        if (out.changed) writeConfigBlockText(out.text, 'order');
+        else syncChipsToPanelState();
       }
 
       /** The config's per-mode array, or [] — read from the block, which is the truth. */
@@ -2221,6 +2272,9 @@
         var fill = window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock;
         if (!fill) return;
         var filled = fill(currentConfigBlock(), found.config);
+        // One write: the fill's text, already in the collection's mode order. A second write that
+        // re-read the block is what raced with this one.
+        var ordered = orderedModesInBlock(filled.text);
         // Straight into the canonical text, with no tab switching. Switching to Configuration code and
         // back was what rebuilt the form, and a rebuild is what made this loop.
         //
@@ -2237,7 +2291,8 @@
           before: blockSize(currentConfigBlock()),
           filled: blockSize(filled.text)
         };
-        writeConfigBlockText(filled.text);
+        writeConfigBlockText(ordered.text, 'auto-import:' + found.source +
+          (ordered.changed ? '+ordered' : ''));
         lastAutoImport.trace.afterWrite = blockSize(currentConfigBlock());
         setTimeout(function () {
           lastAutoImport.trace.later = blockSize(currentConfigBlock());
@@ -2246,6 +2301,8 @@
 
         var summary = filled.summary && filled.summary.indexOf('Nothing to fill') === -1
           ? ' ' + filled.summary : '';
+        // What was done about that different order, said by the thing that did it.
+        if (ordered.changed) summary += ' The modes now follow this file\'s order.';
 
         lastAutoImport.summary = filled.summary || null;
         if (found.source === 'recorded') {
@@ -4080,9 +4137,9 @@
               if (data.autoImport !== undefined) {
                 if (data.autoImportSeq === autoImportSeq) {
                   applyFileModes(data.fileModes);
+                  // `applyAutoImport` writes the fill and the ordering as one text, so there is no
+                  // separate ordering step here to race with it.
                   applyAutoImport(data.autoImport);
-                  // Last, because a fill inserts entries in the incoming config's order.
-                  orderConfigModesToFile();
                 }
                 return;
               }
@@ -4772,7 +4829,9 @@
           // it the one thing worth verifying about chips is invisible from outside: whether a rename
           // is going to be a rename.
           case 'readAutoImport':
-            return Promise.resolve(lastAutoImport);
+            return Promise.resolve({
+              autoImport: lastAutoImport, ordering: lastOrdering, writes: blockWrites
+            });
 
           case 'readModeIntents':
             return Promise.resolve({

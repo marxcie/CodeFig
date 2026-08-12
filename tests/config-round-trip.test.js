@@ -300,3 +300,28 @@ test('an annotation the source spelled out survives an edit', () => {
   const bare = P.parse('modes: [{ name: "a" }], // @rows: name:text @tabs');
   assert.match(P.serialize(bare, { modes: [{ name: 'b' }] }), /@rows: name:text @tabs/);
 });
+
+test('the fill states a different order without claiming what happens to it', () => {
+  // The message used to read "the block's order was kept, so its comments stay with what they
+  // describe" — true of the fill in isolation, and false of the outcome once the panel began putting a
+  // collection's modes into the collection's own order. Márton read that sentence sitting under a list
+  // that was visibly in the wrong order, which is the worst kind of wrong: confident and specific.
+  //
+  // So the fill names the fact, and whatever acts on it says what it did.
+  const block = [
+    'modes: [',
+    '  { name: "Desktop", gap: 24 },',
+    '  { name: "Mobile", gap: 16 },',
+    '], // @rows: name:text|gap:number @tabs',
+  ].join('\n');
+  const incoming = { modes: [{ name: 'Mobile', gap: 16 }, { name: 'Desktop', gap: 24 }] };
+  const filled = P.fillConfigBlock(block, incoming);
+
+  assert.match(filled.summary, /lists modes in a different order\./);
+  assert.doesNotMatch(filled.summary, /order was kept/);
+  assert.doesNotMatch(filled.summary, /comments stay with what they describe/);
+
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  assert.match(ui, /if \(ordered\.changed\) summary \+= ' The modes now follow this file/,
+    'and the panel says what it did about it');
+});

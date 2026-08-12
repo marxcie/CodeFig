@@ -409,12 +409,38 @@ test('a mode the file does not have follows the ones it does, and is never dropp
   assert.equal(out.ids[2], null);
 });
 
-test('the reorder runs after the fill, not before it', () => {
-  // `fillConfigBlock` inserts entries in the *incoming* config's order, so reordering first would be
-  // undone by the fill that follows — and the symptom would be "sometimes it is sorted".
+test('the fill and the ordering are one write, not two', () => {
+  // This is the shape of the bug, not a style preference. The reorder used to run as a step *after* the
+  // fill that re-read the block for itself — and it read the pre-fill text: recorded as
+  // `entries: 3, from "desktop → tablet → mobile", changed: false` in the same second as a write of
+  // five modes in the wrong order. Two writers, one stale read, and the panel kept the wrong order
+  // while every part of it was individually correct.
+  //
+  // So the ordering takes the text it is given rather than fetching one, and the fill hands over the
+  // text it is about to write.
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
-  const handler = ui.slice(ui.indexOf("if (data.autoImport !== undefined)"));
-  const fillAt = handler.indexOf('applyAutoImport(data.autoImport)');
-  const orderAt = handler.indexOf('orderConfigModesToFile()');
-  assert.ok(fillAt > 0 && orderAt > fillAt, 'the reorder must come after the fill');
+  assert.match(ui, /function orderedModesInBlock\(text\)/,
+    'the ordering must take the text, or it can read a stale block again');
+
+  const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
+  const orderAt = apply.indexOf('orderedModesInBlock(filled.text)');
+  const writeAt = apply.indexOf('writeConfigBlockText(ordered.text');
+  assert.ok(orderAt > 0 && writeAt > orderAt, 'ordered before writing, in that order');
+  assert.equal((apply.match(/writeConfigBlockText\(/g) || []).length, 1,
+    'and exactly one write, so nothing can land between them');
+
+  // The load path that brings no config of its own still orders what is already there.
+  assert.match(ui, /function orderConfigModesToFile\(\)[\s\S]{0,220}orderedModesInBlock\(currentConfigBlock\(\)\)/);
+});
+
+test('every exit from the ordering records why, so a stale success cannot be the answer', () => {
+  // The instrument lied by omission: the early exits recorded nothing, so `readAutoImport` reported a
+  // *previous* call's success while the current one had bailed. That is worse than no instrument.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const fn = ui.slice(ui.indexOf('function orderedModesInBlock'), ui.indexOf('function orderConfigModesToFile'));
+  const returns = (fn.match(/return answer;/g) || []).length;
+  const records = (fn.match(/record\(\{/g) || []).length;
+  assert.ok(returns >= 4, 'there are several ways out');
+  assert.ok(records >= returns - 1, 'and all but the success path record a reason (' +
+    records + ' records for ' + returns + ' exits)');
 });
