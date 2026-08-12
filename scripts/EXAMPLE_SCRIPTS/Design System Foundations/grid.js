@@ -145,11 +145,12 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
     }
   ], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes
 
+  // # Suggested whole number divisions
+  // Whole-number margin and gap pairs for the mode above, closest to what it holds first.
+  // @suggestions
+
   // # Preview
   // @preview
-
-  // # Suggested whole number divisions
-  // @suggestions
 
 
   // @CONFIG_END

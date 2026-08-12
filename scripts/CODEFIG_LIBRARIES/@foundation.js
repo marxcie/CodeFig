@@ -768,6 +768,15 @@ async function foundationAutoImport(collectionName, group, domain) {
     // common case, not the exotic one.
     if (domain === 'grid') {
       var seen = await gridRecognise(collectionName, group == null ? '' : group);
+      if (!seen.found) {
+        // Nothing where the panel is pointing. Say where a grid *is*, so the panel can offer to go
+        // there — the whole reason this is worth doing is that the default group and a real system's
+        // group rarely match.
+        var candidates = await gridGroupsIn(collectionName);
+        answer.candidates = candidates.groups.filter(function (entry) {
+          return entry.group !== (group == null ? '' : group);
+        });
+      }
       if (seen.found) {
         answer.source = 'recognised';
         answer.config = seen.config;
@@ -822,13 +831,21 @@ async function foundationAutoImport(collectionName, group, domain) {
  * values there" is a value that differs from the collection's first mode, which is what disappears.
  */
 async function foundationCollectionModes(collectionName) {
-  var answer = { collection: collectionName || null, modes: [], found: false };
+  // **Two identities, and neither is `figma.root.id`** — that is `0:0` in every file, which is how a
+  // panel came to order Márton's five-viewport system against a throwaway file's three modes and call
+  // it done. `figma.root.name` is the file, and the collection's own id is unique within it, so a
+  // same-named collection somewhere else cannot pass for this one.
+  var answer = {
+    document: figma.root.name, collection: collectionName || null, collectionId: null,
+    modes: [], found: false
+  };
   if (!collectionName) return answer;
 
   var collections = await figma.variables.getLocalVariableCollectionsAsync();
   var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
   if (!collection) return answer;
   answer.found = true;
+  answer.collectionId = collection.id;
 
   var modes = collection.modes || [];
   var baseId = modes.length ? modes[0].modeId : null;
@@ -851,6 +868,75 @@ async function foundationCollectionModes(collectionName) {
   answer.modes = modes.map(function (mode) {
     return { modeId: mode.modeId, name: mode.name, valueCount: counts[mode.modeId] || 0 };
   });
+  return answer;
+}
+
+/**
+ * Which groups in a list of variable names look like a grid.
+ *
+ * The signal is `col-1 … col-N`, and it is the same one `gridRecognise` refuses to work without —
+ * a group can have something called `columns` or `gap` for a dozen reasons, but a numbered column
+ * series is a grid. Pure, so the shape of this can be argued with in a test rather than in Figma.
+ *
+ * The group is **everything before** the `col-N`, so a nested `Foundations/Layout/col-1` reports
+ * `Foundations/Layout` and a `col-1` at the collection root reports `""` — which is a real answer,
+ * not a missing one.
+ *
+ * Returns `[{ group, columns }]`, ordered by how many columns each has, descending: on a tie the one
+ * that appears first in the file wins, so the answer does not depend on object key order.
+ */
+function gridGroupCandidates(names) {
+  var found = {};
+  var order = [];
+  (names || []).forEach(function (name) {
+    var match = /^(.*?)(^|\/)col-(\d+)$/.exec(String(name));
+    if (!match) {
+      // `^(.*?)(^|\/)` is awkward about a bare `col-1`, so that case is handled plainly.
+      var bare = /^col-(\d+)$/.exec(String(name));
+      if (!bare) return;
+      if (!Object.prototype.hasOwnProperty.call(found, '')) { found[''] = 0; order.push(''); }
+      found[''] = Math.max(found[''], Number(bare[1]));
+      return;
+    }
+    var group = match[1];
+    var n = Number(match[3]);
+    if (!Object.prototype.hasOwnProperty.call(found, group)) { found[group] = 0; order.push(group); }
+    found[group] = Math.max(found[group], n);
+  });
+
+  return order.map(function (group) {
+    return { group: group, columns: found[group] };
+  }).sort(function (a, b) {
+    if (b.columns !== a.columns) return b.columns - a.columns;
+    return order.indexOf(a.group) - order.indexOf(b.group);
+  });
+}
+
+/**
+ * The groups in a collection that hold a grid, so the panel can point itself at one.
+ *
+ * Márton's observation, and it is the right one: the modes and the values are a strong indicator that
+ * a file has a grid, so finding it is a search rather than a question. His system keeps its grid under
+ * `Layout` while the script defaults to `Grid`, which means every fresh panel starts pointed at
+ * nothing until somebody types the right word.
+ *
+ * Read-only, and it reads names rather than values — one pass over the collection's variables.
+ */
+async function gridGroupsIn(collectionName) {
+  var answer = { collection: collectionName || null, groups: [] };
+  if (!collectionName) return answer;
+
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
+  if (!collection) return answer;
+
+  var names = [];
+  var ids = collection.variableIds || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    if (variable && variable.resolvedType === 'FLOAT') names.push(variable.name);
+  }
+  answer.groups = gridGroupCandidates(names);
   return answer;
 }
 
@@ -1884,7 +1970,11 @@ function foundationEscapeHtml(text) {
  *
  * → { ok, width, columns, gap, margin, content, colWidth, spans: [{ n, span }], scale }
  */
-function gridPreviewModel(mode, drawnWidth) {
+function gridPreviewScale() {
+  return 0.5;
+}
+
+function gridPreviewModel(mode) {
   var width = Number(mode && mode.containerWidth);
   var columns = Number(mode && mode.columns);
   var gap = Number(mode && mode.gap);
@@ -1905,9 +1995,11 @@ function gridPreviewModel(mode, drawnWidth) {
     ok: true,
     width: width, columns: columns, gap: gap, margin: margin,
     content: content, colWidth: colWidth, spans: spans,
-    // The percentage the Total line reports *is* the scale the diagram is drawn at — the frame draws
-    // 716 for a 1440 total, which is 49.7%.
-    scale: (drawnWidth || 716) / width
+    // **Locked at half size, in real pixels.** It used to be drawn in percentages of whatever width
+    // the panel happened to have, while the percentage it *printed* came from a hardcoded 716 — so the
+    // caption said 41%, the drawing scaled with the window, and neither was the truth. A preview whose
+    // scale depends on how wide you dragged the panel cannot be measured against anything.
+    scale: gridPreviewScale()
   };
 }
 
@@ -1934,21 +2026,23 @@ function gridPreviewHtml(config, domain, modeName) {
   if (!mode) mode = modes[0] || null;
 
   var unset = !inner.collectionName || String(inner.collectionName).trim() === '';
-  var model = gridPreviewModel(mode, 716);
+  var model = gridPreviewModel(mode);
 
   var out = ['<div class="grid-preview' + (unset || !model.ok ? ' is-unset' : '') + '">'];
 
   var columns = model.ok ? model.columns : (model.columns || 12);
-  var pct = function(value) { return Math.round((value / model.width) * 10000) / 100; };
+  // Pixels, at exactly half. `col-1: 84` on a 1440 grid draws 42px wide, and a ruler on the screen
+  // agrees with the number beside it.
+  var px = function (value) { return Math.round(value * gridPreviewScale() * 100) / 100; };
 
   out.push('<div class="grid-preview-diagram">');
   if (model.ok) {
-    out.push('<div class="grid-preview-margin" style="width:' + pct(model.margin) + '%"></div>');
+    out.push('<div class="grid-preview-margin" style="width:' + px(model.margin) + 'px"></div>');
     for (var c = 0; c < columns; c++) {
-      if (c) out.push('<div class="grid-preview-gap" style="width:' + pct(model.gap) + '%"></div>');
-      out.push('<div class="grid-preview-col" style="width:' + pct(model.colWidth) + '%"></div>');
+      if (c) out.push('<div class="grid-preview-gap" style="width:' + px(model.gap) + 'px"></div>');
+      out.push('<div class="grid-preview-col" style="width:' + px(model.colWidth) + 'px"></div>');
     }
-    out.push('<div class="grid-preview-margin" style="width:' + pct(model.margin) + '%"></div>');
+    out.push('<div class="grid-preview-margin" style="width:' + px(model.margin) + 'px"></div>');
   } else {
     // Nothing to be proportional to yet, so an even field of columns stands in for the shape.
     for (var e = 0; e < columns; e++) {
@@ -1961,15 +2055,23 @@ function gridPreviewHtml(config, domain, modeName) {
 
   out.push('<div class="grid-preview-total">Total: <b>' +
     (model.ok ? gridPreviewNumber(model.width) : '—') + '</b> (' +
-    (model.ok ? Math.round(model.scale * 100) + '%' : '—') + ')</div>');
+    Math.round(gridPreviewScale() * 100) + '%)</div>');
 
-  var inset = model.ok ? pct(model.margin) : 0;
-  out.push('<div class="grid-preview-guides" style="margin-left:' + inset + '%;margin-right:' + inset + '%"></div>');
+  var inset = model.ok ? px(model.margin) : 0;
+  out.push('<div class="grid-preview-guides" style="margin-left:' + inset + 'px;width:' +
+    (model.ok ? px(model.content) : 0) + 'px"></div>');
 
   for (var r = 0; r < columns; r++) {
     var span = model.ok ? model.spans[r] : null;
-    out.push('<div class="grid-preview-bar" style="margin-left:' + inset + '%;width:' +
-      (span ? pct(span.span) : Math.round(((r + 1) / columns) * 9000) / 100) + '%"></div>');
+    if (span) {
+      out.push('<div class="grid-preview-bar" style="margin-left:' + inset + 'px;width:' +
+        px(span.span) + 'px"></div>');
+    } else {
+      // No width to be proportional to yet: the placeholder is a shape rather than a measurement, so
+      // it stays relative. It is grey, and it says nothing a ruler could contradict.
+      out.push('<div class="grid-preview-bar" style="width:' +
+        (Math.round(((r + 1) / columns) * 9000) / 100) + '%"></div>');
+    }
     out.push('<div class="grid-preview-value">col-' + (r + 1) + ': <b>' +
       (span ? gridPreviewNumber(span.span) : '—') + '</b></div>');
   }
@@ -1995,19 +2097,9 @@ function gridDivisionIsClean(mode, margin, gap) {
   return colWidth > 0 && Math.abs(colWidth - Math.round(colWidth)) < 1e-9;
 }
 
-/** The modes a margin and gap divide cleanly — what a card's badges say. */
-function gridCleanModes(modes, margin, gap) {
-  var clean = [];
-  var list = Array.isArray(modes) ? modes : [];
-  for (var i = 0; i < list.length; i++) {
-    if (gridDivisionIsClean(list[i], margin, gap)) clean.push(list[i].name);
-  }
-  return clean;
-}
-
 /** The spans a card displays: `col-1`, the halfway span, and the full span. Derived, never hardcoded. */
 function gridCardSpans(mode) {
-  var model = gridPreviewModel(mode, 716);
+  var model = gridPreviewModel(mode);
   if (!model.ok) return [];
   var n = model.columns;
   var wanted = [1, n % 2 === 0 ? n / 2 : Math.ceil(n / 2), n];
@@ -2062,14 +2154,19 @@ function gridSearchRadius() {
  * `gridDivisionIsClean` — clean means `colWidth` is a whole number and nothing else, because every
  * span inherits from it.
  *
- * Ranked in three levels, each breaking ties in the one above:
- *   **a.** how many modes the pair is clean for, descending — that is what the badges say;
- *   **b.** how little it moves, ascending — `|m - m₀| + |g - g₀|`, so a 1px change beats a 12px one;
- *   **c.** roundness, descending, as the tie-break.
+ * **One mode: the one you are looking at.** Márton removed the per-mode badges — *"showing values for
+ * other viewports is confusing"* — and that removes the ranking's first level with them. A card that
+ * claimed to be clean for Tablet while you stood in Desktop was answering a question nobody had asked,
+ * and it outranked the pair actually in the fields.
  *
- * The currently applied pair needs no special case: if it is clean it moves zero pixels and lands
- * first by (b). If it is not clean, nothing is selected, which is a real and useful state — the fields
- * hold something that does not divide, and the list is what would.
+ * So two levels, each breaking ties in the one above:
+ *   **a.** how little it moves, ascending — `|m - m₀| + |g - g₀|`, so a 1px change beats a 12px one;
+ *   **b.** roundness, descending, as the tie-break.
+ *
+ * And the current pair needs no special case again: it moves zero pixels, so it lands first by (a).
+ * That was plan 18's original claim, false while a mode-count level sat above it, and true now — which
+ * is worth noticing, because the pin that was added to work around it is now dead weight and gone.
+ * If the current pair is *not* clean, nothing is selected: a real state, and the list is what would be.
  *
  * Returns the whole answer including what it searched and how many it found, because a capped list
  * that does not say it was capped reads as "this is all there is".
@@ -2117,11 +2214,9 @@ function gridSuggestions(modes, modeName, cap) {
     if (width - 2 * m <= 0) continue;
     for (var g = gFrom; g <= gTo; g++) {
       if (!gridDivisionIsClean(mode, m, g)) continue;
-      var cleanFor = gridCleanModes(list, m, g);
       hits.push({
         margin: m,
         gap: g,
-        cleanModes: cleanFor,
         moved: Math.abs(m - m0) + Math.abs(g - g0),
         roundness: gridRoundness(m) + gridRoundness(g),
         selected: m === m0 && g === g0
@@ -2130,14 +2225,6 @@ function gridSuggestions(modes, modeName, cap) {
   }
 
   hits.sort(function (a, b) {
-    // **The current pair comes first when it is clean.** Its own rule, because the derivation this
-    // rested on is false: plan 18 recorded that no special case was needed since a clean current pair
-    // moves zero pixels and wins on (b). It does not — (a) outranks (b), so a pair clean for two modes
-    // buries it. Real example, from grid.js's own defaults: standing in Tablet, `margin 40 · gap 24` is
-    // clean for Tablet and vanished from the list under pairs clean for Desktop *and* Tablet. A panel
-    // whose suggestions omit the configuration you are looking at is telling you it is not an option.
-    if (a.selected !== b.selected) return a.selected ? -1 : 1;
-    if (b.cleanModes.length !== a.cleanModes.length) return b.cleanModes.length - a.cleanModes.length;
     if (a.moved !== b.moved) return a.moved - b.moved;
     if (b.roundness !== a.roundness) return b.roundness - a.roundness;
     // Last resort so the order is stable rather than engine-dependent.
@@ -2181,26 +2268,15 @@ function gridSuggestionsHtml(config, domain, modeName) {
   answer.shown.forEach(function (hit) {
     // Every card is clickable, the selected one included: re-applying the same values is a no-op and
     // cheaper than reasoning about whether to disable it. `data-` carries what a click applies —
-    // margin and gap only, to the mode being shown. The badges stay informational.
+    // margin and gap, to the mode being shown, which is now the only mode a card speaks for.
     out.push('<button class="grid-suggestion' + (hit.selected ? ' is-selected' : '') +
       '" type="button" data-suggestion-margin="' + hit.margin +
       '" data-suggestion-gap="' + hit.gap + '">');
-    out.push('<span class="grid-suggestion-main">');
     out.push('<span class="grid-suggestion-title">margin ' + gridPreviewNumber(hit.margin) +
       ' \u00b7 gap ' + gridPreviewNumber(hit.gap) + '</span>');
     out.push('<span class="grid-suggestion-spans">' + hit.spans.map(function (span) {
       return 'col-' + span.n + ' ' + gridPreviewNumber(span.span);
     }).join(' \u00b7 ') + '</span>');
-    out.push('</span>');
-    out.push('<span class="grid-suggestion-badges">Whole numbers:');
-    if (!hit.cleanModes.length) {
-      out.push('<span class="grid-suggestion-badge grid-suggestion-badge--none">none</span>');
-    } else {
-      hit.cleanModes.forEach(function (name) {
-        out.push('<span class="grid-suggestion-badge">' + foundationEscapeHtml(name) + '</span>');
-      });
-    }
-    out.push('</span>');
     out.push('</button>');
   });
 

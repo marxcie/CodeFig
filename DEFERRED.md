@@ -171,6 +171,44 @@ nobody has run against a real published library yet.
 - Say the true thing in the refusal: *not published* is evidence, not proof.
 
 
+## A queued run that ends in `displayResults` reports a timeout
+
+**What.** `npm run figma:run -- --file <script>` on a script whose last act is `displayResults()`
+waits the full 120s and reports *"Timed out without a result from the plugin"* — while the script has
+in fact finished. Traced with a `console.log` after every step: the loop completes, the panel
+renders (`readInfoPanel` shows its rows), `figma.notify` fires, and the job still never resolves.
+
+**How it was found.** Verifying `selection-to-variables` end to end. It reproduces on the committed
+version as well as the new one, so it is not a regression — and it masked a real bug for as long as
+it has existed, because a script that threw inside `displayResults` and a script that finished
+cleanly reported *the same timeout*. That bug (function-valued `grouping`, below) was found only by
+running the panel call on its own.
+
+**What fixing it involves.** Finding which of `finishCodefigRunProgress()` and
+`window.codefigRunComplete()` the job runner is actually waiting on, and why calling both — in that
+order, which is what `displayResults` does — satisfies neither. Until then a `--file` timeout is not
+evidence of anything; read `figma-console.log` and `readInfoPanel` before believing it.
+
+---
+
+## `displayResults` cannot carry a `grouping` with functions in it
+
+**What.** `@InfoPanel`'s documented `grouping.getGroupKey` / `getGroupTitle` callbacks cannot work.
+The panel is reached by `postMessage`, so the whole call throws `Cannot unwrap function` before
+anything is displayed — and the script dies there, silently, inside whatever swallows it.
+`selection-to-variables` passed them and its Info panel had therefore never appeared; that call is
+now grouping-free. Nothing else under `scripts/` passes functions —
+`match-colors-to-collection-variables` uses the declarative `{ modes, default }` shape, which is the
+one that works.
+
+**What fixing it involves.** Deciding which of the two is the truth. Either delete the callbacks from
+the JSDoc and from `groupResults` — the UI groups by `node` and `property` and nothing else, so a
+caller-supplied key function has nowhere to be honoured — or serialize a grouping *mode name* and
+teach `getGroupKeyByMode` the new modes. The first is a doc change and a dead-code removal; the
+second is a feature. Until then the annotation to remember is that `grouping` must be plain data.
+
+---
+
 ## `perViewport` and `sets` are two spellings of one thing
 
 **Found:** building parameter sets (plan 17, step 2). Adoption now writes both — `sets`, which a
@@ -261,6 +299,40 @@ next person to wire loading may reach for the wrong one. If a second block-shape
 is still unused, delete it along with the parser's per-field `@fromFile:` support rather than leaving
 it to be found a third time. The block-level `@fromFile:` is a different thing and is very much in use
 — `configPreviewDomain` and every Foundations script depend on it.
+
+---
+
+## A load is reverted to the shipped defaults, and the reverter is not yet named
+
+**Found:** driving the Grid panel on Márton's real system (Aug 2026), while verifying group detection.
+
+**What happens:** opening Grid detects the grid under `Layout`, sets Group, loads the five viewports in
+the collection's order — the write trace confirms both steps, `group-detected` then
+`auto-import:recognised+ordered`, with `source: recognised` and the ordering reporting `changed: true`.
+Read the form a minute later and it is back to the *shipped defaults*: `group: "Grid"`, three lowercase
+modes, `Extra columns: 0`.
+
+**What is established:**
+
+- The load itself is correct. Recognition, the fill, the ordering and the note were all verified in the
+  same run.
+- The revert is **not** in `writeConfigBlockText`, which is where every programmatic write goes and
+  where the trace watches.
+- Nothing re-selects the script after a run: `selectScriptDirectly` is reached from the initial open,
+  a user click, a new script, help, and batch import — none of which fired.
+
+**The remaining suspect** is `mergeConfigIntoMain`, which serialises the **form's** values over the
+block whenever the Configuration UI tab is the active view. It does not go through
+`writeConfigBlockText`, so it was invisible to the trace — that tracing is now in place and one read
+after a reload should name it.
+
+**Why it is the likely one, and why it is a class rather than an instance:** the rule "the form is
+authoritative while you are looking at it" is right for something you typed and wrong for text written
+behind the form's back. Two bugs today were exactly this — a fill undone a moment later, and a reorder
+that read the pre-fill block. Both were fixed at the instance. If this is a third, the fix is a version
+stamp: the block text carries a version, the form records the version it was rendered from, and a form
+older than the text is re-projected rather than merged. That closes the class. **Not built on
+speculation** — it waits for the trace.
 
 ---
 

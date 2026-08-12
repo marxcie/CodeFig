@@ -46,20 +46,45 @@ test('clean means the column width is whole, and nothing about spans', () => {
   assert.equal(F.gridDivisionIsClean(MODES[2], 200, 0), false);
 });
 
-test('the current pair is first when it is clean, even when others are cleaner for more modes', () => {
-  // The correction. `margin 40 · gap 24` is clean for Tablet only; `margin 36 · gap 24` is clean for
-  // Desktop *and* Tablet, so rule (a) sorts it above — and the pair actually in the fields disappeared
-  // from the list. A panel whose suggestions omit the configuration you are looking at is saying it is
-  // not an option.
-  const answer = F.gridSuggestions(MODES, 'tablet', 6);
+test('the current pair is first when it is clean, because it moves nothing', () => {
+  // **The mechanism changed and the property did not.** Márton removed the per-mode badges — "showing
+  // values for other viewports is confusing" — which removes the ranking level that counted modes. With
+  // that gone, "how little it moves" is the first rule and the current pair wins on it with zero, so the
+  // pin added to work around the old order is dead weight and is gone.
+  //
+  // Plan 18's original claim is therefore true again. Worth stating plainly: it was false for as long as
+  // a mode-count level sat above it, and removing a feature is what made it true — not a correction.
+  const modes = [{ name: 'Tablet', containerWidth: 768, columns: 8, gap: 24, padding: 40 }];
+  const answer = F.gridSuggestions(modes, 'Tablet', 6);
   assert.equal(answer.current.clean, true);
   assert.equal(answer.shown[0].margin, 40);
   assert.equal(answer.shown[0].gap, 24);
   assert.equal(answer.shown[0].selected, true);
   assert.equal(answer.shown[0].moved, 0);
-  // And it really is outranked on (a) — otherwise this test would pass for the wrong reason.
-  assert.ok(answer.shown[1].cleanModes.length > answer.shown[0].cleanModes.length,
-    'the second card is clean for more modes, which is what used to bury the first');
+
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES', '@foundation.js'), 'utf8');
+  assert.equal(ui.indexOf('if (a.selected !== b.selected)'), -1, 'the pin is gone with the reason for it');
+});
+
+test('a card speaks for the mode on screen and no other', () => {
+  // The badges said which *other* viewports a pair would also divide cleanly. They outranked the pair
+  // actually in the fields, and they answered a question nobody had asked.
+  const modes = [
+    { name: 'Desktop', containerWidth: 1440, columns: 12, gap: 24, padding: 80 },
+    { name: 'Mobile', containerWidth: 390, columns: 4, gap: 16, padding: 20 },
+  ];
+  const answer = F.gridSuggestions(modes, 'Desktop', 6);
+  answer.shown.forEach((hit) => {
+    assert.equal('cleanModes' in hit, false, 'a card carries nothing about other modes');
+    // Every card divides *this* mode cleanly — that is the whole filter.
+    assert.equal(F.gridDivisionIsClean(modes[0], hit.margin, hit.gap), true);
+  });
+
+  const html = F.gridSuggestionsHtml({ modes }, 'grid', 'Desktop');
+  assert.equal(html.indexOf('grid-suggestion-badge'), -1);
+  assert.equal(html.indexOf('Whole numbers'), -1);
+  assert.match(html, /margin \d+ · gap \d+/);
+  assert.match(html, /col-1 \d+ · col-6 \d+ · col-12 \d+/, 'the spans are what a card shows instead');
 });
 
 test('nothing is selected when the current pair does not divide', () => {
@@ -71,21 +96,17 @@ test('nothing is selected when the current pair does not divide', () => {
   assert.ok(answer.shown.length > 0, 'and it still offers what would divide');
 });
 
-test('ranked by modes clean for, then by how little it moves, then by roundness', () => {
+test('ranked by how little it moves, then by roundness', () => {
+  // Two levels, since the mode-count level went with the badges.
   const answer = F.gridSuggestions(MODES, 'desktop', 6);
-  const cards = answer.shown.filter((hit) => !hit.selected);
-  for (let i = 1; i < cards.length; i++) {
-    const before = cards[i - 1];
-    const here = cards[i];
-    if (before.cleanModes.length !== here.cleanModes.length) {
-      assert.ok(before.cleanModes.length > here.cleanModes.length, 'rule (a) is descending');
-      continue;
-    }
+  for (let i = 1; i < answer.shown.length; i++) {
+    const before = answer.shown[i - 1];
+    const here = answer.shown[i];
     if (before.moved !== here.moved) {
-      assert.ok(before.moved < here.moved, 'rule (b) is ascending');
+      assert.ok(before.moved < here.moved, 'moved is ascending');
       continue;
     }
-    assert.ok(before.roundness >= here.roundness, 'rule (c) breaks the tie towards round numbers');
+    assert.ok(before.roundness >= here.roundness, 'and roundness breaks the tie towards round numbers');
   }
 });
 

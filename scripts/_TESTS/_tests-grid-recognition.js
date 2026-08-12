@@ -19,7 +19,7 @@
 // @DOC_END
 
 @import { testBegin, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
-@import { gridRecognise, foundationAutoImport } from "@Foundation"
+@import { gridRecognise, foundationAutoImport, gridGroupsIn } from "@Foundation"
 @import { calculateColumnWidth } from "@Core Library"
 
 function recognitionModes() {
@@ -128,6 +128,42 @@ testBegin('grid-recognition');
       expect(seen.mismatched[0].name).toBe('Grid/col-5');
       expect(seen.mismatched[0].mode).toBe('Desktop');
       expect(seen.mismatched[0].stored !== seen.mismatched[0].wouldBe).toBe(true);
+    });
+  });
+
+  await itInTestFile('finds which group holds a grid, so the panel can point itself at one', function () {
+    // Márton's system keeps its grid under `Layout` while the script defaults to `Grid`. His framing is
+    // the design: a numbered column series *is* a grid, so finding it is a search rather than a
+    // question. Here against real variables, because the scan is over real names.
+    var collection = buildGrid('-groups', {});
+    // A second group that is emphatically not a grid, to make sure the signal is the column series and
+    // not merely "a group with numbers in it".
+    var noise = figma.variables.createVariable('Spacing/space-md', collection, 'FLOAT');
+    noise.setValueForMode(collection.modes[0].modeId, 12);
+    return gridGroupsIn(collection.name).then(function (out) {
+      expect(out.groups.length).toBe(1);
+      expect(out.groups[0].group).toBe('Grid');
+      expect(out.groups[0].columns).toBe(12);
+    });
+  });
+
+  await itInTestFile('offers the group when the one asked for holds nothing', function () {
+    // The panel asks about the group it is pointing at; the answer says where a grid actually is. This
+    // is the whole mechanism behind a fresh panel finding `Layout` on its own.
+    var collection = buildGrid('-elsewhere', {});
+    return foundationAutoImport(collection.name, 'NotAGroup', 'grid').then(function (found) {
+      expect(found.source).toBe('none');
+      expect((found.candidates || []).length).toBe(1);
+      expect(found.candidates[0].group).toBe('Grid');
+    });
+  });
+
+  await itInTestFile('does not offer the group it was already asked about', function () {
+    // Otherwise a panel would be told to move to where it already is, which is how a loop starts.
+    var collection = buildGrid('-same', {});
+    return foundationAutoImport(collection.name, 'Grid', 'grid').then(function (found) {
+      expect(found.source).toBe('recognised');
+      expect((found.candidates || []).length).toBe(0);
     });
   });
 

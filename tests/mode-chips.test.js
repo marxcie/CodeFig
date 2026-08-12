@@ -444,3 +444,69 @@ test('every exit from the ordering records why, so a stale success cannot be the
   assert.ok(records >= returns - 1, 'and all but the success path record a reason (' +
     records + ' records for ' + returns + ' exits)');
 });
+
+// ---------------------------------------------------------------------------
+// Whose file is this
+// ---------------------------------------------------------------------------
+
+test('the mode table is identified by document as well as collection', () => {
+  // Found in the plugin, and it produced correct arithmetic on the wrong facts. CodeFig reopens in
+  // whatever file you are in, and Márton has two files with a collection called "Responsive System" —
+  // a throwaway one with three modes (including a `Pad` I had renamed) and his real five-viewport
+  // system. The guard compared *names*, decided the table it held was already right, and ordered the
+  // real system against the throwaway's modes: `desktop → mobile → tablet`, which is exactly what
+  // matching `mobile` against a file that has no `tablet` produces.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+
+  assert.match(ui, /let fileModes = \{\s*\n?\s*document: null, collection: null, collectionId: null/,
+    'the record carries which document it came from');
+  assert.match(ui, /fileModes\.document === currentDocumentId/,
+    'and the "already have it" guard checks it');
+  // **Not `figma.root.id`.** That is `0:0` in every file, so the first version of this guard could
+  // never fail — it compared one constant with another. The file's *name* and the collection's own id
+  // are things that actually differ between files.
+  // Code lines only. **Third time today** an assertion has failed on a comment quoting what it
+  // forbids — the explanation of why `figma.root.id` is wrong necessarily contains `figma.root.id`.
+  // Worth a helper if it happens again.
+  const uiCode = ui.split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
+  assert.equal(uiCode.indexOf('figma.root.id'), -1, 'a guard that cannot fail does nothing');
+  const foundation = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES', '@foundation.js'), 'utf8'
+  );
+  assert.match(foundation, /document: figma\.root\.name/);
+  assert.match(foundation, /answer\.collectionId = collection\.id;/);
+  assert.match(ui, /next\.collectionId !== fileModes\.collectionId/,
+    'and a collection wearing the same name in another file is a different collection');
+
+  // A script selection re-reads the file rather than inheriting the last one's answer.
+  const select = ui.slice(ui.indexOf('function selectScriptDirectly'));
+  const reset = select.slice(0, select.indexOf('infoPanelAvailable'));
+  assert.match(reset, /fileModes = \{ document: null, collection: null, collectionId: null, modes: \[\], found: false \}/);
+  assert.match(reset, /chipModeIds = \[\]/);
+});
+
+test('the structure sniff reads the editor and does not merge into it', () => {
+  // The reverter, and the third instance of one theme: a write hidden in something that reads.
+  // `getFullCode()` merges the form over the block before returning, and `syncScriptStructureFromEditor`
+  // runs on a debounce after every editor change — so every programmatic write triggered a merge that
+  // undid it. The write trace caught it as eight `merge:form@configUI` writes in three seconds.
+  //
+  // A structure sniff only needs to know whether `@DOC_`/`@CONFIG_` markers came or went, and an edit
+  // in the form already reaches the text through `syncUIToCode`, which is the path that should write.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  // Bounded by what actually follows it. `let structureSyncTimeout` is declared *above* the function,
+  // so slicing to it produced an empty region and a test that passed on nothing.
+  const fn = ui.slice(ui.indexOf('function syncScriptStructureFromEditor'),
+    ui.indexOf('function renderSimpleMarkdown'));
+  assert.ok(fn.length > 400, 'the region is the function, not an empty slice');
+  // Code lines only. The comment above the fix names `getFullCode()` deliberately, and a grep over the
+  // whole region fails on the explanation rather than on the behaviour — which is the second time today
+  // an assertion has tripped over prose quoting what it forbids.
+  const codeOnly = fn.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+  assert.equal(codeOnly.indexOf('getFullCode()'), -1, 'a read path must not merge');
+  assert.match(codeOnly, /const fullCode = code\.getValue\(\);/);
+
+  // And `getFullCode` still merges, because the paths that compose a whole script do need it.
+  const full = ui.slice(ui.indexOf('function getFullCode'), ui.indexOf('function getEffectiveContentLength'));
+  assert.match(full, /mergeConfigIntoMain\(\)/);
+});

@@ -36,17 +36,22 @@ function load() {
 const lib = load();
 const DESKTOP = { name: 'desktop', containerWidth: 1440, columns: 12, gap: 24, padding: 80 };
 
-test('the model reproduces the frame’s geometry', () => {
-  const m = lib.gridPreviewModel(DESKTOP, 716);
+test('the drawing is locked at half size, in real pixels', () => {
+  // **Changed on Márton's report, and the old expectation was the bug.** The diagram was drawn in
+  // percentages of whatever width the panel happened to have, while the percentage it *printed* came
+  // from a hardcoded 716 — so the caption read 41% on his window, the drawing scaled when he dragged the
+  // panel, and neither number was the truth. This test asserted that 716, which is how it survived.
+  //
+  // One fixed scale now: half, in pixels. A ruler on the screen agrees with the number beside the bar.
+  const m = lib.gridPreviewModel(DESKTOP);
   assert.equal(m.ok, true);
   assert.equal(m.content, 1280);
   assert.equal(Math.round(m.colWidth * 100) / 100, 84.67);
 
-  // Drawn at the scale the Total line reports.
-  assert.equal(Math.round(m.scale * 1000) / 1000, 0.497);
-  assert.equal(Math.round(m.margin * m.scale), 40, 'the frame draws a 40px margin band');
-  assert.equal(Math.round(m.gap * m.scale), 12, 'and 12px gaps');
-  assert.equal(Math.round(m.colWidth * m.scale), 42, 'and 42px columns');
+  assert.equal(m.scale, 0.5, 'and it does not depend on how wide the panel is');
+  assert.equal(m.margin * m.scale, 40, 'an 80 margin draws 40px');
+  assert.equal(m.gap * m.scale, 12, 'a 24 gap draws 12px');
+  assert.equal(Math.round(m.colWidth * m.scale * 100) / 100, 42.33);
 });
 
 test('the last span is the content width, for any input', () => {
@@ -81,7 +86,12 @@ test('the markup carries the proportions, and is grey until there is a collectio
 
   assert.match(html, /Total: <b>1440<\/b> \(50%\)/);
   assert.match(html, /col-12: <b>1280<\/b>/);
-  assert.match(html, /class="grid-preview-margin" style="width:5\.56%"/);
+  // Pixels, at half. An 80 margin is 40px wide whatever the panel is doing.
+  assert.match(html, /class="grid-preview-margin" style="width:40px"/);
+  assert.match(html, /class="grid-preview-col" style="width:42\.33px"/);
+  assert.match(html, /class="grid-preview-bar" style="margin-left:40px;width:640px"/,
+    'and a col-6 span of 1280/2 sits inside the margin');
+  assert.equal(html.indexOf('%"'), -1, 'nothing in the drawing is relative any more');
   assert.equal((html.match(/grid-preview-col/g) || []).length, 12);
   assert.equal((html.match(/grid-preview-gap/g) || []).length, 11);
   assert.equal((html.match(/grid-preview-bar/g) || []).length, 12);

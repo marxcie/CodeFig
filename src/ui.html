@@ -547,8 +547,21 @@
       //                   tell a deliberate removal from a config pasted out of another file, and
       //                   deleting on the latter would destroy values nobody offered up.
       // ======================================================================
-      let fileModes = { collection: null, modes: [], found: false };
+      // `document` is part of the identity, not decoration. CodeFig reopens in whatever file you are
+      // in, and a collection called "Responsive System" in one file is not the one in another — the
+      // guard compared names, decided it already had the table, and ordered Márton's real five-viewport
+      // system against a *throwaway file's* three modes, `Pad` rename and all. The wrong order it
+      // produced was correct arithmetic on the wrong facts.
+      //
+      // The first attempt at this stamped `figma.root.id`, which is `0:0` in **every** file — a guard
+      // that cannot fail is a guard that does nothing. `@Foundation` supplies the file's name and the
+      // collection's own id instead.
+      let fileModes = {
+        document: null, collection: null, collectionId: null, modes: [], found: false
+      };
       let chipModeIds = [];
+      /** Which document the panel last heard from, so a same-named collection elsewhere cannot pass. */
+      let currentDocumentId = null;
       let removedModeIds = [];
 
       /** Everything about chips that a rebuild has to put back. Derived; call it after any render. */
@@ -872,6 +885,19 @@
         // originalCode, and skip autosave — feeling like a revert to the last save.
         if (!isConfigTab(currentTab)) return;
 
+        // **The other writer.** This path — form values serialised over the block — does not go through
+        // `writeConfigBlockText`, so the write trace could not see it, and a revert by this function
+        // looked like a write that never happened. Recorded here for the same reason: an invisible
+        // writer turns "who changed this?" into guesswork.
+        blockWrites.push({
+          by: 'merge:' + (fromForm ? 'form' : 'code') + '@' + currentTab,
+          at: new Date().toLocaleTimeString(),
+          modes: (trimmed.match(/name: "([^"]+)"/g) || []).map(function (m) {
+            return m.slice(7, -1);
+          }).join(' \u2192 ')
+        });
+        if (blockWrites.length > 8) blockWrites.shift();
+
         const startReplace = i + startMarker.length;
         const oldSegLen = j - startReplace;
         const newSegLen = newCode.length - before.length - after.length;
@@ -1082,6 +1108,7 @@
         restoreActiveMode(wasShowing);
         syncChipsToPanelState();
         scheduleFileModes(0);
+        scheduleGroupDetection();
         // **Rendering the form does not trigger a load.** It used to, and applying a load re-rendered
         // the form, which triggered another — a rebuild every 350ms that destroyed any open inline
         // input or select dropdown between one lap and the next. Loading is a response to the address
@@ -1142,7 +1169,17 @@
         const hadConfig = scriptHasConfig;
         const hadUI = scriptHasUIConfig;
 
-        const fullCode = getFullCode();
+        // **`code.getValue()`, not `getFullCode()`** — a write hidden inside a read is what reverted
+        // every automatic load. `getFullCode` merges the *form* over the block before returning, and
+        // this function runs on a debounce after every editor change: so a programmatic write landed,
+        // the editor changed, this ran, and the form — which had not caught up, or held a different
+        // script's values — was serialised straight back over it. Eight merges in three seconds in the
+        // write trace, all undoing the fill.
+        //
+        // Nothing is lost by reading. An edit in the form already reaches the text through
+        // `syncUIToCode`, which is the path that is *supposed* to write; a structure sniff only needs
+        // to notice whether `@DOC_`/`@CONFIG_` markers came or went.
+        const fullCode = code.getValue();
         const next = parseScriptSections(fullCode);
         const nextHasDocs = next.hasDocs;
         const nextHasConfig = next.hasConfig;
@@ -1494,6 +1531,19 @@
       }
 
       function selectScriptDirectly(script) {
+        // **A script selection is a fresh question.** Detection is guarded per address so a render
+        // cannot poll, but that guard outlived the script: switching to another script and back asked
+        // nothing, because the address had been asked about *once, ever*. Márton reported it as
+        // detection only working when the plugin opens — the guard is per session and the question is
+        // per opening, and those are not the same thing.
+        detectedFor = {};
+        groupsAdopted = {};
+        // Facts about the file are re-read, not carried over. Cheap — one read — and it is the only way
+        // a panel opened in a different file cannot inherit the last one's modes.
+        fileModes = { document: null, collection: null, collectionId: null, modes: [], found: false };
+        chipModeIds = [];
+        removedModeIds = [];
+
         debugLog('Selecting script:', script);
         currentScript = script;
 
@@ -2050,7 +2100,10 @@
           if (!configUIContainer || !configUIContainer.querySelector('[data-chips-field]')) return;
           var collection = configUIInstance.getValues().collectionName;
           if (!collection || !String(collection).trim()) return;
-          if (fileModes.collection === collection && fileModes.found) return;
+          if (fileModes.collection === collection && fileModes.found &&
+              fileModes.document === currentDocumentId) {
+            return;
+          }
           // An auto-import is already queued, and it brings the table with it. Asking again would be
           // a second read of the same thing and a second thing to sequence.
           if (autoImportTimer) return;
@@ -2067,7 +2120,22 @@
         }, 400);
       }
 
-      function requestAutoImport(attempt) {
+      /**
+       * Ask what is at this address.
+       *
+       * `detectOnly` asks the read-only half of the question: where a grid *is*, and what modes the
+       * collection has. It exists because **opening a panel is not an address change**, and detection
+       * lived inside the fill — so finding the group required changing the very field detection was
+       * meant to fill.
+       *
+       * It deliberately does not fill. Auto-import's safety property is entirely in its trigger:
+       * choosing a Collection or Group is the instruction, and nothing else fills over what you have.
+       * Opening a script is not that instruction, and Márton's own description of the flow — *"when I
+       * open CodeFig and select Grid, of course it shows the default selection"* — is the behaviour to
+       * keep. So opening may *move the address* when the address points at nothing, announce it, and
+       * let the ordinary rule do the loading.
+       */
+      function requestAutoImport(attempt, detectOnly) {
         autoImportTimer = null;
         if (!scriptHasConfig || !configUIInstance) return;
         var values = configUIInstance.getValues();
@@ -2083,7 +2151,7 @@
 
         var seq = ++autoImportSeq;
         lastAutoImport = { at: new Date().toLocaleTimeString(), requested: true, refused: false,
-          source: null, summary: null, note: null, seq: seq };
+          detectOnly: !!detectOnly, source: null, summary: null, note: null, seq: seq };
         // **One read, two answers.** The recorded config and the collection's live mode table are
         // both needed the moment the address resolves, and only one silent run may be in flight —
         // two snippets would mean the second is refused about half the time.
@@ -2103,7 +2171,8 @@
             JSON.stringify(domain) + ');',
           '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ');',
           '  window.codefigConfigLoadResult({',
-          '    autoImport: found, fileModes: modes, autoImportSeq: ' + seq,
+          '    autoImport: found, fileModes: modes, autoImportSeq: ' + seq + ',',
+          '    detectOnly: ' + (detectOnly ? 'true' : 'false'),
           '  });',
           '})();'
         ]).join('\n'));
@@ -2115,7 +2184,7 @@
           if ((attempt || 0) < 4) {
             autoImportTimer = setTimeout(function () {
               autoImportTimer = null;
-              requestAutoImport((attempt || 0) + 1);
+              requestAutoImport((attempt || 0) + 1, detectOnly);
             }, 400);
           }
         }
@@ -2133,8 +2202,15 @@
        * one is not going to be removed from this one.
        */
       function applyFileModes(table) {
-        var next = table && Array.isArray(table.modes) ? table : { collection: null, modes: [], found: false };
-        var changedCollection = next.collection !== fileModes.collection;
+        var next = table && Array.isArray(table.modes)
+          ? table
+          : { document: null, collection: null, collectionId: null, modes: [], found: false };
+        if (next.document) currentDocumentId = next.document;
+        // A different collection *or* a different one wearing the same name: either way, whatever was
+        // going to be removed from the old one is not going to be removed from this.
+        var changedCollection = next.collection !== fileModes.collection ||
+          next.document !== fileModes.document ||
+          next.collectionId !== fileModes.collectionId;
         fileModes = next;
         if (changedCollection) removedModeIds = [];
 
@@ -2256,10 +2332,92 @@
        * substituted in place, comments and key order kept, entries inserted and removed with what
        * was written for them. So an auto-import is as non-destructive as a manual one was.
        */
+      /**
+       * Groups this panel has already been sent to, so it can never be sent to one twice.
+       *
+       * The guard, not a cache. Adopting a group triggers a fresh load at the new address; if that
+       * address also came back empty, adopting again would be a loop with a document read in it.
+       */
+      var groupsAdopted = {};
+      /** Addresses this panel has already asked about, so opening a script asks once and not again. */
+      var detectedFor = {};
+
+      /**
+       * Ask where the grid is, once per address, when the panel opens on one.
+       *
+       * Bounded on purpose. The original loop was *fill* → re-render → fill; this asks a read-only
+       * question, and the one thing it may write — the Group field — is guarded twice: once here, and
+       * once by `groupsAdopted` inside the offer.
+       */
+      function scheduleGroupDetection() {
+        if (!scriptHasConfig || !configUIInstance) return;
+        if (!configUIContainer || !configUIContainer.querySelector('[data-chips-field]')) return;
+        var values = configUIInstance.getValues();
+        var collection = values.collectionName;
+        if (!collection || !String(collection).trim()) return;
+        var key = collection + '\u0000' + (values.group == null ? '' : values.group);
+        if (detectedFor[key]) return;
+        detectedFor[key] = true;
+        if (autoImportTimer) clearTimeout(autoImportTimer);
+        autoImportTimer = setTimeout(function () { requestAutoImport(0, true); }, 400);
+      }
+
+      /**
+       * Nothing where the panel is pointing, but a grid is somewhere in this collection.
+       *
+       * **One candidate: go there.** Márton's point is that a numbered column series *is* a grid, so
+       * finding it is a search rather than a question, and a panel that sits on an empty default while
+       * the answer is one field away is being coy. The Group field is the address, so this changes the
+       * address and lets the ordinary load happen — no second loading path.
+       *
+       * **More than one: say so and touch nothing.** Two grids in a collection means the choice is
+       * real, and picking the bigger one would be a guess dressed as help.
+       */
+      function offerGridGroup(found) {
+        var candidates = (found && found.candidates) || [];
+        if (!candidates.length) return false;
+
+        var where = fileModes.collection || '';
+        if (candidates.length > 1) {
+          setAutoImportNote('No ' + configPreviewDomainLabel() + ' set under this group. This ' +
+            'collection has one under ' +
+            candidates.map(function (c) { return c.group || '(no group)'; }).join(' and ') +
+            ' — set Group to the one you want.');
+          return true;
+        }
+
+        var target = candidates[0].group;
+        var key = where + '\u0000' + target;
+        if (groupsAdopted[key]) return false;
+        groupsAdopted[key] = true;
+
+        var api = window.CodeFigConfigUI;
+        if (!api) return false;
+        var schema;
+        try {
+          schema = api.parse(currentConfigBlock());
+        } catch (e) {
+          return false;
+        }
+        var groupRow = (schema.rows || []).filter(function (r) {
+          return r.type === 'field' && r.name === 'group';
+        })[0];
+        if (!groupRow) return false;
+
+        writeConfigBlockText(api.serialize(schema, { group: target }), 'group-detected');
+        setAutoImportNote('No ' + configPreviewDomainLabel() + ' set under that group. This ' +
+          'collection has one under ' + (target || 'no group') + ' (' + candidates[0].columns +
+          ' columns), so Group was set to it.');
+        // The address changed, so ask again — the ordinary load, at the new address.
+        scheduleAutoImport();
+        return true;
+      }
+
       function applyAutoImport(found) {
         lastAutoImport.source = found ? found.source : 'no-answer';
         if (!found || !found.config ||
             (found.source !== 'recorded' && found.source !== 'recognised')) {
+          if (offerGridGroup(found)) return;
           setAutoImportNote(null);
           return;
         }
@@ -4137,9 +4295,15 @@
               if (data.autoImport !== undefined) {
                 if (data.autoImportSeq === autoImportSeq) {
                   applyFileModes(data.fileModes);
-                  // `applyAutoImport` writes the fill and the ordering as one text, so there is no
-                  // separate ordering step here to race with it.
-                  applyAutoImport(data.autoImport);
+                  if (data.detectOnly) {
+                    // Read-only half: point the panel at a grid if this address holds none, and
+                    // otherwise leave everything exactly as the person left it.
+                    if (!offerGridGroup(data.autoImport)) orderConfigModesToFile();
+                  } else {
+                    // `applyAutoImport` writes the fill and the ordering as one text, so there is no
+                    // separate ordering step here to race with it.
+                    applyAutoImport(data.autoImport);
+                  }
                 }
                 return;
               }

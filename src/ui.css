@@ -2046,26 +2046,23 @@
         opacity: 0.85;
       }
 
-      /* The collection picker: a select over this file's collections, and a companion input for a
-         name that is not one of them. Both write the same config field. */
+      /* A picker: a select with a companion input under it for a value that is not in the list, and
+         a note when one of the two needs explaining. The collection picker and the mode picker are
+         both this — a dropdown, a text input and a note, all of them controls this stylesheet
+         already has. What differs between them is behaviour, which is not styling's business, so
+         there is one layout rule here and no per-control appearance anywhere. */
       /* 70%, the same as a text input. The control filled the whole column while every input beside it
          was 70% of it, so the select read as a longer field than the ones above and below it. Its own
          children stay 100% *of this*, which is what makes them match. */
-      .config-ui-collection {
+      .config-ui-picker {
         display: flex;
         flex-direction: column;
         gap: 6px;
         width: 70%;
       }
 
-      .config-ui-collection .config-ui-input {
+      .config-ui-picker .config-ui-input {
         width: 100%;
-      }
-
-      .config-ui-collection-note {
-        font-size: var(--font-size-helper);
-        line-height: 1.4;
-        opacity: 0.7;
       }
 
       /* A note under a field — auto-import's answer sits under Group, which is where the question
@@ -2232,6 +2229,13 @@
         margin-bottom: 6px;
       }
 
+      /* **The drawing is in real pixels now, so it can be wider than the panel.** Half of a 1920 grid is
+         960, and a panel narrower than that must scroll rather than squash — squashing is what made the
+         old percentage drawing unmeasurable in the first place. */
+      .grid-preview {
+        overflow-x: auto;
+      }
+
       /* A filled band, not a dashed edge. The dashed guides still run down the spans area at the
          content edges — the frame has both — but the band is the margin. */
       /* `flex: 0 0 auto` because these widths *are* the drawing: a flex item that shrinks turns a
@@ -2291,21 +2295,23 @@
       .grid-preview.is-unset .grid-preview-value,
       .grid-preview.is-unset .grid-preview-total { opacity: 0.55; }
 
+      /* **Three across, two down.** Márton's revision: the cards speak for the mode you are looking at
+         and nothing else, so they carry no badges — and without a right-hand column of tags there is no
+         reason for a card to be a full-width row. `repeat(3, 1fr)` rather than `auto-fill`, because six
+         cards in a 3x2 grid is the design; a card count that reflows with the panel width would make the
+         section a different shape at every size. */
       .grid-suggestions {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
         gap: var(--space-sm);
         width: 100%;
       }
 
       .grid-suggestion {
         display: flex;
-        /* The badges belong on the title's line, not centred against the card: the frame puts the Tags
-           frame at y=2, level with "margin 80 · gap 24" rather than between it and the spans. */
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: var(--space-lg);
-        width: 100%;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
         padding: 10px 14px;
         border: 1px solid var(--border-color, #e1e5e9);
         border-radius: 6px;
@@ -2323,32 +2329,17 @@
         box-shadow: 0 0 0 1px var(--active-bg, #0a84ff);
       }
 
-      .grid-suggestion-main {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 0;
-      }
-
       .grid-suggestion-spans {
         font-size: var(--font-size-helper);
         opacity: 0.6;
       }
 
-      .grid-suggestion-badges {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 10px;
+      .grid-suggestions-empty,
+      .grid-suggestions-more {
+        grid-column: 1 / -1;
+        margin: 0;
+        font-size: var(--font-size-helper);
         opacity: 0.7;
-        white-space: nowrap;
-      }
-
-      .grid-suggestion-badge {
-        padding: 2px 6px;
-        border-radius: 10px;
-        background: rgba(23, 151, 106, 0.13);
-        color: #0f6b4c;
       }
 
       /* ============================================================
