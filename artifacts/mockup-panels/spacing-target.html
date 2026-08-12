@@ -82,8 +82,8 @@
                 <span class="config-ui-chip config-ui-chip--placeholder"><span class="config-ui-chip-label">Value</span></span>
               </div>
             </div>
+            <div class="config-ui-field-note">Select or create Collection to edit the Collection modes.</div>
           </div>
-          <div class="config-ui-field-note">Select or create Collection to edit the Collection modes.</div>
         </div>
       </div>
 
@@ -105,8 +105,8 @@
             <div class="config-ui-field__control">
               <input class="config-ui-input config-ui-input--text" placeholder="eg.: none, px, xs, sm, md, lg, xl">
             </div>
+            <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
           </div>
-          <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
         </div>
       </div>
 
@@ -124,56 +124,27 @@
                 </div>
                 <div class="config-ui-rows-body">
                   <div class="config-ui-rows-item config-ui-rows-item--stacked">
-
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Scale type</label>
-                        <div class="config-ui-field__control">
-                          <div class="config-ui-radio-group">
-                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-0" checked> Modular scale</label>
-                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-0"> Metric scale</label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Scaling method</label>
-                        <div class="config-ui-field__control">
-                          <select class="config-ui-input config-ui-input--select"><option>Select scaling method</option></select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Base unit</label>
-                        <div class="config-ui-field__control">
-                          <input class="config-ui-input config-ui-input--number" placeholder="eg.: 4">
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Round numbers to</label>
-                        <div class="config-ui-field__control">
-                          <input class="config-ui-input config-ui-input--number" placeholder="eg.: 2">
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Extra spacings</label>
-                        <div class="config-ui-field__control">
-                          <input class="config-ui-input config-ui-input--text" placeholder="eg.: 0, 1,">
-                        </div>
-                      </div>
-                      <div class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</div>
-                    </div>
-
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Scale type</span>
+                    <span class="config-ui-radio-group"><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-0" checked> Modular scale</label><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-0"> Metric scale</label></span>
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Scaling method</span>
+                    <select class="config-ui-input config-ui-input--select"><option>Select scaling method</option></select>
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Base unit</span>
+                    <input class="config-ui-input config-ui-input--number" placeholder="eg.: 4">
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Round numbers to</span>
+                    <input class="config-ui-input config-ui-input--number" placeholder="eg.: 2">
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Extra spacings</span>
+                    <input class="config-ui-input config-ui-input--text" placeholder="eg.: 0, 1,">
+                    <span class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</span>
+                  </label>
                   </div>
                 </div>
               </div>
@@ -187,13 +158,13 @@
         <!-- Grey until a collection is chosen, exactly as Grid's is: grey is about having somewhere to
              write, not about whether the fields are filled. -->
         <div class="spacing-preview is-unset">
-          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-bar" style="height:24px"></span><span class="spacing-preview-value">24</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-bar" style="height:48px"></span><span class="spacing-preview-value">48</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-bar" style="height:96px"></span><span class="spacing-preview-value">96</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:24px"></span><span class="spacing-preview-value">24</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:48px"></span><span class="spacing-preview-value">48</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:96px"></span><span class="spacing-preview-value">96</span></span></div>
         </div>
       </div>
 
@@ -275,8 +246,8 @@
             <div class="config-ui-field__control">
               <input class="config-ui-input config-ui-input--text" placeholder="eg.: none, px, xs, sm, md, lg, xl">
             </div>
+            <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
           </div>
-          <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
         </div>
       </div>
 
@@ -296,44 +267,27 @@
                 </div>
                 <div class="config-ui-rows-body">
                   <div class="config-ui-rows-item config-ui-rows-item--stacked">
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Scale type</label>
-                        <div class="config-ui-field__control">
-                          <div class="config-ui-radio-group">
-                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-1" checked> Modular scale</label>
-                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-1"> Metric scale</label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Scaling method</label>
-                        <div class="config-ui-field__control">
-                          <select class="config-ui-input config-ui-input--select"><option>Select scaling method</option></select>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Base unit</label>
-                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 4"></div>
-                      </div>
-                    </div>
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Round numbers to</label>
-                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 2"></div>
-                      </div>
-                    </div>
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Extra spacings</label>
-                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--text" placeholder="eg.: 0, 1,"></div>
-                      </div>
-                      <div class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</div>
-                    </div>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Scale type</span>
+                    <span class="config-ui-radio-group"><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-1" checked> Modular scale</label><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-1"> Metric scale</label></span>
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Scaling method</span>
+                    <select class="config-ui-input config-ui-input--select"><option>Select scaling method</option></select>
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Base unit</span>
+                    <input class="config-ui-input config-ui-input--number" placeholder="eg.: 4">
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Round numbers to</span>
+                    <input class="config-ui-input config-ui-input--number" placeholder="eg.: 2">
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Extra spacings</span>
+                    <input class="config-ui-input config-ui-input--text" placeholder="eg.: 0, 1,">
+                    <span class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</span>
+                  </label>
                   </div>
                 </div>
               </div>
@@ -345,13 +299,13 @@
       <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
       <div class="config-ui-row">
         <div class="spacing-preview is-unset">
-          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-bar" style="height:24px"></span><span class="spacing-preview-value">24</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-bar" style="height:48px"></span><span class="spacing-preview-value">48</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-bar" style="height:96px"></span><span class="spacing-preview-value">96</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:24px"></span><span class="spacing-preview-value">24</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:48px"></span><span class="spacing-preview-value">48</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:96px"></span><span class="spacing-preview-value">96</span></span></div>
         </div>
       </div>
 
@@ -411,8 +365,8 @@
             <div class="config-ui-field__control">
               <input class="config-ui-input config-ui-input--text" value="Spacings">
             </div>
+            <div class="config-ui-field-note">As this Collection and Group combination contains a Spacing set, it was imported automatically</div>
           </div>
-          <div class="config-ui-field-note">As this Collection and Group combination contains a Spacing set, it was imported automatically</div>
         </div>
       </div>
 
@@ -423,8 +377,8 @@
             <div class="config-ui-field__control">
               <input class="config-ui-input config-ui-input--text" value="none, px, 3xs, 2xs, xs, sm, md, lg, xl, 2xl, 3xl, 4xl, 5xl">
             </div>
+            <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
           </div>
-          <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
         </div>
       </div>
 
@@ -444,44 +398,27 @@
                 </div>
                 <div class="config-ui-rows-body">
                   <div class="config-ui-rows-item config-ui-rows-item--stacked">
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Scale type</label>
-                        <div class="config-ui-field__control">
-                          <div class="config-ui-radio-group">
-                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-2" checked> Modular scale</label>
-                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-2"> Metric scale</label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Scaling method</label>
-                        <div class="config-ui-field__control">
-                          <select class="config-ui-input config-ui-input--select"><option>1.618 Golden ratio</option></select>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Base unit</label>
-                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" value="4"></div>
-                      </div>
-                    </div>
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Round numbers to</label>
-                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" value="2"></div>
-                      </div>
-                    </div>
-                    <div class="config-ui-field">
-                      <div class="config-ui-field__row">
-                        <label class="config-ui-field__label">Extra spacings</label>
-                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--text" value="0, 1, 2"></div>
-                      </div>
-                      <div class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</div>
-                    </div>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Scale type</span>
+                    <span class="config-ui-radio-group"><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-2" checked> Modular scale</label><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-2"> Metric scale</label></span>
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Scaling method</span>
+                    <select class="config-ui-input config-ui-input--select"><option>1.618 Golden ratio</option></select>
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Base unit</span>
+                    <input class="config-ui-input config-ui-input--number" value="4">
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Round numbers to</span>
+                    <input class="config-ui-input config-ui-input--number" value="2">
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Extra spacings</span>
+                    <input class="config-ui-input config-ui-input--text" value="0, 1, 2">
+                    <span class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</span>
+                  </label>
                   </div>
                 </div>
               </div>
@@ -496,19 +433,19 @@
              generator had to move a number. The note is the reason this preview exists: `md 20` is
              fine until you learn it came from 20.7. -->
         <div class="spacing-preview">
-          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">3xs</span><span class="spacing-preview-bar" style="height:2px"></span><span class="spacing-preview-value">2</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">2xs</span><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-bar" style="height:8px"></span><span class="spacing-preview-value">8</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span><span class="spacing-preview-note">Rounded from 10.9</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-bar" style="height:20px"></span><span class="spacing-preview-value">20</span><span class="spacing-preview-note">Rounded from 20.7</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-bar" style="height:32px"></span><span class="spacing-preview-value">32</span><span class="spacing-preview-note">Rounded from 31.9</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-bar" style="height:52px"></span><span class="spacing-preview-value">52</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">2xl</span><span class="spacing-preview-bar" style="height:84px"></span><span class="spacing-preview-value">84</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">3xl</span><span class="spacing-preview-bar" style="height:136px"></span><span class="spacing-preview-value">136</span><span class="spacing-preview-note">Rounded from 135.2</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">4xl</span><span class="spacing-preview-bar" style="height:220px"></span><span class="spacing-preview-value">220</span></div>
-          <div class="spacing-preview-row"><span class="spacing-preview-name">5xl</span><span class="spacing-preview-bar" style="height:356px"></span><span class="spacing-preview-value">356</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">3xs</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:2px"></span><span class="spacing-preview-value">2</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">2xs</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:8px"></span><span class="spacing-preview-value">8</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span><span class="spacing-preview-note">Rounded from 10.9</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:20px"></span><span class="spacing-preview-value">20</span><span class="spacing-preview-note">Rounded from 20.7</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:32px"></span><span class="spacing-preview-value">32</span><span class="spacing-preview-note">Rounded from 31.9</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:52px"></span><span class="spacing-preview-value">52</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">2xl</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:84px"></span><span class="spacing-preview-value">84</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">3xl</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:136px"></span><span class="spacing-preview-value">136</span><span class="spacing-preview-note">Rounded from 135.2</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">4xl</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:220px"></span><span class="spacing-preview-value">220</span></span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">5xl</span><span class="spacing-preview-track"><span class="spacing-preview-bar" style="height:356px"></span><span class="spacing-preview-value">356</span></span></div>
         </div>
       </div>
 

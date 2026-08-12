@@ -2361,12 +2361,24 @@
         background: var(--border-color);
       }
 
+      /* **The same 3fr / 7fr as every field**, so the token names line up with the labels above them
+         and the bars start where the controls do. A preview that sets its own proportions reads as a
+         different page: Márton spotted it immediately, and it is the kind of misalignment that is
+         invisible in a frame and obvious in a browser. The inner grid is the preview's own business —
+         bar, value, note — and it lives entirely in the control column. */
       .spacing-preview-row {
         display: grid;
-        grid-template-columns: 72px 140px 56px 1fr;
-        align-items: center;
+        grid-template-columns: 3fr 7fr;
         column-gap: var(--space-md);
+        align-items: start;
         min-height: 18px;
+      }
+
+      .spacing-preview-track {
+        display: grid;
+        grid-template-columns: 140px 56px 1fr;
+        column-gap: var(--space-md);
+        align-items: start;
       }
 
       .spacing-preview-name {
@@ -2443,10 +2455,13 @@
         margin-bottom: var(--space-lg);
       }
 
+      /* Same proportions again: the metadata sits in the label column and the sample starts where a
+         control would. A type specimen is the one place a reader compares sizes down a page, and a
+         ragged left edge on the samples defeats it. */
       .type-specimen-step {
         display: grid;
-        grid-template-columns: 120px 1fr;
-        column-gap: var(--space-xl);
+        grid-template-columns: 3fr 7fr;
+        column-gap: var(--space-md);
         align-items: start;
         margin-bottom: var(--space-xl);
       }
