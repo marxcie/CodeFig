@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spacing panel — target layout (three states)</title>
+
+<!--
+  THE TARGET, not a style reference. Same rules as grid-target.html beside it.
+
+  Hand-written to Márton's Figma frames — 2023:336 (Start), 2039:2747 (New collection),
+  2010:5701 (Editing existing) — using **the plugin's own class names and the plugin's own
+  stylesheet**, linked rather than copied. Nothing here can become a competing source of styling
+  because there is no styling here; if a section looks wrong, the fix belongs in src/ui.css.
+
+  What the frames settle, and what this file is for:
+
+  **The skeleton is Grid's.** General → Mode settings (a tab per mode) → Preview. The parameter-set
+  worry was mine and not the design's: one scale per mode, and parallel sets are two Groups, two
+  runs, two manifests. See .plans/23-spacing-panel.md.
+
+  **The chips and the mode tab strip are the same controls Grid uses**, which is why this file can be
+  written at all — they are field-driven, not Grid-driven. The New collection state proves the point
+  from the other side: its modes are `Tight` and `Relaxed`, a density axis rather than viewports, and
+  nothing in the control cares.
+
+  Numbers are illustrative, per the standing rule. Layout, order, labels and copy come from the
+  frames; every value comes from the generator.
+-->
+
+<link rel="stylesheet" href="../../src/ui.css">
+<style>
+  /* Page furniture for the mockup only — never plugin styling. `src/ui.css` styles `body` for the
+     plugin (`display: flex; height: 100vh`), which would lay these states out in a row and clip them. */
+  body { margin: 0; display: block; height: auto; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f7; }
+  .mock-frame { width: 960px; margin: 32px auto; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.12); overflow: hidden; }
+  .mock-caption { width: 960px; margin: 32px auto 8px; font-weight: 600; font-size: 13px; }
+  .mock-caption span { font-weight: 400; opacity: .6; }
+  .mock-tabs { display: flex; gap: 16px; padding: 10px 24px 0; border-bottom: 1px solid #e1e5e9; }
+  .mock-tab { padding-bottom: 10px; font-size: 12px; opacity: .55; }
+  .mock-tab.is-active { opacity: 1; font-weight: 600; border-bottom: 2px solid #1d1d1f; margin-bottom: -1px; }
+  .mock-body { padding: 0; }
+</style>
+</head>
+<body>
+
+<!-- ===================================================================== -->
+<div class="mock-caption">Spacing — Start <span>· 2023:336 · nothing selected yet</span></div>
+<div class="mock-frame">
+  <div class="mock-tabs">
+    <div class="mock-tab is-active">Configuration UI</div>
+    <div class="mock-tab">Configuration code</div>
+    <div class="mock-tab">Documentation</div>
+    <div class="mock-tab">Source code</div>
+  </div>
+  <div class="mock-body">
+    <div class="config-ui-form config-ui-form--rows">
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field config-ui-field--collection">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-collection config-ui-picker">
+                <select class="config-ui-input config-ui-input--select config-ui-collection-select">
+                  <option>Select target collection or create a new one</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- One placeholder chip, no dash, and the reason underneath. Same control as Grid's. -->
+      <div class="config-ui-row config-ui-row--field config-ui-row--chips">
+        <div class="config-ui-field config-ui-field--chips">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection modes</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-chips" data-placeholder="true">
+                <span class="config-ui-chip config-ui-chip--placeholder"><span class="config-ui-chip-label">Value</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="config-ui-field-note">Select or create Collection to edit the Collection modes.</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Group within collection</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg.: Spacing">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Tokens</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg.: none, px, xs, sm, md, lg, xl">
+            </div>
+          </div>
+          <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth">
+        <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field__row">
+            <div class="config-ui-field__control">
+              <div class="config-ui-rows">
+                <div class="config-ui-rows-tabs">
+                  <button class="config-ui-rows-tab is-active" type="button">Default</button>
+                </div>
+                <div class="config-ui-rows-body">
+                  <div class="config-ui-rows-item config-ui-rows-item--stacked">
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scale type</label>
+                        <div class="config-ui-field__control">
+                          <div class="config-ui-radio-group">
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-0" checked> Modular scale</label>
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-0"> Metric scale</label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scaling method</label>
+                        <div class="config-ui-field__control">
+                          <select class="config-ui-input config-ui-input--select"><option>Select scaling method</option></select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Base unit</label>
+                        <div class="config-ui-field__control">
+                          <input class="config-ui-input config-ui-input--number" placeholder="eg.: 4">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Round numbers to</label>
+                        <div class="config-ui-field__control">
+                          <input class="config-ui-input config-ui-input--number" placeholder="eg.: 2">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Extra spacings</label>
+                        <div class="config-ui-field__control">
+                          <input class="config-ui-input config-ui-input--text" placeholder="eg.: 0, 1,">
+                        </div>
+                      </div>
+                      <div class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
+      <div class="config-ui-row">
+        <!-- Grey until a collection is chosen, exactly as Grid's is: grey is about having somewhere to
+             write, not about whether the fields are filled. -->
+        <div class="spacing-preview is-unset">
+          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-bar" style="height:24px"></span><span class="spacing-preview-value">24</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-bar" style="height:48px"></span><span class="spacing-preview-value">48</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-bar" style="height:96px"></span><span class="spacing-preview-value">96</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================== -->
+<div class="mock-caption">Spacing — New collection <span>· 2039:2747 · modes are a density axis, not viewports</span></div>
+<div class="mock-frame">
+  <div class="mock-tabs">
+    <div class="mock-tab is-active">Configuration UI</div>
+    <div class="mock-tab">Configuration code</div>
+    <div class="mock-tab">Documentation</div>
+    <div class="mock-tab">Source code</div>
+  </div>
+  <div class="mock-body">
+    <div class="config-ui-form config-ui-form--rows">
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field config-ui-field--collection">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-collection config-ui-picker">
+                <select class="config-ui-input config-ui-input--select config-ui-collection-select">
+                  <option>New collection</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">New collection name</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" value="Spacing test">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The inline input replaces the `+` and sits where the chip will appear. -->
+      <div class="config-ui-row config-ui-row--field config-ui-row--chips">
+        <div class="config-ui-field config-ui-field--chips">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection modes</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-chips">
+                <span class="config-ui-chip"><span class="config-ui-chip-label">Tight</span><button class="config-ui-chip-remove" type="button">—</button></span>
+                <span class="config-ui-chip"><span class="config-ui-chip-label">Relaxed</span><button class="config-ui-chip-remove" type="button">—</button></span>
+                <input class="config-ui-input config-ui-input--text config-ui-chip-input" placeholder="Mode name">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Group within collection</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg.: Spacing">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Tokens</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg.: none, px, xs, sm, md, lg, xl">
+            </div>
+          </div>
+          <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth">
+        <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field__row">
+            <div class="config-ui-field__control">
+              <div class="config-ui-rows">
+                <!-- One tab per chip, in chip order. -->
+                <div class="config-ui-rows-tabs">
+                  <button class="config-ui-rows-tab is-active" type="button">Tight</button>
+                  <button class="config-ui-rows-tab" type="button">Relaxed</button>
+                </div>
+                <div class="config-ui-rows-body">
+                  <div class="config-ui-rows-item config-ui-rows-item--stacked">
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scale type</label>
+                        <div class="config-ui-field__control">
+                          <div class="config-ui-radio-group">
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-1" checked> Modular scale</label>
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-1"> Metric scale</label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scaling method</label>
+                        <div class="config-ui-field__control">
+                          <select class="config-ui-input config-ui-input--select"><option>Select scaling method</option></select>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Base unit</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 4"></div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Round numbers to</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 2"></div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Extra spacings</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--text" placeholder="eg.: 0, 1,"></div>
+                      </div>
+                      <div class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
+      <div class="config-ui-row">
+        <div class="spacing-preview is-unset">
+          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-bar" style="height:24px"></span><span class="spacing-preview-value">24</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-bar" style="height:48px"></span><span class="spacing-preview-value">48</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-bar" style="height:96px"></span><span class="spacing-preview-value">96</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================== -->
+<div class="mock-caption">Spacing — Editing existing <span>· 2010:5701 · loaded from the file</span></div>
+<div class="mock-frame">
+  <div class="mock-tabs">
+    <div class="mock-tab is-active">Configuration UI</div>
+    <div class="mock-tab">Configuration code</div>
+    <div class="mock-tab">Documentation</div>
+    <div class="mock-tab">Source code</div>
+  </div>
+  <div class="mock-body">
+    <div class="config-ui-form config-ui-form--rows">
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field config-ui-field--collection">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-collection config-ui-picker">
+                <select class="config-ui-input config-ui-input--select config-ui-collection-select">
+                  <option>Responsive Variables</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--chips">
+        <div class="config-ui-field config-ui-field--chips">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection modes</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-chips">
+                <span class="config-ui-chip"><span class="config-ui-chip-label">Desktop</span><button class="config-ui-chip-remove" type="button">—</button></span>
+                <span class="config-ui-chip"><span class="config-ui-chip-label">Tablet</span><button class="config-ui-chip-remove" type="button">—</button></span>
+                <span class="config-ui-chip"><span class="config-ui-chip-label">Mobile</span><button class="config-ui-chip-remove" type="button">—</button></span>
+                <button class="config-ui-chip-add" type="button">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Group within collection</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" value="Spacings">
+            </div>
+          </div>
+          <div class="config-ui-field-note">As this Collection and Group combination contains a Spacing set, it was imported automatically</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Tokens</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" value="none, px, 3xs, 2xs, xs, sm, md, lg, xl, 2xl, 3xl, 4xl, 5xl">
+            </div>
+          </div>
+          <div class="config-ui-field-note">Add as many token names as you like. It'll be ordered from left to right, smaller to larger. You can also use spacing-{1,10} to create a series of named variables (spacing-1, spacing-2, … spacing-10), and you can also mix it (spacing-none, spacing-px, spacing-{1,10})</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth">
+        <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field__row">
+            <div class="config-ui-field__control">
+              <div class="config-ui-rows">
+                <div class="config-ui-rows-tabs">
+                  <button class="config-ui-rows-tab is-active" type="button">Desktop</button>
+                  <button class="config-ui-rows-tab" type="button">Tablet</button>
+                  <button class="config-ui-rows-tab" type="button">Mobile</button>
+                </div>
+                <div class="config-ui-rows-body">
+                  <div class="config-ui-rows-item config-ui-rows-item--stacked">
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scale type</label>
+                        <div class="config-ui-field__control">
+                          <div class="config-ui-radio-group">
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-2" checked> Modular scale</label>
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="s-scale-2"> Metric scale</label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scaling method</label>
+                        <div class="config-ui-field__control">
+                          <select class="config-ui-input config-ui-input--select"><option>1.618 Golden ratio</option></select>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Base unit</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" value="4"></div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Round numbers to</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" value="2"></div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Extra spacings</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--text" value="0, 1, 2"></div>
+                      </div>
+                      <div class="config-ui-field-note">Add extra spacings that is missing from the generated scale. It might breaks the curve a bit, but can be useful sometime.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
+      <div class="config-ui-row">
+        <!-- A bar per token at its own value, the value beside it, and the rounding note where the
+             generator had to move a number. The note is the reason this preview exists: `md 20` is
+             fine until you learn it came from 20.7. -->
+        <div class="spacing-preview">
+          <div class="spacing-preview-row"><span class="spacing-preview-name">none</span><span class="spacing-preview-bar" style="height:0"></span><span class="spacing-preview-value">0</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">px</span><span class="spacing-preview-bar" style="height:1px"></span><span class="spacing-preview-value">1</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">3xs</span><span class="spacing-preview-bar" style="height:2px"></span><span class="spacing-preview-value">2</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">2xs</span><span class="spacing-preview-bar" style="height:4px"></span><span class="spacing-preview-value">4</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xs</span><span class="spacing-preview-bar" style="height:8px"></span><span class="spacing-preview-value">8</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">sm</span><span class="spacing-preview-bar" style="height:12px"></span><span class="spacing-preview-value">12</span><span class="spacing-preview-note">Rounded from 10.9</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">md</span><span class="spacing-preview-bar" style="height:20px"></span><span class="spacing-preview-value">20</span><span class="spacing-preview-note">Rounded from 20.7</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">lg</span><span class="spacing-preview-bar" style="height:32px"></span><span class="spacing-preview-value">32</span><span class="spacing-preview-note">Rounded from 31.9</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">xl</span><span class="spacing-preview-bar" style="height:52px"></span><span class="spacing-preview-value">52</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">2xl</span><span class="spacing-preview-bar" style="height:84px"></span><span class="spacing-preview-value">84</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">3xl</span><span class="spacing-preview-bar" style="height:136px"></span><span class="spacing-preview-value">136</span><span class="spacing-preview-note">Rounded from 135.2</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">4xl</span><span class="spacing-preview-bar" style="height:220px"></span><span class="spacing-preview-value">220</span></div>
+          <div class="spacing-preview-row"><span class="spacing-preview-name">5xl</span><span class="spacing-preview-bar" style="height:356px"></span><span class="spacing-preview-value">356</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

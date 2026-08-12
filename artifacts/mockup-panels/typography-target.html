@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Typography panel — target layout</title>
+
+<!--
+  THE TARGET, not a style reference. Same rules as grid-target.html and spacing-target.html.
+
+  Hand-written to Márton's Figma frames — 2032:2709 (Start) and 2031:8752 (Editing existing) —
+  using the plugin's own class names and the plugin's own stylesheet, linked rather than copied.
+
+  **Two states, not three.** The New collection frame (2039:3078) has not been read, and its content
+  is entirely the shared controls in their create state — the collection picker with a name field, and
+  the chips with an inline input, both of which Spacing's mockup already shows. Inventing it here would
+  put a guess in a file whose whole purpose is to be the fixed goal.
+
+  What the frames settle:
+
+  **The skeleton is Grid's, with one addition.** General → Mode settings → **Overview** → Preview. The
+  Overview table is the "optional overview" the sequencing plan named, and Typography is what makes it
+  real.
+
+  **The chips are locked here, and that is the point.** The Editing frame's chips carry no dash and the
+  note reads *"Collection modes locked by the Collection. Edit Grid values to change them"* — this
+  collection's modes belong to the Grid set, and Typography is a tenant. That is the rule from plan 15
+  seen from the other side: a collection has one mode axis, and whoever established it owns it.
+
+  **A ramp is a group.** `Typography/Heading` is the Group field, so there is no ramp × viewport
+  cross-product and no second tab strip — the correction that unblocked sharing the controls at all.
+
+  Numbers and copy: layout, order, labels and helper text come from the frames; every value is
+  illustrative. The header in 2031:8752 reads "Grid", which is a copy-paste artefact in the frame — the
+  sidebar selection and content are Typography.
+-->
+
+<link rel="stylesheet" href="../../src/ui.css">
+<style>
+  /* Page furniture for the mockup only — never plugin styling. */
+  body { margin: 0; display: block; height: auto; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f7; }
+  .mock-frame { width: 960px; margin: 32px auto; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.12); overflow: hidden; }
+  .mock-caption { width: 960px; margin: 32px auto 8px; font-weight: 600; font-size: 13px; }
+  .mock-caption span { font-weight: 400; opacity: .6; }
+  .mock-tabs { display: flex; gap: 16px; padding: 10px 24px 0; border-bottom: 1px solid #e1e5e9; }
+  .mock-tab { padding-bottom: 10px; font-size: 12px; opacity: .55; }
+  .mock-tab.is-active { opacity: 1; font-weight: 600; border-bottom: 2px solid #1d1d1f; margin-bottom: -1px; }
+  .mock-body { padding: 0; }
+</style>
+</head>
+<body>
+
+<!-- ===================================================================== -->
+<div class="mock-caption">Typography — Start <span>· 2032:2709 · nothing selected yet</span></div>
+<div class="mock-frame">
+  <div class="mock-tabs">
+    <div class="mock-tab is-active">Configuration UI</div>
+    <div class="mock-tab">Configuration code</div>
+    <div class="mock-tab">Documentation</div>
+    <div class="mock-tab">Source code</div>
+  </div>
+  <div class="mock-body">
+    <div class="config-ui-form config-ui-form--rows">
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field config-ui-field--collection">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-collection config-ui-picker">
+                <select class="config-ui-input config-ui-input--select config-ui-collection-select">
+                  <option>Select target collection or create a new one</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--chips">
+        <div class="config-ui-field config-ui-field--chips">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection modes</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-chips" data-placeholder="true">
+                <span class="config-ui-chip config-ui-chip--placeholder"><span class="config-ui-chip-label">Value</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="config-ui-field-note">Select or create Collection to edit the Collection modes.</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Group within collection</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg. Typography">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Tokens</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg. sm, md, lg, xl">
+            </div>
+          </div>
+          <div class="config-ui-field-note">Add as many viewport modes as you like. CodeFig will add the</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Font family</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg. Inter Tight">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Font weights</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg. 400, Semi Bold">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth">
+        <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field__row">
+            <div class="config-ui-field__control">
+              <div class="config-ui-rows">
+                <div class="config-ui-rows-tabs">
+                  <button class="config-ui-rows-tab is-active" type="button">Default</button>
+                </div>
+                <div class="config-ui-rows-body">
+                  <div class="config-ui-rows-item config-ui-rows-item--stacked">
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scale type</label>
+                        <div class="config-ui-field__control">
+                          <div class="config-ui-radio-group">
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="t-scale-0" checked> Modular scale</label>
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="t-scale-0"> Metric scale</label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scaling method</label>
+                        <div class="config-ui-field__control">
+                          <select class="config-ui-input config-ui-input--select"><option>Select scaling method</option></select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Base unit</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 16"></div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Letter spacing</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: -0.25"></div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Line height</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 20"></div>
+                      </div>
+                    </div>
+
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Round numbers to</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 2"></div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No Overview and no Preview in the Start state, the way Grid has no suggestions there:
+           nothing to tabulate and nothing to set type in. -->
+
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================== -->
+<div class="mock-caption">Typography — Editing existing <span>· 2031:8752 · a ramp is a group: Typography/Heading</span></div>
+<div class="mock-frame">
+  <div class="mock-tabs">
+    <div class="mock-tab is-active">Configuration UI</div>
+    <div class="mock-tab">Configuration code</div>
+    <div class="mock-tab">Documentation</div>
+    <div class="mock-tab">Source code</div>
+  </div>
+  <div class="mock-body">
+    <div class="config-ui-form config-ui-form--rows">
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field config-ui-field--collection">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-collection config-ui-picker">
+                <select class="config-ui-input config-ui-input--select config-ui-collection-select">
+                  <option>Responsive Variables</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Locked: no dash, no plus. This collection's modes belong to the Grid set, and the note says
+           where to change them. A tenant does not get to edit the axis. -->
+      <div class="config-ui-row config-ui-row--field config-ui-row--chips">
+        <div class="config-ui-field config-ui-field--chips">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection modes</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-chips">
+                <span class="config-ui-chip"><span class="config-ui-chip-label">Desktop</span></span>
+                <span class="config-ui-chip"><span class="config-ui-chip-label">Tablet</span></span>
+                <span class="config-ui-chip"><span class="config-ui-chip-label">Mobile</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="config-ui-field-note">Collection modes locked by the Collection. Edit Grid values to change them</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Group within collection</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" value="Typography/Heading">
+            </div>
+          </div>
+          <div class="config-ui-field-note">As this Collection and Group combination contains a Typography set, it was imported automatically</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Tokens</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" value="heading-{1,6}">
+            </div>
+          </div>
+          <div class="config-ui-field-note">Add as many viewport modes as you like. CodeFig will add the</div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Font family</label>
+            <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--text" value="Inter Tight"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Font weights</label>
+            <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--text" value="400, 600"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth">
+        <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field__row">
+            <div class="config-ui-field__control">
+              <div class="config-ui-rows">
+                <div class="config-ui-rows-tabs">
+                  <button class="config-ui-rows-tab is-active" type="button">Desktop</button>
+                  <button class="config-ui-rows-tab" type="button">Tablet</button>
+                  <button class="config-ui-rows-tab" type="button">Mobile</button>
+                </div>
+                <div class="config-ui-rows-body">
+                  <div class="config-ui-rows-item config-ui-rows-item--stacked">
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scale type</label>
+                        <div class="config-ui-field__control">
+                          <div class="config-ui-radio-group">
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="t-scale-1" checked> Modular scale</label>
+                            <label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="t-scale-1"> Metric scale</label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Scaling method</label>
+                        <div class="config-ui-field__control">
+                          <select class="config-ui-input config-ui-input--select"><option>1.2 Minor third</option></select>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Base unit</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" value="26"></div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Letter spacing</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" value="-0.25"></div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Line height</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" value="30"></div>
+                      </div>
+                    </div>
+                    <div class="config-ui-field">
+                      <div class="config-ui-field__row">
+                        <label class="config-ui-field__label">Round numbers to</label>
+                        <div class="config-ui-field__control"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 2"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The Overview table: what the run will write, one row per step, with the variable path. It is
+           the only place the *names* of the variables appear, which is what makes it worth having
+           beside a preview that shows their effect. -->
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Overview</h1></div>
+      <div class="config-ui-row">
+        <table class="type-overview">
+          <thead>
+            <tr><th>Step</th><th>Size</th><th>Line height</th><th>Ratio</th><th>Tracking</th><th>Variable</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Heading 1</td><td>26</td><td>86</td><td>1.10</td><td>-1.9%</td><td>Typography/Heading/Heading-1</td></tr>
+            <tr><td>Heading 2</td><td>32</td><td>70</td><td>1.13</td><td>-1.7%</td><td>Typography/Heading/Heading-2</td></tr>
+            <tr><td>Heading 3</td><td>40</td><td>58</td><td>1.16</td><td>-1.4%</td><td>Typography/Heading/Heading-3</td></tr>
+            <tr><td>Heading 4</td><td>50</td><td>48</td><td>1.20</td><td>-1.1%</td><td>Typography/Heading/Heading-4</td></tr>
+            <tr><td>Heading 5</td><td>62</td><td>40</td><td>1.25</td><td>-0.5%</td><td>Typography/Heading/Heading-5</td></tr>
+            <tr><td>Heading 6</td><td>78</td><td>34</td><td>1.31</td><td>0%</td><td>Typography/Heading/Heading-6</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Preview text</label>
+            <div class="config-ui-field__control">
+              <textarea class="config-ui-input config-ui-textarea" rows="2">Sphinx of black quartz,
+judge my vow.</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The specimen. Metadata on the left at caption size, the sample set at the real size on the
+           right, largest last — so the page reads as a scale rather than as a list. Overflowing the
+           panel is expected at the top of a heading ramp and is why this scrolls rather than wraps. -->
+      <div class="config-ui-row">
+        <div class="type-specimen">
+          <div class="type-specimen-family">Inter Tight</div>
+          <div class="type-specimen-note">Font-weight: 400</div>
+
+          <div class="type-specimen-step">
+            <div class="type-specimen-meta">Heading-6<br>Font-weight: 600<br>Font size: 26<br>Line height: 86<br>Letter spacing: 1.9%</div>
+            <div class="type-specimen-sample" style="font-size:26px;line-height:1.1;letter-spacing:-0.019em">Sphinx of black quartz,<br>judge my vow.</div>
+          </div>
+          <div class="type-specimen-step">
+            <div class="type-specimen-meta">Heading-5<br>Font-weight: 600<br>Font size: 32<br>Line height: 70<br>Letter spacing: 1.7%</div>
+            <div class="type-specimen-sample" style="font-size:32px;line-height:1.13;letter-spacing:-0.017em">Sphinx of black quartz,<br>judge my vow.</div>
+          </div>
+          <div class="type-specimen-step">
+            <div class="type-specimen-meta">Heading-4<br>Font-weight: 600<br>Font size: 40<br>Line height: 58<br>Letter spacing: 1.4%</div>
+            <div class="type-specimen-sample" style="font-size:40px;line-height:1.16;letter-spacing:-0.014em">Sphinx of black quartz,<br>judge my vow.</div>
+          </div>
+          <div class="type-specimen-step">
+            <div class="type-specimen-meta">Heading-3<br>Font-weight: 600<br>Font size: 50<br>Line height: 48<br>Letter spacing: 1.1%</div>
+            <div class="type-specimen-sample" style="font-size:50px;line-height:1.2;letter-spacing:-0.011em">Sphinx of black quartz,<br>judge my vow.</div>
+          </div>
+          <div class="type-specimen-step">
+            <div class="type-specimen-meta">Heading-2<br>Font-weight: 600<br>Font size: 62<br>Line height: 40<br>Letter spacing: 0.5%</div>
+            <div class="type-specimen-sample" style="font-size:62px;line-height:1.25;letter-spacing:-0.005em">Sphinx of black quartz,<br>judge my vow.</div>
+          </div>
+          <div class="type-specimen-step">
+            <div class="type-specimen-meta">Heading-1<br>Font-weight: 600<br>Font size: 78<br>Line height: 34<br>Letter spacing: 0%</div>
+            <div class="type-specimen-sample" style="font-size:78px;line-height:1.31">Sphinx of black quartz,<br>judge my vow.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -2343,6 +2343,125 @@
       }
 
       /* ============================================================
+         SPACING PREVIEW  (@Foundation → spacingPreviewHtml)
+
+         A row per token: the name, a bar whose **height** is the value, the value, and the note where
+         the generator had to move a number. Height rather than width because that is what the frames
+         draw — and it is the better choice: a spacing scale is read as a rhythm down the page, and a
+         row of equal-width bars makes the steps between them the thing you see.
+         ============================================================ */
+      .spacing-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 100%;
+      }
+
+      .spacing-preview.is-unset .spacing-preview-bar {
+        background: var(--border-color);
+      }
+
+      .spacing-preview-row {
+        display: grid;
+        grid-template-columns: 72px 140px 56px 1fr;
+        align-items: center;
+        column-gap: var(--space-md);
+        min-height: 18px;
+      }
+
+      .spacing-preview-name {
+        font-size: var(--font-size-body);
+        font-weight: var(--font-weight-semibold);
+      }
+
+      /* `min-height: 1px` so a token worth 0 still occupies its row rather than collapsing it: the
+         absence of a bar is the honest drawing of zero, and a missing row is not. */
+      .spacing-preview-bar {
+        width: 140px;
+        min-height: 1px;
+        background: #17976a;
+        align-self: start;
+      }
+
+      .spacing-preview-value {
+        font-size: var(--font-size-body);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .spacing-preview-note {
+        font-size: var(--font-size-helper);
+        opacity: 0.6;
+      }
+
+      /* ============================================================
+         TYPOGRAPHY OVERVIEW AND SPECIMEN  (plan 20)
+
+         The table is the only place a run's variable *names* appear, which is what earns it a section
+         of its own beside a preview that shows their effect.
+         ============================================================ */
+      .type-overview {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--font-size-body);
+      }
+
+      .type-overview th {
+        text-align: left;
+        font-weight: var(--font-weight-normal);
+        color: var(--text-secondary);
+        font-size: var(--font-size-helper);
+        padding: 0 var(--space-md) 6px 0;
+      }
+
+      .type-overview td {
+        padding: 6px var(--space-md) 6px 0;
+        border-top: 1px solid var(--border-light);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .type-overview td:last-child {
+        font-size: var(--font-size-helper);
+        opacity: 0.7;
+        font-variant-numeric: normal;
+      }
+
+      .type-specimen {
+        width: 100%;
+        /* A heading ramp's top step is wider than the panel by design. Scrolling keeps the sample at
+           its real size, which is the only reason to draw it at all. */
+        overflow-x: auto;
+      }
+
+      .type-specimen-family {
+        font-size: var(--font-size-subheadline);
+        font-weight: var(--font-weight-semibold);
+      }
+
+      .type-specimen-note {
+        font-size: var(--font-size-helper);
+        opacity: 0.6;
+        margin-bottom: var(--space-lg);
+      }
+
+      .type-specimen-step {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        column-gap: var(--space-xl);
+        align-items: start;
+        margin-bottom: var(--space-xl);
+      }
+
+      .type-specimen-meta {
+        font-size: var(--font-size-helper);
+        line-height: 1.6;
+        opacity: 0.6;
+      }
+
+      .type-specimen-sample {
+        white-space: nowrap;
+      }
+
+      /* ============================================================
          NOT WIRED YET
 
          A section whose layout exists and whose behaviour does not. Dimmed so the panel says how far

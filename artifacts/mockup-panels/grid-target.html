@@ -59,14 +59,14 @@
   <div class="mock-body">
     <div class="config-ui-form config-ui-form--rows">
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">General</h2></div>
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
 
       <div class="config-ui-row config-ui-row--field">
         <div class="config-ui-field config-ui-field--collection">
           <div class="config-ui-field__row">
             <label class="config-ui-field__label">Collection</label>
             <div class="config-ui-field__control">
-              <div class="config-ui-collection">
+              <div class="config-ui-collection config-ui-picker">
                 <select class="config-ui-input config-ui-input--select config-ui-collection-select">
                   <option>Select target collection or create a new one</option>
                 </select>
@@ -110,7 +110,7 @@
 
       <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Mode settings</h2></div>
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
 
       <!-- The global band: values that apply to every mode, above the tab bar. -->
       <div class="config-ui-row config-ui-row--field">
@@ -139,7 +139,7 @@
 
       <div class="config-ui-row config-ui-row--field">
         <div class="config-ui-field config-ui-field--rows">
-          <div class="config-ui-rows config-ui-rows--tabs">
+          <div class="config-ui-rows config-ui-rows-tabs">
             <div class="config-ui-rows-tabs">
               <button class="config-ui-rows-tab is-active" type="button">Value</button>
             </div>
@@ -167,37 +167,75 @@
         </div>
       </div>
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Preview</h2></div>
+      <!-- Suggestions: loaded state only, and **above the Preview** — Márton's revision, so the
+           numbers you are choosing between sit next to the numbers you have.
+
+           No badges. They said which *other* viewports a pair would also divide cleanly, which
+           answered a question nobody had asked and outranked the pair actually in the fields; a card
+           now speaks for the mode on screen and nothing else. Without a right-hand column of tags
+           there is no reason for a card to be a full-width row, hence 3x2. -->
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Suggested whole number divisions</h1></div>
+      <div class="config-ui-row config-ui-row--field">
+        <div class="grid-suggestions">
+          <button class="grid-suggestion is-selected" type="button">
+            <span class="grid-suggestion-title">margin 80 · gap 24</span>
+            <span class="grid-suggestion-spans">col-1 84 · col-6 624 · col-12 1280</span>
+          </button>
+          <button class="grid-suggestion" type="button">
+            <span class="grid-suggestion-title">margin 79 · gap 26</span>
+            <span class="grid-suggestion-spans">col-1 83 · col-6 628 · col-12 1282</span>
+          </button>
+          <button class="grid-suggestion" type="button">
+            <span class="grid-suggestion-title">margin 80 · gap 28</span>
+            <span class="grid-suggestion-spans">col-1 81 · col-6 626 · col-12 1280</span>
+          </button>
+          <button class="grid-suggestion" type="button">
+            <span class="grid-suggestion-title">margin 84 · gap 24</span>
+            <span class="grid-suggestion-spans">col-1 84 · col-6 624 · col-12 1272</span>
+          </button>
+          <button class="grid-suggestion" type="button">
+            <span class="grid-suggestion-title">margin 84 · gap 22</span>
+            <span class="grid-suggestion-spans">col-1 86 · col-6 626 · col-12 1272</span>
+          </button>
+          <button class="grid-suggestion" type="button">
+            <span class="grid-suggestion-title">margin 88 · gap 24</span>
+            <span class="grid-suggestion-spans">col-1 83 · col-6 618 · col-12 1264</span>
+          </button>
+        </div>
+        <p class="grid-suggestions-more">Showing 6 of 205 whole-number combinations, closest to your values first.</p>
+      </div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
       <div class="config-ui-row config-ui-row--field">
         <!-- Grey until a collection has been chosen: the Start and New frames show it grey even with
              modes set, so grey is about whether there is a target, not whether fields are filled. -->
         <div class="grid-preview is-unset">
           <div class="grid-preview-diagram">
-            <div class="grid-preview-margin" style="width:5.5556%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-margin" style="width:5.5556%"></div>
+            <div class="grid-preview-margin" style="width:40px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-margin" style="width:40px"></div>
           </div>
           <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
           <div class="grid-preview-guides" style="margin-left:5.5556%;margin-right:5.5556%"></div>
@@ -223,7 +261,7 @@
           <div class="grid-preview-value">col-10: <b>1062.7</b></div>
           <div class="grid-preview-bar" style="margin-left:5.5556%;width:81.3426%"></div>
           <div class="grid-preview-value">col-11: <b>1171.3</b></div>
-          <div class="grid-preview-bar" style="margin-left:5.5556%;width:88.8889%"></div>
+          <div class="grid-preview-bar" style="margin-left:40px;width:640px"></div>
           <div class="grid-preview-value">col-12: <b>1280</b></div>
         </div>
       </div>
@@ -245,14 +283,14 @@
   <div class="mock-body">
     <div class="config-ui-form config-ui-form--rows">
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">General</h2></div>
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
 
       <div class="config-ui-row config-ui-row--field">
         <div class="config-ui-field config-ui-field--collection">
           <div class="config-ui-field__row">
             <label class="config-ui-field__label">Collection</label>
             <div class="config-ui-field__control">
-              <div class="config-ui-collection">
+              <div class="config-ui-collection config-ui-picker">
                 <select class="config-ui-input config-ui-input--select config-ui-collection-select">
                   <option>New collection</option>
                 </select>
@@ -296,7 +334,7 @@
 
       <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Mode settings</h2></div>
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
 
       <div class="config-ui-row config-ui-row--field">
         <div class="config-ui-field config-ui-field--number">
@@ -324,7 +362,7 @@
 
       <div class="config-ui-row config-ui-row--field">
         <div class="config-ui-field config-ui-field--rows">
-          <div class="config-ui-rows config-ui-rows--tabs">
+          <div class="config-ui-rows config-ui-rows-tabs">
             <div class="config-ui-rows-tabs">
               <button class="config-ui-rows-tab is-active" type="button">Desktop grid 1</button>
               <button class="config-ui-rows-tab" type="button">Desktop grid 2</button>
@@ -353,35 +391,35 @@
         </div>
       </div>
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Preview</h2></div>
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
       <div class="config-ui-row config-ui-row--field">
         <div class="grid-preview is-unset">
           <div class="grid-preview-diagram">
-            <div class="grid-preview-margin" style="width:5.5556%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-margin" style="width:5.5556%"></div>
+            <div class="grid-preview-margin" style="width:40px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-margin" style="width:40px"></div>
           </div>
           <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
           <div class="grid-preview-guides" style="margin-left:5.5556%;margin-right:5.5556%"></div>
@@ -407,7 +445,7 @@
           <div class="grid-preview-value">col-10: <b>1062.7</b></div>
           <div class="grid-preview-bar" style="margin-left:5.5556%;width:81.3426%"></div>
           <div class="grid-preview-value">col-11: <b>1171.3</b></div>
-          <div class="grid-preview-bar" style="margin-left:5.5556%;width:88.8889%"></div>
+          <div class="grid-preview-bar" style="margin-left:40px;width:640px"></div>
           <div class="grid-preview-value">col-12: <b>1280</b></div>
         </div>
       </div>
@@ -428,14 +466,14 @@
   <div class="mock-body">
     <div class="config-ui-form config-ui-form--rows">
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">General</h2></div>
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
 
       <div class="config-ui-row config-ui-row--field">
         <div class="config-ui-field config-ui-field--collection">
           <div class="config-ui-field__row">
             <label class="config-ui-field__label">Collection</label>
             <div class="config-ui-field__control">
-              <div class="config-ui-collection">
+              <div class="config-ui-collection config-ui-picker">
                 <select class="config-ui-input config-ui-input--select config-ui-collection-select">
                   <option>Responsive Variables</option>
                 </select>
@@ -475,7 +513,7 @@
 
       <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Mode settings</h2></div>
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
 
       <div class="config-ui-row config-ui-row--field">
         <div class="config-ui-field config-ui-field--number">
@@ -503,7 +541,7 @@
 
       <div class="config-ui-row config-ui-row--field">
         <div class="config-ui-field config-ui-field--rows">
-          <div class="config-ui-rows config-ui-rows--tabs">
+          <div class="config-ui-rows config-ui-rows-tabs">
             <div class="config-ui-rows-tabs">
               <button class="config-ui-rows-tab is-active" type="button">Desktop</button>
               <button class="config-ui-rows-tab" type="button">Tablet</button>
@@ -533,35 +571,35 @@
         </div>
       </div>
 
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Preview</h2></div>
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
       <div class="config-ui-row config-ui-row--field">
         <div class="grid-preview">
           <div class="grid-preview-diagram">
-            <div class="grid-preview-margin" style="width:5.5556%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-gap" style="width:1.6667%"></div>
-            <div class="grid-preview-col" style="width:5.8796%"></div>
-            <div class="grid-preview-margin" style="width:5.5556%"></div>
+            <div class="grid-preview-margin" style="width:40px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-gap" style="width:12px"></div>
+            <div class="grid-preview-col" style="width:42.33px"></div>
+            <div class="grid-preview-margin" style="width:40px"></div>
           </div>
           <div class="grid-preview-total">Total: <b>1440</b> (50%)</div>
           <div class="grid-preview-guides" style="margin-left:5.5556%;margin-right:5.5556%"></div>
@@ -587,58 +625,8 @@
           <div class="grid-preview-value">col-10: <b>1062.7</b></div>
           <div class="grid-preview-bar" style="margin-left:5.5556%;width:81.3426%"></div>
           <div class="grid-preview-value">col-11: <b>1171.3</b></div>
-          <div class="grid-preview-bar" style="margin-left:5.5556%;width:88.8889%"></div>
+          <div class="grid-preview-bar" style="margin-left:40px;width:640px"></div>
           <div class="grid-preview-value">col-12: <b>1280</b></div>
-        </div>
-      </div>
-
-      <!-- Suggestions: loaded state only. -->
-      <div class="config-ui-row config-ui-row--heading"><h2 class="config-ui-heading">Suggested whole number divisions</h2></div>
-      <div class="config-ui-row config-ui-row--field">
-        <div class="grid-suggestions">
-          <button class="grid-suggestion is-selected" type="button">
-            <span class="grid-suggestion-main">
-              <span class="grid-suggestion-title">margin 80 · gap 24</span>
-              <span class="grid-suggestion-spans">col-1 84 · col-6 624 · col-12 1280</span>
-            </span>
-            <span class="grid-suggestion-badges">
-              Whole numbers:
-              <span class="grid-suggestion-badge">Desktop</span>
-              <span class="grid-suggestion-badge">Tablet</span>
-              <span class="grid-suggestion-badge">Mobile</span>
-            </span>
-          </button>
-          <button class="grid-suggestion" type="button">
-            <span class="grid-suggestion-main">
-              <span class="grid-suggestion-title">margin 79 · gap 26</span>
-              <span class="grid-suggestion-spans">col-1 84 · col-6 624 · col-12 1280</span>
-            </span>
-            <span class="grid-suggestion-badges">
-              Whole numbers:
-              <span class="grid-suggestion-badge">Desktop</span>
-              <span class="grid-suggestion-badge">Tablet</span>
-            </span>
-          </button>
-          <button class="grid-suggestion" type="button">
-            <span class="grid-suggestion-main">
-              <span class="grid-suggestion-title">margin 80 · gap 28</span>
-              <span class="grid-suggestion-spans">col-1 84 · col-6 624 · col-12 1280</span>
-            </span>
-            <span class="grid-suggestion-badges">
-              Whole numbers:
-              <span class="grid-suggestion-badge">Desktop</span>
-            </span>
-          </button>
-          <button class="grid-suggestion" type="button">
-            <span class="grid-suggestion-main">
-              <span class="grid-suggestion-title">margin 84 · gap 24</span>
-              <span class="grid-suggestion-spans">col-1 84 · col-6 624 · col-12 1280</span>
-            </span>
-            <span class="grid-suggestion-badges">
-              Whole numbers:
-              <span class="grid-suggestion-badge">Desktop</span>
-            </span>
-          </button>
         </div>
       </div>
 
