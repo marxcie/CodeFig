@@ -200,7 +200,7 @@ test('the preview follows the mode the panel is showing', () => {
   const desktop = T.typographyPreviewHtml({ config: T.data }, 'typography', 'desktop');
   const mobile = T.typographyPreviewHtml({ config: T.data }, 'typography', 'mobile');
   assert.notEqual(desktop, mobile);
-  assert.match(mobile, /font-size:28px/, 'mobile tops out at 28');
+  assert.match(mobile, /font-size:23px/, 'mobile tops out at 23');
   assert.match(desktop, /font-size:60px/, 'desktop at 60');
 
   // An unknown mode name falls back to the first rather than rendering nothing — a blank preview reads

@@ -181,6 +181,26 @@ test('a select over numbers reads back a number, not "1.25"', () => {
   assert.doesNotMatch(text, /ratio: "1\.25"/);
 });
 
+test('a value the dropdown does not offer joins the list rather than being replaced', () => {
+  // Found in the plugin: a mode written `ratio: 1.15` displayed *1.067*, because a `<select>` always
+  // shows something and the first option is what "something" was. The next edit to that mode would have
+  // collected 1.067 and written it back — the config rewritten to a number nobody chose.
+  //
+  // Adding the value also makes a custom ratio first-class, which it is: every type-scale tool offers the
+  // named ratios *and* a custom one.
+  const block = [
+    'modes: [',
+    '  { name: "Desktop", scaleType: "modular", ratio: 1.15, step: 4 },',
+    '], // ' + SPEC,
+  ].join('\n');
+  const { items, values } = render(block);
+  const select = items[0].querySelector('[data-row-field="ratio"]');
+  const offered = select.querySelectorAll('option').map((o) => o.value);
+  assert.deepEqual(offered, ['1.15', '1.2', '1.25'], 'its own value first, then the list');
+  assert.equal(select.value, '1.15');
+  assert.equal(values().modes[0].ratio, 1.15, 'and it reads back as itself, as a number');
+});
+
 test('a hidden cell writes nothing, and keeps what the config had', () => {
   // Found in the plugin, not here: `readForm` reported `ratio: "1.067"` for all three metric modes,
   // because a `<select>` always shows *something* and the collector read every rendered cell. So the

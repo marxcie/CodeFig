@@ -1357,7 +1357,21 @@
       var sel = document.createElement("select");
       sel.className = "config-ui-input config-ui-input--select";
       sel.setAttribute("data-row-field", column.key);
-      (column.options || []).forEach(function (opt) {
+      var choices = (column.options || []).slice();
+      // **A value the list does not offer is added to the list, not replaced by the first entry.**
+      // A `<select>` always shows something, so an unlisted value showed the first option *and* would be
+      // collected as it on the next edit — the config quietly rewritten to a number nobody chose. Found
+      // in the plugin: a mode written with `ratio: 1.15` displayed 1.067.
+      // Adding it also makes a custom value a first-class thing, which it is: every type-scale tool
+      // offers the eight named ratios *and* a custom one.
+      var listed = false;
+      choices.forEach(function (opt) {
+        if (String(value) === p.columnOptionValue(opt)) listed = true;
+      });
+      if (!listed && value !== undefined && value !== null && String(value) !== "") {
+        choices.unshift({ value: String(value), label: String(value) });
+      }
+      choices.forEach(function (opt) {
         var o = document.createElement("option");
         o.value = p.columnOptionValue(opt);
         o.textContent = p.columnOptionLabel(opt);

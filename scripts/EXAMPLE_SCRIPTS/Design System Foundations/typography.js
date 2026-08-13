@@ -275,12 +275,12 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
     {
       name: "mobile",
       scaleType: "modular",
-      ratio: 1.15,
+      ratio: 1.125,
       base: 8,
       letterSpacing: 0,
-      letterSpacingAtTop: -0.55,
+      letterSpacingAtTop: -0.46,
       lineHeight: 12,
-      lineHeightAtTop: 31,
+      lineHeightAtTop: 25,
       roundTo: 1
     }
   ], // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.067:1.067 Minor second|1.125:1.125 Major second|1.2:1.2 Minor third|1.25:1.25 Major third|1.333:1.333 Perfect fourth|1.414:1.414 Augmented fourth|1.5:1.5 Perfect fifth|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|base:number=Base unit|letterSpacing:number=Letter spacing|letterSpacingAtTop:number=Letter spacing (largest)|lineHeight:number=Line height|lineHeightAtTop:number=Line height (largest)|roundTo:number=Round numbers to @tabs @label: Modes

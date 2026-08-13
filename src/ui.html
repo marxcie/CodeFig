@@ -4830,7 +4830,13 @@
                 };
               }),
               note: (suggestSlot.querySelector('.grid-suggestions-more') ||
-                suggestSlot.querySelector('.grid-suggestions-empty') || {}).textContent || null
+                suggestSlot.querySelector('.grid-suggestions-empty') || {}).textContent || null,
+              // **The slot is the second computed section, not "the cards".** Grid fills it with clickable
+              // suggestions; Typography fills it with its Overview table. Reading only cards reported
+              // `visible: true, cards: []` for a section holding ten rows of numbers — which reads exactly
+              // like a section that computed nothing. Same gap as the one the comment above describes,
+              // one section along.
+              text: suggestSlot.innerText || ''
             } : null;
 
             var slot = document.querySelector('[data-preview-slot]');
