@@ -118,6 +118,29 @@ deleting variable modes they did not recognise.
   requested by writing them rather than by a setting: it counts **down** as readily as up, so
   `heading-{6,1}` names a heading ramp smallest-to-largest, and a written leading zero is a width, so
   `{01,10}` gives `spacing-01 … spacing-10` — which sorts the way it reads in Figma's variables list.
+- **Typography has its panel.** The same skeleton as Grid and Spacing — General, a tab per mode, then
+  two sections of its own: an **Overview** table listing every step with its size, line height, ratio,
+  tracking and the variable a run will write, and a **specimen** setting your own preview copy at the
+  real sizes, largest last. Each mode carries its own scale (Modular, Metric or Fibonacci) and its own
+  rounding, and **Base unit is the size of the first token**, so tokens read smallest to largest and
+  nothing has to say where the base sits.
+
+  **Line height and letter spacing take two numbers each** — the value at the smallest step and,
+  optionally, the value at the largest. Both are in px, and what runs between them is the *relative*
+  quantity: line height as a ratio, tracking as a share of the size. That is what makes absolute line
+  height rise while its ratio falls, and tracking tighten as type grows, which is the interaction the
+  type-scale tools chart and none of them computes. **Fill in only the first and nothing changes from
+  before**: line height keeps the base ratio and tracking stays flat.
+
+  Two smaller things came with it: font weights are a list where a number is a weight and a word is a
+  Figma font style name (`400, Semi Bold`), and text styles have their own two fields — whether to create
+  them, and their naming — instead of being edited as an object in the code tab.
+
+  **Configs written before this keep working and generate exactly what they generated**, pinned by a
+  test: per-mode `minFont`/`baseFont`/`maxFont` with a top-level curve and easing still run, they simply
+  have no controls. The default block's token *names* are unchanged, so a run updates the variables you
+  already have — but its numbers are new, because a per-mode ratio has no min, max or easing with which
+  to reproduce a sine ramp from 8 to 200.
 - **Scale type is a set of radio buttons, and every ratio says what it is.** *Modular scale / Metric
   scale / Fibonacci* are visible at once instead of hidden in a dropdown, and the Scaling method list
   reads *1.25 Major third*, *1.618 Golden ratio* rather than bare numbers. The dropdown is now as wide as

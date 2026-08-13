@@ -336,6 +336,28 @@ speculation** — it waits for the trace.
 
 ---
 
+## Typography records no manifest, so its panel can never load from the file
+
+**Found** building the Typography panel (Aug 2026). Its config block declares
+`// @fromFile: domains.typography`, and the panel's auto-import therefore offers to fill itself from the
+file — but nothing ever *writes* a typography manifest. Grid and Spacing both do (Spacing through
+`runLinearRamp`, Grid in its own run), so their panels answer `recorded`; Typography answers `none`,
+every time, in every file.
+
+**What it looks like:** not a failure. The panel simply says nothing was found, which is
+indistinguishable from a file that genuinely has no typography set. Someone who has run the script
+twenty times still gets "nothing recorded".
+
+**What fixing it involves:** a `typographyManifestSlice(config)` beside `rampManifestSlice`, and a
+`writeManifest` call at the end of `createOrUpdateCollection`. The slice keys are already declared —
+`createStyles`, `styleNaming`, `overviewPreviewText` and `fontFamily` are in `foundationSliceKeys`, and
+`normaliseDomainSlice` passes per-mode payloads through untouched, so the new `scaleType`/`base`/
+`lineHeightAtTop` fields need nothing added. **Recognition** — reading an existing typography set out of
+the variables themselves, the way `gridRecognise` does — is the larger, separate piece, and the honest
+order is manifest first: it is small, and it is what makes the panel's own claim true.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.

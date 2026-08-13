@@ -192,6 +192,11 @@
 // | `@collectionModes: Title` | the mode chips — a marker row of its own, reading names from the `modes` field |
 // | `@rows: key:type=Label\|…` | a table, one line per array entry |
 // | `@rows: …` + `@tabs` | the same array as one tab per entry, fields stacked and labelled |
+// | `key:(a\|b)` in a column | a dropdown in that cell. All-numeric options read back as numbers |
+// | `key:(1.25:1.25 Major third)` | the same, with the words for the value. A bare option is its own label |
+// | `key:radio(a:First\|b:Second)` | radio buttons in that cell instead of a dropdown |
+// | `key:type{other=value}` in a column | that column appears only while another column **in the same row** holds one of those values. A cell nobody can see writes nothing |
+// | `name-{1,10}` in a token list | a series: `name-1 … name-10`. `{10}` is short for it, `{6,1}` counts down, and `{01,10}` pads to the width you wrote |
 // | an object or array with no `@rows` | the form says it cannot hold it and points at Configuration code |
 //
 // Marker rows, on their own line:
@@ -270,6 +275,15 @@ var modes = [
   { name: "Tablet", width: 834, columns: 8 },
   { name: "Mobile", width: 390, columns: 4 },
 ]; // @rows: name:text=Mode|width:number=Width|columns:number=Columns @tabs @label: Modes
+//
+// # A column that depends on its row
+// Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the
+// scale type and watch the fields change — each tab is judged on its own values, so two modes can be
+// using different scale types at once.
+var scales = [
+  { name: "Desktop", scaleType: "modular", ratio: 1.25, step: 4, mod: 3 },
+  { name: "Mobile", scaleType: "metric", ratio: 1.2, step: 2, mod: 3 },
+]; // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.2:1.2 Minor third|1.25:1.25 Major third|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps @tabs @label: Scale per mode
 //
 // # Table rows
 // The same annotation without @tabs: one line per entry, with Add and Remove.

@@ -661,14 +661,109 @@
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="36"></div>
         <div class="config-ui-row config-ui-row--heading" data-row-index="37">
-          <h1 class="config-ui-heading">Table rows</h1>
+          <h1 class="config-ui-heading">A column that depends on its row</h1>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="38">
+          <div class="docs-rendered">
+            Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the  <br>scale type and watch the fields change — each tab is judged on its own values, so two modes can be  <br>using different scale types at once.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="39">
+          <div class="config-ui-field config-ui-field--rows" title="@rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.2:1.2 Minor third|1.25:1.25 Major third|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps @tabs">
+            <div class="config-ui-field__row">
+              <div class="config-ui-field__control">
+                <div class="config-ui-rows config-ui-rows--tabs" data-rows-field="scales">
+                  <div class="config-ui-rows-tabs">
+                    <button type="button" class="config-ui-rows-tab is-active">Desktop</button>
+                    <button type="button" class="config-ui-rows-tab">Mobile</button>
+                  </div>
+                  <div class="config-ui-rows-body">
+                    <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="0">
+                      <div class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                        <span class="config-ui-rows-cell-label">Scale type</span>
+                        <span class="config-ui-radio-group" data-row-field="scaleType" data-row-radio="true">
+                          <label class="config-ui-radio-label">
+                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-0-scaleType" value="modular" checked>
+                             Modular scale
+                          </label>
+                          <label class="config-ui-radio-label">
+                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-0-scaleType" value="metric">
+                             Metric scale
+                          </label>
+                          <label class="config-ui-radio-label">
+                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-0-scaleType" value="fibonacci">
+                             Fibonacci
+                          </label>
+                        </span>
+                      </div>
+                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;modular&quot;]}]">
+                        <span class="config-ui-rows-cell-label">Scaling method</span>
+                        <select class="config-ui-input config-ui-input--select" data-row-field="ratio">
+                          <option value="1.2">1.2 Minor third</option>
+                          <option value="1.25" selected>1.25 Major third</option>
+                          <option value="1.618">1.618 Golden ratio</option>
+                        </select>
+                      </label>
+                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;metric&quot;,&quot;fibonacci&quot;]}]">
+                        <span class="config-ui-rows-cell-label">Step</span>
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="step" value="4">
+                      </label>
+                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;metric&quot;]}]">
+                        <span class="config-ui-rows-cell-label">Every N steps</span>
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="mod" value="3">
+                      </label>
+                    </div>
+                    <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="1">
+                      <div class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                        <span class="config-ui-rows-cell-label">Scale type</span>
+                        <span class="config-ui-radio-group" data-row-field="scaleType" data-row-radio="true">
+                          <label class="config-ui-radio-label">
+                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-1-scaleType" value="modular">
+                             Modular scale
+                          </label>
+                          <label class="config-ui-radio-label">
+                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-1-scaleType" value="metric" checked>
+                             Metric scale
+                          </label>
+                          <label class="config-ui-radio-label">
+                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-1-scaleType" value="fibonacci">
+                             Fibonacci
+                          </label>
+                        </span>
+                      </div>
+                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;modular&quot;]}]">
+                        <span class="config-ui-rows-cell-label">Scaling method</span>
+                        <select class="config-ui-input config-ui-input--select" data-row-field="ratio">
+                          <option value="1.2" selected>1.2 Minor third</option>
+                          <option value="1.25">1.25 Major third</option>
+                          <option value="1.618">1.618 Golden ratio</option>
+                        </select>
+                      </label>
+                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;metric&quot;,&quot;fibonacci&quot;]}]">
+                        <span class="config-ui-rows-cell-label">Step</span>
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="step" value="2">
+                      </label>
+                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;metric&quot;]}]">
+                        <span class="config-ui-rows-cell-label">Every N steps</span>
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="mod" value="3">
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="40"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="41">
+          <h1 class="config-ui-heading">Table rows</h1>
+        </div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="42">
           <div class="docs-rendered">
             The same annotation without @tabs: one line per entry, with Add and Remove.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="39">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="43">
           <div class="config-ui-field config-ui-field--rows" title="@rows: label:text=Name|min:number=Min width">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -703,14 +798,14 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="40"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="41">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="44"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="45">
           <h1 class="config-ui-heading">What the form cannot hold</h1>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="42">
+        <div class="config-ui-row config-ui-row--field" data-row-index="46">
           <div class="config-ui-field config-ui-field--unsupported">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label" for="config-ui-nested-15">Nested object</label>
+              <label class="config-ui-field__label" for="config-ui-nested-16">Nested object</label>
               <div class="config-ui-field__control">
                 <pre class="config-ui-readonly" aria-readonly="true" data-readonly-field="nested" title="Edit this one in the Script tab — no form control can hold it">{
   "outer": {
@@ -722,7 +817,7 @@
             </div>
           </div>
         </div>
-        <div data-row-index="43"></div>
+        <div data-row-index="47"></div>
       </div>
       </div>
     </div>

@@ -32,6 +32,18 @@
   Numbers and copy: layout, order, labels and helper text come from the frames; every value is
   illustrative. The header in 2031:8752 reads "Grid", which is a copy-paste artefact in the frame — the
   sidebar selection and content are Typography.
+
+  **Four fields the shipped panel has and this does not**, per Márton's *"add the fields that are
+  required, and remove the ones that are not used in that mode"*:
+
+  - **Step** and **Every N steps**, which appear only under Metric or Fibonacci. The frames only ever
+    show Modular selected, so they say nothing about that branch.
+  - **Line height (largest)** and **Letter spacing (largest)**, the optional second end of each curve.
+    Leave them empty and the panel behaves as this mockup implies — one line height ratio, one tracking.
+
+  `panel-controls-match-target.test.js` compares the *control type* of every label these two share, so a
+  dropdown drawn here against radios in the block is a failure. Labels present on only one side are these
+  departures and are deliberately not failed.
 -->
 
 <link rel="stylesheet" href="../../src/ui.css">

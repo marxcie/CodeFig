@@ -23,7 +23,7 @@ const DIR = path.join(root, 'artifacts', 'mockup-panels');
 const SCRIPTS = path.join(root, 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations');
 
 /** Panels whose config block has no mode table yet. Self-clearing: each entry is asserted to be true. */
-const NOT_BUILT = { 'typography-target.html': 'typography.js — plan 20' };
+const NOT_BUILT = {};
 
 const FILES = {
   'grid-target.html': 'grid.js',

@@ -1365,7 +1365,12 @@ function foundationSliceKeys(domain) {
   // A field in a shipped default block is declared by definition. Leaving these to `extra` meant
   // an untouched config warned about itself the first time anyone ran the script it came with,
   // which is how people learn that warnings are noise.
-  if (domain === 'typography') return keys.concat(['fontFamily']);
+  // `createStyles`, `styleNaming` and `overviewPreviewText` joined when the panel gave them controls.
+  // A field in a shipped default block is declared by definition — leave one out and the script warns
+  // about its own untouched config the first time anyone runs it.
+  if (domain === 'typography') {
+    return keys.concat(['fontFamily', 'createStyles', 'styleNaming', 'overviewPreviewText']);
+  }
   if (domain === 'colors') return keys.concat(['light', 'dark']);
   return keys;
 }
@@ -1378,7 +1383,10 @@ function foundationDomainKeys(domain) {
   ].concat(foundationDerivedKeys());
   if (domain === 'spacing') return common.concat(['spacings']);
   if (domain === 'radius') return common.concat(['radii']);
-  if (domain === 'typography') return common.concat(['fontScale', 'fontWeights', 'styles', 'figmaStyles']);
+  if (domain === 'typography') {
+    return common.concat(['fontScale', 'fontWeights', 'styles', 'figmaStyles', 'createStyles',
+      'styleNaming', 'overviewPreviewText']);
+  }
   if (domain === 'grid') return common.concat(['extensionColumns']);
   if (domain === 'colors') return common.concat(['light', 'dark']);
   return common;
@@ -1780,6 +1788,14 @@ function buildDomainSlice(inner, domain, translations, warnings) {
       slice.fontWeights = foundationClone(inner.fontWeights);
     }
     if (inner.fontFamily !== undefined) slice.fontFamily = foundationClone(inner.fontFamily);
+    // The panel's flat style fields and the specimen's copy. Kept beside `styles` rather than folded
+    // into it: the nested object is what an older config carries, and merging the two spellings on the
+    // way in would mean guessing which one the author meant when a config holds both.
+    if (inner.createStyles !== undefined) slice.createStyles = !!inner.createStyles;
+    if (typeof inner.styleNaming === 'string') slice.styleNaming = inner.styleNaming;
+    if (typeof inner.overviewPreviewText === 'string') {
+      slice.overviewPreviewText = inner.overviewPreviewText;
+    }
   }
   if (domain === 'colors') {
     if (inner.light !== undefined) slice.light = foundationClone(inner.light);
@@ -1970,6 +1986,14 @@ function toDomainConfig(v1, domain, options) {
   }
   if (config.roundLowerValuesTo !== undefined) out.roundLowerValuesTo = config.roundLowerValuesTo;
   if (config.fontFamily !== undefined) out.fontFamily = foundationClone(config.fontFamily);
+  // Typography's panel gave text styles and the specimen's copy their own fields, so they are inputs
+  // now and have to come back out. `styles` above is the older nested spelling and still wins where a
+  // config carries it — these are the flat two the panel writes.
+  if (config.createStyles !== undefined) out.createStyles = config.createStyles;
+  if (config.styleNaming !== undefined) out.styleNaming = foundationClone(config.styleNaming);
+  if (config.overviewPreviewText !== undefined) {
+    out.overviewPreviewText = foundationClone(config.overviewPreviewText);
+  }
   if (config.light !== undefined) out.light = foundationClone(config.light);
   if (config.dark !== undefined) out.dark = foundationClone(config.dark);
   if (config.extensionColumns !== undefined) out.extensionColumns = config.extensionColumns;

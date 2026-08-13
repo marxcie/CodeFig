@@ -1,36 +1,64 @@
 // Typography
 // @DOC_START
 // # Typography
-// Responsive typography system with range-first scaling and style generation.
+// Responsive type scale: one scale per mode, plus the line height and tracking that travel with a size.
 //
 // ## Overview
-// Creates typography variables and optional text styles. **Range mode:** min → base → max per viewport with easing between steps. **Modular mode** (`fontScaling.type` = minorSecond … perfectFifth, `phi`): font size = base × ratio^(step−base), clamped to min/max. Line height and letter spacing always use the range model. Does not create canvas preview frames.
+// Creates a `font-size`, `line-height` and `letter-spacing` variable per token, a variable per font
+// weight, a font family variable, and — optionally — a text style per token and weight bound to them.
+// No canvas frames.
+//
+// **Each mode carries its own scale**: `modular` (a fixed ratio), `metric` (a step that grows every N
+// tokens) or `fibonacci` (each step the sum of the two before it). `base` is the size of the **first**
+// token, so tokens are named smallest to largest and nothing has to say where the base sits.
+//
+// **Line height and letter spacing take two numbers each**, both in px: the value at the smallest step
+// and, optionally, the value at the largest. The steps between are interpolated — line height as a
+// *ratio* and tracking as a *share of the size*, which is what makes absolute line height rise while
+// its ratio falls and tracking tighten as type grows. Fill in only the first and line height keeps the
+// base ratio while tracking stays flat, which is what this script has always done.
 //
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
-// | fontFamily | Font family name (e.g. Inter). |
-// | fontWeights | Map of style names to numeric weight (400, 600) or Figma style name string (`"Regular"`, `"Light"`). |
 // | collectionName | Figma variable collection (e.g. same as grid: `Responsive System`). |
-// | group | Optional variable name prefix; empty = collection root. |
-// | modes | Ordered `{ name, minFont, baseFont, maxFont }` per viewport. Legacy: `fontSizes` object. |
-// | fontScale | Ordered step names; `baseFont.level` must match one entry. |
-// | fontScaling.type | **Range curve** (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise** (font size): `piecewise`, `piecewise2`, `piecewise4` — proportional Carbon spine min→max; **Modular** (typescale.com): minorSecond … phi. |
-// | fontScaling.rangeMode | `full` — single min→max ramp (default for piecewise). `twoSegment` — min→base→max (default for range curves). |
-// | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for piecewise/modular font size. Line height / letter spacing still use range lerp. |
-// | fontScaling.roundLowerValuesTo, roundUpperValuesTo | Rounding grid for font size and line height. |
-// | figmaStyles | `createAndUpdateStyles`, `styleNaming` (e.g. `Typography/{$fontScale}/{$fontWeight}`). Legacy: `styles`. |
-// | scaling, round* (legacy) | Old top-level keys; use `fontScaling` instead. |
+// | group | Variable name prefix folder; empty = collection root. |
+// | fontScale | Ordered token names, smallest to largest. A series works: `heading-{1,6}`, and it mixes with names you write. |
+// | fontFamily | Font family name (e.g. Inter). |
+// | fontWeights | A list where a number is a weight and a word is a Figma font style name: `[400, "Semi Bold"]`. Legacy: a map from name to either. |
+// | createStyles, styleNaming | Whether to create and update text styles, and their naming (`Typography/{$fontScale}/{$fontWeight}`). Legacy: `figmaStyles.createAndUpdateStyles` / `.styleNaming`. |
+// | modes | Per mode: `scaleType`, `ratio` or `step`/`mod`, `base`, `lineHeight`, `lineHeightAtTop`, `letterSpacing`, `letterSpacingAtTop`, `roundTo`. Rounding applies to size and line height; tracking is left fractional. |
 // | generateOverview | Optional boolean (default `false`). When `true`, fills **Render styles — overview** inside **`Design System Foundations`** (see `@Foundation overview`). |
 // | overviewStyleFilter | Optional substring for text style names (case-insensitive). When empty, defaults to styles containing `group/` (e.g. `Typography/`). |
-// | overviewPreviewText | Optional multiline sample for overview tiles; newline becomes a soft line break in Figma. |
+// | overviewPreviewText | The specimen's copy, and the overview tiles' when you generate one. A newline becomes a soft line break in Figma. |
+//
+// ## The older shape still runs
+// A config written before the panel — per-mode `minFont`/`baseFont`/`maxFont` with a top-level
+// `fontScaling` curve — generates exactly what it always did, and is pinned by
+// `tests/typography-legacy-config.test.js`. Those keys have no controls in the panel; nothing else about
+// them changed.
+//
+// | Legacy option | Description |
+// |--------|--------------|
+// | modes[].minFont / baseFont / maxFont | `{ size, lineHeight, letterSpacing }`; `baseFont.level` must name a token. Legacy alias: a `fontSizes` object. |
+// | fontScaling.type | **Range curve** (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise:** `piecewise`, `piecewise2`, `piecewise4`. **Modular** (typescale.com): minorSecond … phi. |
+// | fontScaling.rangeMode | `full` — single min→max ramp (default for piecewise). `twoSegment` — min→base→max (default for range curves). |
+// | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for piecewise/modular font size. |
+// | fontScaling.roundLowerValuesTo, roundUpperValuesTo | Rounding grid below and above the base step. |
 // @DOC_END
+
+// The Configuration tab redraws these as you type. Both are pure: they generate in memory and read the
+// same numbers a run writes, so neither can touch the document.
+// @SUGGESTIONS: typographyOverviewHtml
+// @PREVIEW: typographyPreviewHtml
 
 // Import functions from libraries
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getCollectionVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries } from "@Foundation"
+@import { scaleSequence, resolveModularRatio } from "@Scale Models"
+@import { typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleProgress, typeScaleLineHeights, typeScaleTrackings, typeScaleTable, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
 
 // ========================================
 // CONFIG HELPERS (collection, modes, fontSizes)
@@ -67,9 +95,51 @@ function materializeFontSizes(config) {
   config.fontSizes = resolveFontSizes(config);
 }
 
+/**
+ * The panel's spelling of the font weights: a comma list, where a number is a weight and a word is a
+ * Figma font style name.
+ *
+ * The frame's placeholder is *"eg. 400, Semi Bold"*, which is both at once — and both are already
+ * supported, as a map from a name to either. So the list is promoted into that map rather than the
+ * generator learning a second shape: `[400, "Semi Bold"]` becomes
+ * `{ "400": 400, "Semi Bold": "Semi Bold" }`, and the style path reads `Typography/Heading-1/400`.
+ */
+function typographyPromoteFontWeights(config) {
+  if (!Array.isArray(config.fontWeights)) return;
+  var out = {};
+  config.fontWeights.forEach(function (entry) {
+    if (entry === null || entry === undefined || entry === '') return;
+    var text = String(entry).trim();
+    if (!text) return;
+    var asNumber = Number(text);
+    out[text] = isFinite(asNumber) && text !== '' && /^-?\d+(\.\d+)?$/.test(text) ? asNumber : text;
+  });
+  config.fontWeights = out;
+}
+
+/**
+ * The panel's two flat style fields, folded into the nested object the generator reads.
+ *
+ * The frames show no style controls at all, but text styles are what this script is *for* — so they are
+ * two fields rather than none, and `figmaStyles` stays the storage shape so an older config is
+ * untouched.
+ */
+function typographyPromoteStyleFields(config) {
+  if (config.createStyles === undefined && config.styleNaming === undefined) return;
+  var styles = (config.figmaStyles && typeof config.figmaStyles === 'object') ? config.figmaStyles : {};
+  if (config.createStyles !== undefined) styles.createAndUpdateStyles = config.createStyles === true;
+  if (typeof config.styleNaming === 'string' && config.styleNaming) styles.styleNaming = config.styleNaming;
+  config.figmaStyles = styles;
+}
+
 // Merge fontScaling into scaling (plus rounding); figmaStyles into styles for existing code paths.
 function ensureCompatTypographyConfig(config) {
   if (!config || typeof config !== 'object') return;
+  typographyPromoteFontWeights(config);
+  typographyPromoteStyleFields(config);
+  // `heading-{1,6}` is six tokens. Expanded here so every reader below — the variables, the styles, the
+  // Overview table — counts the same steps.
+  if (tokenListHasSeries(config.fontScale)) config.fontScale = expandTokenList(config.fontScale);
   if (config.fontScaling && typeof config.fontScaling === 'object') {
     var fs = config.fontScaling;
     config.scaling = {
@@ -151,110 +221,76 @@ function validateTypographyScalingTypeConfig(config) {
 var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typographyConfigData : {
   // @CONFIG_START
   // @fromFile: domains.typography
-  collectionName: "Responsive System",
-  group: "Typography",
 
-  fontFamily: "Inter",
-  fontWeights: {
-    "Regular": 400,
-    "Semibold": 600
-  },
+  // # General
+  // Where this goes, and what exists. Pick a collection in this file, or choose "New collection" and
+  // type a name — a name that is not in this file is created on Run.
+  collectionName: "Responsive System", // @collection @label: Collection
+  // @collectionModes: Collection modes
+  // The collection's own modes. The chips are a view of the file; the tabs below hold each mode's scale.
+  group: "Typography", // @label: Group within collection @placeholder="eg.: Typography"
+  fontScale: ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"], // @label: Tokens @helper: Named smallest to largest, and heading-{6,1} is a series of six. The Base unit below is the size of the first name here.
+  fontFamily: "Inter", // @label: Font family @placeholder="eg.: Inter Tight"
+  fontWeights: [400, 600], // @label: Font weights @helper: A number is a font weight; a word is a Figma font style name, e.g. Semi Bold. Each one gets a variable and a text style.
+  createStyles: true, // @label: Create and update text styles @helper: One style per token and weight, bound to these variables
+  styleNaming: "Typography/{$fontScale}/{$fontWeight}", // @label: Style naming @placeholder="eg.: Typography/{$fontScale}/{$fontWeight}"
 
-  fontScale: [
-    "Text-Tiny",
-    "Text-Small",
-    "Text-Regular",
-    "Text-Large",
-    "Heading-6",
-    "Heading-5",
-    "Heading-4",
-    "Heading-3",
-    "Heading-2",
-    "Heading-1"
-  ],
-  // Array ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"] or string template "Text-{$fontScale}"
-  // steps: 10, // If string template is selected, steps is required.
+  // --- @section
 
-  fontScaling: {
-    type: "sine",
-    // Range curve (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio.  
-    // Modular scale: minorSecond, majorSecond, minorThird, majorThird, perfectFourth, augmentedFourth, perfectFifth.
-    // Piecewise: piecewise, piecewise2, piecewise4 (proportional Carbon spine min→max)
-    rangeMode: "twoSegment", // full | twoSegment — default twoSegment for range; piecewise defaults to full
-    ease: "in", // none, in, out, inout, outin. Only used for range curves. Ignored for piecewise types.
-    roundLowerValuesTo: 1, // Rounding grid for font size and line height.
-    roundUpperValuesTo: 2 // Rounding grid for font size and line height.
-  },
-
-  figmaStyles: {
-    createAndUpdateStyles: true,
-    styleNaming: "Typography/{$fontScale}/{$fontWeight}"
-  },
-
-  // When true: update **Render styles — overview** inside **Design System Foundations** (after variables and styles run)
-  generateOverview: false,
-  // overviewStyleFilter: "", // Optional name substring; when empty, uses styles matching `group/`
-  // overviewPreviewText: "", // Optional multiline preview copy for overview tiles
-
+  // # Mode settings
+  generateOverview: false, // @label: Generate overview @helper: Fills the Render styles — overview section in Design System Foundations
+  // Each mode's own scale, the same three models the Spacing panel offers. **Line height and letter
+  // spacing take two numbers**: the value at the smallest step, and — optionally — the value at the
+  // largest, with the steps between interpolated. That is what reproduces the interaction the type
+  // tools chart but none of them computes: absolute line height rises while its *ratio* falls, and
+  // tracking tightens as the size grows. Leave the second number out and line height keeps the base
+  // ratio and tracking stays put, which is what this script has always done.
+  //
+  // These are not the numbers this script shipped with, and they cannot be: a per-mode modular scale
+  // has no min, max or easing to reproduce a sine ramp from 8 to 200. The token *names* are unchanged,
+  // so a run updates the variables you already have rather than creating a second set beside them.
   modes: [
     {
       name: "desktop",
-      minFont: {
-        size: 8,  // Only when Range curve mode is used
-        lineHeight: 1.25,
-        letterSpacing: 0
-      },
-      baseFont: {
-        level: "Text-Regular",
-        size: 18,
-        lineHeight: 1.5,
-        letterSpacing: -0.2
-      },
-      maxFont: {
-        size: 200, // Only when Range curve mode is used
-        lineHeight: 1,
-        letterSpacing: -3
-      }
+      scaleType: "modular",
+      ratio: 1.25,
+      base: 8,
+      letterSpacing: 0,
+      letterSpacingAtTop: -1.2,
+      lineHeight: 12,
+      lineHeightAtTop: 66,
+      roundTo: 2
     },
     {
       name: "tablet",
-      minFont: {
-        size: 8,  // Only when Range curve mode is used
-        lineHeight: 1.25,
-        letterSpacing: 0
-      },
-      baseFont: {
-        level: "Text-Regular",
-        size: 16,
-        lineHeight: 1.5,
-        letterSpacing: -0.2
-      },
-      maxFont: {
-        size: 160, // Only when Range curve mode is used
-        lineHeight: 1,
-        letterSpacing: -2.5
-      }
+      scaleType: "modular",
+      ratio: 1.2,
+      base: 8,
+      letterSpacing: 0,
+      letterSpacingAtTop: -0.8,
+      lineHeight: 12,
+      lineHeightAtTop: 46,
+      roundTo: 2
     },
     {
       name: "mobile",
-      minFont: {
-        size: 8,  // Only when Range curve mode is used
-        lineHeight: 1.5,
-        letterSpacing: 0
-      },
-      baseFont: {
-        level: "Text-Regular",
-        size: 16,
-        lineHeight: 1.25,
-        letterSpacing: -0.2
-      },
-      maxFont: {
-        size: 120, // Only when Range curve mode is used
-        lineHeight: 1,
-        letterSpacing: -2
-      }
+      scaleType: "modular",
+      ratio: 1.15,
+      base: 8,
+      letterSpacing: 0,
+      letterSpacingAtTop: -0.55,
+      lineHeight: 12,
+      lineHeightAtTop: 31,
+      roundTo: 1
     }
-  ]
+  ], // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.067:1.067 Minor second|1.125:1.125 Major second|1.2:1.2 Minor third|1.25:1.25 Major third|1.333:1.333 Perfect fourth|1.414:1.414 Augmented fourth|1.5:1.5 Perfect fifth|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|base:number=Base unit|letterSpacing:number=Letter spacing|letterSpacingAtTop:number=Letter spacing (largest)|lineHeight:number=Line height|lineHeightAtTop:number=Line height (largest)|roundTo:number=Round numbers to @tabs @label: Modes
+
+  // # Overview
+  // @suggestions
+
+  // # Preview
+  overviewPreviewText: "Sphinx of black quartz,\njudge my vow.", // @label: Preview text @textarea @helper: Shown in the specimen below, and in the overview frame when you generate one
+  // @preview
   // @CONFIG_END
 };
 
@@ -454,45 +490,88 @@ function calculateFluidLetterSpacing(scaleIndex, totalSteps, viewport, config) {
 
 // Helper: variable name prefix (no leading slash or empty path — Figma rejects bad path segments)
 // Round value to grid (8, 4, or 2 pt). Returns value unchanged if gridSize is falsy or <= 0.
+/**
+ * Which modes this config has, whichever shape it is written in.
+ *
+ * The panel's modes carry a scale rather than a min/base/max payload, so `fontSizes` — which is built
+ * from those payloads — is empty for them, and reading the mode list off it found nothing to write.
+ */
+function typographyViewportNames(config) {
+  var scaled = typeScaleModes({ config: config }).filter(typeScaleModeIsScaled);
+  if (scaled.length > 0) {
+    return scaled.map(function (m) { return m.name; });
+  }
+  return Object.keys(config.fontSizes || {});
+}
+
+/**
+ * The size, line height and tracking for every token of one mode.
+ *
+ * The one seam between the two models, and it is deliberately the *only* one: everything below this
+ * function writes variables from three arrays and does not know which shape produced them. The
+ * alternative — a second generator — is two places to fix a scope, a name or a rounding rule.
+ */
+function typographyValuesFor(config, viewport, tokens, legacyBaseIndex) {
+  var mode = typeScaleModeNamed({ config: config }, viewport);
+  if (typeScaleModeIsScaled(mode)) {
+    var sizes = typeScaleSizes(mode, tokens.length);
+    var lineHeights = typeScaleLineHeights(mode, sizes.values);
+    var trackings = typeScaleTrackings(mode, sizes.values);
+    return tokens.map(function (token, i) {
+      return { size: sizes.values[i], lineHeight: lineHeights[i], letterSpacing: trackings[i] };
+    });
+  }
+
+  var sizesFor = config.fontSizes[viewport];
+  var scaleArr = getTypographyFontScale(tokens.length, viewport, config);
+  var minSize = sizesFor.minFont.size;
+  var maxSize = sizesFor.maxFont.size;
+  return tokens.map(function (token, index) {
+    var gridSize = getGridSizeForStep(config, index, legacyBaseIndex);
+    var fontSize = scaleArr[index];
+    if (typeof fontSize !== 'number' || isNaN(fontSize)) fontSize = minSize;
+    fontSize = Math.max(minSize, Math.min(maxSize, fontSize));
+    var lineHeightPx = fontSize * calculateFluidLineHeight(index, tokens.length, viewport, config);
+    return {
+      size: fontSize,
+      lineHeight: gridSize > 0
+        ? snapScaleGrid(Math.round(lineHeightPx * 100) / 100, gridSize)
+        : Math.round(lineHeightPx * 100) / 100,
+      letterSpacing: calculateFluidLetterSpacing(index, tokens.length, viewport, config)
+    };
+  });
+}
+
 // Generate variables programmatically
 function generateTypographyVariables(config) {
   var variables = {};
   var prefix = namePrefix(resolveGroup({ config: config }));
-  
-  var viewportNames = Object.keys(config.fontSizes);
-  var baseIndex = config.fontScale.indexOf(config.fontSizes[viewportNames[0]].baseFont.level);
-  var fontScalesByViewport = {};
+
+  var viewportNames = typographyViewportNames(config);
+  var first = config.fontSizes && config.fontSizes[viewportNames[0]];
+  // Read from the first mode only, which is how it has always been read. It decides nothing but which
+  // rounding grid a step uses, and every mode names the same base level in practice.
+  var baseIndex = first && first.baseFont ? config.fontScale.indexOf(first.baseFont.level) : 0;
+  var valuesByViewport = {};
   viewportNames.forEach(function(viewport) {
-    fontScalesByViewport[viewport] = getTypographyFontScale(config.fontScale.length, viewport, config);
+    valuesByViewport[viewport] = typographyValuesFor(config, viewport, config.fontScale, baseIndex);
   });
 
   // Generate variables for each font scale step - grouped by scale level
   config.fontScale.forEach(function(scaleName, index) {
-    var gridSize = getGridSizeForStep(config, index, baseIndex);
     // Pre-calculate values for each viewport dynamically
     var fontSizeValues = {};
     var lineHeightValues = {};
     var letterSpacingValues = {};
-    
+
     viewportNames.forEach(function(viewport) {
       var viewportKey = viewportLabel(viewport);
-      var minSize = config.fontSizes[viewport].minFont.size;
-      var maxSize = config.fontSizes[viewport].maxFont.size;
-      var scaleArr = fontScalesByViewport[viewport];
-      var fontSize = scaleArr[index];
-      if (typeof fontSize !== 'number' || isNaN(fontSize)) fontSize = minSize;
-      fontSize = Math.max(minSize, Math.min(maxSize, fontSize));
-      
-      var lineHeightRatio = calculateFluidLineHeight(index, config.fontScale.length, viewport, config);
-      var lineHeightPx = fontSize * lineHeightRatio;
-      var lineHeight = gridSize > 0 ? snapScaleGrid(Math.round(lineHeightPx * 100) / 100, gridSize) : Math.round(lineHeightPx * 100) / 100;
-      var letterSpacing = calculateFluidLetterSpacing(index, config.fontScale.length, viewport, config);
-      
-      fontSizeValues[viewportKey] = fontSize;
-      lineHeightValues[viewportKey] = lineHeight;
-      letterSpacingValues[viewportKey] = letterSpacing;
+      var cell = valuesByViewport[viewport][index] || {};
+      fontSizeValues[viewportKey] = cell.size;
+      lineHeightValues[viewportKey] = cell.lineHeight;
+      letterSpacingValues[viewportKey] = cell.letterSpacing;
     });
-    
+
     // Font sizes for each viewport
     variables[prefix + scaleName + '/font-size'] = {
       type: "FLOAT",
@@ -657,7 +736,7 @@ async function createOrUpdateCollection(config) {
   
   var collection = await getOrCreateCollection(collectionName);
   
-  var modes = Object.keys(data.fontSizes || {}).map(function(k) {
+  var modes = typographyViewportNames(data).map(function(k) {
     return viewportLabel(k);
   });
   if (modes.length === 0) {
