@@ -125,8 +125,36 @@ class Element {
   set rows(v) { this._attrs.set('rows', String(v)); }
   get htmlFor() { return this._attrs.get('for') || ''; }
   set htmlFor(v) { this._attrs.set('for', String(v)); }
-  get value() { return this._attrs.has('value') ? this._attrs.get('value') : ''; }
-  set value(v) { this._attrs.set('value', v === null || v === undefined ? '' : String(v)); }
+  /**
+   * A `<select>`'s value is its selected option's, which the attribute map does not know.
+   *
+   * The renderer builds a select by marking one `<option selected>` and never assigns `value`, so
+   * every reader — `collectRows`, the row-level `showWhen` evaluation — saw an empty string and drew
+   * the wrong conclusion. In a browser this is free; here it has to be modelled, and a shim that
+   * silently answers "" for a control the user can see a value in is worse than one that throws.
+   */
+  get value() {
+    if (this._attrs.has('value')) return this._attrs.get('value');
+    if (this.tagName === 'select') {
+      var chosen = this.children.filter(function (o) { return o.tagName === 'option' && o.selected; })[0];
+      if (!chosen) chosen = this.children.filter(function (o) { return o.tagName === 'option'; })[0];
+      if (chosen) return chosen._attrs.has('value') ? chosen._attrs.get('value') : chosen.textContent;
+    }
+    return '';
+  }
+  set value(v) {
+    var next = v === null || v === undefined ? '' : String(v);
+    this._attrs.set('value', next);
+    // Assigning a select's value moves the selection, the way it does in a browser — otherwise a test
+    // that sets a value and re-reads the options disagrees with itself.
+    if (this.tagName === 'select') {
+      this.children.forEach(function (o) {
+        if (o.tagName !== 'option') return;
+        var own = o._attrs.has('value') ? o._attrs.get('value') : o.textContent;
+        o.selected = own === next;
+      });
+    }
+  }
   get checked() { return this._attrs.get('checked') === true; }
   set checked(v) { this._attrs.set('checked', !!v); }
   get disabled() { return this._attrs.get('disabled') === true; }

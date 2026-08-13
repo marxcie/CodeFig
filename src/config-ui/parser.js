@@ -214,8 +214,8 @@
     var parts = [];
     for (var i = 0; i < spec.length; i++) {
       var ch = spec.charAt(i);
-      if (ch === "(") depth++;
-      if (ch === ")") depth--;
+      if (ch === "(" || ch === "{") depth++;
+      if (ch === ")" || ch === "}") depth--;
       if (ch === "|" && depth === 0) { parts.push(current); current = ""; continue; }
       current += ch;
     }
@@ -232,6 +232,31 @@
       // `containerWidth:number=Width` — a label of its own, because the frames say *Width* and
       // *Margins* where the config says `containerWidth` and `padding`. The label belongs to the
       // panel and the key belongs to the config; neither should have to bend to the other.
+      // `{scaleType=metric}` — this column appears only when another column in the **same row** holds
+      // one of those values. A mode's fields depend on the scale it uses: a modular scale needs a
+      // ratio and a metric one needs a step, and showing both means half of every tab is inert.
+      // Márton's instruction: *"add the fields that are required, and remove the ones that are not
+      // used in that mode."*
+      //
+      // `{}` rather than a second annotation because it belongs to the column it guards. Values are
+      // separated by `|` inside the braces, which is why the split above counts brace depth.
+      // Taken out **first**, and from anywhere in the spec: a condition contains an `=`, so splitting
+      // the label off before removing it would hand `Scaling method` the wrong half.
+      var showWhen = null;
+      var when = typeText.match(/\{([^}]*)\}/);
+      if (when) {
+        typeText = (typeText.slice(0, when.index) + typeText.slice(when.index + when[0].length)).trim();
+        showWhen = when[1].split(";").map(function (rule) {
+          var bits = rule.split("=");
+          if (bits.length < 2) return null;
+          return {
+            field: bits[0].trim(),
+            values: bits[1].split("|").map(function (v) { return v.trim(); }).filter(Boolean)
+          };
+        }).filter(function (rule) { return rule && rule.field && rule.values.length; });
+        if (!showWhen.length) showWhen = null;
+      }
+
       var label = null;
       var eq = typeText.indexOf("=");
       if (eq !== -1) {
@@ -246,6 +271,7 @@
       var column = {
         key: key, label: label || labelFromName(key), type: "text", labelSpelled: label != null
       };
+      if (showWhen) column.showWhen = showWhen;
       var optionMatch = typeText.match(/^\((.*)\)$/);
       if (optionMatch) {
         column.type = "select";
@@ -836,7 +862,14 @@
             var spec = c.type === "select" ? "(" + (c.options || []).join("|") + ")" : c.type;
             var named = c.label && (c.labelSpelled || c.label !== labelFromName(c.key))
               ? "=" + c.label : "";
-            return c.key + ":" + spec + named;
+            // The condition trails the type, before the label, so `ratio:text{scaleType=modular}=Scaling
+            // method` reads as "a text column, when modular, called Scaling method".
+            var when = c.showWhen && c.showWhen.length
+              ? "{" + c.showWhen.map(function (rule) {
+                return rule.field + "=" + rule.values.join("|");
+              }).join(";") + "}"
+              : "";
+            return c.key + ":" + spec + when + named;
           }).join("|"));
           if (r.tabs) parts.push("@tabs");
         }

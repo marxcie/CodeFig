@@ -1211,6 +1211,13 @@
           // the right shape only when rows are stacked and being compared.
           cell.className = field.tabs ? "config-ui-rows-cell config-ui-rows-cell--stacked"
             : "config-ui-rows-cell";
+          // A column can depend on another column **in the same row**: a modular scale needs a ratio,
+          // a metric one needs a step, and showing both leaves half of every tab inert. The condition
+          // travels on the cell, and is evaluated against that row's own values rather than the form's
+          // — two modes on two tabs can be using different scale types at the same time.
+          if (column.showWhen) {
+            cell.setAttribute("data-row-show-when", JSON.stringify(column.showWhen));
+          }
           var caption = document.createElement("span");
           caption.className = "config-ui-rows-cell-label";
           caption.textContent = column.label;
@@ -1434,6 +1441,31 @@
         var v = visRules(row);
         if (v !== null) row.style.display = v ? "" : "none";
       });
+      // Row cells, judged inside their own row. `getValues` flattens the rows into one array per field,
+      // which is the wrong shape for this — what a cell needs is the sibling cell beside it, so the
+      // values are read from the DOM of that row and nowhere else.
+      container.querySelectorAll(".config-ui-rows-item").forEach(function (item) {
+        var own = {};
+        item.querySelectorAll("[data-row-field]").forEach(function (el) {
+          var key = el.getAttribute("data-row-field");
+          if (!key) return;
+          own[key] = el.type === "checkbox" ? (el.checked ? "true" : "false") : el.value;
+        });
+        item.querySelectorAll("[data-row-show-when]").forEach(function (cell) {
+          var rules;
+          try {
+            rules = JSON.parse(cell.getAttribute("data-row-show-when"));
+          } catch (e) {
+            return;
+          }
+          var show = true;
+          for (var i = 0; i < rules.length; i++) {
+            if (rules[i].values.indexOf(showWhenValueStr(own[rules[i].field])) === -1) show = false;
+          }
+          cell.style.display = show ? "" : "none";
+        });
+      });
+
       container.querySelectorAll("[data-show-when-field]").forEach(function (row) {
         if (row.getAttribute("data-show-when-rules")) return;
         var field = row.getAttribute("data-show-when-field");
