@@ -1217,7 +1217,11 @@
           // on the chips, which is the only rename affordance — a second one here would be a second
           // place to do the same thing, and the two could disagree.
           if (field.tabs && column.key === "name") return;
-          var cell = document.createElement("label");
+          // A radio cell is a `div`, every other cell a `label`. A `label` wrapping a radio group is
+          // nested labels: clicking anywhere in the cell — the caption included — would activate the
+          // outer label's first labelable descendant, which is the first radio. So the caption would
+          // silently reset the scale type to Modular.
+          var cell = document.createElement(column.type === "radio" ? "div" : "label");
           // With `@tabs` a tab shows one row at a time, so its fields read as a form — one labelled
           // field per line, as the frames show — rather than as a horizontal strip of cells, which is
           // the right shape only when rows are stacked and being compared.
@@ -1234,7 +1238,10 @@
           caption.className = "config-ui-rows-cell-label";
           caption.textContent = column.label;
           cell.appendChild(caption);
-          cell.appendChild(buildRowCell(column, row ? row[column.key] : undefined));
+          cell.appendChild(buildRowCell(
+            column, row ? row[column.key] : undefined,
+            "config-ui-row-radio-" + field.name + "-" + index + "-" + column.key
+          ));
           rowEl.appendChild(cell);
         });
 
@@ -1286,7 +1293,8 @@
         (field.columns || []).forEach(function (column) {
           blank[column.key] = column.type === "number" ? 0
             : column.type === "checkbox" ? false
-            : column.type === "select" ? (column.options || [])[0] || ""
+            : (column.type === "select" || column.type === "radio")
+              ? ((column.options || []).length ? p.columnOptionValue(column.options[0]) : "")
             : "";
         });
         next.push(blank);
@@ -1302,7 +1310,7 @@
     return wrap;
   }
 
-  function buildRowCell(column, value) {
+  function buildRowCell(column, value, groupName) {
     if (column.type === "list") {
       // `extras: [0, 1, 2]` is a list in a cell. Text on screen, an array in the config — a string
       // there would read as an array of one to `rampExtras` and quietly generate nothing.
@@ -1314,15 +1322,46 @@
       list.value = p.listToText(value);
       return list;
     }
+    if (column.type === "radio") {
+      // The group carries `data-row-field`, not the inputs: one cell, one value, read by asking which
+      // input is checked. `groupName` has to be unique per row or the tabs share one group and picking
+      // a scale type on Desktop clears Mobile's.
+      var group = document.createElement("span");
+      group.className = "config-ui-radio-group";
+      group.setAttribute("data-row-field", column.key);
+      group.setAttribute("data-row-radio", "true");
+      var options = column.options || [];
+      var matched = false;
+      options.forEach(function (opt) {
+        if (String(value) === p.columnOptionValue(opt)) matched = true;
+      });
+      options.forEach(function (opt, i) {
+        var wrapLabel = document.createElement("label");
+        wrapLabel.className = "config-ui-radio-label";
+        var input = document.createElement("input");
+        input.type = "radio";
+        input.className = "config-ui-radio";
+        input.name = groupName;
+        input.value = p.columnOptionValue(opt);
+        // Nothing checked is not a state this control can be read out of, so an unrecognised value
+        // falls back to the first option rather than to none — and the fallback is visible, which is
+        // how you find out the config says `metrik`.
+        input.checked = matched ? String(value) === input.value : i === 0;
+        wrapLabel.appendChild(input);
+        wrapLabel.appendChild(document.createTextNode(" " + p.columnOptionLabel(opt)));
+        group.appendChild(wrapLabel);
+      });
+      return group;
+    }
     if (column.type === "select") {
       var sel = document.createElement("select");
       sel.className = "config-ui-input config-ui-input--select";
       sel.setAttribute("data-row-field", column.key);
       (column.options || []).forEach(function (opt) {
         var o = document.createElement("option");
-        o.value = opt;
-        o.textContent = opt;
-        if (String(value) === opt) o.selected = true;
+        o.value = p.columnOptionValue(opt);
+        o.textContent = p.columnOptionLabel(opt);
+        if (String(value) === o.value) o.selected = true;
         sel.appendChild(o);
       });
       return sel;
@@ -1345,6 +1384,17 @@
     input.setAttribute("data-row-field", column.key);
     input.value = value == null ? "" : String(value);
     return input;
+  }
+
+  /** Every option of this column is a number, so the column is about numbers. */
+  function allNumericOptions(column) {
+    var options = column.options || [];
+    if (!options.length) return false;
+    for (var i = 0; i < options.length; i++) {
+      var raw = p.columnOptionValue(options[i]);
+      if (raw === "" || Number.isNaN(parseFloat(raw, 10)) || !isFinite(Number(raw))) return false;
+    }
+    return true;
   }
 
   /** The rows of one control, read back out of the DOM in their displayed order. */
@@ -1373,11 +1423,24 @@
       (field.columns || []).forEach(function (column) {
         var el = rowEl.querySelector('[data-row-field="' + column.key + '"]');
         if (!el) return;
-        if (column.type === "list") {
+        if (column.type === "radio") {
+          // Left alone when nothing is checked, rather than blanked. `buildRowCell` always checks
+          // something, so no-selection means the DOM is not what this code thinks it is — and keeping
+          // the value the config already had is the answer that cannot lose data.
+          var picked = el.querySelector("input:checked");
+          if (picked) row[column.key] = picked.value;
+        } else if (column.type === "list") {
           row[column.key] = p.textToList(el.value);
         } else if (column.type === "number") {
           var n = parseFloat(el.value, 10);
           row[column.key] = Number.isNaN(n) ? 0 : n;
+        } else if (column.type === "select" && allNumericOptions(column)) {
+          // A select over numbers reads back a number. A `<select>`'s value is always a string, so
+          // picking *1.25 Major third* wrote `ratio: "1.25"` — which `resolveModularRatio` answers
+          // with "unknown ratio" and an empty scale. The config also stops looking like the one that
+          // shipped, and this is a file people read.
+          var picked = parseFloat(el.value, 10);
+          row[column.key] = Number.isNaN(picked) ? el.value : picked;
         } else if (column.type === "checkbox") {
           row[column.key] = !!el.checked;
         } else {
@@ -1476,7 +1539,12 @@
         item.querySelectorAll("[data-row-field]").forEach(function (el) {
           var key = el.getAttribute("data-row-field");
           if (!key) return;
-          own[key] = el.type === "checkbox" ? (el.checked ? "true" : "false") : el.value;
+          if (el.getAttribute("data-row-radio")) {
+            var on = el.querySelector("input:checked");
+            own[key] = on ? on.value : "";
+          } else {
+            own[key] = el.type === "checkbox" ? (el.checked ? "true" : "false") : el.value;
+          }
         });
         item.querySelectorAll("[data-row-show-when]").forEach(function (cell) {
           var rules;
@@ -1564,6 +1632,11 @@
       if (target.getAttribute("data-row-field")) return true;
       if (target.getAttribute("data-rows-field")) return true;
       if (target.classList && target.classList.contains("config-ui-multiselect-cb")) return true;
+      // A radio inside a row cell. The *group* carries `data-row-field` — one cell, one value — so the
+      // input that the user actually clicks has no attribute of its own, and the check above misses it.
+      // This is the failure the comment describes, arriving a second time by the same route: a control
+      // that renders and cannot save.
+      if (typeof target.closest === "function" && target.closest("[data-row-field]")) return true;
       if (typeof target.closest === "function" && target.closest("[data-collection-field]")) return true;
       if (typeof target.closest === "function" && target.closest("[data-mode-field]")) return true;
       return false;

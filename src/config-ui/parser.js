@@ -44,9 +44,31 @@
    * `"0, 1, 2"` has to come back as `[0, 1, 2]` and not `["0", "1", "2"]`, because `rampExtras` reads
    * numbers and a quoted 0 in a config block is a different thing to the person reading it.
    */
+  function splitOnTopLevelCommas(text) {
+    var out = [];
+    var current = "";
+    var depth = 0;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (ch === "{") depth++;
+      if (ch === "}") depth = Math.max(0, depth - 1);
+      if (ch === "," && depth === 0) { out.push(current); current = ""; continue; }
+      current += ch;
+    }
+    out.push(current);
+    return out;
+  }
+
   function textToList(text) {
     if (Array.isArray(text)) return text;
-    var parts = String(text === undefined || text === null ? "" : text).split(",");
+    // Split on the commas between terms, not on the one inside `spacing-{1,10}`. The series form is
+    // Márton's and so is the comma-separated field, so both use the same character and this has to
+    // count braces — otherwise typing a series into Tokens stores `spacing-{1` and `10}`, which then
+    // read as two perfectly ordinary token names and ship as two variables.
+    // `expandTokenList` in `@Foundation` splits the same way for the same reason; the two live in
+    // different runtimes (this is the iframe, that is the sandbox) and `token-series.test.js` pins them
+    // to one answer.
+    var parts = splitOnTopLevelCommas(String(text === undefined || text === null ? "" : text));
     var out = [];
     for (var i = 0; i < parts.length; i++) {
       var piece = parts[i].trim();
@@ -238,6 +260,43 @@
   }
 
   /**
+   * `1.2:1.2 Minor third|1.25:1.25 Major third` — an option's value, then the words for it.
+   *
+   * An option is a `{ value, label }` pair rather than a string plus a lookup table beside it. Two
+   * lists that have to agree is the bug class this file has hit most often, and a label is exactly the
+   * kind of thing that gets added for six of eight options.
+   *
+   * A bare `1.2` is its own label, which is what every column held before this existed — so nothing
+   * that does not spell a label out changes.
+   */
+  function parseColumnOptions(text) {
+    return text.split("|").map(function (o) { return o.trim(); })
+      .filter(function (o) { return o.length > 0; })
+      .map(function (o) {
+        var at = o.indexOf(":");
+        if (at === -1) return { value: o, label: o };
+        var value = o.slice(0, at).trim();
+        var label = o.slice(at + 1).trim();
+        return { value: value, label: label || value };
+      });
+  }
+
+  /** An option's value, whether it is a pair or the bare string an older column held. */
+  function columnOptionValue(option) {
+    return option && typeof option === "object" && option.value != null ? String(option.value)
+      : String(option);
+  }
+
+  /** An option's words. Falls back to its value, so a label is never blank on screen. */
+  function columnOptionLabel(option) {
+    if (option && typeof option === "object") {
+      return option.label != null && String(option.label) !== "" ? String(option.label)
+        : columnOptionValue(option);
+    }
+    return String(option);
+  }
+
+  /**
    * `name:text|appliesTo:text|min:number|model:(metric|modular)` → the columns of a `@rows` control.
    *
    * One control with two renderings, not two controls. A parallel "tab" control would need its own
@@ -304,6 +363,9 @@
         label = typeText.slice(eq + 1).trim();
         typeText = typeText.slice(0, eq).trim();
       }
+      // Which is why an option's own label is spelled `value:Label` and not `value=Label`: the label
+      // above is split off at the **first** `=`, so an `=` inside the parentheses would hand
+      // *Scaling method* to the first ratio.
 
       // `labelSpelled` records that the source wrote `=Label` out, even when it matches the
       // prettified key. Without it, serialize drops what it can infer — and `columns:number=Columns`
@@ -313,11 +375,10 @@
         key: key, label: label || labelFromName(key), type: "text", labelSpelled: label != null
       };
       if (showWhen) column.showWhen = showWhen;
-      var optionMatch = typeText.match(/^\((.*)\)$/);
+      var optionMatch = typeText.match(/^(radio)?\((.*)\)$/);
       if (optionMatch) {
-        column.type = "select";
-        column.options = optionMatch[1].split("|").map(function (o) { return o.trim(); })
-          .filter(function (o) { return o.length > 0; });
+        column.type = optionMatch[1] ? "radio" : "select";
+        column.options = parseColumnOptions(optionMatch[2]);
       } else if (typeText === "number" || typeText === "checkbox" || typeText === "text" ||
                  typeText === "list") {
         column.type = typeText;
@@ -901,7 +962,15 @@
         }
         if (r.inputType === "rows" && r.columns) {
           parts.push("@rows: " + r.columns.map(function (c) {
-            var spec = c.type === "select" ? "(" + (c.options || []).join("|") + ")" : c.type;
+            var spec = c.type;
+            if (c.type === "select" || c.type === "radio") {
+              spec = (c.type === "radio" ? "radio" : "") + "(" +
+                (c.options || []).map(function (o) {
+                  var value = columnOptionValue(o);
+                  var words = columnOptionLabel(o);
+                  return words === value ? value : value + ":" + words;
+                }).join("|") + ")";
+            }
             var named = c.label && (c.labelSpelled || c.label !== labelFromName(c.key))
               ? "=" + c.label : "";
             // The condition trails the type, before the label, so `ratio:text{scaleType=modular}=Scaling
@@ -1830,6 +1899,10 @@
     matchModeIds: matchModeIds,
     listToText: listToText,
     textToList: textToList,
+    // The renderer draws options and reads them back; both need the same answer to "what is this
+    // option's value" for a pair and for the bare string older columns hold.
+    columnOptionValue: columnOptionValue,
+    columnOptionLabel: columnOptionLabel,
     alignModesToFile: alignModesToFile,
     // Exported because the panel asks the same question when it words the removal note, and "the same
     // mode name" must have exactly one definition. It did not, and the note said "Removing" for a

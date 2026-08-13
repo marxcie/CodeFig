@@ -29,7 +29,11 @@ test('a column spec becomes typed columns', () => {
   assert.equal(f.inputType, 'rows');
   assert.deepEqual(f.columns.map((c) => c.key), ['name', 'appliesTo', 'min', 'model']);
   assert.deepEqual(f.columns.map((c) => c.type), ['text', 'text', 'number', 'select']);
-  assert.deepEqual(f.columns[3].options, ['metric', 'modular', 'endpoints'], 'a fixed set per column');
+  // An option is a `{ value, label }` pair since the ratio select had to show *1.618 Golden ratio*
+  // beside its number. A bare option is its own label, which is what these three are.
+  assert.deepEqual(f.columns[3].options.map((o) => o.value), ['metric', 'modular', 'endpoints'],
+    'a fixed set per column');
+  assert.deepEqual(f.columns[3].options.map((o) => o.label), ['metric', 'modular', 'endpoints']);
   assert.equal(f.columns[0].label, 'Name', 'labelled like any other field');
 });
 
@@ -38,7 +42,7 @@ test('options are parenthesised because the column separator is a pipe', () => {
   // let one mechanism serve both.
   const f = fieldOf('var s = [{}]; // @rows: a:text|m:(x|y|z)|b:number');
   assert.deepEqual(f.columns.map((c) => c.key), ['a', 'm', 'b']);
-  assert.deepEqual(f.columns[1].options, ['x', 'y', 'z']);
+  assert.deepEqual(f.columns[1].options.map((o) => o.value), ['x', 'y', 'z']);
 });
 
 test('@tabs is a flag on the same control, not a different one', () => {

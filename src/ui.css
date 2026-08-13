@@ -2201,6 +2201,17 @@
         min-width: 0;
       }
 
+      /* A select in a tab is as wide as its longest option, not 70% of the cell.
+         Márton: *"spacing method dropdown is too large for no reason"* — and it had none: at 70% of the
+         control column it was sized for a sentence while holding `1.25`. Now that the options carry
+         their names (*1.618 Golden ratio*) the width has a source, so it comes from the content.
+         `justify-self` because the cell is a grid, where `width: auto` would otherwise stretch. */
+      .config-ui-rows-cell--stacked .config-ui-input--select {
+        width: auto;
+        max-width: 100%;
+        justify-self: start;
+      }
+
       /* A tab's fields are fields, so their labels match every other label: normal weight, and the
          same 3fr/7fr grid. */
       .config-ui-rows-cell--stacked .config-ui-rows-cell-label {

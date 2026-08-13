@@ -1384,6 +1384,111 @@ function foundationDomainKeys(domain) {
   return common;
 }
 
+/**
+ * `spacing-{1,10}` → `spacing-1 … spacing-10`. One term of a token list, expanded.
+ *
+ * **The spelling is `{from,to}`**, which is the one already written down twice in the designs —
+ * `spacing-{1,10}` in Márton's own Tokens helper and `heading-{1,6}` in the Typography frame — rather
+ * than a second syntax for the same idea. `{10}` is shorthand for `{1,10}`.
+ *
+ * Two things fall out of taking the range from what is written rather than from a count:
+ * - **it counts down as readily as up.** `heading-{6,1}` is `heading-6 … heading-1`, which is how a
+ *   heading ramp is named smallest-to-largest without anyone having to reverse a list by hand.
+ * - **a written leading zero is a width.** `{01,10}` pads to two digits, so `spacing-01` sorts beside
+ *   `spacing-10` in Figma's variable list instead of after it.
+ *
+ * A term with no braces is itself, so `none, px, spacing-{1,10}` mixes literal names with a series —
+ * which is the case the helper text promises and the reason this works per term rather than per field.
+ */
+function expandTokenTerm(term) {
+  var text = String(term == null ? '' : term).trim();
+  if (!text) return [];
+  // Numbers only, deliberately: `{$step}` is the name-template placeholder this project already has,
+  // and `{brand}` is somebody's token name. Neither is a series, and neither should warn about it.
+  var brace = text.match(/\{\s*(-?\d+)\s*(?:,\s*(-?\d+)\s*)?\}/);
+  if (!brace) return [text];
+
+  var fromText = brace[2] !== undefined ? brace[1] : '1';
+  var toText = brace[2] !== undefined ? brace[2] : brace[1];
+  var from = parseInt(fromText, 10);
+  var to = parseInt(toText, 10);
+
+  var width = /^0\d/.test(fromText) ? fromText.length : 0;
+  var before = text.slice(0, brace.index);
+  var after = text.slice(brace.index + brace[0].length);
+  var out = [];
+  var step = to >= from ? 1 : -1;
+  for (var n = from; step > 0 ? n <= to : n >= to; n += step) {
+    var digits = String(Math.abs(n));
+    while (digits.length < width) digits = '0' + digits;
+    out.push(before + (n < 0 ? '-' : '') + digits + after);
+  }
+  return out;
+}
+
+/**
+ * Split a token list on its commas — the ones between terms, not the one inside `{1,10}`.
+ *
+ * A plain `split(',')` turns `none, spacing-{1,10}` into `spacing-{1` and `10}`, which then look like
+ * two ordinary names and ship as two variables. The separator and the range separator are the same
+ * character because both spellings are Márton's, so the split has to count braces.
+ */
+function splitTokenTerms(text) {
+  var out = [];
+  var current = '';
+  var depth = 0;
+  var s = String(text == null ? '' : text);
+  for (var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i);
+    if (ch === '{') depth++;
+    if (ch === '}') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) { out.push(current); current = ''; continue; }
+    current += ch;
+  }
+  out.push(current);
+  return out;
+}
+
+/**
+ * A whole token list: an array, or one comma-separated string, with every term expanded.
+ *
+ * Both shapes because both are real — the config holds an array and the panel's field is one line of
+ * text — and the answer has to be the same either way or a config means something different after a
+ * round trip through the form.
+ */
+function expandTokenList(value) {
+  var terms = [];
+  if (Array.isArray(value)) {
+    for (var i = 0; i < value.length; i++) {
+      var entry = value[i];
+      if (typeof entry === 'string' && entry.indexOf(',') !== -1) {
+        terms = terms.concat(splitTokenTerms(entry));
+      } else {
+        terms.push(entry);
+      }
+    }
+  } else if (typeof value === 'string') {
+    terms = splitTokenTerms(value);
+  } else {
+    return [];
+  }
+
+  var out = [];
+  for (var t = 0; t < terms.length; t++) out = out.concat(expandTokenTerm(terms[t]));
+  return out;
+}
+
+/** Does this token list carry a series or a comma, so expanding it would change what it names? */
+function tokenListHasSeries(value) {
+  var list = Array.isArray(value) ? value : (typeof value === 'string' ? [value] : []);
+  for (var i = 0; i < list.length; i++) {
+    if (typeof list[i] !== 'string') continue;
+    if (/\{\s*-?\d+\s*(,\s*-?\d+\s*)?\}/.test(list[i])) return true;
+    if (list[i].indexOf(',') !== -1) return true;
+  }
+  return false;
+}
+
 /** The array key each domain calls its token list. */
 function foundationTokensKey(domain) {
   if (domain === 'spacing') return 'spacings';

@@ -20,7 +20,7 @@
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-@import { viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, writeRegistry, normaliseConfig, toDomainConfig, readStamp, stampToken, foundationNamespace, foundationRegistryKey } from "@Foundation"
+@import { viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, writeRegistry, normaliseConfig, toDomainConfig, readStamp, stampToken, foundationNamespace, foundationRegistryKey, expandTokenList, tokenListHasSeries } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { scaleSequence, recogniseScale, resolveModularRatio } from "@Scale Models"
 @import { spacingRampSpec, radiusRampSpec, adoptRamp, readRampGroup, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"

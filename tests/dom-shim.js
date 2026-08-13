@@ -156,7 +156,25 @@ class Element {
     }
   }
   get checked() { return this._attrs.get('checked') === true; }
-  set checked(v) { this._attrs.set('checked', !!v); }
+  /**
+   * Checking a radio unchecks the rest of its group, the way a browser does.
+   *
+   * Without it a test can leave two radios checked at once, and `collectRows` reads whichever comes
+   * first in the DOM — so a test would pass while asserting the wrong value, which is the failure mode
+   * a shim exists to avoid. The group is `name` within this element's root, which is also what makes
+   * the per-row group names in `buildRowCell` load-bearing rather than cosmetic.
+   */
+  set checked(v) {
+    const on = !!v;
+    this._attrs.set('checked', on);
+    if (!on || this.type !== 'radio' || !this.name) return;
+    let root = this;
+    while (root.parentNode) root = root.parentNode;
+    const self = this;
+    root.querySelectorAll('input[name="' + this.name + '"]').forEach(function (el) {
+      if (el !== self) el._attrs.set('checked', false);
+    });
+  }
   get disabled() { return this._attrs.get('disabled') === true; }
   set disabled(v) { this._attrs.set('disabled', !!v); }
   get draggable() { return this._attrs.get('draggable') === true; }

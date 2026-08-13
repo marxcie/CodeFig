@@ -29,7 +29,7 @@
 
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, normaliseConfig } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, normaliseConfig, expandTokenList, tokenListHasSeries } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
@@ -54,7 +54,7 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
   // @collectionModes: Collection modes
   // The collection's own modes. The chips are a view of the file; the tabs below hold each mode's scale.
   group: "Spacing", // @label: Group within collection @placeholder="eg.: Spacing"
-  spacings: ["px", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest. Extra spacings below fill the smallest names, and the scale takes over from there.
+  spacings: ["px", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest, and spacing-{1,10} is a series of ten. Extra spacings below fill the smallest names, and the scale takes over from there.
 
   // --- @section
 
@@ -95,7 +95,7 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
       roundTo: 2,
       extras: [1]
     }
-  ], // @rows: name:text=Mode|scaleType:(modular|metric|fibonacci)=Scale type|ratio:(1.067|1.125|1.2|1.25|1.333|1.414|1.5|1.618){scaleType=modular}=Scaling method|base:number=Base unit|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|roundTo:number=Round numbers to|extras:list=Extra spacings @tabs @label: Modes
+  ], // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.067:1.067 Minor second|1.125:1.125 Major second|1.2:1.2 Minor third|1.25:1.25 Major third|1.333:1.333 Perfect fourth|1.414:1.414 Augmented fourth|1.5:1.5 Perfect fifth|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|base:number=Base unit|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|roundTo:number=Round numbers to|extras:list=Extra spacings @tabs @label: Modes
 
   // # Preview
   // @preview

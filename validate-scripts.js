@@ -279,6 +279,54 @@ function validateResolvedParse(script, scripts) {
  *
  * Measured at 0 false positives across all 35 runnable scripts when added.
  */
+/**
+ * Blank out comments, leaving every other character where it was.
+ *
+ * Not a regex: `"https://api.figma.com"` is a string containing a comment opener, and cutting from
+ * there would drop real calls on that line — a build gate that misses is worse than one that shouts.
+ * Whitespace replaces the comment rather than deleting it, so nothing after it joins what came before.
+ *
+ * **Quote state resets at each newline**, which is what makes this survive a library full of regex
+ * literals. A character class like `/[^.\w$'"]/` — one of these files has exactly that — carries an
+ * unpaired quote, and a scanner that carried state across lines from there treated the next several
+ * hundred lines as one string. The known limit, stated rather than papered over: a line holding both
+ * such a regex *and* a trailing comment keeps that comment, so that one line reads as it did before.
+ */
+function withoutComments(code) {
+  let inBlock = false;
+  return code.split('\n').map((line) => {
+    let out = '';
+    let i = 0;
+    let quote = null;
+    while (i < line.length) {
+      const ch = line[i];
+      const next = line[i + 1];
+      if (inBlock) {
+        if (ch === '*' && next === '/') { inBlock = false; out += '  '; i += 2; continue; }
+        out += ' ';
+        i++;
+        continue;
+      }
+      if (quote) {
+        out += ch;
+        if (ch === '\\') { out += next === undefined ? '' : next; i += 2; continue; }
+        if (ch === quote) quote = null;
+        i++;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === '`') { quote = ch; out += ch; i++; continue; }
+      if (ch === '/' && next === '/') {
+        while (i < line.length) { out += ' '; i++; }
+        continue;
+      }
+      if (ch === '/' && next === '*') { inBlock = true; out += '  '; i += 2; continue; }
+      out += ch;
+      i++;
+    }
+    return out;
+  }).join('\n');
+}
+
 function validateResolvedCalls(scripts) {
   const errors = [];
 
@@ -304,7 +352,12 @@ function validateResolvedCalls(scripts) {
     const called = new Set();
     const callRe = /(^|[^.\w$'"])([A-Za-z_$][\w$]*)\(/g;
     let match;
-    while ((match = callRe.exec(resolved)) !== null) called.add(match[2]);
+    // Comments stripped first: text in a comment is not a call. A config block's own annotations are
+    // comments and they are written to be read, so they contain parentheses —
+    // `scaleType:radio(modular|metric)` in Spacing's `@rows` line was reported as a call to `radio()`,
+    // which is declared in `@codefig-ui.js`, so the error even named a file to import it from. A
+    // validator that has to be worked around is one nobody trusts the next time.
+    while ((match = callRe.exec(withoutComments(resolved))) !== null) called.add(match[2]);
 
     [...called]
       .filter((name) => declaredSomewhere.has(name) && !declaredHere.has(name))
@@ -752,5 +805,9 @@ if (require.main === module) {
   process.exit(result.valid ? 0 : 1);
 }
 
-module.exports = { validateScripts, shouldExclude, findAllScripts };
+// `validateResolvedCalls` and `withoutComments` are exported so the gate itself is testable: it is
+// the only automated check standing between an unimported library call and a swallowed
+// ReferenceError in Figma, and it has now been wrong in both directions — once blind to a real
+// missing import, once shouting about a call that was only ever text in a comment.
+module.exports = { validateScripts, shouldExclude, findAllScripts, validateResolvedCalls, withoutComments };
 

@@ -78,14 +78,22 @@ test('a mode shows the fields its scale type uses, and no others', () => {
   // The shipped default is metric: a base, a step, and how often the step grows.
   assert.deepEqual(shown(), ['scaleType', 'base', 'step', 'mod', 'roundTo', 'extras']);
 
+  // **Radios, at Márton's request** — *"Change Scaling type selector to radio buttons"*, which is also
+  // what his frames show. This picked a `<select>` value before; the assertions about which fields a
+  // mode shows are unchanged, because the control changed and the behaviour did not.
   const type = item.querySelectorAll('[data-row-field="scaleType"]')[0];
-  type.value = 'modular';
-  type.dispatchEvent(new shim.Event('change', { bubbles: true }));
+  const pick = (value) => {
+    const input = type.querySelectorAll('input').filter((r) => r.value === value)[0];
+    assert.ok(input, 'the panel offers ' + value);
+    input.checked = true;
+    input.dispatchEvent(new shim.Event('change', { bubbles: true }));
+  };
+
+  pick('modular');
   assert.deepEqual(shown(), ['scaleType', 'ratio', 'base', 'roundTo', 'extras'],
     'a ratio, and neither the step nor the module size');
 
-  type.value = 'fibonacci';
-  type.dispatchEvent(new shim.Event('change', { bubbles: true }));
+  pick('fibonacci');
   assert.deepEqual(shown(), ['scaleType', 'base', 'step', 'roundTo', 'extras'],
     'a step, because it is the first increment — but nothing to say how often it grows');
 });

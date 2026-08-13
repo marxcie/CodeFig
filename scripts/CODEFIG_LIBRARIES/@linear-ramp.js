@@ -482,7 +482,17 @@ function applyRampNameTemplate(template, index, totalSteps) {
 function materialiseRampTokens(config, spec) {
   if (!config || typeof config !== 'object') return;
   var raw = config[spec.tokensKey];
-  if (Array.isArray(raw) && raw.length > 0) return;
+  // A series is expanded wherever it appears — in the array the config holds or in the one line of
+  // text the panel's field is. `spacing-{1,10}` is ten tokens and `steps` is not involved: the range
+  // says how many, so there is no second field to keep in agreement with the first.
+  if (Array.isArray(raw) && raw.length > 0) {
+    if (tokenListHasSeries(raw)) config[spec.tokensKey] = expandTokenList(raw);
+    return;
+  }
+  if (typeof raw === 'string' && tokenListHasSeries(raw)) {
+    config[spec.tokensKey] = expandTokenList(raw);
+    return;
+  }
 
   var n = typeof config.steps === 'number' ? config.steps : 0;
   var out = [];

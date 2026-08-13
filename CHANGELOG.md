@@ -112,9 +112,24 @@ deleting variable modes they did not recognise.
   *"Replacing…"* when that is what you have set up.
 - **A config pasted from another file still never deletes a mode.** A mode this config has not heard of
   is left exactly where it is, values and all. The only thing that removes a mode is clicking its dash.
+- **Name a series of tokens instead of typing it out.** `spacing-{1,10}` in the Tokens field is ten
+  tokens, `spacing-1` through `spacing-10`, and it mixes with names you write yourself:
+  `none, px, spacing-{1,10}`. `{10}` is short for `{1,10}`. Two details worth knowing because they are
+  requested by writing them rather than by a setting: it counts **down** as readily as up, so
+  `heading-{6,1}` names a heading ramp smallest-to-largest, and a written leading zero is a width, so
+  `{01,10}` gives `spacing-01 … spacing-10` — which sorts the way it reads in Figma's variables list.
+- **Scale type is a set of radio buttons, and every ratio says what it is.** *Modular scale / Metric
+  scale / Fibonacci* are visible at once instead of hidden in a dropdown, and the Scaling method list
+  reads *1.25 Major third*, *1.618 Golden ratio* rather than bare numbers. The dropdown is now as wide as
+  its longest option instead of a fixed share of the row.
 
 ### Fixed
 
+- **Picking a ratio in the panel now generates a scale.** A dropdown's value is text, so choosing
+  *1.25 Major third* wrote `ratio: "1.25"` — quoted — and the generator, which accepts a number or a
+  ratio's name, answered "unknown ratio" and produced nothing for that mode. Numeric dropdowns read back
+  as numbers, and a quoted number is understood wherever a ratio is accepted, so a config typed by hand
+  behaves the same way.
 - **Modes are shown in the collection's order.** A loaded config listed its modes in whatever order it
   had been stored in, which on a five-viewport system — Desktop-large, Desktop, Tablet, Tablet-small,
   Mobile — reads as no order at all. The chips and the Mode settings tabs now follow the order Figma

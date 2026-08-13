@@ -86,7 +86,14 @@ function resolveModularRatio(ratio) {
   if (typeof ratio === 'number' && isFinite(ratio) && ratio > 0) return ratio;
   if (typeof ratio !== 'string') return null;
   var table = modularRatios();
-  return table[ratio] !== undefined ? table[ratio] : null;
+  if (table[ratio] !== undefined) return table[ratio];
+  // `"1.25"` means 1.25. A config arrives from a paste, a text layer or a `<select>` — all of which
+  // carry strings — and answering "unknown ratio" to a number that is right there produces an empty
+  // scale rather than a wrong one, which is harder to read back to a cause.
+  var trimmed = ratio.trim();
+  if (!trimmed) return null;
+  var parsed = Number(trimmed);
+  return isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function scaleModelNames() {
