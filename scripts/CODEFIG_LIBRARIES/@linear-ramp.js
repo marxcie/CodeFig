@@ -601,15 +601,29 @@ function buildRampScaleOpts(totalSteps, viewport, config, spec) {
   if (!sizes || !sizes.base) return null;
 
   var tokens = config[spec.tokensKey];
-  var baseIndex = tokens.indexOf(sizes.base.level);
-  if (baseIndex < 0) {
-    console.warn('base.level not found in ' + spec.tokensKey + ', using middle step');
-    baseIndex = Math.max(0, Math.floor((totalSteps - 1) / 2));
+  // **Extras are values, not tokens.** They merge into the sequence below, so the generated part is
+  // shorter by however many there are — which is also what fixes the base: with extras filling the
+  // smallest names, the base is the first *generated* token, and nothing has to say where it sits.
+  var extras = rampExtras(sizes);
+  var generatedSteps = Math.max(1, totalSteps - extras.length);
+
+  var baseIndex;
+  if (typeof sizes.base === 'number') {
+    // The panel's spelling: one number, and the base is where the extras stop.
+    baseIndex = 0;
+  } else {
+    baseIndex = tokens.indexOf(sizes.base.level);
+    if (baseIndex < 0) {
+      console.warn('base.level not found in ' + spec.tokensKey + ', using middle step');
+      baseIndex = Math.max(0, Math.floor((generatedSteps - 1) / 2));
+    }
   }
   var scaling = config.scaling || {};
+  var baseValue = typeof sizes.base === 'number' ? sizes.base : sizes.base.size;
   return {
-    model: typeof sizes.model === 'string' && sizes.model ? sizes.model : 'endpoints',
-    steps: totalSteps,
+    model: rampModelOf(sizes),
+    steps: generatedSteps,
+    extras: extras,
     min: sizes.min,
     max: sizes.max,
     tokens: tokens,
@@ -618,21 +632,72 @@ function buildRampScaleOpts(totalSteps, viewport, config, spec) {
     ease: scaling.ease,
     rangeMode: useFullRangeRamp(config) ? 'full' : 'twoSegment',
     baseIndex: baseIndex,
-    baseValue: sizes.base.size,
-    roundTo: getRampRoundGrid(config),
+    baseValue: baseValue,
+    // **Per mode.** Márton's call, and the frames had it right: a file with a 4px desktop grid and a
+    // 2px mobile one is the ordinary case, so the mode's own `roundTo` wins and the config-level one is
+    // the fallback every older config still relies on.
+    roundTo: typeof sizes.roundTo === 'number' && sizes.roundTo > 0
+      ? sizes.roundTo
+      : getRampRoundGrid(config),
     easeInExponent: scaling.easeInExponent,
     easeOutExponent: scaling.easeOutExponent,
     defaultRangeMode: 'full',
     // modular, metric, explicit. `baseValue`/`baseIndex` is the library's spelling; the config's
     // is `base: { level, size }`, and this is the translation one way. rampModePayloadFor is the
     // other. Both directions or neither — see @Scale Models.
-    baseValue: sizes.base.size,
+    baseValue: baseValue,
     ratio: sizes.ratio,
     step: sizes.step,
     mod: sizes.mod,
     values: sizes.values,
     clamp: sizes.clamp
   };
+}
+
+/**
+ * A mode's extra values, sorted and cleaned.
+ *
+ * `extras: [0, 1, 2]` in Márton's frame fills `none, px, 3xs` while the curve takes over at `2xs`. His
+ * rule, and the reason "prepend" is the wrong word for it: *"I might need to prepend a 16, where the
+ * generated scale is 8, 12, 20… and I need an intermittent step."* So they are merged by value, not
+ * pushed to the front — a 16 lands between 12 and 20.
+ */
+function rampExtras(sizes) {
+  var given = sizes && Array.isArray(sizes.extras) ? sizes.extras : [];
+  var out = [];
+  for (var i = 0; i < given.length; i++) {
+    var raw = given[i];
+    // **`Number(null)` is 0, and 0 is a legitimate extra** — Márton's own are `0, 1, 2` — so coercing
+    // would let a stray hole in the array become a zero-spacing token that nobody typed. Emptiness is
+    // rejected before conversion, and so are booleans, where `Number(true)` is 1.
+    if (raw === null || raw === undefined || raw === '' || typeof raw === 'boolean') continue;
+    var n = Number(raw);
+    if (isFinite(n) && out.indexOf(n) === -1) out.push(n);
+  }
+  return out.sort(function (a, b) { return a - b; });
+}
+
+/** The model, under either spelling: the panel writes `scaleType`, the config has always had `model`. */
+function rampModelOf(sizes) {
+  var name = sizes && (sizes.model || sizes.scaleType);
+  return typeof name === 'string' && name ? name : 'endpoints';
+}
+
+/**
+ * Merge a mode's extras into its generated sequence.
+ *
+ * Sorted by value, which is what makes an extra an *intermittent step* rather than a prefix. The token
+ * names are positional and independent — Márton's second rule — so the names come from the token list
+ * in order and this only decides the numbers.
+ *
+ * The consequence worth reporting rather than hiding: each extra takes a step away from the generated
+ * part, so a scale with three extras generates three fewer values and its top is correspondingly lower.
+ */
+function mergeRampExtras(values, extras) {
+  if (!extras || !extras.length) return values;
+  var merged = values.concat(extras);
+  merged.sort(function (a, b) { return a - b; });
+  return merged;
 }
 
 /**
@@ -646,7 +711,12 @@ function rampSequenceFor(viewport, config, spec) {
   var opts = buildRampScaleOpts((config[spec.tokensKey] || []).length, viewport, config, spec);
   if (!opts) return { opts: null, values: [], warnings: [] };
   var built = scaleSequence(opts.model, opts);
-  return { opts: opts, values: built.values, warnings: built.warnings, adjustments: built.adjustments || [] };
+  return {
+    opts: opts,
+    values: mergeRampExtras(built.values, opts.extras),
+    warnings: built.warnings,
+    adjustments: built.adjustments || []
+  };
 }
 
 /**

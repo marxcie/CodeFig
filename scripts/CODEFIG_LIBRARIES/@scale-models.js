@@ -90,7 +90,7 @@ function resolveModularRatio(ratio) {
 }
 
 function scaleModelNames() {
-  return ['endpoints', 'modular', 'metric', 'explicit'];
+  return ['endpoints', 'modular', 'metric', 'fibonacci', 'explicit'];
 }
 
 function scaleWarning(code, message, detail) {
@@ -146,7 +146,7 @@ function scaleSequence(model, options) {
   if (name === 'explicit') return explicitSequence(steps, opts, warnings);
   if (name === 'endpoints') return endpointsSequence(steps, opts, warnings);
 
-  // modular and metric both walk outwards from a base, and both derive their top.
+  // modular, metric and fibonacci all walk outwards from a base, and all derive their top.
   if (typeof opts.max === 'number') {
     warnings.push(scaleWarning(
       'scale-max-ignored',
@@ -155,8 +155,8 @@ function scaleSequence(model, options) {
     ));
   }
 
-  var built = name === 'modular'
-    ? modularSequence(steps, opts, warnings)
+  var built = name === 'modular' ? modularSequence(steps, opts, warnings)
+    : name === 'fibonacci' ? fibonacciSequence(steps, opts, warnings)
     : metricSequence(steps, opts, warnings);
   if (!built) return { values: [], warnings: warnings };
 
@@ -257,6 +257,42 @@ function metricSequence(steps, opts, warnings) {
   for (i = baseIndex + 1; i < steps; i++) {
     var above = i - baseIndex;
     out[i] = out[i - 1] + (Math.floor((above - 1) / mod) + 1) * step;
+  }
+  for (i = baseIndex - 1; i >= 0; i--) out[i] = out[i + 1] - step;
+  return out;
+}
+
+/**
+ * Each step the sum of the two before it: `4, 8, 12, 20, 32, 52, 84, 136 …`
+ *
+ * **Márton's own frame is why this exists.** Its spacing values are labelled *1.618 Golden ratio* and
+ * are exactly this sequence — a golden-ratio geometric from 4 gives `4, 6.47, 10.47, 16.94 …`, which is
+ * not what he drew. The ratios of a Fibonacci sequence converge on φ (2.0, 1.5, 1.667, 1.6, 1.625,
+ * 1.615, 1.619, 1.618), which is why it reads as golden while behaving better: **it stays whole**. A
+ * true φ scale needs rounding at every step, which is where the *"Rounded from 10.9"* notes beside half
+ * those rows come from.
+ *
+ * Seeded by `baseValue` and `step`: the base, then the base plus the step, then sums. Below the base it
+ * walks down by `step`, the same as a metric scale — a sequence defined by addition has nothing to say
+ * about what comes before its start.
+ */
+function fibonacciSequence(steps, opts, warnings) {
+  var step = typeof opts.step === 'number' && isFinite(opts.step) ? opts.step : 0;
+  if (step <= 0) {
+    warnings.push(scaleWarning(
+      'scale-step-required',
+      'A fibonacci scale needs a positive `step` — it is the first increment, and the sequence is the ' +
+      'base, the base plus the step, then each value the sum of the two before it.'
+    ));
+    return null;
+  }
+
+  var baseIndex = scaleBaseIndex(steps, opts);
+  var out = new Array(steps);
+  out[baseIndex] = scaleBaseValue(opts);
+  var i;
+  for (i = baseIndex + 1; i < steps; i++) {
+    out[i] = i === baseIndex + 1 ? out[baseIndex] + step : out[i - 1] + out[i - 2];
   }
   for (i = baseIndex - 1; i >= 0; i--) out[i] = out[i + 1] - step;
   return out;
