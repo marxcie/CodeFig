@@ -204,7 +204,11 @@ function typeScaleTable(config, modeName) {
       ratio: size > 0 ? Math.round((lineHeight / size) * 100) / 100 : 0,
       tracking: tracking,
       trackingPercent: size > 0 ? Math.round((tracking / size) * 1000) / 10 : 0,
-      variable: prefix + token
+      // **The folder, with its slash, because a step is three variables and not one.** A run writes
+      // `<token>/font-size`, `/line-height` and `/letter-spacing`; naming `Typography/Text-Tiny` in a
+      // column headed *Variable* named something that does not exist in the file — the illustrative-value
+      // trap, arriving in the one section whose whole job is to say what will be written.
+      variable: prefix + token + '/'
     };
   });
   return { mode: mode, tokens: tokens, rows: rows, warnings: sizes.warnings };
@@ -234,7 +238,7 @@ function typographyOverviewHtml(config, domain, modeName) {
   }
 
   var head = '<thead><tr><th>Step</th><th>Size</th><th>Line height</th><th>Ratio</th>' +
-    '<th>Tracking</th><th>Variable</th></tr></thead>';
+    '<th>Tracking</th><th>Variables</th></tr></thead>';
   var body = table.rows.map(function (row) {
     return '<tr>' +
       '<td>' + typeScaleEscape(row.token) + '</td>' +

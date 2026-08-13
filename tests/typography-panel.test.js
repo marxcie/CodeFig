@@ -174,12 +174,19 @@ test('the Overview lists every token with the variable a run would write', () =>
   const html = T.typographyOverviewHtml({ config: T.data }, 'typography', 'desktop');
   const table = T.typeScaleTable({ config: T.data }, 'desktop');
   assert.match(html, /class="type-overview"/);
-  ['Step', 'Size', 'Line height', 'Ratio', 'Tracking', 'Variable'].forEach((head) => {
+  ['Step', 'Size', 'Line height', 'Ratio', 'Tracking', 'Variables'].forEach((head) => {
     assert.ok(html.indexOf('<th>' + head + '</th>') !== -1, head + ' is a column');
   });
   table.rows.forEach((row) => {
     assert.ok(html.indexOf(row.token) !== -1, row.token + ' has a row');
     assert.ok(html.indexOf(row.variable) !== -1, row.variable + ' is named');
+    // A step is three variables, so the column names the **folder** — and every one of the three a run
+    // writes has to live under it. Naming `Typography/Text-Tiny` in a column headed *Variable* was
+    // naming something no file contains.
+    assert.match(row.variable, /\/$/, 'the folder, with its slash');
+    ['font-size', 'line-height', 'letter-spacing'].forEach((leaf) => {
+      assert.ok(T.variables[row.variable + leaf], row.variable + leaf + ' is what a run writes');
+    });
   });
   // The numbers are the run's numbers. A preview computed a second way is the trap every one of these
   // is written to avoid.
