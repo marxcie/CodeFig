@@ -1413,7 +1413,12 @@ function expandTokenTerm(term) {
   if (!text) return [];
   // Numbers only, deliberately: `{$step}` is the name-template placeholder this project already has,
   // and `{brand}` is somebody's token name. Neither is a series, and neither should warn about it.
-  var brace = text.match(/\{\s*(-?\d+)\s*(?:,\s*(-?\d+)\s*)?\}/);
+  //
+  // `{%10}` is accepted as `{10}` because it is the spelling in Márton's own frames — he left the syntax
+  // to me and then drew `spacing-{%10}` in the Tokens helper, so somebody reading the panel will type it.
+  // One alias costs nothing; a reader typing what the helper shows and getting a literal token named
+  // `spacing-{%10}` costs a confused half hour.
+  var brace = text.match(/\{\s*%?\s*(-?\d+)\s*(?:,\s*(-?\d+)\s*)?\}/);
   if (!brace) return [text];
 
   var fromText = brace[2] !== undefined ? brace[1] : '1';
@@ -1491,7 +1496,7 @@ function tokenListHasSeries(value) {
   var list = Array.isArray(value) ? value : (typeof value === 'string' ? [value] : []);
   for (var i = 0; i < list.length; i++) {
     if (typeof list[i] !== 'string') continue;
-    if (/\{\s*-?\d+\s*(,\s*-?\d+\s*)?\}/.test(list[i])) return true;
+    if (/\{\s*%?\s*-?\d+\s*(,\s*-?\d+\s*)?\}/.test(list[i])) return true;
     if (list[i].indexOf(',') !== -1) return true;
   }
   return false;

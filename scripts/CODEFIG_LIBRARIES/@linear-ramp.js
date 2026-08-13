@@ -1289,32 +1289,43 @@ function rampPreviewHtml(config, domain) {
  * 20.7 — that is the number that tells you the grid is fighting the curve. It is computed rather than
  * remembered: the model's raw sequence against the value the run would actually write.
  */
-function spacingPreviewHtml(config, domain, modeName) {
+/**
+ * One mode's tokens, values and notes — everything a per-mode preview draws, before any drawing.
+ *
+ * Extracted when the Corner radius panel arrived, because its preview is the same numbers in a different
+ * shape: boxes with a radius instead of bars with a height. Two copies of *this* would be two copies of
+ * "generate in memory the way a run does", which is the property every preview in this project has to
+ * keep — a preview computed a second way is the one nobody can judge.
+ *
+ * Returns `{ error }`, or `{ unset, mode, rows }` where a row is `{ token, value, note }` and the note is
+ * already worded.
+ */
+function rampPreviewRows(config, domain, modeName) {
   var spec = domain === 'radius' ? radiusRampSpec() : spacingRampSpec();
-  if (!config || typeof config !== 'object') return rampPreviewNote('There is no config to preview yet.');
+  if (!config || typeof config !== 'object') return { error: 'There is no config to preview yet.' };
 
   var data = JSON.parse(JSON.stringify(config.config || config));
   try {
     ensureCompatRampConfig(data, spec);
     materialiseRampTokens(data, spec);
   } catch (e) {
-    return rampPreviewNote('This config could not be read: ' + (e && e.message ? e.message : e));
+    return { error: 'This config could not be read: ' + (e && e.message ? e.message : e) };
   }
 
   var modeNames = rampModeNames(data, spec);
   var setPlan = materialiseRampSizes(data, spec, modeNames);
-  if (setPlan && !setPlan.ok) return rampPreviewNote(describeRampSetPlan(setPlan).join(' '));
+  if (setPlan && !setPlan.ok) return { error: describeRampSetPlan(setPlan).join(' ') };
 
   var variables;
   try {
     variables = generateRampVariables(data, spec);
   } catch (e) {
-    return rampPreviewNote('This config could not be generated: ' + (e && e.message ? e.message : e));
+    return { error: 'This config could not be generated: ' + (e && e.message ? e.message : e) };
   }
 
   var table = rampScaleTable(variables, resolveGroup(config) || data.group || '');
   if (!table.rows.length || !table.modes.length) {
-    return rampPreviewNote('Nothing to draw yet — this config names no tokens or no modes.');
+    return { error: 'Nothing to draw yet \u2014 this config names no tokens or no modes.' };
   }
 
   // The mode the panel is showing, matched the way every other comparison here matches: by name, and
@@ -1329,50 +1340,112 @@ function spacingPreviewHtml(config, domain, modeName) {
   if (!wanted) wanted = table.modes[0];
 
   var raw = spacingRawSequenceFor(wanted, data, spec);
-  var unset = !data.collectionName || String(data.collectionName).trim() === '';
-  var out = ['<div class="spacing-preview' + (unset ? ' is-unset' : '') + '">'];
+  var grid = spacingModeGrid(wanted, data, spec);
 
-  table.rows.forEach(function (row, index) {
+  var rows = table.rows.map(function (row, index) {
     var cell = null;
     for (var c = 0; c < row.cells.length; c++) if (row.cells[c].mode === wanted) cell = row.cells[c];
     var value = cell ? cell.value : null;
-    var drawn = typeof value === 'number' ? Math.max(0, value * 0.5) : 0;
-
-    out.push('<div class="spacing-preview-row">');
-    out.push('<span class="spacing-preview-name">' + rampEscapeHtml(row.token) + '</span>');
-    out.push('<span class="spacing-preview-track">');
-    out.push('<span class="spacing-preview-bar" style="height:' +
-      (Math.round(drawn * 100) / 100) + 'px"></span>');
-    out.push('<span class="spacing-preview-value">' +
-      (typeof value === 'number' ? rampPreviewNumber(value) : '\u2014') + '</span>');
+    var note = null;
     // **Two different things, said differently.** A value moved by the grid was *rounded*; a value moved
     // because it landed on the token below it was *nudged*, and calling that rounding would be a small
     // lie in the one place that exists to explain a number.
     var before = raw[index];
-    if (typeof value === 'number' && typeof before === 'number' &&
-        Math.abs(before - value) > 0.01) {
-      var grid = spacingModeGrid(wanted, data, spec);
+    if (typeof value === 'number' && typeof before === 'number' && Math.abs(before - value) > 0.01) {
       var onGrid = grid > 0 ? snapScaleGrid(before, grid) : before;
-      out.push('<span class="spacing-preview-note">' +
-        (Math.abs(onGrid - value) > 0.01
-          ? 'Nudged from ' + rampPreviewNumber(onGrid) + ' — it landed on the token below'
-          : 'Rounded from ' + rampPreviewNumber(before)) +
-        '</span>');
+      note = Math.abs(onGrid - value) > 0.01
+        ? 'Nudged from ' + rampPreviewNumber(onGrid) + ' \u2014 it landed on the token below'
+        : 'Rounded from ' + rampPreviewNumber(before);
     }
+    return { token: row.token, value: value, note: note };
+  });
+
+  return {
+    unset: !data.collectionName || String(data.collectionName).trim() === '',
+    mode: wanted,
+    rows: rows
+  };
+}
+
+function spacingPreviewHtml(config, domain, modeName) {
+  var drawn = rampPreviewRows(config, domain, modeName);
+  if (drawn.error) return rampPreviewNote(drawn.error);
+
+  var out = ['<div class="spacing-preview' + (drawn.unset ? ' is-unset' : '') + '">'];
+  drawn.rows.forEach(function (row) {
+    var height = typeof row.value === 'number' ? Math.max(0, row.value * 0.5) : 0;
+    out.push('<div class="spacing-preview-row">');
+    out.push('<span class="spacing-preview-name">' + rampEscapeHtml(row.token) + '</span>');
+    out.push('<span class="spacing-preview-track">');
+    out.push('<span class="spacing-preview-bar" style="height:' +
+      (Math.round(height * 100) / 100) + 'px"></span>');
+    out.push('<span class="spacing-preview-value">' +
+      (typeof row.value === 'number' ? rampPreviewNumber(row.value) : '\u2014') + '</span>');
+    if (row.note) out.push('<span class="spacing-preview-note">' + rampEscapeHtml(row.note) + '</span>');
     out.push('</span>');
     out.push('</div>');
   });
-
   out.push('</div>');
   return out.join('');
 }
 
+/** The box every radius is drawn on, in px. From the frame: 200 x 120. */
+function radiusPreviewBox() {
+  return { width: 200, height: 120 };
+}
+
 /**
- * One mode's sequence **before** rounding, so the preview can say what moved.
+ * The largest radius a 200x120 box can actually show.
  *
- * Returns `[]` when the model cannot produce one, which makes the note simply absent — a preview that
- * guessed at a raw value would be inventing the very number it is there to disclose.
+ * Above `min(w, h) / 2` the corners meet and the shape stops changing: 60 and 600 draw the identical pill.
+ * The frame's own largest token is 96, already past it, so a preview that says nothing here draws two
+ * different numbers as the same picture. The note is the difference between "the drawing is wrong" and
+ * "the drawing has run out of room".
  */
+function radiusPreviewCap() {
+  var box = radiusPreviewBox();
+  return Math.min(box.width, box.height) / 2;
+}
+
+/**
+ * Corner radius, drawn at its real size on the box the frame draws.
+ *
+ * Real px rather than a scale, because a radius is judged against the corner it will sit on \u2014 and
+ * Márton settled the general question on Grid: *"it should be real 50% of the viewport width, in pixels"*.
+ * Here the box is a fixed size, so nothing is scaled at all.
+ */
+function radiusPreviewHtml(config, domain, modeName) {
+  var drawn = rampPreviewRows(config, domain || 'radius', modeName);
+  if (drawn.error) return rampPreviewNote(drawn.error);
+
+  var box = radiusPreviewBox();
+  var cap = radiusPreviewCap();
+  var out = ['<div class="radius-preview' + (drawn.unset ? ' is-unset' : '') + '">'];
+  drawn.rows.forEach(function (row) {
+    var radius = typeof row.value === 'number' ? Math.max(0, row.value) : 0;
+    out.push('<div class="radius-preview-row">');
+    out.push('<span class="radius-preview-name">' + rampEscapeHtml(row.token) + '</span>');
+    out.push('<span class="radius-preview-track">');
+    out.push('<span class="radius-preview-box" style="width:' + box.width + 'px;height:' + box.height +
+      'px;border-radius:' + (Math.round(radius * 100) / 100) + 'px"></span>');
+    out.push('<span class="radius-preview-value">' +
+      (typeof row.value === 'number' ? rampPreviewNumber(row.value) : '\u2014') + '</span>');
+    var notes = [];
+    if (row.note) notes.push(row.note);
+    if (radius > cap) {
+      notes.push('Past what a ' + box.width + '\u00d7' + box.height + ' box can show \u2014 ' +
+        rampPreviewNumber(cap) + ' and up draw the same pill');
+    }
+    if (notes.length) {
+      out.push('<span class="radius-preview-note">' + rampEscapeHtml(notes.join(' \u00b7 ')) + '</span>');
+    }
+    out.push('</span>');
+    out.push('</div>');
+  });
+  out.push('</div>');
+  return out.join('');
+}
+
 function spacingRawSequenceFor(modeName, data, spec) {
   try {
     var sizes = data[spec.sizesKey] || {};

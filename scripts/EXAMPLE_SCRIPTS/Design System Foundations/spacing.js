@@ -95,7 +95,7 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
       roundTo: 2,
       extras: [1]
     }
-  ], // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.067:1.067 Minor second|1.125:1.125 Major second|1.2:1.2 Minor third|1.25:1.25 Major third|1.333:1.333 Perfect fourth|1.414:1.414 Augmented fourth|1.5:1.5 Perfect fifth|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|base:number=Base unit|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|roundTo:number=Round numbers to|extras:list=Extra spacings @tabs @label: Modes
+  ], // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.067:1.067 Minor second|1.125:1.125 Major second|1.2:1.2 Minor third|1.25:1.25 Major third|1.333:1.333 Perfect fourth|1.414:1.414 Augmented fourth|1.5:1.5 Perfect fifth|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|base:number=Base unit|roundTo:number=Round numbers to|extras:list=Extra spacings @tabs @label: Modes
 
   // # Preview
   // @preview

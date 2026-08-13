@@ -118,6 +118,18 @@ deleting variable modes they did not recognise.
   requested by writing them rather than by a setting: it counts **down** as readily as up, so
   `heading-{6,1}` names a heading ramp smallest-to-largest, and a written leading zero is a width, so
   `{01,10}` gives `spacing-01 … spacing-10` — which sorts the way it reads in Figma's variables list.
+- **Corner radius has its panel**, and its preview draws the thing you are judging: a 200×120 box per
+  token with the radius applied at its real size, the name beside it and the value past it. Same skeleton
+  as the others — General, a tab per mode, Preview — with each mode carrying its own scale and its own
+  rounding. `none` is no longer a special case in the maths: it is an extra value of `0` that fills the
+  smallest token name.
+
+  **A radius past 60 says so.** The corners of a 200×120 box meet there, so 60 and 600 draw the identical
+  pill — and the shipped design's own largest token is 96. Without the note, two different numbers look
+  like the same picture.
+
+  **The numbers are unchanged** in all three modes: desktop still generates `0, 4, 8, 12, 16, 24`. Only the
+  spelling moved.
 - **Typography has its panel.** The same skeleton as Grid and Spacing — General, a tab per mode, then
   two sections of its own: an **Overview** table listing every step with its size, line height, ratio,
   tracking and the variable a run will write, and a **specimen** setting your own preview copy at the

@@ -47,7 +47,7 @@ function mockups() {
 
 test('there is a target mockup for each panel that has one designed', () => {
   const files = mockups();
-  ['grid-target.html', 'spacing-target.html', 'typography-target.html'].forEach((name) => {
+  ['grid-target.html', 'spacing-target.html', 'typography-target.html', 'radius-target.html'].forEach((name) => {
     assert.ok(files.includes(name), name + ' is missing');
   });
 });

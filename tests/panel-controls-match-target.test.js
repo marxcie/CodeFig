@@ -29,6 +29,7 @@ const FILES = {
   'grid-target.html': 'grid.js',
   'spacing-target.html': 'spacing.js',
   'typography-target.html': 'typography.js',
+  'radius-target.html': 'corner-radius.js',
 };
 
 /** `text` and `list` are the same control — one line of text — so they answer for each other. */

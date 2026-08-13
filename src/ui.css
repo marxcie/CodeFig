@@ -2434,6 +2434,65 @@
       }
 
       /* ============================================================
+         CORNER RADIUS PREVIEW  (frame 2065:3045)
+
+         The same row skeleton as the spacing preview — 3fr / 7fr outside, the preview's own business
+         inside the control column — because Márton's instruction covers both: *"spacing preview rows …
+         doesn't follow the same left/right proportions as the default ui fields, it should be aligned."*
+         Its own classes, though: appending to `.spacing-preview-*` would tie a box's size to a bar's.
+
+         Sizes are the frame's: a 200x120 box, the value 24px past it, and 6px between rows.
+         ============================================================ */
+      .radius-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 100%;
+      }
+
+      .radius-preview.is-unset .radius-preview-box {
+        background: var(--border-color);
+      }
+
+      .radius-preview-row {
+        display: grid;
+        grid-template-columns: 3fr 7fr;
+        column-gap: var(--space-md);
+        align-items: center;
+      }
+
+      .radius-preview-track {
+        display: grid;
+        grid-template-columns: 200px 54px 1fr;
+        column-gap: var(--space-lg);
+        align-items: center;
+      }
+
+      .radius-preview-name {
+        font-size: var(--font-size-body);
+        font-weight: var(--font-weight-semibold);
+      }
+
+      /* The corner is the subject, so the box is drawn at the frame's size and the radius at its real
+         one. `box-sizing` matters here in a way it does not for a bar: a border would eat the 120px the
+         radius is measured against. */
+      .radius-preview-box {
+        display: block;
+        box-sizing: border-box;
+        background: var(--bg-tertiary, #e8eaed);
+      }
+
+      .radius-preview-value {
+        font-size: var(--font-size-body);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .radius-preview-note {
+        font-size: var(--font-size-helper);
+        opacity: 0.6;
+      }
+
+      /* ============================================================
          TYPOGRAPHY OVERVIEW AND SPECIMEN  (plan 20)
 
          The table is the only place a run's variable *names* appear, which is what earns it a section

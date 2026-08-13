@@ -75,8 +75,12 @@ test('a mode shows the fields its scale type uses, and no others', () => {
       .filter(Boolean);
   }
 
-  // The shipped default is metric: a base, a step, and how often the step grows.
-  assert.deepEqual(shown(), ['scaleType', 'base', 'step', 'mod', 'roundTo', 'extras']);
+  // The shipped default is metric: a step, how often it grows, and a base.
+  //
+  // **Step and Every N steps sit where Scaling method does**, not after Base unit. Both frames put Base
+  // unit directly after Scaling method, and these two are what *replaces* it under a metric scale — so
+  // the field that changes meaning keeps its position, and the three panels read the same way down.
+  assert.deepEqual(shown(), ['scaleType', 'step', 'mod', 'base', 'roundTo', 'extras']);
 
   // **Radios, at Márton's request** — *"Change Scaling type selector to radio buttons"*, which is also
   // what his frames show. This picked a `<select>` value before; the assertions about which fields a
@@ -91,10 +95,10 @@ test('a mode shows the fields its scale type uses, and no others', () => {
 
   pick('modular');
   assert.deepEqual(shown(), ['scaleType', 'ratio', 'base', 'roundTo', 'extras'],
-    'a ratio, and neither the step nor the module size');
+    'a ratio in that same slot, and neither the step nor the module size');
 
   pick('fibonacci');
-  assert.deepEqual(shown(), ['scaleType', 'base', 'step', 'roundTo', 'extras'],
+  assert.deepEqual(shown(), ['scaleType', 'step', 'base', 'roundTo', 'extras'],
     'a step, because it is the first increment — but nothing to say how often it grows');
 });
 

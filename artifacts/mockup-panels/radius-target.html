@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Corner radius panel — target layout</title>
+
+<!--
+  THE TARGET, not a style reference. Same rules as the other three in this folder.
+
+  Hand-written to Márton's frame `2065:3045`, using the plugin's own class names and the plugin's own
+  stylesheet, linked rather than copied.
+
+  **One state, because he drew one.** *"It's pretty similar to spacings, so I didn't create the additional
+  screens."* The Start and New-collection states are the shared controls in their empty and creating
+  states, which `spacing-target.html` already shows; inventing them here would put a guess in the file
+  whose whole purpose is to be the fixed goal.
+
+  What the frame settles, beyond confirming the skeleton:
+
+  **The preview is the subject drawn at its real size.** A 200x120 box per token with the radius applied,
+  the name in the label column and the value 24px past the box. Not a bar, not a swatch — the corner is
+  what you are judging, so the corner is what is drawn.
+
+  **Three radio buttons, Fibonacci included.** The frame has all three, which settles the question the
+  Spacing frames left open by only ever showing two.
+
+  **Extra values**, not *Extra spacings*: the same control, worded for the domain.
+
+  Two copy artefacts, deliberately not reproduced: the header reads "Design System Foundations / Spacing"
+  and the sidebar highlights Spacing, and the Tokens helper is Spacing's sentence with `spacing-{%10}` in
+  it. The panel says `radius-{1,10}` — though `{%10}` is accepted too, precisely because it is written
+  here.
+
+  One thing the panel adds that the frame has no room for: above 60 a radius stops changing the shape of a
+  200x120 box, so a token past that says so in the per-row helper the frame leaves empty. The frame's own
+  largest value is 96.
+-->
+
+<link rel="stylesheet" href="../../src/ui.css">
+<style>
+  /* Page furniture for the mockup only — never plugin styling. */
+  body { margin: 0; display: block; height: auto; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f7; }
+  .mock-frame { width: 960px; margin: 32px auto; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.12); overflow: hidden; }
+  .mock-caption { width: 960px; margin: 32px auto 8px; font-weight: 600; font-size: 13px; }
+  .mock-caption span { font-weight: 400; opacity: .6; }
+  .mock-tabs { display: flex; gap: 16px; padding: 10px 24px 0; border-bottom: 1px solid #e1e5e9; }
+  .mock-tab { padding-bottom: 10px; font-size: 12px; opacity: .55; }
+  .mock-tab.is-active { opacity: 1; font-weight: 600; border-bottom: 2px solid #1d1d1f; margin-bottom: -1px; }
+  .mock-body { padding: 0; }
+</style>
+</head>
+<body>
+
+<div class="mock-caption">Corner radius <span>· 2065:3045 · one mode, nothing selected yet</span></div>
+<div class="mock-frame">
+  <div class="mock-tabs">
+    <div class="mock-tab is-active">Configuration UI</div>
+    <div class="mock-tab">Configuration code</div>
+    <div class="mock-tab">Documentation</div>
+    <div class="mock-tab">Source code</div>
+  </div>
+  <div class="mock-body">
+    <div class="config-ui-form config-ui-form--rows">
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">General</h1></div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field config-ui-field--collection">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-collection config-ui-picker">
+                <select class="config-ui-input config-ui-input--select config-ui-collection-select">
+                  <option>Select target collection or create a new one</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--chips">
+        <div class="config-ui-field config-ui-field--chips">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Collection modes</label>
+            <div class="config-ui-field__control">
+              <div class="config-ui-chips" data-placeholder="true">
+                <span class="config-ui-chip config-ui-chip--placeholder"><span class="config-ui-chip-label">Value</span></span>
+              </div>
+            </div>
+            <div class="config-ui-field-note">Select or create Collection to edit the Collection modes.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Group within collection</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg.: Corner radius">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--field">
+        <div class="config-ui-field">
+          <div class="config-ui-field__row">
+            <label class="config-ui-field__label">Tokens</label>
+            <div class="config-ui-field__control">
+              <input class="config-ui-input config-ui-input--text" placeholder="eg.: none, xs, sm, md, lg, xl">
+            </div>
+            <div class="config-ui-field-note">Named smallest to largest, and radius-{1,10} is a series of ten. Extra values below fill the smallest names, and the scale takes over from there.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Mode settings</h1></div>
+
+      <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth">
+        <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field__row">
+            <div class="config-ui-field__control">
+              <div class="config-ui-rows">
+                <div class="config-ui-rows-tabs">
+                  <button class="config-ui-rows-tab is-active" type="button">Default</button>
+                </div>
+                <div class="config-ui-rows-body">
+                  <div class="config-ui-rows-item config-ui-rows-item--stacked">
+                  <div class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Scale type</span>
+                    <span class="config-ui-radio-group"><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="r-scale" checked> Modular scale</label><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="r-scale"> Metric scale</label><label class="config-ui-radio-label"><input class="config-ui-radio" type="radio" name="r-scale"> Fibonacci</label></span>
+                  </div>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Scaling method</span>
+                    <select class="config-ui-input config-ui-input--select"><option>Select scaling method</option></select>
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Base unit</span>
+                    <input class="config-ui-input config-ui-input--number" placeholder="eg.: 4">
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Round numbers to</span>
+                    <input class="config-ui-input config-ui-input--number" placeholder="eg.: 2">
+                  </label>
+                  <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                    <span class="config-ui-rows-cell-label">Extra values</span>
+                    <input class="config-ui-input config-ui-input--text" placeholder="eg.: 0, 1,">
+                  </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-ui-row config-ui-row--heading"><h1 class="config-ui-heading">Preview</h1></div>
+
+      <!-- The corner drawn at its real size on a 200x120 box, the name in the label column and the value
+           past the box. The last two values are beyond what the box can show, which is why the panel says
+           so in the helper the frame leaves empty. -->
+      <div class="config-ui-row">
+        <div class="radius-preview">
+          <div class="radius-preview-row">
+            <span class="radius-preview-name">none</span>
+            <span class="radius-preview-track">
+              <span class="radius-preview-box" style="width:200px;height:120px;border-radius:0px"></span>
+              <span class="radius-preview-value">0</span>
+            </span>
+          </div>
+          <div class="radius-preview-row">
+            <span class="radius-preview-name">px</span>
+            <span class="radius-preview-track">
+              <span class="radius-preview-box" style="width:200px;height:120px;border-radius:1px"></span>
+              <span class="radius-preview-value">1</span>
+            </span>
+          </div>
+          <div class="radius-preview-row">
+            <span class="radius-preview-name">xs</span>
+            <span class="radius-preview-track">
+              <span class="radius-preview-box" style="width:200px;height:120px;border-radius:4px"></span>
+              <span class="radius-preview-value">4</span>
+            </span>
+          </div>
+          <div class="radius-preview-row">
+            <span class="radius-preview-name">sm</span>
+            <span class="radius-preview-track">
+              <span class="radius-preview-box" style="width:200px;height:120px;border-radius:12px"></span>
+              <span class="radius-preview-value">12</span>
+            </span>
+          </div>
+          <div class="radius-preview-row">
+            <span class="radius-preview-name">md</span>
+            <span class="radius-preview-track">
+              <span class="radius-preview-box" style="width:200px;height:120px;border-radius:24px"></span>
+              <span class="radius-preview-value">24</span>
+            </span>
+          </div>
+          <div class="radius-preview-row">
+            <span class="radius-preview-name">lg</span>
+            <span class="radius-preview-track">
+              <span class="radius-preview-box" style="width:200px;height:120px;border-radius:48px"></span>
+              <span class="radius-preview-value">48</span>
+            </span>
+          </div>
+          <div class="radius-preview-row">
+            <span class="radius-preview-name">xl</span>
+            <span class="radius-preview-track">
+              <span class="radius-preview-box" style="width:200px;height:120px;border-radius:96px"></span>
+              <span class="radius-preview-value">96</span>
+              <span class="radius-preview-note">Past what a 200×120 box can show — 60 and up draw the same pill</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
