@@ -1987,8 +1987,19 @@
         width: 100%;
       }
 
-      /* Except a number, which keeps its own width — the whole point of the narrow variant. */
-      .config-ui-rows-cell .config-ui-input--number {
+      /* Except a number, which keeps its own width — the whole point of the narrow variant.
+         **And a text input in a tab, which is one of these too.** Every other control in a mode tab is
+         a number, a select or a radio, and the one text field there holds a short list — Extra
+         spacings' `0, 1, 2`. At `--text`'s 70% it ran several times the width of the fields above it
+         and read as a different kind of thing entirely. One declaration for both, so the two widths
+         cannot drift apart.
+
+         Safe to scope by layout rather than by field: under `@tabs` the renderer skips the `name`
+         column (the tab *is* the name), so the only text cell that can appear here is a value like
+         this one. The shared `.config-ui-input--text` 70% is untouched — the flat layout and the
+         table form both still want it. */
+      .config-ui-rows-cell .config-ui-input--number,
+      .config-ui-rows-cell--stacked .config-ui-input--text {
         width: 96px;
       }
 
@@ -2483,6 +2494,15 @@
 
       .type-specimen-sample {
         white-space: nowrap;
+        /* **The clip belongs here, on the box that overflows.** A grid item's `min-width` is `auto`,
+           which means it refuses to shrink below its content — so a `nowrap` sample at 78px widened
+           its own `7fr` column, squeezed the `3fr` beside it, and ran past the panel. Each step is its
+           own grid, so every row resolved a different split and the samples' left edges stopped
+           lining up, which is the one thing this layout exists to guarantee.
+           `overflow: hidden` on `.type-specimen` could not fix that: by then the grid had already been
+           laid out wide, and clipping the outer box does not put the columns back. */
+        min-width: 0;
+        overflow: hidden;
       }
 
       /* ============================================================

@@ -105,8 +105,14 @@ test('a rows cell sizes its control by which of the two layouts it is in', () =>
     'and the unscoped rule is gone, or the tabbed form inherits it again');
   assert.match(CSS, /\.config-ui-input--text,[\s\S]{0,120}width: 70%/,
     'the shared rule is still there — the fix is scoped, not a change to it');
-  // A number is 96px in either layout: it is a number, and its width says so.
-  assert.match(CSS, /\.config-ui-rows-cell \.config-ui-input--number \{\s*\n\s*width: 96px/);
+  // A number is 96px in either layout: it is a number, and its width says so. A text input in a
+  // **tab** is one of these too — every other control there is a number, a select or a radio, and the
+  // one text field holds a short list (`0, 1, 2`), which at 70% read as a different kind of thing.
+  // Asserted as one rule rather than two, because that is the point: the widths cannot drift apart.
+  const narrow = CSS.match(
+    /\.config-ui-rows-cell \.config-ui-input--number,\s*\n\s*\.config-ui-rows-cell--stacked \.config-ui-input--text \{\s*\n\s*width: 96px/
+  );
+  assert.ok(narrow, 'the number and the tabbed text input no longer share one width declaration');
 });
 
 test('a rows control is a section: no label, full width', () => {
@@ -193,4 +199,22 @@ test('a section gap arrives with or without a divider', () => {
   assert.match(CSS,
     /\.config-ui-row--divider \+ \.config-ui-row--heading h1,\s*\n\s*\.config-ui-row--divider \+ \.config-ui-row--heading h2 \{\s*\n\s*margin-top: 0;/,
     'a heading after a divider must drop its own top margin, h1 included');
+});
+
+test('an oversized type sample is clipped by its own cell, not by the specimen around it', () => {
+  // **Where the clip lives decides whether it works.** A grid item's `min-width` is `auto`, so a
+  // `nowrap` sample refuses to shrink below its text: at 78px it widened its own `7fr` column and
+  // squeezed the `3fr` metadata column beside it. Each step is its own grid, so every row resolved a
+  // different split — measured in a browser, the 78px sample's left edge sat at 744 while every other
+  // sample started at 854, which is the "it pushes itself to the right" that kept coming back.
+  //
+  // `overflow: hidden` on `.type-specimen` could not fix it. By the time that box clips, the grid
+  // inside it has already been laid out wide; clipping the outer edge does not put the columns back.
+  const sample = CSS.match(/\.type-specimen-sample \{([^}]*)\}/);
+  assert.ok(sample, 'the sample rule is gone');
+  assert.match(sample[1], /min-width: 0/,
+    'without this the sample widens its own column and the ramp stops lining up');
+  assert.match(sample[1], /overflow: hidden/, 'and the clip belongs on the box that overflows');
+  assert.match(sample[1], /white-space: nowrap/,
+    'still one sample per line — wrapping would turn two lines into four and destroy the comparison');
 });
