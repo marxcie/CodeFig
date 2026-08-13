@@ -183,6 +183,7 @@
 // | `@options: a\|b\|c` + `@multi` | checkbox list |
 // | `@options: variableCollections` | dropdown filled from this file's collections |
 // | `@textarea` | multi-line input |
+// | an array of names or numbers | one input holding a comma list; the config keeps the array |
 // | `@label: Text` | the label, instead of the prettified variable name |
 // | `@helper: Text` | a 10px note under the control, not under the row. **Last on the line:** a note runs to the end of it, so it can mention an `@annotation` without being cut in half |
 // | `@showWhen: field=value` | the row appears only when that field holds one of those values |
@@ -248,6 +249,7 @@ var textField = "Sample"; // @label: Text @helper: var textField = "Sample";
 var withPlaceholder = ""; // @placeholder="Shown while empty" @label: Text with a placeholder @helper: @placeholder="Shown while empty"
 var numberField = 12; // @label: Number @helper: a numeric default makes it a number input, 96px wide
 var longText = ""; // @textarea @placeholder="One per line" @label: Textarea @helper: @textarea
+var nameList = ["sm", "md", "lg"]; // @label: List of names @helper: an array of strings or numbers — one input holding a comma list, and the config keeps the array
 //
 // # Choices
 var toggle = true; // @label: Checkbox @helper: a true or false default

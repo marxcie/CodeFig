@@ -10,9 +10,50 @@
     if (typeof v === "boolean") return "boolean";
     if (typeof v === "number" && !Number.isNaN(v)) return "number";
     if (typeof v === "string") return "string";
-    if (Array.isArray(v)) return "array";
+    if (Array.isArray(v)) {
+      // **A list of names is editable; a list of objects is not.** `spacings: ["none", "px", …]` is the
+      // Tokens field in Márton's frames — one input holding a comma list — and it used to fall through
+      // to `unsupported`, which renders read-only and sends you to Configuration code for a row of
+      // words. A list of *objects* is a different thing and still needs `@rows` to say what its columns
+      // are.
+      return isPrimitiveList(v) ? "list" : "array";
+    }
     if (typeof v === "object") return "object";
     return "string";
+  }
+
+  function isPrimitiveList(v) {
+    for (var i = 0; i < v.length; i++) {
+      var item = v[i];
+      if (item === null || item === undefined) continue;
+      var t = typeof item;
+      if (t !== "string" && t !== "number" && t !== "boolean") return false;
+    }
+    return true;
+  }
+
+  /** `["none", "px", 3]` ⇄ `"none, px, 3"`. The config keeps the array; the panel shows the list. */
+  function listToText(value) {
+    if (!Array.isArray(value)) return value === undefined || value === null ? "" : String(value);
+    return value.join(", ");
+  }
+
+  /**
+   * A comma list back to an array, keeping numbers numeric.
+   *
+   * `"0, 1, 2"` has to come back as `[0, 1, 2]` and not `["0", "1", "2"]`, because `rampExtras` reads
+   * numbers and a quoted 0 in a config block is a different thing to the person reading it.
+   */
+  function textToList(text) {
+    if (Array.isArray(text)) return text;
+    var parts = String(text === undefined || text === null ? "" : text).split(",");
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var piece = parts[i].trim();
+      if (!piece) continue;
+      out.push(/^-?\d+(\.\d+)?$/.test(piece) ? Number(piece) : piece);
+    }
+    return out;
   }
 
   function labelFromName(n) {
@@ -277,7 +318,8 @@
         column.type = "select";
         column.options = optionMatch[1].split("|").map(function (o) { return o.trim(); })
           .filter(function (o) { return o.length > 0; });
-      } else if (typeText === "number" || typeText === "checkbox" || typeText === "text") {
+      } else if (typeText === "number" || typeText === "checkbox" || typeText === "text" ||
+                 typeText === "list") {
         column.type = typeText;
       }
       columns.push(column);
@@ -1786,6 +1828,8 @@
     applyChipOp: applyChipOp,
     modeIntents: modeIntents,
     matchModeIds: matchModeIds,
+    listToText: listToText,
+    textToList: textToList,
     alignModesToFile: alignModesToFile,
     // Exported because the panel asks the same question when it words the removal note, and "the same
     // mode name" must have exactly one definition. It did not, and the note said "Removing" for a

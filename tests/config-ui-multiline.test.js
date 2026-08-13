@@ -434,9 +434,15 @@ test('an object value is marked as one no control can edit', () => {
   assert.equal(schema.rows[0].inputType, 'unsupported');
 });
 
-test('an array is unsupported unless a control claims it', () => {
-  assert.equal(P.parse('var tokens = ["px","xs"];').rows[0].inputType, 'unsupported');
-  assert.equal(P.parse('var tokens = ["px","xs"]; // @multi @options: px|xs').rows[0].inputType, 'multiselect');
+test('a list of names is editable; a list of objects is not', () => {
+  // **Changed deliberately.** `spacings: ["none", "px", …]` is the Tokens field in Márton's frames — one
+  // input holding a comma list — and it used to render read-only and send you to Configuration code to
+  // edit a row of words. A list of *objects* is a different thing and still needs `@rows` to say what
+  // its columns are, because there is no way to guess.
+  assert.equal(P.parse('var tokens = ["px","xs"];').rows[0].inputType, 'list');
+  assert.equal(P.parse('var modes = [{ name: "d" }];').rows[0].inputType, 'unsupported');
+  assert.equal(P.parse('var tokens = ["px","xs"]; // @multi @options: px|xs').rows[0].inputType, 'multiselect',
+    'and an explicit control still wins');
 });
 
 test('editing one field leaves an object field byte-identical', () => {

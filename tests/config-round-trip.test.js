@@ -84,12 +84,16 @@ const VIEWPORTS = [
   { key: 'mobile', label: 'Mobile', width: 375 }
 ];
 
+// A stand-in for the shipped block, in the spelling the panel writes: `scaleType`, a numeric base, a
+// per-mode grid, and the smallest value as an extra rather than as a floor the model runs into. The
+// numbers it generates are the same ones this script has always generated — `1, 4, 8, 12, 16, 24` on
+// desktop — which is what lets the comparison below mean anything.
 const SHIPPED_SPACING = {
   collectionName: 'Responsive System', group: 'Spacing',
-  spacings: ['px', 'xs', 'sm', 'md', 'lg', 'xl'], roundTo: 2, generateOverview: false,
+  spacings: ['px', 'xs', 'sm', 'md', 'lg', 'xl'], generateOverview: false,
   modes: [
-    { name: 'desktop', model: 'metric', min: 1, base: { level: 'xs', size: 4 }, step: 4, mod: 3 },
-    { name: 'mobile', model: 'metric', min: 1, base: { level: 'xs', size: 2 }, step: 2, mod: 3 }
+    { name: 'desktop', scaleType: 'metric', base: 4, step: 4, mod: 3, roundTo: 2, extras: [1] },
+    { name: 'mobile', scaleType: 'metric', base: 2, step: 2, mod: 3, roundTo: 2, extras: [1] }
   ]
 };
 
@@ -121,7 +125,10 @@ test('the printed block fills the shipped block, and the result is what a run wo
   const back = P.parseConfigBlockObject(filled.text);
   assert.ok(back, 'the filled block did not parse');
   assert.deepEqual(back.modes.map((m) => m.name), ['desktop', 'mobile']);
-  assert.equal(back.roundTo, 2);
+  // **Per mode now**, on Márton's call: the frames put "Round numbers to" inside Mode settings, and a
+  // file with a 4px desktop grid and a 2px mobile one is the ordinary case. It used to be checked at the
+  // top level here, which is where the config had it.
+  assert.equal(back.modes[0].roundTo, 2);
   assert.deepEqual(back.spacings, ['px', 'xs', 'sm', 'md', 'lg', 'xl']);
 });
 

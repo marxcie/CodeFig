@@ -260,15 +260,34 @@ function rampModeToSize(m, tokens, defaultBaseLevel) {
   if (!m || typeof m !== 'object') return null;
   var baseLevel = rampDefaultBaseLevel(tokens, defaultBaseLevel);
   var min = typeof m.min === 'number' ? m.min : 0;
-  var derived = typeof m.model === 'string' && m.model && m.model !== 'endpoints';
+  // **Either spelling decides whether the model derives its top.** This read `m.model` alone, so a
+  // panel writing `scaleType` looked like an endpoints scale with no max — and every value in every
+  // mode came out 0. A whole panel of zeros from one key nobody carried.
+  var model = rampModelOf(m);
+  var derived = model && model !== 'endpoints';
   var max = typeof m.max === 'number' ? m.max : (derived ? null : min);
-  var base = m.base && typeof m.base === 'object' ? m.base : {};
-  var level = typeof base.level === 'string' && base.level ? base.level : baseLevel;
-  var size = typeof base.size === 'number' ? base.size : rampDefaultBaseSize(min, max);
-  var entry = { min: min, max: max, base: { level: level, size: size } };
-  var carried = ['model', 'ratio', 'step', 'mod', 'values', 'clamp'];
-  for (var c = 0; c < carried.length; c++) {
-    if (m[carried[c]] !== undefined) entry[carried[c]] = m[carried[c]];
+
+  var entry = { min: min, max: max };
+  if (typeof m.base === 'number') {
+    // The panel's spelling: one number, and the base is the first *generated* step — which is what
+    // `buildRampScaleOpts` needs, so it is passed through rather than dressed as `{ level, size }`.
+    // Normalising it here would put the base at the token's index and make the extras' rows generate.
+    entry.base = m.base;
+  } else {
+    var base = m.base && typeof m.base === 'object' ? m.base : {};
+    var level = typeof base.level === 'string' && base.level ? base.level : baseLevel;
+    var size = typeof base.size === 'number' ? base.size : rampDefaultBaseSize(min, max);
+    entry.base = { level: level, size: size };
+  }
+
+  // **Carry everything this function did not compute.** It used to carry a hand-written list —
+  // `model, ratio, step, mod, values, clamp` — which is a list that exists to be forgotten: `scaleType`,
+  // `roundTo` and `extras` were all dropped silently, and a dropped key here is a scale that generates
+  // the wrong numbers rather than an error. The four keys below are the ones it owns.
+  var computed = { min: true, max: true, base: true, name: true, appliesTo: true };
+  for (var k in m) {
+    if (!Object.prototype.hasOwnProperty.call(m, k) || computed[k]) continue;
+    if (m[k] !== undefined) entry[k] = m[k];
   }
   return entry;
 }
@@ -711,12 +730,42 @@ function rampSequenceFor(viewport, config, spec) {
   var opts = buildRampScaleOpts((config[spec.tokensKey] || []).length, viewport, config, spec);
   if (!opts) return { opts: null, values: [], warnings: [] };
   var built = scaleSequence(opts.model, opts);
+  // **Round what we generate, not what was typed** — and only the models that were never rounded.
+  // `roundTo` reached the endpoints model inside `generateScale` and the collision guard, and nothing
+  // else: a modular scale with a grid of 2 produced 6.47, which is the one thing that field promises not
+  // to happen. Rounding endpoints here as well changes what every config written before this generates,
+  // which the frozen-fixture comparison caught within a minute — so it is left exactly as it was.
+  // Extras are merged afterwards and left alone: a number entered by hand is already the number wanted.
+  var rounded = opts.model === 'endpoints'
+    ? built.values
+    : roundRampSequence(built.values, opts.roundTo, opts.min);
   return {
     opts: opts,
-    values: mergeRampExtras(built.values, opts.extras),
+    values: mergeRampExtras(rounded, opts.extras),
+    // The sequence before the grid touched it, so a preview can say *"Rounded from 10.9"* without
+    // guessing — and so the two numbers cannot drift, because one is computed from the other.
+    raw: mergeRampExtras(built.values.slice(), opts.extras),
     warnings: built.warnings,
     adjustments: built.adjustments || []
   };
+}
+
+/**
+ * Every generated value on the mode's own grid. A grid of 0 means "leave them alone".
+ *
+ * **A value held at the floor is left where it is.** `min` is a number someone set, and rounding it
+ * upwards invents a value above it — `px` went from 1 to 2 on a grid of 2, in a config that says the
+ * smallest spacing is 1. The collision guard beside this refuses to bump a held token for the same
+ * reason, and the frozen-fixture comparison caught it immediately.
+ */
+function roundRampSequence(values, grid, floor) {
+  if (!Array.isArray(values) || !(typeof grid === 'number' && grid > 0)) return values;
+  var min = typeof floor === 'number' && isFinite(floor) ? floor : null;
+  return values.map(function (v) {
+    if (typeof v !== 'number' || !isFinite(v)) return v;
+    if (min !== null && v <= min) return v;
+    return snapScaleGrid(v, grid);
+  });
 }
 
 /**
@@ -833,7 +882,12 @@ function generateRampVariables(config, spec, report) {
       if (!sequence.opts) return;
       var value = rampValueAt(sequence.values, index, sequence.opts);
       var previous = lastPerViewport[viewportKey];
-      var step = gridSize > 0 ? gridSize : 1;
+      // This mode's grid. The config-level one is the fallback, and using it here would separate two
+      // colliding tokens by a step the mode does not use.
+      var modeGrid = typeof sequence.opts.roundTo === 'number' && sequence.opts.roundTo > 0
+        ? sequence.opts.roundTo
+        : gridSize;
+      var step = modeGrid > 0 ? modeGrid : 1;
       var guard = 0;
       // A repeat *at the floor* is the model doing what it was told: two tokens below the base
       // both land under `min` and are held there, which scaleSequence already reported. The guard
@@ -847,7 +901,7 @@ function generateRampVariables(config, spec, report) {
         var nextRaw = Math.min(maxSize, previous + step);
         if (nextRaw <= previous) break;
         value = nextRaw;
-        if (gridSize > 0) value = snapScaleGrid(value, gridSize);
+        if (modeGrid > 0) value = snapScaleGrid(value, modeGrid);
         value = Math.max(minSize, Math.min(maxSize, value));
       }
 
@@ -861,7 +915,7 @@ function generateRampVariables(config, spec, report) {
             ? 'it collided with ' + tokens[index - 1] + ' and could go no higher than ' + maxSize
             : 'it collided with ' + tokens[index - 1] + ' at ' + before + '; moved up by the grid'
         });
-        collisions.push(describeRampCollision(tokens[index - 1], tokenName, before, sequence.opts, gridSize));
+        collisions.push(describeRampCollision(tokens[index - 1], tokenName, before, sequence.opts, modeGrid));
       }
 
       lastPerViewport[viewportKey] = value;
@@ -909,12 +963,18 @@ function generateRampVariables(config, spec, report) {
  * that drift — the caption is the model line, not a second description of it.
  */
 function rampModelCaption(v, config) {
-  var model = typeof v.model === 'string' && v.model ? v.model : 'endpoints';
+  // **Either spelling, everywhere.** `rampModelOf` is the one reader; this said `endpoints, min 0, max
+  // null, linear` for a metric scale the moment the panel started writing `scaleType`, which is a
+  // caption confidently describing a model the run is not using.
+  var model = rampModelOf(v);
   var parts = [model];
-  if (model === 'metric') {
-    parts.push('base ' + v.base.size, 'step ' + v.step, 'mod ' + (v.mod === undefined ? 1 : v.mod));
+  if (model === 'metric' || model === 'fibonacci') {
+    var baseSize = typeof v.base === 'number' ? v.base : (v.base && v.base.size);
+    parts.push('base ' + baseSize, 'step ' + v.step);
+    if (model === 'metric') parts.push('mod ' + (v.mod === undefined ? 1 : v.mod));
   } else if (model === 'modular') {
-    parts.push('base ' + v.base.size, 'ratio ' + v.ratio);
+    parts.push('base ' + (typeof v.base === 'number' ? v.base : (v.base && v.base.size)),
+      'ratio ' + v.ratio);
   } else if (model === 'explicit') {
     parts.push((v.values || []).length + ' values');
   } else {
@@ -996,7 +1056,7 @@ function rampUsesEndpoints(config, spec) {
   if (sizes && typeof sizes === 'object') {
     for (var mode in sizes) {
       if (!Object.prototype.hasOwnProperty.call(sizes, mode)) continue;
-      var model = sizes[mode] && sizes[mode].model;
+      var model = sizes[mode] ? rampModelOf(sizes[mode]) : null;
       if (!model || model === 'endpoints') return true;
     }
     return false;
@@ -1200,6 +1260,142 @@ function rampPreviewHtml(config, domain) {
     return rampPreviewNote('Nothing to draw yet — this config names no tokens or no modes.');
   }
   return rampScaleHtml(table, rampCaptions(data, spec));
+}
+
+/**
+ * The Spacing panel's preview: **one mode**, a bar per token, and where a value was moved.
+ *
+ * `rampPreviewHtml` beside this draws every mode at once — tokens down, modes across — which is the
+ * right shape for judging a whole set and the wrong one for a panel where you are editing a single mode
+ * in a tab. Márton's frames show the mode you are standing in, so this takes the mode name the panel is
+ * showing and draws that column.
+ *
+ * **The bar's height is the value, at half size.** Height rather than width because a spacing scale is
+ * read as a rhythm down the page, which is what the frames draw; half size because a 356px token would
+ * otherwise be 356px of panel. The same rule as Grid's preview: a fixed scale, so a ruler on the screen
+ * agrees with the number beside it.
+ *
+ * **"Rounded from 10.9" is the reason this exists.** `md 20` is unremarkable until you learn it came from
+ * 20.7 — that is the number that tells you the grid is fighting the curve. It is computed rather than
+ * remembered: the model's raw sequence against the value the run would actually write.
+ */
+function spacingPreviewHtml(config, domain, modeName) {
+  var spec = domain === 'radius' ? radiusRampSpec() : spacingRampSpec();
+  if (!config || typeof config !== 'object') return rampPreviewNote('There is no config to preview yet.');
+
+  var data = JSON.parse(JSON.stringify(config.config || config));
+  try {
+    ensureCompatRampConfig(data, spec);
+    materialiseRampTokens(data, spec);
+  } catch (e) {
+    return rampPreviewNote('This config could not be read: ' + (e && e.message ? e.message : e));
+  }
+
+  var modeNames = rampModeNames(data, spec);
+  var setPlan = materialiseRampSizes(data, spec, modeNames);
+  if (setPlan && !setPlan.ok) return rampPreviewNote(describeRampSetPlan(setPlan).join(' '));
+
+  var variables;
+  try {
+    variables = generateRampVariables(data, spec);
+  } catch (e) {
+    return rampPreviewNote('This config could not be generated: ' + (e && e.message ? e.message : e));
+  }
+
+  var table = rampScaleTable(variables, resolveGroup(config) || data.group || '');
+  if (!table.rows.length || !table.modes.length) {
+    return rampPreviewNote('Nothing to draw yet — this config names no tokens or no modes.');
+  }
+
+  // The mode the panel is showing, matched the way every other comparison here matches: by name, and
+  // case-insensitively, because a config writes `desktop` and a collection holds `Desktop`.
+  var wanted = null;
+  for (var i = 0; i < table.modes.length; i++) {
+    if (!modeName || String(table.modes[i]).toLowerCase() === String(modeName).toLowerCase()) {
+      wanted = table.modes[i];
+      break;
+    }
+  }
+  if (!wanted) wanted = table.modes[0];
+
+  var raw = spacingRawSequenceFor(wanted, data, spec);
+  var unset = !data.collectionName || String(data.collectionName).trim() === '';
+  var out = ['<div class="spacing-preview' + (unset ? ' is-unset' : '') + '">'];
+
+  table.rows.forEach(function (row, index) {
+    var cell = null;
+    for (var c = 0; c < row.cells.length; c++) if (row.cells[c].mode === wanted) cell = row.cells[c];
+    var value = cell ? cell.value : null;
+    var drawn = typeof value === 'number' ? Math.max(0, value * 0.5) : 0;
+
+    out.push('<div class="spacing-preview-row">');
+    out.push('<span class="spacing-preview-name">' + rampEscapeHtml(row.token) + '</span>');
+    out.push('<span class="spacing-preview-track">');
+    out.push('<span class="spacing-preview-bar" style="height:' +
+      (Math.round(drawn * 100) / 100) + 'px"></span>');
+    out.push('<span class="spacing-preview-value">' +
+      (typeof value === 'number' ? rampPreviewNumber(value) : '\u2014') + '</span>');
+    // **Two different things, said differently.** A value moved by the grid was *rounded*; a value moved
+    // because it landed on the token below it was *nudged*, and calling that rounding would be a small
+    // lie in the one place that exists to explain a number.
+    var before = raw[index];
+    if (typeof value === 'number' && typeof before === 'number' &&
+        Math.abs(before - value) > 0.01) {
+      var grid = spacingModeGrid(wanted, data, spec);
+      var onGrid = grid > 0 ? snapScaleGrid(before, grid) : before;
+      out.push('<span class="spacing-preview-note">' +
+        (Math.abs(onGrid - value) > 0.01
+          ? 'Nudged from ' + rampPreviewNumber(onGrid) + ' — it landed on the token below'
+          : 'Rounded from ' + rampPreviewNumber(before)) +
+        '</span>');
+    }
+    out.push('</span>');
+    out.push('</div>');
+  });
+
+  out.push('</div>');
+  return out.join('');
+}
+
+/**
+ * One mode's sequence **before** rounding, so the preview can say what moved.
+ *
+ * Returns `[]` when the model cannot produce one, which makes the note simply absent — a preview that
+ * guessed at a raw value would be inventing the very number it is there to disclose.
+ */
+function spacingRawSequenceFor(modeName, data, spec) {
+  try {
+    var sizes = data[spec.sizesKey] || {};
+    var key = null;
+    for (var name in sizes) {
+      if (!Object.prototype.hasOwnProperty.call(sizes, name)) continue;
+      if (viewportLabel(name) === modeName || name === modeName) { key = name; break; }
+    }
+    if (key === null) return [];
+    var built = rampSequenceFor(key, data, spec);
+    return built && built.raw ? built.raw : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/** The grid one mode rounds to, for wording the note. */
+function spacingModeGrid(modeName, data, spec) {
+  var sizes = data[spec.sizesKey] || {};
+  for (var name in sizes) {
+    if (!Object.prototype.hasOwnProperty.call(sizes, name)) continue;
+    if (viewportLabel(name) !== modeName && name !== modeName) continue;
+    var own = sizes[name].roundTo;
+    return typeof own === 'number' && own > 0 ? own : getRampRoundGrid(data);
+  }
+  return getRampRoundGrid(data);
+}
+
+/** A preview number: whole where it is whole, two decimals where it is not. */
+function rampPreviewNumber(value) {
+  if (typeof value !== 'number' || !isFinite(value)) return '\u2014';
+  var rounded = Math.round(value * 100) / 100;
+  return String(rounded);
 }
 
 /** Why there is no picture, in the place the picture would be. */

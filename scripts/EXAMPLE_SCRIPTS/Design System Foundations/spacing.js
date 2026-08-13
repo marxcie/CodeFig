@@ -25,7 +25,7 @@
 
 // The Configuration tab redraws this as you type. Pure: it generates in memory and draws
 // the same table the run does, so it cannot write anything.
-// @PREVIEW: rampPreviewHtml
+// @PREVIEW: spacingPreviewHtml
 
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
@@ -33,7 +33,7 @@
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
-@import { spacingRampSpec, rampPreviewHtml, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
+@import { spacingRampSpec, spacingPreviewHtml, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
 
 // ========================================
 // CONFIG
@@ -46,50 +46,59 @@
 var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfigData : {
   // @CONFIG_START
   // @fromFile: domains.spacing
-  collectionName: "Responsive System",
-  group: "Spacing",
 
-  // When true: after variables run, builds the **Spacing — overview** frame (see @Foundation overview)
-  generateOverview: false,
+  // # General
+  // Where this goes, and what exists. Pick a collection in this file, or choose "New collection" and
+  // type a name — a name that is not in this file is created on Run.
+  collectionName: "Responsive System", // @collection @label: Collection
+  // @collectionModes: Collection modes
+  // The collection's own modes. The chips are a view of the file; the tabs below hold each mode's scale.
+  group: "Spacing", // @label: Group within collection @placeholder="eg.: Spacing"
+  spacings: ["px", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest. Extra spacings below fill the smallest names, and the scale takes over from there.
 
-  spacings: ["px", "xs", "sm", "md", "lg", "xl"],
-  // Array ["s", "m", "l"] or string template "spacings-{$step}".
-  // steps: 10, // If string template is selected, steps is required.
+  // --- @section
 
-  // Snap every value to a multiple of this (e.g. `2` → 2, 4, 6, …). Omit or `0` for none.
-  // Applies to every model, which is why it is a field of the config and not of a curve.
-  roundTo: 2,
-
-  // How each viewport's scale is generated. `metric` is a base plus a step that grows every
-  // `mod` tokens — the way a spacing scale is usually written down (4, 8, 12, 16, 24, 32).
-  // Other models: `endpoints` (min → max along scaling.type, what configs before this used),
-  // `modular` (each step a fixed ratio above the last), `explicit` (your own `values` array).
+  // # Mode settings
+  generateOverview: false, // @label: Generate overview @helper: Fills the Spacing — overview section in Design System Foundations
+  // Each mode's own scale. `metric` is a base plus a step that grows every N tokens — the way a spacing
+  // scale is usually written down. `modular` is a fixed ratio; `fibonacci` is each step the sum of the
+  // two before it, which lands on whole numbers where a 1.618 ratio needs rounding at every step.
+  //
+  // These three generate exactly what this script has always generated: `1, 4, 8, 12, 16, 24` on
+  // desktop, and the same shape halved and quartered below it. The spelling is the panel's; the numbers
+  // are unchanged.
   modes: [
     {
       name: "desktop",
-      model: "metric",
-      min: 1,
-      base: { level: "xs", size: 4 },
+      scaleType: "metric",
+      base: 4,
       step: 4,
-      mod: 3
+      mod: 3,
+      roundTo: 2,
+      extras: [1]
     },
     {
       name: "tablet",
-      model: "metric",
-      min: 1,
-      base: { level: "xs", size: 3 },
+      scaleType: "metric",
+      base: 3,
       step: 3,
-      mod: 3
+      mod: 3,
+      roundTo: 2,
+      extras: [1]
     },
     {
       name: "mobile",
-      model: "metric",
-      min: 1,
-      base: { level: "xs", size: 2 },
+      scaleType: "metric",
+      base: 2,
       step: 2,
-      mod: 3
+      mod: 3,
+      roundTo: 2,
+      extras: [1]
     }
-  ]
+  ], // @rows: name:text=Mode|scaleType:(modular|metric|fibonacci)=Scale type|ratio:(1.067|1.125|1.2|1.25|1.333|1.414|1.5|1.618){scaleType=modular}=Scaling method|base:number=Base unit|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|roundTo:number=Round numbers to|extras:list=Extra spacings @tabs @label: Modes
+
+  // # Preview
+  // @preview
   // @CONFIG_END
 };
 

@@ -426,29 +426,40 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="20"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="21">
+        <div class="config-ui-row config-ui-row--field" data-row-index="20">
+          <div class="config-ui-field config-ui-field--list">
+            <div class="config-ui-field__row">
+              <label class="config-ui-field__label" for="config-ui-nameList-4">List of names</label>
+              <div class="config-ui-field__control">
+                <input type="text" class="config-ui-input config-ui-input--text" data-field="nameList" data-field-list="true" value="sm, md, lg">
+              </div>
+              <div class="config-ui-field-note">an array of strings or numbers — one input holding a comma list, and the config keeps the array</div>
+            </div>
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="21"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="22">
           <h1 class="config-ui-heading">Choices</h1>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="22">
+        <div class="config-ui-row config-ui-row--field" data-row-index="23">
           <div class="config-ui-field config-ui-field--boolean">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label" for="config-ui-toggle-4">Checkbox</label>
+              <label class="config-ui-field__label" for="config-ui-toggle-5">Checkbox</label>
               <div class="config-ui-field__control">
                 <div class="config-ui-toggle-wrap">
-                  <input type="checkbox" id="config-ui-toggle-4" checked class="config-ui-toggle" data-field="toggle">
+                  <input type="checkbox" id="config-ui-toggle-5" checked class="config-ui-toggle" data-field="toggle">
                 </div>
               </div>
               <div class="config-ui-field-note">a true or false default</div>
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="23">
+        <div class="config-ui-row config-ui-row--field" data-row-index="24">
           <div class="config-ui-field config-ui-field--select" title="@options: small|medium|large">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-dropdown-5">Dropdown</label>
+              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-dropdown-6">Dropdown</label>
               <div class="config-ui-field__control">
-                <select id="config-ui-dropdown-5" class="config-ui-input config-ui-input--select" data-field="dropdown">
+                <select id="config-ui-dropdown-6" class="config-ui-input config-ui-input--select" data-field="dropdown">
                   <option value="small">small</option>
                   <option value="medium" selected>medium</option>
                   <option value="large">large</option>
@@ -458,18 +469,18 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="24">
+        <div class="config-ui-row config-ui-row--field" data-row-index="25">
           <div class="config-ui-field config-ui-field--radio" title="@options: replace|append @radio">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-radioChoice-6">Radio group</label>
+              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-radioChoice-7">Radio group</label>
               <div class="config-ui-field__control">
                 <div class="config-ui-radio-group">
                   <label class="config-ui-radio-label">
-                    <input type="radio" name="cfg-radioChoice-6" id="config-ui-radioChoice-6-0" value="replace" checked class="config-ui-radio" data-field="radioChoice">
+                    <input type="radio" name="cfg-radioChoice-7" id="config-ui-radioChoice-7-0" value="replace" checked class="config-ui-radio" data-field="radioChoice">
                     <span>replace</span>
                   </label>
                   <label class="config-ui-radio-label">
-                    <input type="radio" name="cfg-radioChoice-6" id="config-ui-radioChoice-6-1" value="append" class="config-ui-radio" data-field="radioChoice">
+                    <input type="radio" name="cfg-radioChoice-7" id="config-ui-radioChoice-7-1" value="append" class="config-ui-radio" data-field="radioChoice">
                     <span>append</span>
                   </label>
                 </div>
@@ -478,12 +489,12 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="25">
+        <div class="config-ui-row config-ui-row--field" data-row-index="26">
           <div class="config-ui-field config-ui-field--multiselect" title="@options: small|medium|large @multi">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-multiChoice-7">Multi-select</label>
+              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-multiChoice-8">Multi-select</label>
               <div class="config-ui-field__control">
-                <div id="config-ui-multiChoice-7" class="config-ui-multiselect" data-field="multiChoice" data-multi="true">
+                <div id="config-ui-multiChoice-8" class="config-ui-multiselect" data-field="multiChoice" data-multi="true">
                   <label class="config-ui-multiselect-item">
                     <input type="checkbox" class="config-ui-multiselect-cb" value="small" checked>
                     <span>small</span>
@@ -502,12 +513,12 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="26">
+        <div class="config-ui-row config-ui-row--field" data-row-index="27">
           <div class="config-ui-field config-ui-field--select" title="@options: variableCollections">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-documentList-8">From the document</label>
+              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-documentList-9">From the document</label>
               <div class="config-ui-field__control">
-                <select id="config-ui-documentList-8" class="config-ui-input config-ui-input--select" data-field="documentList" data-option-source="variableCollections" data-initial-value="">
+                <select id="config-ui-documentList-9" class="config-ui-input config-ui-input--select" data-field="documentList" data-option-source="variableCollections" data-initial-value="">
                   <option value="__loading__">Loading...</option>
                 </select>
               </div>
@@ -515,25 +526,25 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]" data-row-index="27">
+        <div class="config-ui-row config-ui-row--field" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]" data-row-index="28">
           <div class="config-ui-field config-ui-field--string" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]" title="@showWhen: toggle=true">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-dependent-9">Only while Checkbox is on</label>
+              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-dependent-10">Only while Checkbox is on</label>
               <div class="config-ui-field__control">
-                <input type="text" id="config-ui-dependent-9" value="" class="config-ui-input config-ui-input--text" data-field="dependent">
+                <input type="text" id="config-ui-dependent-10" value="" class="config-ui-input config-ui-input--text" data-field="dependent">
               </div>
               <div class="config-ui-field-note">@showWhen: toggle=true</div>
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="28"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="29">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="29"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="30">
           <h1 class="config-ui-heading">Collections and modes</h1>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="30">
+        <div class="config-ui-row config-ui-row--field" data-row-index="31">
           <div class="config-ui-field config-ui-field--collection" title="@collection">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-collectionName-10">Collection</label>
+              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-collectionName-11">Collection</label>
               <div class="config-ui-field__control">
                 <div class="config-ui-collection config-ui-picker" data-collection-field="collectionName" data-option-source="localCollections" data-initial-value="Responsive System">
                   <select class="config-ui-input config-ui-input--select config-ui-collection-select" value="Responsive System">
@@ -552,10 +563,10 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="31">
+        <div class="config-ui-row config-ui-row--field" data-row-index="32">
           <div class="config-ui-field config-ui-field--mode" title="@mode: collectionName">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-collectionMode-11">Mode</label>
+              <label class="config-ui-field__label config-ui-field__label--has-tooltip" for="config-ui-collectionMode-12">Mode</label>
               <div class="config-ui-field__control">
                 <div class="config-ui-mode config-ui-picker" data-mode-field="collectionMode" data-mode-collection-field="collectionName" data-initial-value="Desktop" data-mode-exists="">
                   <select class="config-ui-input config-ui-input--select config-ui-mode-select" value="Desktop">
@@ -572,7 +583,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--chips" data-row-index="32">
+        <div class="config-ui-row config-ui-row--field config-ui-row--chips" data-row-index="33">
           <div class="config-ui-field config-ui-field--chips">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label">Collection modes</label>
@@ -596,12 +607,12 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="33">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="34">
           <div class="docs-rendered">
             The chips read their names from the modes field below, so the two cannot disagree. Click a chip to  <br>rename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="34">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="35">
           <div class="config-ui-field config-ui-field--rows" title="@rows: name:text=Mode|width:number=Width|columns:number=Columns @tabs">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -648,16 +659,16 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="35"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="36">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="36"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="37">
           <h1 class="config-ui-heading">Table rows</h1>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="37">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="38">
           <div class="docs-rendered">
             The same annotation without @tabs: one line per entry, with Add and Remove.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="38">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="39">
           <div class="config-ui-field config-ui-field--rows" title="@rows: label:text=Name|min:number=Min width">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -692,14 +703,14 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="39"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="40">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="40"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="41">
           <h1 class="config-ui-heading">What the form cannot hold</h1>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="41">
+        <div class="config-ui-row config-ui-row--field" data-row-index="42">
           <div class="config-ui-field config-ui-field--unsupported">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label" for="config-ui-nested-14">Nested object</label>
+              <label class="config-ui-field__label" for="config-ui-nested-15">Nested object</label>
               <div class="config-ui-field__control">
                 <pre class="config-ui-readonly" aria-readonly="true" data-readonly-field="nested" title="Edit this one in the Script tab — no form control can hold it">{
   "outer": {
@@ -711,7 +722,7 @@
             </div>
           </div>
         </div>
-        <div data-row-index="42"></div>
+        <div data-row-index="43"></div>
       </div>
       </div>
     </div>

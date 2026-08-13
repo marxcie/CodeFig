@@ -178,6 +178,18 @@
       ro.setAttribute("data-readonly-field", n);
       ro.setAttribute("title", "Edit this one in the Script tab — no form control can hold it");
       cw.appendChild(ro);
+    } else if (t === "list") {
+      // One input holding a comma list, which is what the frames show for Tokens — and the config keeps
+      // its array, so nothing about the paste format changes. `p.listToText` and `p.textToList` are the
+      // one conversion, used here and by the collector below.
+      var listInput = document.createElement("input");
+      listInput.type = "text";
+      listInput.className = "config-ui-input config-ui-input--text";
+      listInput.setAttribute("data-field", n);
+      listInput.setAttribute("data-field-list", "true");
+      listInput.value = p.listToText(v);
+      if (field.placeholder) listInput.setAttribute("placeholder", field.placeholder);
+      cw.appendChild(listInput);
     } else if (t === "textarea") {
       var ta = document.createElement("textarea");
       ta.id = id;
@@ -1291,6 +1303,17 @@
   }
 
   function buildRowCell(column, value) {
+    if (column.type === "list") {
+      // `extras: [0, 1, 2]` is a list in a cell. Text on screen, an array in the config — a string
+      // there would read as an array of one to `rampExtras` and quietly generate nothing.
+      var list = document.createElement("input");
+      list.type = "text";
+      list.className = "config-ui-input config-ui-input--text";
+      list.setAttribute("data-row-field", column.key);
+      list.setAttribute("data-row-list", "true");
+      list.value = p.listToText(value);
+      return list;
+    }
     if (column.type === "select") {
       var sel = document.createElement("select");
       sel.className = "config-ui-input config-ui-input--select";
@@ -1350,7 +1373,9 @@
       (field.columns || []).forEach(function (column) {
         var el = rowEl.querySelector('[data-row-field="' + column.key + '"]');
         if (!el) return;
-        if (column.type === "number") {
+        if (column.type === "list") {
+          row[column.key] = p.textToList(el.value);
+        } else if (column.type === "number") {
           var n = parseFloat(el.value, 10);
           row[column.key] = Number.isNaN(n) ? 0 : n;
         } else if (column.type === "checkbox") {
@@ -1409,6 +1434,8 @@
         } else if (el.type === "number") {
           var x = parseFloat(el.value, 10);
           vals[n] = Number.isNaN(x) ? 0 : x;
+        } else if (el.getAttribute("data-field-list") === "true") {
+          vals[n] = p.textToList(el.value);
         } else if (vals[n] === undefined) {
           vals[n] = el.value;
         }

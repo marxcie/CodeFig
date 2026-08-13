@@ -390,8 +390,12 @@ test('a run says which model produced its numbers', () => {
 
   const lines = ctx.describeRampModels(config, spec);
   assert.match(lines[0], /Desktop: metric, base 4, step 4, mod 3/);
-  // And the expected consequence of that base, in context rather than as an interruption.
-  assert.match(lines[1], /px held at the minimum of 1\./);
+  // **The floor line is gone from the shipped block, and that is the point of the change.** `px` used to
+  // be a value the model pushed below `min: 1` and the floor caught — reported as "px held at the
+  // minimum of 1". It is now `extras: [1]`: the same number, stated rather than clamped. A held value is
+  // a consequence to explain; an extra is a decision, and it needs no explaining.
+  assert.equal(lines.filter((l) => /held at the minimum/.test(l)).length, 0);
+  assert.match(lines[1], /Tablet: metric, base 3, step 3, mod 3/);
   assert.equal(lines.filter((l) => /metric, base/.test(l)).length, 3, 'one per viewport');
 
   // An unconfigured (endpoints) config says so too, with the numbers that shaped it.
