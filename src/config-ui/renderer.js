@@ -1423,6 +1423,14 @@
       (field.columns || []).forEach(function (column) {
         var el = rowEl.querySelector('[data-row-field="' + column.key + '"]');
         if (!el) return;
+        // **A cell its condition hides does not write.** This is the same rule as the one above, one
+        // layer in: the panel may only overwrite what it actually shows. A `<select>` always shows
+        // *something*, so a metric mode collected `ratio: 1.067` — the first option — and every mode in
+        // the file gained a ratio it does not use, in a block people read. Skipping it leaves whatever
+        // the config already had, so switching to modular and back returns your ratio rather than a
+        // default.
+        var cell = typeof el.closest === "function" ? el.closest(".config-ui-rows-cell") : null;
+        if (cell && cell.style.display === "none") return;
         if (column.type === "radio") {
           // Left alone when nothing is checked, rather than blanked. `buildRowCell` always checks
           // something, so no-selection means the DOM is not what this code thinks it is — and keeping

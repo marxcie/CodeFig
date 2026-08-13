@@ -181,6 +181,45 @@ test('a select over numbers reads back a number, not "1.25"', () => {
   assert.doesNotMatch(text, /ratio: "1\.25"/);
 });
 
+test('a hidden cell writes nothing, and keeps what the config had', () => {
+  // Found in the plugin, not here: `readForm` reported `ratio: "1.067"` for all three metric modes,
+  // because a `<select>` always shows *something* and the collector read every rendered cell. So the
+  // first edit to any field gave every mode a ratio it does not use, in a block people read and paste.
+  const block = [
+    'modes: [',
+    '  { name: "Desktop", scaleType: "metric", base: 4, step: 4 },',
+    '], // ' + SPEC,
+  ].join('\n');
+  const { items, seen, values } = render(block);
+
+  assert.equal('ratio' in values().modes[0], false, 'no ratio arrives from a cell nobody can see');
+
+  const step = items[0].querySelector('[data-row-field="step"]');
+  step.value = '6';
+  step.dispatchEvent(new shim.Event('input', { bubbles: true }));
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].modes[0].step, 6);
+  assert.equal('ratio' in seen[0].modes[0], false, 'and an edit elsewhere does not add one either');
+
+  // The other direction: a ratio the config *does* hold survives a trip through metric, so switching
+  // scale type to compare is not a way to lose it.
+  const withRatio = render([
+    'modes: [',
+    '  { name: "Desktop", scaleType: "modular", ratio: 1.25, base: 4, step: 4 },',
+    '], // ' + SPEC,
+  ].join('\n'));
+  const type = withRatio.items[0].querySelector('[data-row-field="scaleType"]');
+  const pick = (value) => {
+    const input = type.querySelectorAll('input').filter((r) => r.value === value)[0];
+    input.checked = true;
+    input.dispatchEvent(new shim.Event('change', { bubbles: true }));
+  };
+  pick('metric');
+  assert.equal(withRatio.values().modes[0].ratio, 1.25, 'still there while hidden');
+  pick('modular');
+  assert.equal(withRatio.values().modes[0].ratio, 1.25, 'and still there when it comes back');
+});
+
 test('the shipped Spacing panel is the one Márton asked for', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'spacing.js'),

@@ -5095,7 +5095,23 @@
               var row = {};
               rowEl.querySelectorAll('[data-row-field]').forEach(function (cell) {
                 var key = cell.getAttribute('data-row-field');
+                if (cell.getAttribute('data-row-radio')) {
+                  // A radio group holds its value in whichever input is checked, and the group is what
+                  // carries the field name. Reading `.value` off the group gives `undefined`, so
+                  // `scaleType` was simply absent from every row this reported — an instrument lying by
+                  // omission, which is worse than one that fails, because the row still looked complete.
+                  var on = cell.querySelector('input:checked');
+                  row[key] = on ? on.value : null;
+                  return;
+                }
                 row[key] = cell.type === 'checkbox' ? cell.checked : cell.value;
+                // Whether the cell is on screen, because a hidden cell's value is not this mode's
+                // setting — `ratio` reads `1.067` in a metric mode purely because a select must show
+                // something.
+                if (cell.closest('.config-ui-rows-cell') &&
+                    cell.closest('.config-ui-rows-cell').style.display === 'none') {
+                  row[key] = { hidden: row[key] };
+                }
               });
               rows.push(row);
               // Measured from the first row only: design feedback is about layout, and a control
