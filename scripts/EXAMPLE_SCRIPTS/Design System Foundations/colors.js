@@ -1,225 +1,137 @@
 // Colors
 // @DOC_START
-// # Colors
-// Create and update color system variables programmatically.
+// Generates a colour ramp per mode from three anchors and a curve, in OKLCH or HSL.
 //
-// ## Overview
-// Defines a color variable collection with light/dark (or other) modes. Config holds hex values per mode; the script creates variables (e.g. primary/50, primary/500, secondary, accent) from that config.
+// ## The shape of it
+// A **lightness ladder** is three anchors — bright, middle, dark — with a curve between them, and it is
+// **shared by every mode in the script**. Each mode then supplies only its own hue and chroma. That is what
+// makes two modes read as the same tone under a greyscale filter: they match on **lightness, not colour**,
+// and `Moss 200` and `Granite 200` sit at the same L with different hue and chroma.
 //
-// ## Config options
-// - **collectionName** / **structure.variableCollection** – Collection name.
-// - **structure.variableGroup** – Optional group path.
-// - **config** – Per-mode (e.g. light, dark) color values: primary, primaryLight, primaryDark, secondary, accent, background, surface, text, textMuted.
-// - **variables** – Map of variable names to { type: "COLOR", values: { modeName: function(config) => hex } }.
+// In **HSL** there is no shared ladder — a mode's own three anchors are its ladder, and the curve is per
+// mode, because an HSL curve is legitimately per hue. The *Color model* radio switches between the two.
+//
+// ## Seed color
+// A hex you already have. It fills the **Middle** anchor's hue and chroma once, when you enter it, and then
+// gets out of the way — the workflow is *place a colour, generate a scale from it, then adjust the scale*.
+// **Token placement** decides which step it occupies, and that step becomes the middle anchor, so the two
+// segments need not be the same length.
+//
+// **Lock seed** re-anchors rather than offsets. With it on, the middle anchor becomes the seed's own
+// lightness and the ladder is recomputed through it; bright and dark are untouched, so the endpoints still
+// match the shared ladder exactly. The cost is that interior steps drift, and the largest deviation is
+// reported beside the field, because that number is the whole decision. With the seed *on* the first or last
+// step there is no endpoint left to keep, and the panel says so.
+//
+// ## Two things about colour that are not obvious
+// - **Chroma is reduced per step to stay inside sRGB, and L and hue never move.** That is the only fit that
+//   keeps a step on its ladder, so there is no setting for it. Every reduction is reported — `C→` under the
+//   swatch, and a line in the run log.
+// - Very saturated colours read slightly brighter than their lightness suggests (Helmholtz–Kohlrausch).
+//   Not a concern for the near-neutral ramps this is for, and worth knowing before you chase it.
+// - Stored RGB values are treated as **sRGB**.
+//
+// ## Reading a collection you already have
+// Point *Collection* and *Group* at an existing set and the panel fills itself from it: the steps from the
+// variable names, and hue, chroma and the lightness anchors from the real first, middle and last values.
+//
+// **It does not guess a curve.** An existing ramp is a list of colours with no record of how it was made,
+// and a hand-made one may sit on no curve at all — so *Curve type* keeps its default and the panel draws
+// what is in the file *underneath* what it would generate, with the lightness gap per step. That comparison
+// is the honest version of a fit, and it is the only place you can see whether a collection you already have
+// sits on the ladder.
+//
+// What it will not touch:
+// - **An aliased variable is read through to its value and never written.** An alias is a deliberate
+//   indirection and replacing it with a raw value breaks a link silently.
+// - **A non-opaque variable is reported and skipped**, never composited over an assumed background to get a
+//   lightness, and never overwritten with an opaque value.
+// - A **group where more than half the variables are non-opaque** is an alpha ramp, not a lightness ramp.
+//   The panel declines it in one line rather than itemising every skip.
 // @DOC_END
 
-// Import functions from libraries
-@import { getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-@import { namePrefix } from "@Foundation"
+// The Configuration tab redraws this as you type. Pure: it generates in memory and draws the same strips a
+// run would, so it cannot write anything.
+// @PREVIEW: colorsPreviewHtml
+
+// `@Color Ramp` and `@OKLCH` both, and `@Math Helpers` under them: **imports do not bring cross-script
+// dependencies.** `colorsGenerateMode` arrives here as text and its calls resolve in *this* context, so
+// everything it reaches for has to be named here too. `npm run validate` makes that a build error rather
+// than a ReferenceError swallowed by a caller's try/catch.
+@import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
+@import { applyEase } from "@Math Helpers"
+@import { oklchFromHex, oklchHslFromHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare, oklchDistance } from "@OKLCH"
+@import { colorsPlaceholderSteps, colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel, colorsSegmentCurves, colorsGenerateMode, colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip, colorsAlignment, colorsBannerHtml, colorsTolerance, colorsEscapeHtml, colorsPct } from "@Color Ramp"
 
 // ========================================
-// COLOR SYSTEM CONFIGURATION
+// CONFIG
 // ========================================
 
-// Helper: variable name prefix (no leading slash when group is empty — Figma rejects names like "/primary/50")
-// Use existing config if already defined, otherwise use default
-var colorConfig = typeof colorConfig !== 'undefined' ? colorConfig : {
+var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigData : {
   // @CONFIG_START
-  collectionName: "Colors",
-  structure: {
-    variableCollection: "Colors",
-    variableGroup: ""
-  },
-  
-  // Configuration values (NOT added as variables)
-  config: {
-    light: {
-      primary: "#3b82f6",
-      primaryLight: "#eff6ff", 
-      primaryDark: "#1e3a8a",
-      secondary: "#10b981",
-      secondaryLight: "#ecfdf5",
-      secondaryDark: "#047857",
-      accent: "#f59e0b",
-      accentLight: "#fffbeb",
-      accentDark: "#92400e",
-      background: "#ffffff",
-      surface: "#f8fafc",
-      text: "#1f2937",
-      textMuted: "#6b7280"
-    },
-    dark: {
-      primary: "#60a5fa",
-      primaryLight: "#eff6ff",
-      primaryDark: "#1e3a8a", 
-      secondary: "#34d399",
-      secondaryLight: "#ecfdf5",
-      secondaryDark: "#047857",
-      accent: "#fbbf24",
-      accentLight: "#fffbeb",
-      accentDark: "#92400e",
-      background: "#0f172a",
-      surface: "#1e293b",
-      text: "#f9fafb",
-      textMuted: "#9ca3af"
+  // @fromFile: domains.colors
+
+  // # General
+  collectionName: "", // @collection @label: Collection
+  // The collection's own modes. The chips are the mode list — a read fills them, and there is one mode block
+  // below per chip, in chip order. Removing and renaming happen here, which is why a block carries neither.
+  // @collectionModes: Collection modes
+  group: "", // @label: Group within collection @placeholder="eg.: Primitives/Neutrals"
+  steps: "", // @label: Steps @placeholder="Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950" @helper: Named lightest to darkest, and the only source for token placement below. The variables are <group>/<step>.
+  colorModel: "hsl", // @options: hsl:HSL|oklch:OKLCH @radio @label: Color model @helper: HSL keeps a curve per mode. OKLCH shares one lightness ladder across every mode, which is what makes them match in greyscale.
+
+  // --- @section
+
+  // # OKLCH settings @showWhen: colorModel=oklch
+  curve: "", // @options: linear:Linear|sine-ease-in-out:Sine easeInOut|sine-ease-in:Sine easeIn|sine-ease-out:Sine easeOut|quad-ease-in-out:Quad easeInOut|cubic-ease-in-out:Cubic easeInOut|quart-ease-in-out:Quart easeInOut|circ-ease-in-out:Circ easeInOut|exponential-ease-in-out:Exponential easeInOut @label: Curve type @showWhen: colorModel=oklch
+  // @preview
+  lightness: {}, // @group: bright:number=Bright|middle:number=Middle|dark:number=Dark @label: Lightness @showWhen: colorModel=oklch @helper: 0 to 100. The ends hold exactly; the curve fills between them.
+
+  // # Mode settings
+  // Amount is how far towards the named curve to go, 0 being linear. An easing's departure from linear
+  // is a fraction of the range it spans, so the same curve is 5 lightness points across a 27-point
+  // segment and 13 across a 64-point one — 0% or 100% alone is too coarse a choice.
+  // Hue is two keys: OKLCH's is a perceptual angle, HSL's is where the maximum channel sits, and on a
+  // near-neutral ramp they disagree by more than 30°. Both are filled on a read so the model switch
+  // loses nothing either way.
+  modes: [
+    {
+      name: "",
+      lower: { family: "original", easing: "inout", amount: 100 },
+      upper: { family: "original", easing: "inout", amount: 100 },
+      seed: { hex: "", placement: "", lock: false },
+      bright: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 98 },
+      middle: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 46 },
+      dark: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 4 }
     }
-  },
-  
+  ], // @rows: name:text=Mode|lower:{family:(original:Original|linear:Linear|sine:Sine|quad:Quad|cubic:Cubic|circ:Circ)=Family|easing:(in:easeIn|out:easeOut|inout:easeInOut|outin:easeOutIn){family=sine|quad|cubic|circ}=Easing|amount:number{family=sine|quad|cubic|circ}@placeholder="eg. 100"=Amount}=Lower curve|upper:{family:(original:Original|linear:Linear|sine:Sine|quad:Quad|cubic:Cubic|circ:Circ)=Family|easing:(in:easeIn|out:easeOut|inout:easeInOut|outin:easeOutIn){family=sine|quad|cubic|circ}=Easing|amount:number{family=sine|quad|cubic|circ}@placeholder="eg. 100"=Amount}=Upper curve|#Seed{lower.family=linear|sine|quad|cubic|circ}|seed:{hex:text@placeholder="eg. #71717A"=Seed color|placement:text@placeholder="Auto"=Token placement|lock:checkbox=Lock seed @helper: On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder.}{lower.family=linear|sine|quad|cubic|circ}=Seed|#Palette|bright:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Bright|middle:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Middle|dark:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Dark @disabledNote: Anchors take effect once you choose a curve.|@preview @blocks @label: Modes
+
   // @CONFIG_END
-  
-  // Variables to be created in Figma
-  variables: {
-    // Primary colors
-    "primary/50": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.primaryLight; },
-        "Dark": function(config) { return config.dark.primaryLight; }
-      }
-    },
-    "primary/500": {
-      type: "COLOR", 
-      values: {
-        "Light": function(config) { return config.light.primary; },
-        "Dark": function(config) { return config.dark.primary; }
-      }
-    },
-    "primary/900": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.primaryDark; },
-        "Dark": function(config) { return config.dark.primaryDark; }
-      }
-    },
-    
-    // Secondary colors
-    "secondary/50": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.secondaryLight; },
-        "Dark": function(config) { return config.dark.secondaryLight; }
-      }
-    },
-    "secondary/500": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.secondary; },
-        "Dark": function(config) { return config.dark.secondary; }
-      }
-    },
-    "secondary/900": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.secondaryDark; },
-        "Dark": function(config) { return config.dark.secondaryDark; }
-      }
-    },
-    
-    // Accent colors
-    "accent/50": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.accentLight; },
-        "Dark": function(config) { return config.dark.accentLight; }
-      }
-    },
-    "accent/500": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.accent; },
-        "Dark": function(config) { return config.dark.accent; }
-      }
-    },
-    "accent/900": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.accentDark; },
-        "Dark": function(config) { return config.dark.accentDark; }
-      }
-    },
-    
-    // Surface colors
-    "surface/background": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.background; },
-        "Dark": function(config) { return config.dark.background; }
-      }
-    },
-    "surface/card": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.surface; },
-        "Dark": function(config) { return config.dark.surface; }
-      }
-    },
-    
-    // Text colors
-    "text/primary": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.text; },
-        "Dark": function(config) { return config.dark.text; }
-      }
-    },
-    "text/secondary": {
-      type: "COLOR",
-      values: {
-        "Light": function(config) { return config.light.textMuted; },
-        "Dark": function(config) { return config.dark.textMuted; }
-      }
-    }
-  }
 };
 
 // ========================================
-// CORE FUNCTIONS
-// ========================================
-
-async function createOrUpdateCollection(config) {
-  var collectionName = (config.structure && config.structure.variableCollection != null) ? config.structure.variableCollection : config.collectionName;
-  var group = (config.structure && config.structure.variableGroup !== undefined) ? config.structure.variableGroup : '';
-  var prefix = namePrefix(group);
-  
-  console.log('=== COLOR SYSTEM MANAGER ===');
-  console.log('Processing collection: ' + collectionName + (group ? ' (group: ' + group + ')' : ' (no group)'));
-  
-  var collection = await getOrCreateCollection(collectionName);
-  
-  var modes = extractModes(config);
-  console.log('Detected modes: ' + modes.join(', '));
-  
-  setupModes(collection, modes);
-  
-  var variablesWithPrefix = {};
-  for (var key in config.variables) {
-    variablesWithPrefix[prefix + key] = config.variables[key];
-  }
-  
-  var stats = await processVariables(collection, variablesWithPrefix, config.config, modes);
-  
-  console.log('=== COLOR SYSTEM SUMMARY ===');
-  console.log('Collection: ' + collectionName);
-  console.log('Variables created: ' + stats.created);
-  console.log('Variables updated: ' + stats.updated);
-  console.log('Variables skipped: ' + stats.skipped);
-  
-  return {
-    collection: collection,
-    stats: stats
-  };
-}
-
-// ========================================
 // EXECUTION
+//
+// **Nothing is written yet, on purpose.** The panel — config, recognition and both preview strips — is
+// phase 3; the write path is phase 4 and is gated on a dry run being reviewed first. A Run that half-wrote a
+// colour set would be worse than one that refuses, because the thing it would be half-writing is a
+// collection other files subscribe to.
 // ========================================
 
-(async function() {
-  try {
-    var result = await createOrUpdateCollection(colorConfig);
-    figma.notify('✅ Color System: ' + result.stats.created + ' created, ' + result.stats.updated + ' updated');
-  } catch (error) {
-    console.error('Error:', error);
-    figma.notify('❌ Error: ' + error.message);
-  }
+(function () {
+  var parsed = colorsParseSteps(colorsConfigData.steps);
+  var results = [createResult(
+    'The generator is not built yet, so nothing was written.',
+    'The panel, the preview and reading an existing collection all work. The write path lands after its ' +
+    'dry run has been reviewed.',
+    'info'
+  )];
+  results.push(createResult(
+    parsed.steps.length + ' steps, ' + (colorsConfigData.modes || []).length + ' modes, model ' +
+    (colorsConfigData.colorModel || 'oklch'),
+    'Collection: ' + (colorsConfigData.collectionName || '—') +
+    (colorsConfigData.group ? ' / ' + colorsConfigData.group : ''),
+    'info'
+  ));
+  displayResults({ title: 'Colors', results: results, type: 'info', showFilters: false });
 })();

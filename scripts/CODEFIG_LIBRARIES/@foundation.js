@@ -1,6 +1,5 @@
 // @Foundation
 // @DOC_START
-// # @Foundation
 // One viewport registry per file, one manifest per generated token set, and one copy of the
 // helpers the Design System Foundations scripts each used to carry.
 //
@@ -790,6 +789,7 @@ async function foundationAutoImport(collectionName, group, domain) {
         };
       }
     }
+
     return answer;
   }
 
@@ -1371,7 +1371,11 @@ function foundationSliceKeys(domain) {
   if (domain === 'typography') {
     return keys.concat(['fontFamily', 'createStyles', 'styleNaming', 'overviewPreviewText']);
   }
-  if (domain === 'colors') return keys.concat(['light', 'dark']);
+  // `light` and `dark` are the old declarative block's; `colorModel`, `curve` and `lightness` are the
+  // panel's. A field in a shipped default block is declared by definition — leave one out and the script
+  // warns about its own untouched config the first time anyone runs it, which is how people learn that
+  // warnings are noise.
+  if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'lightness']);
   return keys;
 }
 
@@ -1388,7 +1392,7 @@ function foundationDomainKeys(domain) {
       'styleNaming', 'overviewPreviewText']);
   }
   if (domain === 'grid') return common.concat(['extensionColumns']);
-  if (domain === 'colors') return common.concat(['light', 'dark']);
+  if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'lightness']);
   return common;
 }
 
@@ -1530,7 +1534,11 @@ function configDomainOf(inner) {
   if (inner.fontScale !== undefined || inner.fontSizes !== undefined || inner.fontWeights !== undefined ||
       inner.fontScaling !== undefined || inner.figmaStyles !== undefined || inner.styles !== undefined) return 'typography';
 
+  // Colours, in two spellings. `light` / `dark` is the **old** declarative block, kept so a config written
+  // before the panel still resolves. `colorModel` and `lightness` are the panel's: a colour model to
+  // generate in, and the shared lightness ladder that is the whole point of the OKLCH one.
   if (inner.light !== undefined || inner.dark !== undefined) return 'colors';
+  if (inner.colorModel !== undefined || inner.lightness !== undefined) return 'colors';
 
   var modes = Array.isArray(inner.modes) ? inner.modes : [];
   for (var i = 0; i < modes.length; i++) {
@@ -2764,4 +2772,398 @@ async function foundationConfigPayload(domain, options) {
     warnings: foundation.warnings || []
   };
   return payload;
+}
+
+/**
+ * What a Collection + Group already holds, in colour — the second `recognised` domain beside Grid's.
+ *
+ * → `{ found, collection, group, modeName, steps, existing, anchors, hue, chroma, config,
+ *      skipped, aliased, declined, notes, missing }`
+ *
+ * **Reads one mode at a time.** A COLOR variable has a value per mode and a mode is what a panel block is
+ * about, so the caller names the mode. Modes that exist in the collection but have no block are not read,
+ * not written and not reported as missing — the cross-collection alignment report is where they get looked at.
+ *
+ * Read-only. Nothing here writes, which is what lets it run on every edit to Collection or Group.
+ *
+ * ## The rules, and where each came from
+ *
+ * **An alias is read through and never written.** An alias is a deliberate indirection, and replacing it with
+ * a raw value breaks a link silently — so its resolved value is used for the comparison strip and its name
+ * goes in `aliased`, for the dry run to list under its own heading. *Unverified against a real file*: the
+ * test file has **zero** aliases in 194 COLOR variables, so this path has never run on real data. Kept
+ * because it is cheap and correct if one appears; a fixture invented to exercise it would validate nothing.
+ *
+ * **A non-opaque variable is reported and skipped.** Never composited over an assumed background to get a
+ * lightness — that would invent the background — and never overwritten with an opaque value.
+ *
+ * **A group where more than half the variables are non-opaque is declined outright.** `colors / other` in the
+ * test file is `black/1 … black/100` and `white/1 … white/100`: 31 of 33 non-opaque, deliberately, because
+ * they are alpha ramps over a fixed hue. Itemising 31 skips is correct and useless, so the group gets one
+ * line and no anchors are derived from it.
+ *
+ * **A name that is not a step is not ours.** Ignored silently: a group may hold anything, and reporting
+ * every unrelated variable would make the panel look like it had found problems.
+ *
+ * **Fewer than three steps is not recognisable.** First, middle and last have to exist for the anchors to
+ * come from anywhere. Below that the answer is `found: false`, which is the same path as nothing selected.
+ *
+ * Stored RGB is treated as **sRGB**. Scoping and hidden-from-publishing are ignored on read.
+ */
+async function colorsRecognise(collectionName, group, modeName) {
+  var answer = {
+    found: false, collection: collectionName || null, group: group == null ? '' : group,
+    modeName: modeName || null, steps: [], existing: [], anchors: null, hue: null, chroma: null,
+    config: null, skipped: [], aliased: [], duplicates: [], declined: null, notes: [],
+    // The curve cannot be recovered: an existing ramp is a list of colours with no record of how it was
+    // made, and a hand-made one may sit on no curve at all. Named rather than guessed.
+    missing: ['curve']
+  };
+  if (!collectionName) return answer;
+
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
+  if (!collection) return answer;
+
+  // **A named mode that is not in the collection reads nothing.** The fallback to the default mode is only
+  // for a caller that named none.
+  //
+  // This was the other way round, and it was wrong in the way that matters. `foundationColorsAutoImport` asks
+  // for the modes the panel's *blocks* name; against `color - neutral` the blocks were Granite and Moss, and
+  // the collection has Ash, Granite, Bark. Moss fell back to Ash — so `found: true`, and **Ash's hue anchors
+  // were filled into Moss's block** with nothing anywhere saying so. A block for a mode the file does not
+  // have must come back empty, not full of a neighbour's colours.
+  // **The mode is resolved, and a missing one is not reported yet.** A group being an alpha ramp is true of
+  // the *group*, whichever mode you ask about, and it is the more useful thing to say — but the mode check
+  // used to run first, so `colors / other` / `black` came back "the collection has no mode called Granite"
+  // and the decline was unreachable for any collection whose mode names differ from the panel's blocks, which
+  // for a single-mode collection is almost always. So the answer about the group comes first, tested against
+  // whichever mode there is to read.
+  var named = modeName
+    ? (collection.modes.filter(function (m) { return m.name === modeName; })[0] || null)
+    : null;
+  var fallback = collection.modes.filter(function (m) { return m.modeId === collection.defaultModeId; })[0] ||
+    collection.modes[0] || null;
+  var probe = named || fallback;
+  if (!probe) return answer;
+  var mode = named || (modeName ? null : fallback);
+  answer.modeName = (mode || probe).name;
+
+  var prefix = namePrefix(answer.group);
+  var members = [];
+  var ids = collection.variableIds || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    if (!variable || variable.resolvedType !== 'COLOR') continue;
+    if (variable.name.indexOf(prefix) !== 0) continue;
+    var tail = variable.name.slice(prefix.length);
+    // Direct children only. A nested name belongs to something else, and a set assembled out of two
+    // depths is not one ramp.
+    if (tail.indexOf('/') !== -1) continue;
+    if (!colorsStepNameOk(tail)) continue;
+    members.push({ step: tail, variable: variable });
+  }
+
+  if (!members.length) return answer;
+
+  // Declined before anything is derived: a group that is mostly alpha is not a lightness ramp, and the
+  // panel says so once rather than skipping its way through it.
+  var nonOpaque = 0;
+  for (var n = 0; n < members.length; n++) {
+    var cell = members[n].variable.valuesByMode[probe.modeId];
+    if (cell && cell.type !== 'VARIABLE_ALIAS' && typeof cell.a === 'number' && cell.a < 1) nonOpaque++;
+  }
+  if (nonOpaque * 2 > members.length) {
+    answer.declined = (answer.group || collectionName) + ' is an alpha ramp (' + nonOpaque + ' of ' +
+      members.length + ' non-opaque). This panel generates lightness ramps and can\'t work on it.';
+    return answer;
+  }
+
+  // Only now: the group is a plausible ramp, and this mode is not in the collection.
+  if (!mode) {
+    answer.notes.push('The collection has no mode called ' + modeName + ', so there is nothing to read for ' +
+      'it. Its values were left alone.');
+    return answer;
+  }
+
+  var seenStep = {};
+  var usable = [];
+  for (var m2 = 0; m2 < members.length; m2++) {
+    var entry = members[m2];
+    if (seenStep[entry.step]) {
+      // Reported, first one kept. Guessing which duplicate was meant is worse than saying there are two.
+      answer.duplicates.push(entry.variable.name);
+      continue;
+    }
+    seenStep[entry.step] = true;
+
+    var raw = entry.variable.valuesByMode[mode.modeId];
+    if (raw && raw.type === 'VARIABLE_ALIAS') {
+      var resolved = await colorsResolveAlias(raw.id, collections);
+      answer.aliased.push(entry.variable.name);
+      if (!resolved || (typeof resolved.a === 'number' && resolved.a < 1)) {
+        answer.skipped.push({ name: entry.variable.name, why: resolved ? 'not opaque' : 'alias did not resolve' });
+        continue;
+      }
+      usable.push({ step: entry.step, rgb: resolved, aliased: true, variable: entry.variable });
+      continue;
+    }
+    if (!raw || typeof raw.r !== 'number') {
+      answer.skipped.push({ name: entry.variable.name, why: 'no value in ' + mode.name });
+      continue;
+    }
+    if (typeof raw.a === 'number' && raw.a < 1) {
+      answer.skipped.push({ name: entry.variable.name, why: 'not opaque (alpha ' + colorsTrim(raw.a) + ')' });
+      continue;
+    }
+    usable.push({ step: entry.step, rgb: raw, aliased: false, variable: entry.variable });
+  }
+
+  // First, middle and last have to exist for the anchors to come from anywhere. Below three this is the
+  // same answer as nothing selected, and deliberately the same code path.
+  if (usable.length < 3) {
+    answer.notes.push('Fewer than three usable steps in ' + mode.name + ', so there is no ramp to read.');
+    return answer;
+  }
+
+  answer.found = true;
+  answer.steps = usable.map(function (u) { return u.step; });
+  answer.existing = usable.map(function (u) { return oklchRgbToHex([u.rgb.r, u.rgb.g, u.rgb.b]); });
+
+  var readings = usable.map(function (u) { return oklchFromRgb([u.rgb.r, u.rgb.g, u.rgb.b]); });
+  var mid = Math.floor((readings.length - 1) / 2);
+  var last = readings.length - 1;
+  answer.anchors = {
+    bright: readings[0].L, middle: readings[mid].L, dark: readings[last].L
+  };
+  answer.hue = { bright: readings[0].H, middle: readings[mid].H, dark: readings[last].H };
+  answer.chroma = { bright: readings[0].C, middle: readings[mid].C, dark: readings[last].C };
+  answer.midStep = usable[mid].step;
+
+  // **The same three colours, read again in HSL.** A hue is not a hue across models: OKLCH's is a perceptual
+  // angle and HSL's is where the maximum channel sits, and the two disagree by tens of degrees on the very
+  // ramps this reads. Filling an HSL panel with OKLCH numbers would put a plausible-looking wrong value in
+  // every field, which is worse than an empty one. Read here rather than converted later, because the file's
+  // own hex is the only thing both readings can honestly come from.
+  var asHsl = answer.existing.map(function (hex) { return oklchHslFromHex(hex); });
+  if (asHsl[0] && asHsl[mid] && asHsl[last]) {
+    answer.hsl = {
+      hue: { bright: asHsl[0].H, middle: asHsl[mid].H, dark: asHsl[last].H },
+      saturation: { bright: asHsl[0].C, middle: asHsl[mid].C, dark: asHsl[last].C },
+      lightness: { bright: asHsl[0].L, middle: asHsl[mid].L, dark: asHsl[last].L }
+    };
+  }
+
+  // **A hue read off a near-grey is rounding, not a value.** Measured on this file's own neutrals: at the
+  // chroma they actually have, moving one channel by a single 8-bit step swings the *measured* hue by 11° at
+  // C=0.0074 and 52° at C=0.0017. `color - neutral`'s three modes come back with hue anchors of
+  // 165/174/229, 146/146/146 and 56/107/85 — the second is a coherent ramp and the other two are noise, and
+  // nothing about the numbers says which is which.
+  //
+  // Reported rather than corrected. Taking the hue from the most chromatic step instead would be inventing a
+  // value the file does not contain, and the panel filling three fields with noise is at least visible.
+  // 0.01 is the threshold because below it one byte moves hue by more than the hue *difference* a designed
+  // ramp puts between its anchors.
+  var weakest = Math.min(answer.chroma.bright, answer.chroma.middle, answer.chroma.dark);
+  if (weakest < 0.01) {
+    answer.hueUnreliable = true;
+    answer.notes.push('Hue read from a near-grey: the lowest chroma here is ' +
+      colorsTrim4(weakest) + ', where one 8-bit step moves hue by tens of degrees. The Hue anchors are ' +
+      'rounding rather than a value — set them yourself if this ramp is meant to have a hue.');
+  }
+
+  return answer;
+}
+
+/** Four decimal places, for a chroma in a message. */
+function colorsTrim4(value) {
+  return String(Math.round(value * 10000) / 10000);
+}
+
+/** A step name is a word or a number, and nothing else. Anything stranger is not ours and is ignored. */
+function colorsStepNameOk(name) {
+  return typeof name === 'string' && name.length > 0 && /^[A-Za-z0-9][A-Za-z0-9 _.-]*$/.test(name);
+}
+
+/** An alias, followed to a value. Cross-collection is the same walk as same-collection: the id is a
+ *  document-wide handle, so `getVariableByIdAsync` does not care which collection it lands in — what differs
+ *  is only which collection's *default mode* supplies the value. A chain is followed a few hops and then
+ *  given up on rather than looped forever. */
+async function colorsResolveAlias(id, collections) {
+  var byId = {};
+  collections.forEach(function (c) { byId[c.id] = c; });
+  var currentId = id;
+  for (var hop = 0; hop < 8; hop++) {
+    var variable = await figma.variables.getVariableByIdAsync(currentId);
+    if (!variable) return null;
+    var owner = byId[variable.variableCollectionId];
+    // A remote (library) variable has no local collection here, so its own default mode is unreachable;
+    // that is a `null` rather than a guess.
+    if (!owner) return null;
+    var value = variable.valuesByMode[owner.defaultModeId];
+    if (value && value.type === 'VARIABLE_ALIAS') { currentId = value.id; continue; }
+    if (value && typeof value.r === 'number') return value;
+    return null;
+  }
+  return null;
+}
+
+/** Two decimal places, without a trailing zero — for an alpha in a message. */
+function colorsTrim(value) {
+  return String(Math.round(value * 100) / 100);
+}
+
+/** A hue or a percentage, at the precision a panel field shows. */
+function colorsRound1(value) {
+  return Math.round(value * 10) / 10;
+}
+
+/** A chroma. Four places, because 0.002 and 0.006 are different neutrals and 0.00 is neither. */
+function colorsRound4(value) {
+  return Math.round(value * 10000) / 10000;
+}
+
+/**
+ * The colours half of auto-import: what a Collection + Group already holds, per mode.
+ *
+ * → `{ source, config, existing, modes, tokens, recognition, missing }` — the same shape
+ * `foundationAutoImport` answers in, so the UI handles one payload either way.
+ *
+ * **Its own function, not a branch inside `foundationAutoImport`.** Extraction follows the calls a function
+ * makes *within its own source file*, so a colours branch in there dragged `colorsRecognise` — and through it
+ * `@OKLCH` — into every consumer, including Grid's spec, which has no reason to know what a chroma is. The
+ * validator caught it as an unresolvable call; at run time it would have been a `ReferenceError` waiting
+ * behind an `if` nobody had taken yet.
+ *
+ * **One mode at a time**, driven by the modes the panel's own blocks name. A COLOR variable has a value per
+ * mode, and a mode the panel has no block for is not the panel's business — it is the alignment report's. So
+ * a collection mode with no block is neither read nor reported as missing.
+ *
+ * Read-only, like the rest of the import path.
+ */
+async function foundationColorsAutoImport(collectionName, group, modeNames, colorModel) {
+  var answer = {
+    source: 'none', config: null, collection: collectionName || null,
+    group: group == null ? null : group, tokens: [], modes: [], existing: {},
+    recognition: { modes: {}, declined: null }, missing: ['curve']
+  };
+  if (!collectionName) return answer;
+
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var owner = collections.filter(function (c) { return c.name === collectionName; })[0];
+  if (!owner) return answer;
+
+  // **When the panel names no modes, read the collection's own.**
+  //
+  // "The modes come from the panel, not the collection" is right about which modes get *written* — a mode
+  // with no block is not the panel's business. As the only source for what to *read* it was a
+  // chicken-and-egg: the shipped block opens with one unnamed mode, so nothing was asked about, so nothing
+  // populated, so there was no way to name a mode. Selecting a collection read none of its modes and said
+  // nothing, which is bug 1.
+  //
+  // So: named blocks win, and an unnamed panel adopts what is there. `modeSource` says which happened, so
+  // the note can tell the difference between "your blocks" and "what the file had".
+  var asked = (Array.isArray(modeNames) ? modeNames : []).filter(function (name) {
+    return typeof name === 'string' && name.trim();
+  });
+  var wanted = asked.length ? asked : owner.modes.map(function (m) { return m.name; });
+  answer.modeSource = asked.length ? 'panel' : 'collection';
+  if (!wanted.length) return answer;
+
+  var perMode = [], unread = [], leadAnchors = null, leadName = null;
+  for (var w = 0; w < wanted.length; w++) {
+    var seen = await colorsRecognise(collectionName, group == null ? '' : group, wanted[w]);
+    // A declined group is a fact about the group, not about one mode, so it stops the whole answer.
+    if (seen.declined) {
+      answer.recognition.declined = seen.declined;
+      return answer;
+    }
+    answer.recognition.modes[wanted[w]] = {
+      found: seen.found, skipped: seen.skipped, aliased: seen.aliased, duplicates: seen.duplicates,
+      notes: seen.notes, hueUnreliable: !!seen.hueUnreliable, midStep: seen.midStep
+    };
+    if (!seen.found) {
+      // **Present, and carrying nothing.** `fillConfigBlock` removes a block entry the payload does not
+      // mention, so leaving this out deleted the whole mode block — the same fault as filling it with a
+      // neighbour's colours, in the other direction. A user who wrote a `Moss` block is naming a mode they
+      // intend to create; reading a collection that has no Moss is not permission to throw that away. An
+      // entry with only its name matches, refills the name it already had, and leaves every other key alone.
+      unread.push({ name: wanted[w] });
+      continue;
+    }
+    answer.existing[wanted[w]] = seen.existing;
+    // The lightness ladder is **shared**, so one mode has to supply it and the panel says which. The first
+    // that recognised — there is no better rule, and an arbitrary one stated beats one hidden.
+    if (!leadAnchors) { leadAnchors = seen.anchors; leadName = wanted[w]; }
+    // **Which model the panel is on decides which numbers go in.** The fields differ — Chroma in OKLCH,
+    // Saturation and Lightness in HSL — and so does Hue, which is a different quantity in each. Recognition
+    // reads the file once and answers in both; choosing between them belongs here, where the panel's own
+    // setting is known. An unrecognised value means OKLCH, which is what every existing caller meant.
+    // **Both models' channels, every read.** The panel can be switched between HSL and OKLCH at any time and
+    // the switch has to be lossless in either direction, which it cannot be if a read fills only the model
+    // that happened to be selected. The file's colours answer both questions at once — they are the same
+    // three colours read twice — so both are written and the generator takes the pair its model uses.
+    // **A read HSL mode arrives on *Original*.** Its three anchors are the file's, but the steps between
+    // them were made by a person and sit on no curve this panel offers — so naming any of them would be a
+    // claim about the file that is not true, and would open by proposing to rewrite every interior step.
+    // *Original* says what is actually the case: these are the colours, and picking a curve replaces them.
+    // Not set in OKLCH, where the ladder is shared and *"OKLCH scale not applied"* is the honest answer.
+    var hsl = seen.hsl || null;
+    function anchorAt(which) {
+      var both = {
+        hue: colorsRound1(seen.hue[which]),
+        chroma: colorsRound4(seen.chroma[which])
+      };
+      if (hsl) {
+        both.hslHue = colorsRound1(hsl.hue[which]);
+        both.saturation = colorsRound1(hsl.saturation[which] * 100);
+        both.lightness = colorsRound1(hsl.lightness[which] * 100);
+      }
+      return both;
+    }
+    var entry = {
+      name: wanted[w], steps: seen.steps,
+      bright: anchorAt('bright'), middle: anchorAt('middle'), dark: anchorAt('dark')
+    };
+    // Only HSL gets a curve, and only *Original*: it means "the ramp already in the file", which OKLCH has
+    // no equivalent of because its ladder is shared. Left off the payload in OKLCH so `fillConfigBlock`
+    // keeps whatever curve the block already had.
+    if (colorModel === 'hsl') {
+      // Both segments, so the pair behaves as one control until it is deliberately split. The easing is
+      // carried even though Original ignores it: choosing a family should reveal an easing that is already
+      // set to something, not an empty dropdown.
+      entry.lower = { family: 'original', easing: 'inout', amount: 100 };
+      entry.upper = { family: 'original', easing: 'inout', amount: 100 };
+    }
+    perMode.push(entry);
+  }
+
+  if (!perMode.length) return answer;
+  answer.recognition.lightnessFrom = leadName;
+  answer.source = 'recognised';
+  answer.modes = perMode.map(function (m) { return m.name; });
+  answer.tokens = perMode[0].steps.slice();
+  answer.config = {
+    steps: perMode[0].steps.join(', '),
+    lightness: {
+      bright: colorsRound1(leadAnchors.bright * 100),
+      middle: colorsRound1(leadAnchors.middle * 100),
+      dark: colorsRound1(leadAnchors.dark * 100)
+    },
+    // No `seed`: a file holds no record of one, and `fillConfigBlock` only touches the keys a payload
+    // carries — so whatever seed the user typed survives being read over.
+    // The modes that were read, then the ones the file does not have, in the order they were asked for so the
+    // block's own order survives the fill.
+    // Passed through as built, rather than re-listed key by key. Naming the keys again here is what made
+    // this the second place that had to know which model was in play — and the place that would silently
+    // drop Saturation and Lightness the moment the first one learned to produce them.
+    modes: perMode.map(function (m) {
+      var entry = { name: m.name, bright: m.bright, middle: m.middle, dark: m.dark };
+      // Only when it was read in HSL: `fillConfigBlock` touches the keys a payload carries and leaves the
+      // rest, so omitting this keeps whatever curve an OKLCH block already had.
+      if (m.curve) entry.curve = m.curve;
+      return entry;
+    }).concat(unread)
+  };
+  return answer;
 }
