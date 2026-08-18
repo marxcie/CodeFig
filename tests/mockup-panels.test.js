@@ -47,7 +47,8 @@ function mockups() {
 
 test('there is a target mockup for each panel that has one designed', () => {
   const files = mockups();
-  ['grid-target.html', 'spacing-target.html', 'typography-target.html', 'radius-target.html'].forEach((name) => {
+  ['grid-target.html', 'spacing-target.html', 'typography-target.html', 'radius-target.html',
+    'colors-target.html'].forEach((name) => {
     assert.ok(files.includes(name), name + ' is missing');
   });
 });
@@ -90,13 +91,30 @@ test('a mockup links the real stylesheet and carries no styling of its own', () 
 });
 
 test('a section heading in a mockup is an h1, the way the plugin renders one', () => {
-  // `// # Title` parses as level 1, so the plugin emits `h1`. A mockup using `h2` is styled as a
-  // *within-section* title and reads a size too small — the same mismatch that made a heading fix
-  // land on a rule that never fired.
+  // `// # Title` parses as level 1, so the plugin emits `h1`. A mockup using `h2` for a *section* is styled
+  // as a within-section title and reads a size too small — the same mismatch that made a heading fix land on
+  // a rule that never fired.
+  //
+  // **A heading inside a `@blocks` row is the exception, and an `h2` there is correct.** `#Seed` among the
+  // columns parses to level 2 and the renderer builds an `h2`, because it groups *rows* one level below the
+  // block's own title. So the rule is about where the heading sits, not about the tag alone: a heading in a
+  // `config-ui-row--heading` wrapper is a section and must be `h1`; anything else is nested and may not be.
   mockups().forEach((file) => {
     const html = fs.readFileSync(path.join(DIR, file), 'utf8');
-    const headings = [...html.matchAll(/<(h\d) class="config-ui-heading"/g)].map((m) => m[1]);
-    const wrong = headings.filter((tag) => tag !== 'h1');
-    assert.deepEqual(wrong, [], file + ' has section headings that are not h1: ' + wrong.join(', '));
+    const levels = new Set([...html.matchAll(/<(h\d) class="config-ui-heading"/g)].map((m) => m[1]));
+    assert.ok(levels.size > 0, file + ' has no headings at all, which cannot be right');
+
+    // Checked by level rather than by position, because one of these files *generates* its markup and the
+    // wrapper and the heading are never adjacent in its source. Two levels are legitimate and no more: h1 for
+    // a section, h2 for a heading inside a `@blocks` row. An h3 in a mockup is styled by a rule the panel
+    // never fires and reads a size that exists nowhere in the plugin.
+    const stray = [...levels].filter((tag) => tag !== 'h1' && tag !== 'h2');
+    assert.deepEqual(stray, [], file + ' uses heading levels the plugin does not emit: ' + stray.join(', '));
+
+    // And an h2 only earns its place in a panel that has blocks to nest it in.
+    if (levels.has('h2')) {
+      assert.match(html, /config-ui-rows--blocks/,
+        file + ' uses an h2 with no @blocks row to nest it in, so it is a section heading a size too small');
+    }
   });
 });

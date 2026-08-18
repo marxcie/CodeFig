@@ -478,6 +478,24 @@ test('no shipped config block proposes a viewport system of its own', () => {
   });
 });
 
+test('the note names three modes as a person would write them', () => {
+  // Found by reading the real panel: `join(' and ')` gave *"Desktop and Pad and Mobile had no settings
+  // here"*. Fine at one or two names, wrong at three, and three is the ordinary case for a responsive
+  // collection. Pinned on the source because the sentence is built in the UI.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const fn = ui.slice(ui.indexOf('function nameList(names)'));
+  const nameList = new Function('return ' + fn.slice(0, fn.indexOf('\n      }') + 8))();
+
+  assert.equal(nameList(['Desktop']), 'Desktop');
+  assert.equal(nameList(['Desktop', 'Mobile']), 'Desktop and Mobile');
+  assert.equal(nameList(['Desktop', 'Pad', 'Mobile']), 'Desktop, Pad and Mobile');
+  assert.equal(nameList([]), '', 'and no list is no sentence, not the word "and"');
+
+  // No caller may go back to the naive join.
+  const notes = ui.slice(ui.indexOf('function insertedModesNote'), ui.indexOf('function orderConfigModesToFile'));
+  assert.equal(notes.indexOf("join(' and ')"), -1, 'the note builds its list with nameList');
+});
+
 test('the panel records that you pressed +, and never aligns without both intents', () => {
   // The two remembered intents are symmetric and each one\'s absence is a silent data loss: without
   // `removedModeIds` alignment puts back a mode you removed, and without `addedModeNames` it deletes a

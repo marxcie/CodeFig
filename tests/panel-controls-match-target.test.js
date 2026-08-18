@@ -30,6 +30,7 @@ const FILES = {
   'spacing-target.html': 'spacing.js',
   'typography-target.html': 'typography.js',
   'radius-target.html': 'corner-radius.js',
+  'colors-target.html': 'colors.js',
 };
 
 /** `text` and `list` are the same control — one line of text — so they answer for each other. */

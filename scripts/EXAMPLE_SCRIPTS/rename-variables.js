@@ -74,25 +74,30 @@
 
 // @UI_CONFIG_START
 var searchIn = ""; // @placeholder="Typography/Body"
-// Optional scope: collection, group, or path (e.g. "Typography/", "Typography/Body", "Color/*/Accent")
+// Narrows the rename to one collection, group or path — `Typography/`, `Typography/Body`,
+// `Color/*/Accent`. Leave it empty to search every variable.
 //
 var searchFor = ""; // @placeholder="50"
 var replaceWith = ""; // @placeholder="050"
-// Leave searchFor empty to replace the whole name. Tokens: $& $1 $n $nn $nnn $N $NN $NNN
+// Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that
+// matched, `$1` a capture group, `$n` counts up and `$N` counts down.
 //
 var matchCase = false; // @label: Match case
 var useRegex = false; // @label: Use regular expression
-// Treat searchIn and searchFor as regular expressions instead of literal text with `*` wildcards.
+// Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards.
 //
 var previewOnly = true; // @label: Preview only
-// **On by default.** Lists what would change and changes nothing. Untick and run again to apply.
+// **On by default.** Lists what would change and touches nothing. Untick and run again to apply.
 // ---
 var batchReplacement = ""; // @textarea
-// Batch replacement: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
-// **Example:**
-// "50, 050",
-// "100, 0100",
-// "200, 0200",
+// Many renames in one run: one pair per line, search first, replace after the comma. Overrides
+// **Search for** and **Replace with**. No quotes, no trailing commas.
+//
+// ```
+// 50, 050
+// 100, 0100
+// 200, 0200
+// ```
 // @UI_CONFIG_END
 
 // Batch replacement in script only mode:

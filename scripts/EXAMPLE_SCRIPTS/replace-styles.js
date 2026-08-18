@@ -67,22 +67,31 @@
 
 // @UI_CONFIG_START
 var searchIn = ""; // @placeholder="color/*"
-// Optional, only rebind when current style name contains this (e.g. "color/", "Typography/")
-// ## Important
-// Due to Figma’s style cache quirks, style replacement works with local styles, but for library styles they must exist in the document first. The current workaround is to use Render styles in the library file, which creates a style overview frame with all styles and their bindings. Copy this frame into the target file so the styles become available, then you can replace them.
+// Rebinds only styles whose name contains this — `color/`, `Typography/`. Leave it empty for every style.
+// ## Library styles must already be in the file
+// Figma caches styles per file, so a library style can only be rebound once the document has seen it.
+// Run **Render styles overview** in the library file, then copy the frame it makes into this one. The
+// styles become available and the rebind works. Local styles need none of this.
 var searchFor = ""; // @placeholder="Text V1"
 var replaceWith = ""; // @placeholder="Text V2"
-// Leave searchFor empty to replace the whole name. Tokens: $& and $1 $2 in regex mode
+// Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that
+// matched, and `$1` `$2` are capture groups when **Use regular expression** is on.
 //
 var matchCase = false; // @label: Match case
 var useRegex = false; // @label: Use regular expression
-// Treat searchIn and searchFor as regular expressions instead of literal text with `*` wildcards.
+// Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards.
 //
 var previewOnly = true; // @label: Preview only
-// **On by default.** Lists the style bindings that would be rebound and changes nothing. Untick and run again to apply.
+// **On by default.** Lists the bindings that would be rebound and touches nothing. Untick and run again to apply.
 // ---
 var batchReplacement = ""; // @textarea
-// Batch: one line per pair, "search, replace" (overrides searchFor/replaceWith when non-empty)
+// Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides
+// **Search for** and **Replace with**. No quotes, no trailing commas.
+//
+// ```
+// Text V1, Text V2
+// Heading V1, Heading V2
+// ```
 // @UI_CONFIG_END
 //
 // Script-only batch: var batchReplacement = [["500","50"],["4xl","3xl"]]; or [{ searchPattern: "500", replacePattern: "50" }];

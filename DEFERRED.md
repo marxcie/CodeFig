@@ -197,6 +197,47 @@ nobody has run against a real published library yet.
 - Say the true thing in the refusal: *not published* is evidence, not proof.
 
 
+## The tone pass over the remaining 77 helper texts
+
+**What.** The copy pass fixed what could be pointed at: 87 Title Case labels, 15 explanations naming a
+variable instead of the field on screen, 6 that only repeated their label, 3 broken sentences, and 5
+worked examples that did not work. The other 77 explanations are accurate and were left alone.
+
+**How it was found.** Márton asked whether `content-designer/ux-writing-skill` would help. Measured
+against it, the copy already passes its rules — median sentence 8 words, 85% under 14, 2% over 25 — so
+the skill would have flagged 13 of 85 and none of the real faults. What is left is tone and rhythm, not
+a rule anything can check.
+
+**Why it was left.** It is taste, it is a large diff, and it wants reading rather than a sweep. The
+house voice is in `CLAUDE.md` and `CHANGELOG.md`, not in a generic skill.
+
+**What doing it involves.** Script by script, with a person reading each panel — not one pass over all
+of `scripts/`.
+
+---
+
+## A `@rows` control has no ⓘ
+
+**What.** Every other control shows its explanation on an ⓘ beside its label. A `@rows` control is a
+section rather than a field — the renderer deliberately builds no label for it, because the heading
+above it already names it — so there is nothing to hang the button from. If one ever carries a
+`@helper:` or has a paragraph folded onto it, the text falls back to a native `title` on the wrapper:
+slow, unstyled, and easy to miss.
+
+**How it was found.** Building the ⓘ. Checked against every config block in `scripts/`: no `@rows`
+field owns any explanation today — the paragraphs near one all attach to the heading above it, which
+is the right owner anyway and is where a reader is looking.
+
+**Why it was left.** The fix is a header row inside the `@rows` block to hold the button, which is new
+layout for a case that does not exist yet. Inventing a place to put a button nothing needs is how a
+control grows a part that is wrong the first time something does need it.
+
+**What fixing it involves.** Either a titled header inside `.config-ui-rows`, or hanging the ⓘ off the
+`# Heading` above and accepting that a `@rows` helper reads as the section's. Decide when a block
+actually wants one.
+
+---
+
 ## A queued run that ends in `displayResults` reports a timeout
 
 **What.** `npm run figma:run -- --file <script>` on a script whose last act is `displayResults()`

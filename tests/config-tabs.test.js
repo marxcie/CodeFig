@@ -150,11 +150,14 @@ test('which view the merge reads is decided by which view you are in', () => {
     'and Configuration code is authoritative otherwise');
 });
 
-test('a helper line belongs to its field, and renders under the control', () => {
-  // The frames put helper text under the input. A comment line above the field is a paragraph row
-  // instead — it sits at the label's left edge and reads as prose about the section rather than as an
-  // explanation of that input. `@helper:` attaches it to the field; the renderer puts it in the grid's
-  // second column, which is what lands it under the control.
+test('a helper line belongs to its field, and shows behind its \u24d8', () => {
+  // `@helper:` attaches a note to a field rather than to the gap above it — which is the whole reason
+  // the annotation exists, and is unchanged. Where it *renders* did change: it used to draw a 10px
+  // line under the control, and it is now one of the blocks behind the field's \u24d8, together with the
+  // field's leftover prose and any paragraph written against it. Three kinds of grey text became one.
+  //
+  // Everything below the renderer assertions is about the parser and is deliberately untouched: the
+  // fold is presentational, so `@helper:` parses and round trips exactly as it did.
   const P = require('../src/config-ui/parser.js');
   const line = 'extensionColumns: 0, // @label: Extra columns @helper: Just numeric variables';
   const f = P.parse(line).rows.filter((r) => r.type === 'field')[0];
@@ -194,11 +197,22 @@ test('a helper line belongs to its field, and renders under the control', () => 
   const renderer = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
   );
-  assert.match(renderer, /if \(field\.helper\) \{[\s\S]{0,200}row\.appendChild\(helper\)/,
-    'the note goes in the field row, not after it');
+  // The field's label owns the affordance, and `attachInfo` is the one place that decides whether
+  // there is anything to say — a field with no helper, no prose and no leftover comment gets no
+  // button, so the panel does not sprout a row of \u24d8 that all say nothing.
+  assert.match(renderer, /attachInfo\(lab, field, prose\)/,
+    'the field label no longer carries the info affordance');
+  assert.equal(/className = "config-ui-field-note";\n\s*helper\.textContent/.test(renderer), false,
+    'the old note under the control is back');
   const css = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'src', 'ui.css'), 'utf8'
   );
+  assert.match(css, /\.config-ui-info \{/, 'the info affordance has no styling');
+  assert.match(css, /\.config-ui-tip \{[\s\S]{0,400}position: fixed/,
+    'the bubble is not positioned against the panel');
+  // `.config-ui-field-note` stays, and stays in the control's column: it carries the notes that
+  // report **state** — `@disabledNote:`, the collection and mode notes, the pending mode removal.
+  // Those are consequences about to happen, and a consequence does not go behind a hover.
   assert.match(css, /\.config-ui-field-note \{[\s\S]{0,160}grid-column: 2/);
 
   // And no row gap: the helper is a second grid row, so a row gap would put 12px between a control

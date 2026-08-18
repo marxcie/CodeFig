@@ -40,6 +40,7 @@
 // Where the variables go. Pick a collection in this file, or choose "New collection" and type a
 // name — a name that is not in this file is created on Run.
 var targetCollection = ""; // @collection @label: Collection
+//
 // Which mode the values are written to. Empty means the collection's default mode.
 var targetMode = ""; // @mode: targetCollection @label: Mode
 //

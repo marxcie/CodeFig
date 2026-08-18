@@ -30,16 +30,18 @@
 
 // @UI_CONFIG_START
 var searchFor = ""; // @placeholder="Text/*/Regular"
-// Partial style or variable name (e.g. "Regular", "Text/5xl", "Text/*/Bold")
+// Part of a style or variable name — `Regular`, `Text/5xl`, `Text/*/Bold`.
 //
 var matchCase = false; // @label: Match case
 var useRegex = false; // @label: Use regular expression
-// Treat searchFor as a regular expression instead of literal text with `*` wildcards.
+// Reads **Search for** as a regular expression rather than plain text with `*` wildcards.
 //
-var selectMixed = false; // Include elements with mixed style/variable usage (e.g. text with bold + regular)
+var selectMixed = false; // @label: Include mixed layers
+// Layers using more than one style or variable at once — a text layer that is part bold, part regular.
 //
 // ---
-var selectionOnly = true; // Search within selection only; otherwise search whole page
+var selectionOnly = true; // @label: Selection only
+// Off searches the whole page.
 // @UI_CONFIG_END
 
 @import { traverseNodes } from "@Core Library"

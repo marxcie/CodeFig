@@ -197,7 +197,50 @@ deleting variable modes they did not recognise.
   reads *1.25 Major third*, *1.618 Golden ratio* rather than bare numbers. The dropdown is now as wide as
   its longest option instead of a fixed share of the row.
 
+- **A config form explains itself in one place: the ⓘ beside a label.** Helper text under the control,
+  the descriptive comment lines between fields, and a control's leftover comment prose were three kinds
+  of grey text in one form — and the third had never appeared at all, because it set a browser tooltip
+  whose only styling hook had no rule behind it. They are one thing now. Hover the ⓘ, or reach it with
+  Tab and press Enter to pin the bubble open; nothing that used to be written down has been thrown away.
+  - **What a script's config block looks like has not changed**, and neither has what it means. A
+    paragraph is still a comment line and `@helper:` is still `@helper:` — the panel decides where to
+    show them, and writes your block back exactly as you wrote it, comments and all.
+  - **A paragraph belongs to the control it sits against**, above it or below it, whichever it is
+    touching — a blank or bare `//` line is the separator that decides. All 68 in the shipped scripts
+    were checked one by one; two blocks whose spacing disagreed with their intent were given the
+    spacer that says what they mean.
+  - **A block that is meant to be read says so**, with `@prose` on a line of its own — its paragraphs
+    stay on the page. *Help & documentation*'s specimen shelf is the one that uses it.
+  - **Notes that report what is about to happen stay where they are**: why a field is disabled, that a
+    collection will be created, that a mode will be removed at Run. A description moves behind a hover;
+    a consequence does not.
+
+- **Every field label is sentence case, the way Figma writes one.** 87 of the plugin's 123 labels had
+  never been written by anyone: with no `@label:` set, the name of the variable was split at its
+  capitals and left there, so `fileKeyOrUrl` read as *File Key Or Url* while the 36 hand-written labels
+  beside it were sentence case. The plugin disagreed with itself on the first thing anyone reads. Your
+  config blocks are untouched by this — nothing starts writing `@label:` into them.
+
+- **Helper text explains the control it is attached to, in plain words.** A pass over every explanation
+  in the shipped scripts: the ones that named a variable in the source rather than the field on screen
+  ("leave `searchFor` empty" where the label says **Search for**), the ones that only repeated their
+  own label, and three broken sentences. Notes that had been parked under a section heading now sit on
+  the control they describe — *Amount* and *Hue* in Colors, the collection and payload fields in
+  Export/import.
+
 ### Fixed
+
+- **The batch rename and rebind examples now work if you type them.** Every one of the five scripts
+  showed its example as `"50, 050",` — quoted, comma-terminated — and the parser splits each line at
+  its **first** comma and keeps the rest verbatim. Pasted in as shown, that renamed `"50` to `050",`,
+  quote and comma included. The examples are bare pairs now, and the note says so: no quotes, no
+  trailing commas.
+
+- **A helper no longer breaks its lines wherever the source file happened to wrap.** Every newline in a
+  config block's comment became a hard line break on screen, so an explanation wrapped at the `.js`
+  file's margin arrived with breaks mid-sentence — 18 of them across the shipped scripts. A line break
+  in a paragraph is a wrap now, as it is everywhere else in markdown; a blank line still starts a new
+  paragraph, and a list is still a list.
 
 - **Picking a ratio in the panel now generates a scale.** A dropdown's value is text, so choosing
   *1.25 Major third* wrote `ratio: "1.25"` — quoted — and the generator, which accepts a number or a

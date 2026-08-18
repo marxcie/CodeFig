@@ -51,22 +51,27 @@
         /* Typography */
         --font-family-base: system-ui, -apple-system, sans-serif;
         --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
-        --font-size-caption: 10px;
-        --font-size-body: 12px;
-        --font-size-subheadline: 14px;
-        /* 15, not 16: the frame's section titles are 21px tall, which is 15 at this line height. The
-           ratio Márton is aiming for is body 12 / heading 15 / helper 10. */
-        --font-size-headline: 15px;
-        --font-size-helper: 10px;
-        --font-size-display: 20px;
-        /* A config form's section title. Its ladder is **even**: 16 / 14 / 12, the same 2px between
-           each level, which is what put it a step above the 14 its `h2` uses instead of one below.
-           Márton's call after seeing all three levels beside each other in the reference.
-           NOTE: this leaves `--font-size-headline` (15px) one pixel away, now used only by the script
-           title, the Documentation tab's `h2` and the InfoPanel header. Two sizes that differ by 1px
-           are an accident waiting to be quoted as a decision — worth collapsing into this one, which
-           is a call about the panel chrome and the docs tab rather than about this ladder. */
-        --font-size-title: 16px;
+        /* **One ladder, and the Documentation tab and a settings form both read it.** They used to have
+           separate rules for the same markdown — 20/15/14 in the docs tab, 16/14/12 in the form — so
+           `// ## Overview` was two different sizes depending on which tab it landed in, and a change had
+           to be made twice or it looked like it had not been made at all.
+           The shape, which is Márton's call: the **document title is the only thing above 16px**. It is
+           the editor header, it is always there, and it names the script once — which is why the
+           duplicated `// # Script name` came out of every DOC and config block rather than being restyled.
+           Everything below the title sits **between 16 and 12**, two pixels a step, with weight rather
+           than size separating the bottom of it from body copy. */
+        --font-size-display: 20px;     /* the document title, in the editor header */
+        --font-size-title: 16px;       /* h1 — a section, on either surface */
+        --font-size-subheadline: 14px; /* h2 — a sub-title inside a section */
+        --font-size-body: 12px;        /* h3 (semibold), paragraphs, labels, inputs, tabs, cells */
+        /* One name for text below body size. This was `--font-size-caption` and `--font-size-helper`,
+           two tokens holding 10px and differing only in which section of this sheet used them. */
+        --font-size-small: 10px;       /* helper notes, captions, buttons, status, tags */
+        /* Monospace only, and the one size that is deliberately not a step on the ladder: a mono face
+           set at the body's 12px reads larger than the prose beside it, so code steps down a single
+           pixel. It was 11px in eight places before this, none of them a token, and half of them not
+           monospace at all — those went to `--font-size-small` or to body. */
+        --font-size-code: 11px;
         --font-weight-normal: 400;
         --font-weight-medium: 500;
         --font-weight-semibold: 600;
@@ -126,7 +131,7 @@
           --hover-bg: #363638;
           --active-bg: #0a84ff;
           --code-bg: #363638;
-          --input-bg: #2c2c2c;
+          --input-bg: #252525;
         }
       }
 
@@ -264,7 +269,7 @@
         width: 100%;
         height: 56px;
         border-radius: var(--radius-md);
-        font: var(--font-size-caption) var(--font-family-base);
+        font: var(--font-size-small) var(--font-family-base);
         font-weight: var(--font-weight-semibold);
         outline: none;
         transition: all 0.2s ease;
@@ -470,7 +475,7 @@
         padding: var(--space-xl) var(--space-md);
         text-align: center;
         color: var(--text-secondary);
-        font: var(--font-size-caption) var(--font-family-base);
+        font: var(--font-size-small) var(--font-family-base);
         font-style: italic;
       }
       
@@ -501,7 +506,10 @@
       
       /* Editor header (script title, status, actions) */
       .editor-header {
-        padding: var(--space-md) var(--space-lg) var(--space-md) var(--space-2xl);
+        /* `--panel-padding-x` on the left, not the 24px that happens to equal it: the title, the tab
+           strip below it and the first label in the form all sit on one line, and they only stay on it
+           if they read one variable. */
+        padding: var(--space-md) var(--space-lg) var(--space-md) var(--panel-padding-x);
         background: var(--bg-primary);
         border-bottom: 1px solid var(--border-color);
         display: flex;
@@ -523,12 +531,20 @@
         gap: 12px;
       }
       
-      /* Script title (editable for user scripts) */
+      /* The **document title**: the name of the thing on screen, always present, and the only text in
+         the plugin above 16px. It is what lets a script's DOC and config blocks stop repeating the
+         script's own name — there is one title, and this is it. */
       .script-title {
-        font-size: var(--font-size-headline);
+        font-size: var(--font-size-display);
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
         padding: var(--space-xs) var(--space-sm);
+        /* **The padding is pulled back out on the left.** It is there for the hover and edit
+           background, which needs to sit *around* the text rather than starting at it — but it was also
+           indenting the title 8px past the tab strip and every label under it, so the one line the panel
+           is aligned to had the largest text in the plugin sitting off it. The box starts 8px early, the
+           text starts on the line. */
+        margin-left: calc(-1 * var(--space-sm));
         border-radius: var(--radius-sm);
         transition: background-color var(--transition-base);
       }
@@ -549,7 +565,7 @@
       }
       
       .script-status {
-        font-size: 11px;
+        font-size: var(--font-size-small);
         color: var(--text-secondary);
         background: var(--bg-tertiary);
         padding: 2px var(--space-sm);
@@ -650,25 +666,67 @@
         color: var(--text-primary);
       }
       
-      .docs-rendered h1 {
-        font-size: var(--font-size-display);
-        margin: 0 0 var(--space-md) 0;
+      /* ===== THE HEADING LADDER =====
+         **One ladder, and these are the only rules that set a heading's size.** The Documentation tab
+         and a settings form render the same markdown through the same parser, so `// ## Overview` is
+         14px in both and a change here changes both. Two ladders shipped for months — 20/15/14 here,
+         16/14/12 in the form — which meant every heading question had to be asked twice and a rule
+         written for the wrong one changed nothing on screen.
+         h1 is a **section**, not a page title: the editor header carries the document title at 20px, so
+         a script's DOC and config blocks no longer restate their own name.
+         The selectors name both surfaces on purpose. A form's headings are not inside `.docs-rendered`
+         — the renderer builds `h1.config-ui-heading` directly — so a rule that mentioned only one
+         surface is the bug this replaces.
+         **Keyed on the class, not on the row wrapper.** Every heading the renderer emits carries
+         `.config-ui-heading`, wrapped in a `.config-ui-row--heading` or not: a `#Seed` heading among an
+         `@rows` block's columns has no wrapper, because a form row nested in a block would drag the
+         panel's inline padding in with it. Naming the wrapper here meant that heading fell through and
+         had to restate its own size — a third place a heading size lived. */
+      .docs-rendered h1,
+      h1.config-ui-heading {
+        font-size: var(--font-size-title);
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
+      }
+
+      .docs-rendered h2,
+      h2.config-ui-heading {
+        font-size: var(--font-size-subheadline);
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-primary);
+      }
+
+      /* The bottom of the ladder: body size, and **weight is the only thing separating it from the
+         paragraph beside it**. Deliberate — a fourth size below 12px would be smaller than body copy,
+         which is a caption, not a heading. */
+      .docs-rendered h3,
+      h3.config-ui-heading {
+        font-size: var(--font-size-body);
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-primary);
+      }
+
+      /* Spacing, in the Documentation tab. **The numbers are the form's** — `--section-gap` above a
+         section title, 16px below it — so the two surfaces read the same. Only the arithmetic differs,
+         and not by choice: this is a block container, where a heading's top margin *collapses* with the
+         previous paragraph's bottom margin, so the gap is stated whole. The form is a flex column,
+         where margins do not collapse but add, so it subtracts the row's own margin to reach the same
+         48px. Same result, different mechanism — see `.config-ui-row--heading` below. */
+      .docs-rendered h1 {
+        margin: var(--section-gap) 0 var(--space-lg) 0;
       }
 
       .docs-rendered h2 {
-        font-size: var(--font-size-headline);
-        margin: var(--space-lg) 0 var(--space-sm) 0;
-        font-weight: var(--font-weight-semibold);
-        color: var(--text-primary);
+        margin: calc(var(--section-gap) / 2) 0 var(--space-sm) 0;
       }
 
       .docs-rendered h3 {
-        font-size: var(--font-size-subheadline);
         margin: var(--space-md) 0 var(--space-xs) 0;
-        font-weight: var(--font-weight-semibold);
-        color: var(--text-primary);
+      }
+
+      /* Nothing above the first heading on the page but the tab strip and the container's own padding. */
+      .docs-rendered > :first-child {
+        margin-top: 0;
       }
 
       /* Body text (docs) and config form labels when stacked; row layout labels use margin: 0 below */
@@ -703,7 +761,7 @@
         color: var(--text-primary);
         padding: 1px var(--space-xs);
         border-radius: var(--radius-sm);
-        font-size: 11px;
+        font-size: var(--font-size-code);
       }
 
       .docs-rendered pre {
@@ -713,7 +771,7 @@
         border-radius: var(--radius-md);
         overflow-x: auto;
         margin: var(--space-sm) 0;
-        font-size: 11px;
+        font-size: var(--font-size-code);
       }
       
       .docs-rendered pre code { 
@@ -737,7 +795,7 @@
       .config-ui-container .config-ui-empty {
         margin: 0;
         color: var(--text-secondary);
-        font-size: var(--font-size-caption);
+        font-size: var(--font-size-small);
         line-height: var(--line-height-normal);
       }
 
@@ -804,7 +862,7 @@
         border: 1px solid transparent;
         background: transparent;
         border-radius: var(--radius-md);
-        font: var(--font-size-caption) var(--font-family-base);
+        font: var(--font-size-small) var(--font-family-base);
         font-weight: var(--font-weight-semibold);
         cursor: pointer;
         display: flex;
@@ -910,14 +968,14 @@
         width: 60%;
         height: 6px;
         background: rgba(255, 255, 255, 0.333);
-        border-radius: 3px;
+        border-radius: var(--radius-sm);
         overflow: hidden;
       }
       
       .progress-fill {
         height: 100%;
         background: #fff;
-        border-radius: 3px;
+        border-radius: var(--radius-sm);
         transition: width 0.3s ease;
         width: 0%;
       }
@@ -1024,39 +1082,10 @@
         text-align: center;
       }
       
-      /* Config UI: layout only; typography from .docs-rendered (markdown) rules above */
-      .config-ui-section {
-        width: 100%;
-        min-width: 0;
-        margin-bottom: var(--space-md);
-        flex-shrink: 0;
-      }
-      
-      .config-ui-section:last-child {
-        margin-bottom: 0;
-      }
-      .config-ui-section--trailing-blank {
-        margin-bottom: var(--space-xl);
-      }
+      /* Markdown inside a form is the same markdown, so it keeps `.docs-rendered` and only loses the
+         container padding — the row it sits in carries that. */
       .config-ui-form .docs-rendered {
         padding: 0;
-      }
-      
-      .config-ui-section--divider {
-        margin-bottom: var(--space-md);
-      }
-      .config-ui-section--divider hr {
-        border: 0;
-        border-top: 1px solid var(--border-light);
-        margin: 0;
-      }
-      
-      .config-ui-section__fields {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-sm);
-        width: 100%;
-        min-width: 0;
       }
       
       /* Row-based form: vertical flex column, one row per item */
@@ -1109,37 +1138,28 @@
         margin: 0;
         flex-shrink: 0;
       }
-      /* Config-block headings. **`// # Heading` parses as level 1 and renders as `h1`** — that is how
-         every shipped block writes a section title, so h1 is *the* section heading and the size and
-         the section gap belong on it. A rule that names only `h2` never fires, which is how 15px and
-         48px both shipped twice without changing anything on screen. h2 stays available for a title
-         *inside* a section and steps down from h1. */
-      .config-ui-form--rows .config-ui-row--heading h1,
-      .config-ui-form--rows .config-ui-row--heading h2 {
-        font-size: var(--font-size-title);
-        /* Above: the section gap, less the previous row's own bottom margin, so the two do not add up
-           to more than the gap. Below: 16px to the content, measured — the frame's title sits at y=24
-           and is 21 tall, and the content slot starts at y=61. */
+      /* Config-block headings: **spacing only.** Every size, weight and colour comes from the shared
+         ladder in the typography section — if you are here to change how a heading looks, it is the
+         wrong rule. `// # Heading` parses as level 1, so h1 is *the* section title and carries the
+         section gap; h2 is a title inside a section.
+         Why the arithmetic differs from the Documentation tab's: a form is a **flex column**, where
+         margins do not collapse but add to the row's own 12px `margin-bottom`. Each gap is therefore
+         stated 12px short, to land on the same 48 and 24 the docs tab reaches by collapsing. */
+      .config-ui-form--rows .config-ui-row--heading h1 {
+        /* Below: 16px to the content, measured — the frame's title sits at y=24 and is 21 tall, and the
+           content slot starts at y=61. */
         margin: calc(var(--section-gap) - var(--space-md)) 0 var(--space-lg) 0;
-        font-weight: var(--font-weight-semibold);
-        color: var(--text-primary);
       }
       .config-ui-form--rows .config-ui-row--heading h2 {
-        font-size: var(--font-size-subheadline);
-        margin-top: calc(var(--section-gap) / 2 - var(--space-md));
+        margin: calc(var(--section-gap) / 2 - var(--space-md)) 0 var(--space-sm) 0;
+      }
+      .config-ui-form--rows .config-ui-row--heading h3 {
+        margin: var(--space-md) 0 var(--space-xs) 0;
       }
       /* The first heading has no previous section to be separated from: the form's own top padding
          plus this is the frame's 24 to the first title. */
       .config-ui-form--rows .config-ui-row--heading:first-child h1 {
         margin-top: var(--space-sm);
-      }
-      /* Body size, and semibold is the only thing separating it from the paragraph beside it. That is
-         deliberate: it is the bottom of the ladder, so the weight does the work. */
-      .config-ui-form--rows .config-ui-row--heading h3 {
-        font-size: var(--font-size-body);
-        margin: var(--space-md) 0 var(--space-xs) 0;
-        font-weight: var(--font-weight-semibold);
-        color: var(--text-primary);
       }
       
       .config-ui-form--rows .config-ui-row--field .config-ui-field {
@@ -1199,7 +1219,7 @@
         appearance: none;
         width: 32px;
         height: 18px;
-        border-radius: 9px;
+        border-radius: var(--radius-full);
         background: var(--border-light, #e6e6e6);
         cursor: pointer;
         position: relative;
@@ -1215,7 +1235,7 @@
         left: 2px;
         width: 14px;
         height: 14px;
-        border-radius: 50%;
+        border-radius: var(--radius-full);
         background: #fff;
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         transition: transform 0.2s ease;
@@ -1237,11 +1257,18 @@
       /* Input fields */
       .config-ui-input {
         font-size: var(--font-size-body);
+        /* **Declared, because a form control does not inherit it.** `body` sets `--font-family-base` and
+           every field ignored it, falling back to whatever the UA picks — near enough to system-ui on macOS
+           that nobody looked. A `textarea` defaults to *monospace*, though, so the JSON block in the Colors
+           frames rendered in a different typeface from the fields around it and that is where it showed.
+           Fixed here rather than on the textarea: one declaration on the class that says what a field looks
+           like, instead of a second font rule per control type. */
+        font-family: var(--font-family-base);
         padding: 8px 10px;
         border: 1px solid var(--border-color, #e1e5e9);
-        border-radius: 6px;
+        border-radius: var(--radius-md);
         background: var(--input-bg, #fff);
-        color: var(--text-primary, #1d1d1f);
+        color: var(--text-primary);
         max-width: 100%;
         transition: border-color 0.2s ease, box-shadow 0.2s ease;
       }
@@ -1281,6 +1308,9 @@
         max-width: 100%;
       }
       
+      /* Everything a field looks like — border, radius, padding, background, focus ring, size and now the
+         font — comes from `.config-ui-input`, which the renderer puts on a textarea alongside this class.
+         So this holds only what a textarea has and an input does not. */
       .config-ui-textarea {
         resize: vertical;
         min-height: 2.5em;
@@ -1315,7 +1345,7 @@
 
       /* Variable collection dropdown: library / document group headers (native optgroup; limited browser styling) */
       .config-ui-form select[data-collection-groups="true"] optgroup {
-        font-size: 11px;
+        font-size: var(--font-size-small);
         font-weight: 600;
         color: var(--text-muted, rgba(29, 29, 31, 0.55));
       }
@@ -1324,7 +1354,7 @@
         max-height: 160px;
         overflow-y: auto;
         border: 1px solid var(--figma-color-border, #e5e5e5);
-        border-radius: 4px;
+        border-radius: var(--radius-md);
         padding: 6px 8px;
         background: var(--figma-color-bg, #fff);
         width: 100%;
@@ -1337,7 +1367,7 @@
         margin-bottom: 0;
       }
       .config-ui-multiselect-group__label {
-        font-size: 11px;
+        font-size: var(--font-size-small);
         font-weight: 600;
         color: var(--text-muted, rgba(29, 29, 31, 0.55));
         margin-bottom: 4px;
@@ -1346,7 +1376,7 @@
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: 12px;
+        font-size: var(--font-size-body);
         padding: 2px 0;
         cursor: pointer;
       }
@@ -1429,10 +1459,12 @@
         padding: 16px 16px 12px 16px;
       }
 
+      /* A section, not the document title: the InfoPanel is a panel *inside* the script's page, so it
+         takes the top of the content ladder rather than the 20px the editor header has. */
       .info-title {
-        font-size: var(--font-size-headline);
+        font-size: var(--font-size-title);
         color: var(--text-primary);
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         margin: 0;
       }
 
@@ -1450,8 +1482,8 @@
         color: var(--text-primary);
         border: 1px solid var(--border-light);
         padding: 6px 12px;
-        border-radius: 4px;
-        font-size: var(--font-size-caption);
+        border-radius: var(--radius-md);
+        font-size: var(--font-size-small);
         cursor: pointer;
         transition: all 0.2s ease;
       }
@@ -1513,13 +1545,13 @@
       }
 
       .info-entry-count {
-        font-size: var(--font-size-caption);
+        font-size: var(--font-size-small);
         font-weight: 400;
         color: var(--text-secondary);
       }
 
       .info-entry-subtitle {
-        font-size: 11px;
+        font-size: var(--font-size-small);
         color: var(--text-secondary);
         line-height: 1.4;
       }
@@ -1528,8 +1560,8 @@
       .info-entry-badge {
         display: inline-block;
         padding: 2px 6px;
-        border-radius: 3px;
-        font-size: var(--font-size-caption);
+        border-radius: var(--radius-sm);
+        font-size: var(--font-size-small);
         font-weight: 500;
         margin-right: 2px;
       }
@@ -1627,7 +1659,7 @@
         margin: 8px 0;
         padding: 8px;
         background: var(--bg-tertiary);
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
         border: 1px solid var(--border-light);
         display: flex;
         align-items: center;
@@ -1637,7 +1669,7 @@
       .color-preview {
         width: 20px;
         height: 20px;
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
         display: inline-block;
         border: 1px solid var(--border-light);
         flex-shrink: 0;
@@ -1646,7 +1678,7 @@
       .stroke-preview {
         width: 20px;
         height: 20px;
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
         display: inline-block;
         flex-shrink: 0;
       }
@@ -1654,7 +1686,7 @@
       .effect-preview {
         width: 20px;
         height: 20px;
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
         display: inline-block;
         flex-shrink: 0;
       }
@@ -1692,12 +1724,12 @@
         background: var(--bg-tertiary);
         color: var(--text-primary);
         padding: 2px 4px;
-        border-radius: 2px;
+        border-radius: var(--radius-sm);
       }
 
       /* Result messages */
       .info-result-message {
-        font-size: var(--font-size-caption);
+        font-size: var(--font-size-small);
         font-weight: bold;
         color: var(--text-primary);
         margin-bottom: 4px;
@@ -1708,7 +1740,7 @@
       }
 
       .info-result-details {
-        font-size: var(--font-size-caption);
+        font-size: var(--font-size-small);
         color: var(--text-secondary);
         line-height: 1.5;
       }
@@ -1727,7 +1759,7 @@
       .info-result-message .highlight {
         background: var(--bg-tertiary);
         padding: 1px 3px;
-        border-radius: 2px;
+        border-radius: var(--radius-sm);
         font-weight: 600;
       }
 
@@ -1751,8 +1783,8 @@
         background: var(--bg-tertiary);
         color: var(--text-primary);
         padding: 1px 4px;
-        border-radius: 3px;
-        font-size: 10px;
+        border-radius: var(--radius-sm);
+        font-size: var(--font-size-code);
         border: 1px solid var(--border-light);
       }
 
@@ -1760,13 +1792,13 @@
       .info-result-message .badge {
         display: inline-block;
         padding: 2px 3px;
-        font-size: var(--font-size-caption);
+        font-size: var(--font-size-small);
         font-weight: 600;
         line-height: 1;
         text-align: center;
         white-space: nowrap;
         vertical-align: baseline;
-        border-radius: 2px;
+        border-radius: var(--radius-sm);
         margin-right: 4px;
       }
 
@@ -1809,13 +1841,13 @@
       }
 
       .codefig-console-title {
-        font-size: 12px;
+        font-size: var(--font-size-body);
         font-weight: 700;
         color: #8a1f2b; /* dark red */
       }
 
       .codefig-console-meta {
-        font-size: 10px;
+        font-size: var(--font-size-small);
         color: var(--text-secondary);
         justify-self: end;
       }
@@ -1828,13 +1860,13 @@
 
       .codefig-console-btn {
         padding: 6px 10px;
-        font-size: 11px;
+        font-size: var(--font-size-small);
       }
 
       .codefig-console-body {
         margin: 10px 0 0 0;
         padding: 6px;
-        border-radius: 10px;
+        border-radius: var(--radius-lg);
         border: 1px solid rgba(220, 53, 69, 0.35);
         background: #fff;
         color: var(--text-primary);
@@ -1872,10 +1904,10 @@
       .info-stale-note {
         margin: 0 0 10px;
         padding: 8px 10px;
-        border-radius: 4px;
+        border-radius: var(--radius-md);
         border: 1px solid rgba(128, 128, 128, 0.28);
         background: rgba(128, 128, 128, 0.08);
-        font-size: 11px;
+        font-size: var(--font-size-small);
         line-height: 1.45;
         opacity: 0.85;
       }
@@ -1895,7 +1927,7 @@
       }
 
       .config-preview-title {
-        font-size: 10px;
+        font-size: var(--font-size-small);
         text-transform: uppercase;
         letter-spacing: 0.06em;
         opacity: 0.55;
@@ -1928,7 +1960,7 @@
         border: none;
         background: none;
         font: inherit;
-        font-size: 11px;
+        font-size: var(--font-size-body);
         color: inherit;
         opacity: 0.6;
         cursor: pointer;
@@ -2004,7 +2036,7 @@
       }
 
       .config-ui-rows-cell-label {
-        font-size: 10px;
+        font-size: var(--font-size-small);
         opacity: 0.6;
       }
 
@@ -2018,7 +2050,7 @@
         font-size: var(--font-size-body);
         padding: 8px 10px;
         border: 1px solid rgba(128, 128, 128, 0.35);
-        border-radius: 6px;
+        border-radius: var(--radius-md);
         color: inherit;
         background: none;
         cursor: pointer;
@@ -2054,10 +2086,10 @@
       .config-no-form {
         margin: 10px 12px 0;
         padding: 8px 10px;
-        border-radius: 4px;
+        border-radius: var(--radius-md);
         border: 1px solid rgba(128, 128, 128, 0.28);
         background: rgba(128, 128, 128, 0.08);
-        font-size: 11px;
+        font-size: var(--font-size-small);
         line-height: 1.45;
         opacity: 0.85;
       }
@@ -2082,12 +2114,15 @@
       }
 
       /* A note under a field — auto-import's answer sits under Group, which is where the question
-         was asked. */
+         was asked. `pre-line` so a helper written as two lines stays two lines: a toggle's *On.* and
+         *Off.* cases are a table of two, and wrapped into one paragraph they read as one sentence
+         contradicting itself. Only newlines are honoured, so the note is still text and never markup. */
       .config-ui-field-note {
+        white-space: pre-line;
         /* The second column of the field's grid, so it lands under the control it explains. */
         grid-column: 2;
         margin-top: 4px;
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         line-height: 1.4;
         opacity: 0.7;
       }
@@ -2112,7 +2147,7 @@
         gap: 6px;
         padding: 6px 10px;
         border: 1px solid var(--border-color);
-        border-radius: 6px;
+        border-radius: var(--radius-md);
         font-size: var(--font-size-body);
         background: var(--bg-tertiary);
       }
@@ -2165,7 +2200,7 @@
          `+` either. The wording is the design's own — a hidden text node in the frame reads "Modes
          locked by Collection scope". */
       .config-ui-chips-locked {
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         opacity: 0.6;
       }
 
@@ -2300,7 +2335,7 @@
       .grid-preview-bar {
         grid-column: 1;
         height: 8px;
-        border-radius: 2px;
+        border-radius: var(--radius-sm);
         background: #17976a;
       }
 
@@ -2341,7 +2376,7 @@
         min-width: 0;
         padding: 10px 14px;
         border: 1px solid var(--border-color, #e1e5e9);
-        border-radius: 6px;
+        border-radius: var(--radius-md);
         background: var(--input-bg, #fff);
         font: inherit;
         font-size: var(--font-size-body);
@@ -2357,7 +2392,7 @@
       }
 
       .grid-suggestion-spans {
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         opacity: 0.6;
       }
 
@@ -2365,7 +2400,7 @@
       .grid-suggestions-more {
         grid-column: 1 / -1;
         margin: 0;
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         opacity: 0.7;
       }
 
@@ -2429,7 +2464,7 @@
       }
 
       .spacing-preview-note {
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         opacity: 0.6;
       }
 
@@ -2488,7 +2523,7 @@
       }
 
       .radius-preview-note {
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         opacity: 0.6;
       }
 
@@ -2508,7 +2543,7 @@
         text-align: left;
         font-weight: var(--font-weight-normal);
         color: var(--text-secondary);
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         padding: 0 var(--space-md) 6px 0;
       }
 
@@ -2519,7 +2554,7 @@
       }
 
       .type-overview td:last-child {
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         opacity: 0.7;
         font-variant-numeric: normal;
       }
@@ -2540,7 +2575,7 @@
       }
 
       .type-specimen-note {
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         opacity: 0.6;
         margin-bottom: var(--space-lg);
       }
@@ -2557,7 +2592,7 @@
       }
 
       .type-specimen-meta {
-        font-size: var(--font-size-helper);
+        font-size: var(--font-size-small);
         line-height: 1.6;
         opacity: 0.6;
       }
@@ -2576,6 +2611,534 @@
       }
 
       /* ============================================================
+         COLOR PANEL — the third `@rows` display, and the ramp preview
+         (frames 2065:4154 and 2065:6267)
+
+         Written against artifacts/mockup-panels/colors-target.html, which links this stylesheet.
+
+         The Color frames repeat a mode as a **block** rather than a tab: a heading naming the mode, the
+         mode's fields under it as a form, the next mode below, and one Add button at the end. So this is
+         a third display on the one `@rows` control, beside the stacked table and `@tabs` — same values,
+         same serialization, which is the reason a display is a modifier here and not a second control.
+         `--blocks` reuses `--stacked`'s cells wholesale; what it adds is the title and the widths.
+         ============================================================ */
+      /* `--section-gap`, because that is what a mode block is: the frames give each one a UI Block of
+         its own, abutting the next with 24px below and 24 above, which is the same 48px every other
+         section boundary in the panel uses. */
+      .config-ui-rows--blocks .config-ui-rows-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--section-gap);
+      }
+
+      /* "Mode **Granite**" — measured off the frames, and the answer was not the one to guess: the block
+         title is *the same size and the same weight* as the `h1` above it saying **Mode settings**. Only
+         the colour differs, and only for the first word — grey for the kind of thing, primary for which
+         one. A step down in size would have been the reasonable invention and it is not what is drawn.
+         Not an `h1` element, though: the plugin's `h1` comes from a `// # Heading` line in the config
+         block, and there is no comment per mode — the control draws this. Its 16px to the content is the
+         heading rule's, for the same reason: the frame's title sits at y=24 and the slot starts at 61. */
+      .config-ui-rows-item-title {
+        margin: 0 0 var(--space-lg);
+        font-size: var(--font-size-title);
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-secondary);
+      }
+
+      .config-ui-rows-item-title-name {
+        color: var(--text-primary);
+      }
+
+      /* *Seed* and *Palette*: a heading **inside** a block, one step down from the block's own title — 14px
+         against 16px, measured off 2072:5165. Which is `h2` against `h1`, so **the size comes from the
+         ladder and this rule sets only the spacing**: `#Seed` among the columns parses to the same
+         `{ type: "heading", level }` a `// ## Heading` line does and renders the same `h2.config-ui-heading`,
+         so reusing the mechanism is the whole point rather than adding a third layout. What differs is the
+         spacing, because a heading inside a block sits between rows rather than between sections.
+
+         No `.config-ui-row--heading` wrapper: a form row nested in a block brings the panel's 24px inline
+         padding with it and indents every heading past the fields it names. That absence is why the ladder
+         is keyed on `.config-ui-heading` rather than on the wrapper — keyed on the wrapper, this heading
+         fell through it and had to restate 14px semibold for itself. */
+      .config-ui-rows-item .config-ui-heading {
+        margin: var(--space-sm) 0 0;
+      }
+
+      /* **A select in a block runs the field width, not the content width.** The opposite of the tabbed
+         rule directly above, and deliberately: `width: auto` answered *"spacing method dropdown is too
+         large for no reason"* about a tab, where every neighbour is a number or a radio. Here the
+         neighbours are General's Collection and Group inputs, and both frames draw Mode and Curve type
+         at exactly their width — a dropdown that stops at *Linear* reads as a different kind of field
+         from the one directly above it. */
+      /* 70%, which is what a text input is and what `.config-ui-picker` is — so Curve type ends where
+         Mode ends, and both end where Collection and Group do. The frames draw all four at 443px of a
+         677px column, and that is this number, not a fourth one.
+
+         **A direct child**, because the mode picker's select is not one: it is already 100% of a
+         `.config-ui-picker` that is itself 70%, and this rule is the more specific of the two. Written
+         as a descendant it made the dropdown 70% of 70% and left the name input under it sticking out
+         240px further — a control that visibly disagreed with the one it belongs to. */
+      .config-ui-rows--blocks .config-ui-rows-cell--stacked > .config-ui-input--select {
+        width: 70%;
+        justify-self: start;
+      }
+
+      /* A picker is two controls deep, and the frames put the label level with the **first** of them —
+         the dropdown is the field, and the name input below is a consequence of what it says. Centred
+         against both, the label floats between them and reads as labelling neither. The label's own
+         32px min-height then centres its text against the 28px select, so `start` lands level rather
+         than at the top. */
+      .config-ui-rows-cell--picker {
+        align-items: start;
+      }
+
+      /* ---- A nested group in one cell: Hue, Chroma, Lightness ----
+
+         `bright:{hue:number=Hue|chroma:number=Chroma}=Bright`. An anchor is one thing you set and two or
+         three numbers you set it with, so it is one cell — *Bright* in the label column, the parts in the
+         control column, each captioned. Sizes are the frames': 96px parts, 8px apart, captions above.
+
+         Named `--group` and not `--triple` because the renderer emits it for any nested column: the seed's
+         hex-and-placement pair is two, an anchor is three, and a name that counts them would be wrong for
+         one of the two on the day it shipped.
+
+         `align-items: end` on the cell because the captions add a line above the inputs: centred, the
+         *Bright* label floats between the caption and the field and reads as belonging to neither. */
+      /* **Aligned to the inputs, not to the bottom of the tallest part.**
+         `align-items: end` looked right until a part carried a helper: the group grew downwards and the label
+         sank with it, so *Seed* ended up below its own fields. The label has to line up with the row of inputs
+         regardless of what hangs beneath them, which means offsetting it by the caption's height rather than
+         letting flex-end find it. 18px, the frame's own gap — captions at y=0 and fields at y=18. */
+      .config-ui-rows-cell--group {
+        align-items: start;
+      }
+
+      /* A **margin**, not padding: `box-sizing: border-box` lets the label's own `min-height: 32px` absorb
+         padding, so 18px of it moved the text by nothing and left the box a strange 36px tall. A margin is
+         outside the box either way, so the label keeps its 32px and starts one caption lower — which is what
+         puts its text on the same line as the inputs. */
+      .config-ui-rows-cell--group .config-ui-rows-cell-label {
+        margin-top: 19px;
+      }
+
+      /* A toggle is 18px where every other control is 28, and the label's 32px min-height sizes the row
+         for the taller ones — which left the *Lock seed* helper floating 23px under its switch where the
+         frame has 8. Shortening the label is the fix rather than moving the note: the row is only tall
+         because the label asked it to be. */
+      .config-ui-rows-cell--toggle .config-ui-rows-cell-label {
+        min-height: 24px;
+      }
+
+      .config-ui-rows-group {
+        display: flex;
+        gap: var(--space-sm);
+        min-width: 0;
+      }
+
+      .config-ui-rows-group-part {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        width: 96px;
+      }
+
+      /* **The last part sizes to itself.** 96px is right for a column of numbers being compared down the
+         group, and wrong for whatever ends the row — a toggle with two lines of copy under it, an easing
+         dropdown whose labels are longer than its box. Fixed, the last part either clipped its control or
+         held a 96px gap open beside it. `:last-child` rather than a modifier class, because "the end of the
+         row" is a position, not a kind of part. */
+      .config-ui-rows-group-part:last-child {
+        width: auto;
+      }
+
+      /* Not `.config-ui-rows-cell-label`: that one is a *field's* label and `--stacked` gives it body
+         size and a 32px min-height to line up with its control. This is a caption over a 96px number. */
+      .config-ui-rows-group-label {
+        font-size: var(--font-size-small);
+        opacity: 0.6;
+      }
+
+      /* A part is 96px wide, so its input fills it — the 96px number rule already agrees, and this says
+         so from the part's side rather than relying on two numbers happening to match. */
+      .config-ui-rows-group .config-ui-input--number {
+        width: 100%;
+      }
+
+      /* ---- The ramp preview ----
+
+         The first preview in the plugin that reads **across** rather than down, and it has to: a colour
+         ramp is judged by the joins between neighbours, which is a thing you can only see when they are
+         adjacent. So one card per token in a row, and the anchors marked above the tokens they land on
+         rather than listed beside the strip.
+
+         Sizes from the frames: cards share the width, 8px apart, a 74px swatch, and the token name and
+         hex stacked under it. */
+      .color-ramp-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+      }
+
+      /* Inside a mode block the strip is a flex child beside the cells, not a row of the form, so it
+         gets the same top gap the cells have and no padding of its own. */
+      .config-ui-rows-item .color-ramp-preview {
+        margin-top: var(--space-sm);
+      }
+
+      /* ---- The alignment banner ----
+
+         Amber, because it is neither a fault nor a success: the collection holds colours this config would not
+         produce, which is a thing to know and decide about. It names the modes that differ rather than implying
+         the whole collection, and the action beside it acts on all of them, because the scale is a property of
+         the collection.
+
+         **Derived, never stored.** There is no applied flag: the banner is the answer to "do these values match
+         what this config would produce", asked again on every edit. So it clears itself when a collection is
+         aligned by hand, and returns after a round trip through HSL, with nothing to reset. */
+      .color-apply-banner {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md);
+        margin: var(--space-sm) 0 0;
+        padding: 10px 12px;
+        border: 1px solid #e8d48a;
+        border-radius: var(--radius-md);
+        background: #fdf6e3;
+        color: #6b5417;
+      }
+
+      .color-apply-banner-text {
+        font-size: var(--font-size-small);
+        line-height: 1.5;
+        min-width: 0;
+      }
+
+      /* The one action, and it looks like one: this is the button in the frame, not a link. */
+      .color-apply-banner-action {
+        margin-left: auto;
+        flex: none;
+        font: var(--font-size-body) var(--font-family-base);
+        padding: 6px 12px;
+        border: 0;
+        border-radius: var(--radius-md);
+        background: var(--active-bg, #0a84ff);
+        color: #fff;
+        cursor: pointer;
+      }
+
+      .color-apply-banner-action:hover {
+        filter: brightness(1.05);
+      }
+
+      /* ---- Remove, in a block ----
+
+         No frame has a Remove button at all. The capability has to exist — Add without it is a one-way door —
+         but a bar the width of the panel competes with Add for attention and reads as the block's primary
+         action, which for a block several hundred pixels tall it certainly is not. So a `×` beside the title,
+         about *this* block, quiet until wanted. */
+      .config-ui-rows-item-title {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-sm);
+        /* **The same height with an icon and without.** The chevron's line box is shorter than the title's,
+           so a block that has one would otherwise sit a pixel or two tighter than one that does not — and
+           `@blocks` controls exist in both shapes. Pinned to the title's own line height instead of to
+           whatever the icon happens to measure. */
+        min-height: calc(var(--font-size-title) * 1.4);
+      }
+
+      .config-ui-rows-remove--block {
+        margin-left: auto;
+        padding: 0 4px;
+        border: 0;
+        background: none;
+        color: var(--text-secondary);
+        font-size: var(--font-size-subheadline);
+        line-height: 1;
+        cursor: pointer;
+        opacity: 0.5;
+      }
+
+      .config-ui-rows-remove--block:hover {
+        opacity: 1;
+        color: #c0392b;
+      }
+
+      /* ---- A step that would change ----
+
+         One strip, two hexes. Frame 2091:6810 draws a changed step with a second hex under the first and
+         leaves the unchanged ones alone, so the current-versus-updated display and the
+         existing-versus-generated comparison are the same component rather than two strips stacked. Built
+         once, which is also why there is no second strip below any more.
+
+         The swatch splits on the diagonal: the file's colour on one side, the run's on the other, so the pair
+         reads before either hex does. */
+      .color-ramp-preview-swatch--split {
+        border-style: solid;
+      }
+
+      /* Struck through, and muted: this is the value being given up. */
+      .color-ramp-preview-hex--was {
+        text-decoration: line-through;
+        opacity: 0.45;
+      }
+
+      /* The value that would replace it, in the one colour this strip uses for "the panel did something". */
+      .color-ramp-preview-hex--now {
+        color: #17976a;
+        font-weight: var(--font-weight-semibold);
+        opacity: 1;
+      }
+
+      /* ---- Two strips, when the file already holds a set ----
+
+         Reading an existing collection cannot recover a curve — an eleven-step ramp made by hand may sit on
+         no curve at all — so the panel does not guess one. It draws what is in the file underneath what it
+         would generate, and the gap between the two strips is the answer to the only question worth asking
+         before pressing Run. Same shape as the zinc comparison that made the curve problem visible in the
+         first place; this is that trick promoted from a one-off to a feature.
+
+         Each strip keeps its own caption, because two unlabelled ramps one above the other is a puzzle. */
+      .color-ramp-preview-caption {
+        font-size: var(--font-size-small);
+        font-weight: var(--font-weight-semibold);
+        opacity: 0.6;
+      }
+
+      /* Tighter to the strip above it: the pair reads as one comparison rather than two previews, so the
+         gap within a pair is smaller than the gap to whatever follows. */
+      .color-ramp-preview--existing {
+        margin-top: var(--space-md);
+      }
+
+      /* A dashed edge, so a swatch that is *reported* rather than *proposed* is distinguishable at a glance
+         from the ones a Run would write — the two strips otherwise differ only in their numbers. */
+      .color-ramp-preview--existing .color-ramp-preview-swatch {
+        border-style: dashed;
+        border-color: rgba(0, 0, 0, 0.18);
+      }
+
+      /* The per-step lightness gap, which is the whole point of drawing the second strip. Tabular so a
+         column of them can be scanned, and only shown where it is big enough to matter. */
+      .color-ramp-preview-delta {
+        font-size: var(--font-size-small);
+        font-variant-numeric: tabular-nums;
+        opacity: 0.6;
+      }
+
+      /* Amber past the point where a step has visibly moved. Not red: an existing set differing from the
+         ladder is the normal state of affairs before adoption, not a fault. */
+      .color-ramp-preview-delta--wide {
+        opacity: 1;
+        color: #a8620a;
+      }
+
+      .color-ramp-preview.is-unset .color-ramp-preview-swatch {
+        background: var(--border-color);
+      }
+
+      /* One track shared with the strip below it, so a marker sits over its own card by construction
+         rather than by a percentage that has to be recomputed whenever the step count changes. */
+      /* `start`, so the swatches share a top edge. The seed's card is a line taller than the rest — it
+         carries the *Seed color* note — and any other alignment lifts that one swatch out of the row,
+         which is the opposite of what the strip is for. */
+      .color-ramp-preview-anchors,
+      .color-ramp-preview-strip {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        column-gap: 8px;
+        align-items: start;
+      }
+
+      /* An anchor is drawn in the column of the token it lands on, and it points at it. `justify-self`
+         puts *Bright* against the left edge of the first card and *Dark* against the right edge of the
+         last, which is what the frames show — the outer two anchors are the ends of the ramp, so they
+         read better flush than centred over a card. */
+      .color-ramp-preview-anchor {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        font-size: var(--font-size-small);
+        line-height: 1.2;
+      }
+
+      .color-ramp-preview-anchor--start {
+        align-items: flex-start;
+      }
+
+      .color-ramp-preview-anchor--middle {
+        align-items: center;
+      }
+
+      .color-ramp-preview-anchor--end {
+        align-items: flex-end;
+      }
+
+      /* The triangle, drawn rather than typed: a `▾` glyph is a font's opinion about size and baseline,
+         and it sat two pixels off the label in every browser tried. */
+      .color-ramp-preview-anchor-mark {
+        width: 0;
+        height: 0;
+        border-left: 3px solid transparent;
+        border-right: 3px solid transparent;
+        border-top: 4.5px solid currentColor;
+      }
+
+      .color-ramp-preview-card {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      /* `box-sizing` and an inset border rather than an outline: #FAFAFA on white is invisible without
+         an edge, and a swatch that is 74px plus a border is no longer the height the frame measured. */
+      .color-ramp-preview-swatch {
+        box-sizing: border-box;
+        height: 74px;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        border-radius: var(--radius-md);
+      }
+
+      .color-ramp-preview-token {
+        margin-top: 4px;
+        font-size: var(--font-size-small);
+        font-variant-numeric: tabular-nums;
+        opacity: 0.6;
+      }
+
+      .color-ramp-preview-hex {
+        font-size: var(--font-size-small);
+        font-variant-numeric: tabular-nums;
+        opacity: 0.6;
+      }
+
+      /* Green, and the only colour in the strip that is not a swatch: it names the one token the user
+         typed, among ten the generator wrote. */
+      .color-ramp-preview-seed {
+        font-size: var(--font-size-small);
+        font-weight: var(--font-weight-semibold);
+        color: #17976a;
+      }
+
+      /* A swatch whose chroma the gamut would not take. The only note left on a card: `overrides` and the
+         pins that went with them are gone, because reproducing Tailwind zinc's ladder was never the goal. */
+      .color-ramp-preview-pin {
+        font-size: var(--font-size-small);
+        opacity: 0.45;
+      }
+
+
+      /* ---- The seed row (frame 2072:5165, and the revision that supersedes it) ----
+
+         One row: a hex and a placement dropdown side by side, the message inline to their right, the
+         input's own coordinates as a caption underneath. The caption goes below rather than beside
+         because it is *the same colour said differently* — a reading, not a second field — and the
+         message goes beside because it is about the run and competes with nothing. */
+      .config-ui-rows-cell--seed {
+        align-items: start;
+      }
+
+      .color-seed {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .color-seed-fields {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        min-width: 0;
+      }
+
+      .color-seed-field {
+        width: 96px;
+        flex: none;
+      }
+
+      .color-seed-field .config-ui-input {
+        width: 100%;
+      }
+
+      /* The placement dropdown is content-width, not 96. The frames draw it at 96 with *Auto* in it, and
+         the moment it holds a step it says *Auto (500)* — which at 96 minus 28 for the chevron clips to
+         `Auto (500`. Same reasoning as the tabbed select: a dropdown's width comes from its longest
+         option, because that is the only thing that knows how wide it needs to be. */
+      /* Back to 96px, the frames' width. The reason *auto* chose a step moved to the readout line: in the
+         option it made this the widest control in the Seed section, for a sentence that belongs with the
+         colour's other coordinates rather than inside a dropdown. */
+      .color-seed-field--placement {
+        width: 96px;
+      }
+
+      /* `H145 C0.017 L0.569` — the channel letters muted so the numbers are what you read. Tabular, so
+         the three columns do not jitter as you type in the field above them. */
+      .color-seed-readout {
+        font-size: var(--font-size-small);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .color-seed-readout-key {
+        opacity: 0.5;
+      }
+
+      /* Re-apply seed: offered only when an anchor has been edited since the hex was placed, so it sits
+         beside the message that says so rather than occupying a row of its own permanently. Sized and
+         weighted like the Add button, which is the plugin's other in-form action. */
+      .color-seed-reapply {
+        font: var(--font-size-body) var(--font-family-base);
+        padding: 5px 10px;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: var(--input-bg, #fff);
+        color: var(--text-primary);
+        cursor: pointer;
+        flex: none;
+      }
+
+      .color-seed-reapply:hover {
+        background: var(--bg-tertiary);
+      }
+
+      /* Two messages stack. The chroma note is *a second line* — it explains a different thing from the
+         snap, and side by side they read as two columns of one sentence. */
+      .color-seed-messages {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      /* Inline, and it wraps rather than pushing the fields: the message is the longest thing in the row
+         and the two 96px fields are the shortest, so a row sized by its text would move the controls
+         every time the state changed. */
+      .color-seed-message {
+        font-size: var(--font-size-small);
+        min-width: 0;
+        color: #a8620a;
+      }
+
+      /* Not a warning, an error: the field holds something that is not a colour, and placement has
+         nothing to offer until it does. */
+      .color-seed-message--invalid {
+        color: #c0392b;
+      }
+
+      /* ---- Lightness in OKLCH mode ----
+
+         Read-only rather than absent, because the number is the answer to *what did the tone scale give
+         this step* — the one thing a designer checks before trusting a shared ladder. `[readonly]` and
+         not a class: the attribute is what makes it true, so the styling follows the attribute and a
+         field cannot look editable while refusing to be. */
+      .config-ui-input[readonly] {
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        cursor: default;
+      }
+
+      /* ============================================================
          NOT WIRED YET
 
          A section whose layout exists and whose behaviour does not. Dimmed so the panel says how far
@@ -2591,9 +3154,184 @@
         content: attr(data-unwired);
         display: block;
         margin-top: 2px;
-        font-size: 10px;
+        font-size: var(--font-size-small);
         font-style: italic;
         opacity: 0.8;
       }
 
       /* End of styles */
+
+      /* **A disabled config control reads as inert, not broken.**
+         The Palette holds anchors read out of the file while a mode is still on Original: real values, worth
+         seeing, not yet doing anything. The UA's own disabled styling is near-invisible against the panel's
+         input background, so the state has to be stated — dimmed and not-allowed, with the caption dimmed
+         too so the whole row recedes together rather than a field looking oddly pale under a live label. */
+      .config-ui-input:disabled,
+      .config-ui-toggle:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .config-ui-rows-cell.is-disabled .config-ui-rows-cell-label,
+      .config-ui-rows-cell.is-disabled .config-ui-rows-group-label {
+        opacity: 0.55;
+      }
+
+      /* The note that says why. Sits under the row it explains, like a field note, and is only ever present
+         while the disable is. */
+      .config-ui-field-note--disabled {
+        font-style: italic;
+      }
+
+      /* **Collapse.** The chevron sits at the end of the title row, and a collapsed block keeps its title and
+         its strip — the strip is what you scan a list of modes for, so hiding it would leave nothing to
+         recognise. Everything else in the item goes. Selected by child so a nested group cannot be caught by
+         it. */
+      /* A drawn icon rather than a glyph, so the shape and the size are the design's and not the UI font's.
+         The button is the icon's box: 20px square, no chrome, dimmed until hovered like the chip's own
+         controls. `display: flex` so the SVG centres in it whichever way it is flipped. */
+      .config-ui-rows-collapse {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border: none;
+        background: none;
+        padding: 0;
+        color: inherit;
+        opacity: 0.55;
+        cursor: pointer;
+      }
+
+      .config-ui-rows-collapse:hover {
+        opacity: 1;
+      }
+
+      /* Named by what goes, not by what stays. Excluding the preview slot by class reached out of this
+         namespace to one a single hyphen from a shared modifier — the collision `ui-css-shared-classes`
+         exists to stop, and it caught it. Listing the block's own parts keeps the rule inside `rows-`. */
+      .config-ui-rows-item.is-collapsed > .config-ui-rows-cell,
+      .config-ui-rows-item.is-collapsed > .config-ui-heading,
+      .config-ui-rows-item.is-collapsed > .config-ui-field-note {
+        display: none;
+      }
+
+
+      /* ============================================================================
+         The ⓘ and its bubble — one channel for a control's explanation
+         ============================================================================
+         `@helper:` drew a 10px note under every control it was written on, leftover comment prose set
+         a native `title` and showed nothing at all, and a paragraph row printed its explanation as
+         loose grey text between the fields. Three kinds of grey text in one form, one of them
+         invisible, and no way to tell which belonged to which control. They are one thing now.
+
+         `.config-ui-field-note` is untouched and still carries what it should: the notes that report
+         **state** — `@disabledNote:`, the collection and mode notes, the pending mode removal. A
+         consequence about to happen stays on the page; a description moves behind the ⓘ. */
+
+      /* The circle is drawn, not typed: ⓘ as a character is whatever the platform font decides, and
+         at 10px that is the difference between a legible mark and a smudge. Inline-flex so it sits on
+         the label's baseline row rather than displacing it. */
+      .config-ui-info {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 13px;
+        height: 13px;
+        margin-left: 5px;
+        padding: 0;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        background: none;
+        color: inherit;
+        font-family: inherit;
+        font-size: 9px;
+        font-weight: var(--font-weight-semibold);
+        font-style: italic;
+        line-height: 1;
+        opacity: 0.45;
+        cursor: help;
+        vertical-align: middle;
+        flex: none;
+      }
+
+      .config-ui-info:hover,
+      .config-ui-info[aria-expanded="true"] {
+        opacity: 1;
+      }
+
+      /* Focus is visible on purpose. The ⓘ is a real button so the panel stays usable from the
+         keyboard, and a focus ring is the only thing that says where Tab has landed. */
+      .config-ui-info:focus-visible {
+        opacity: 1;
+        outline: 2px solid var(--text-primary);
+        outline-offset: 1px;
+      }
+
+      /* One bubble, on `document.body`, moved to whichever ⓘ is asking. Fixed rather than absolute so
+         a form that has scrolled does not drag it off with the row it belongs to. `max-width` is the
+         panel's own narrow measure: most of these are two sentences, and a bubble as wide as the
+         window would be one long line. */
+      .config-ui-tip {
+        position: fixed;
+        z-index: 100;
+        max-width: 260px;
+        padding: 8px 10px;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: var(--border-color);
+        color: var(--text-primary);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+        font-size: var(--font-size-body);
+        line-height: 1.45;
+        /* It is placed against a button, never hovered itself — pointer events would let it eat the
+           `mouseleave` that dismisses it. */
+        pointer-events: none;
+      }
+
+      .config-ui-tip[hidden] {
+        display: none;
+      }
+
+      /* A helper keeps its newlines: a toggle's *On.* and *Off.* cases are a table of two, and run
+         together they read as one sentence contradicting itself. This is the same `pre-line` the note
+         under the control used to carry, moved with the text it belongs to. */
+      .config-ui-tip__block {
+        white-space: pre-line;
+      }
+
+      .config-ui-tip__block + .config-ui-tip__block {
+        margin-top: 6px;
+      }
+
+      /* Prose came from a paragraph row and has always been markdown, so `**bold**` and `code` in a
+         shipped config keep working.
+
+         `.docs-rendered` is the Documentation **tab**, and it carries that page's shell: 16px/24px of
+         padding, its own background, `overflow: auto` and `flex: 1`. Inside the bubble that padding
+         lands on top of the bubble's own and insets a prose tooltip 34px from its left edge while a
+         plain-text one sits at 10px — the same markdown, the same class, two visibly different boxes.
+         The form already strips the padding for its own surface (`.config-ui-form .docs-rendered`);
+         this is that move for the third surface, and the rest of the shell with it. */
+      .config-ui-tip .docs-rendered {
+        flex: none;
+        overflow: visible;
+        padding: 0;
+        background: none;
+        white-space: normal;
+        /* The `font:` shorthand on `.docs-rendered` sets a line-height too, so restating the size
+           alone left prose at 1.5 against a helper's 1.45 — the other half of why the two kinds of
+           block did not look like one control. */
+        font-size: var(--font-size-small);
+        line-height: 1.45;
+      }
+
+      .config-ui-tip .docs-rendered > :first-child {
+        margin-top: 0;
+      }
+
+      .config-ui-tip .docs-rendered > :last-child {
+        margin-bottom: 0;
+      }

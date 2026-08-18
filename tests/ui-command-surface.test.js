@@ -168,3 +168,17 @@ test('clickControl still cannot reach anything but a config control', () => {
   // `card` is a suggestion card. It applies margin and gap to the mode on screen — a config edit, the
   // same class as typing in the fields — and it cannot reach a run.
 });
+
+test('a radio takes its option by value, not the first input of the group', () => {
+  // `uiControlTarget` falls back to `flat[0]` when nothing matches `part`, and a radio's value was then
+  // read as a boolean. So `setField name=colorModel value=oklch` unchecked HSL, selected nothing, and
+  // answered `settled`. The panel previewed HSL while the terminal believed it was on OKLCH — the tool
+  // reporting a state the plugin was not in, which is the one failure this instrument cannot have.
+  const body = commandBody('setField');
+  assert.match(body, /uiControlTarget\(a\.name, String\(a\.value\), a\.index\)/,
+    'a radio no longer resolves its option from the value');
+  assert.match(body, /has no option called/,
+    'an option that does not exist is silently becoming another one again');
+  assert.equal(/target\.checked = a\.value === true \|\| a\.value === 'true';/.test(body), false,
+    'the boolean-only read is back, so a named option cannot be selected');
+});

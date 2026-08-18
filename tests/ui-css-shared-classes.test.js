@@ -23,6 +23,26 @@ const path = require('path');
 const CSS = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.css'), 'utf8');
 
 /**
+ * `selector { body }` pairs, as a flat list.
+ *
+ * **Comments come out first.** This sheet documents its decisions in prose above the rule they
+ * belong to, and a comment mentioning `h1` sits directly above a rule that sets a font size — so a
+ * scan that keeps comments reads that prose as part of the next selector and matches on it.
+ *
+ * The pattern is deliberately linear. Spanning a multi-line selector list with a nested quantifier
+ * backtracks exponentially over 3,000 lines, which presents as a hung suite rather than a failing
+ * one. Nested at-rules are fine: a body cannot contain a brace, so an `@media` prelude never
+ * becomes a selector.
+ */
+function cssRules() {
+  const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  return [...stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, sel, body]) => ({
+    selector: sel.trim().replace(/\s+/g, ' '),
+    body
+  }));
+}
+
+/**
  * Shared wrappers: classes applied to many different things, where a bare rule restyles all of
  * them. Not an exhaustive list of shared classes — an exhaustive list would need maintaining, and
  * this one is the set that has actually caused a regression.
@@ -133,14 +153,19 @@ test('a rows control is a section: no label, full width', () => {
     'the label is not built for a rows field');
 });
 
-test('a tabbed rows control has no add or remove', () => {
-  // Modes are managed by the chips above. Two places to add a mode is one too many.
+test('a rows control with chips above it has no add', () => {
+  // Modes are managed by the chips. Two places to add a mode is one too many — and the test is the *chips*,
+  // not the display: `field.tabs` was only ever a proxy for "there are chips above", and `@blocks` has them
+  // now too, which is what made the Colors panel carry both a chips input and an Add button.
   const renderer = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
   );
-  assert.match(renderer, /if \(field\.tabs\) \{[\s\S]{0,140}return;/,
-    'the add button is not built under tabs');
-  assert.match(renderer, /var remove = field\.tabs \? null :/, 'nor a remove button per row');
+  assert.match(renderer, /if \(field\.tabs \|\| field\.membershipFromChips\) return;/,
+    'the add button is built even where chips own the mode list');
+  assert.match(renderer, /r\.membershipFromChips = true;/,
+    'nothing marks a rows field as having its membership owned by chips');
+  assert.match(renderer, /var remove = \(field\.tabs \|\| field\.membershipFromChips\) \? null :/,
+    'nor a remove button per row — removal lives on the chip');
 });
 
 test('the row buttons take their height from the same values the inputs do', () => {
@@ -175,18 +200,55 @@ test('the section heading rule names the tag the renderer actually emits', () =>
   assert.ok(map, 'the heading tag mapping is not where this test can read it');
   const tag = level >= 3 ? map[1] : level === 2 ? map[2] : map[3];
 
-  const rule = CSS.match(/\.config-ui-form--rows \.config-ui-row--heading (h\d)(,\s*\n\s*\.config-ui-form--rows \.config-ui-row--heading (h\d))? \{([^}]*)\}/);
-  assert.ok(rule, 'the section heading rule is missing');
-  const tags = [rule[1], rule[3]].filter(Boolean);
-  assert.ok(tags.includes(tag),
-    'a section heading renders as <' + tag + '>, but the rule styles ' + tags.join(' and '));
-  // Not the display size, which is the Documentation tab's `h1` and was what the form was wearing for
-  // as long as the rule named the wrong tag. Which token it *is* belongs to the reference's ladder
-  // table, checked against this same CSS in tests/style-reference.test.js — one place, not two.
-  assert.doesNotMatch(rule[4], /font-size: var\(--font-size-display\)/,
-    'a form section heading is wearing the Documentation tab size');
-  assert.match(rule[4], /font-size: var\(--font-size-[a-z]+\)/, 'and takes its size from a token');
-  assert.match(rule[4], /margin: calc\(var\(--section-gap\)/, 'and carries the section gap itself');
+  // Matched on the **whole** selector, not a substring of one: the shared rule's selector list ends
+  // with the form's selector, so a substring match finds the wrong rule and reports the wrong thing.
+  const rules = cssRules();
+  const formSelector = '.config-ui-form--rows .config-ui-row--heading ' + tag;
+
+  // The **shared** ladder rule: one declaration of the size, naming both surfaces. The size used to
+  // live on a form-only rule and again on a docs-only rule, which is the drift this asserts away.
+  // Keyed on `.config-ui-heading` — the class the renderer puts on every heading it builds — rather
+  // than on the row wrapper, which a heading nested in an `@rows` block does not have.
+  const shared = rules.find(
+    (r) => r.selector === '.docs-rendered ' + tag + ', ' + tag + '.config-ui-heading'
+  );
+  assert.ok(shared,
+    'a section heading renders as <' + tag + '>, and one rule must set its size for both the ' +
+    'Documentation tab and a config form — no rule has that selector list');
+  // Not the display size: that is the document title in the editor header, the only text above 16px,
+  // and it is what the form was wearing for as long as the rule named the wrong tag.
+  assert.doesNotMatch(shared.body, /font-size: var\(--font-size-display\)/,
+    'a section heading is wearing the document-title size');
+  assert.match(shared.body, /font-size: var\(--font-size-[a-z]+\)/, 'and takes its size from a token');
+
+  // The gap stays the form's own, because a flex column does not collapse margins — see the rule's
+  // comment. Only the arithmetic is surface-specific; the size above is not.
+  const gap = rules.find((r) => r.selector === formSelector);
+  assert.ok(gap, 'the form has no spacing rule for its section heading');
+  assert.match(gap.body, /margin: calc\(var\(--section-gap\)/, 'and carries the section gap itself');
+  assert.doesNotMatch(gap.body, /font-size/,
+    'the form is setting a heading size again — that belongs to the shared ladder rule');
+});
+
+test('one heading ladder: neither surface sets a heading size on its own', () => {
+  // The bug this whole section exists for. The Documentation tab and a config form render the same
+  // markdown through the same parser, so `// ## Overview` must be one size. It was two for months —
+  // 20/15/14 against 16/14/12 — which meant every heading question had to be asked twice and a rule
+  // written for the wrong surface changed nothing on screen.
+  //
+  // A size on a single-surface selector is how that comes back, so that is what this forbids. Spacing
+  // is exempt: block flow collapses adjacent margins and a flex column does not, so the two surfaces
+  // reach the same gap by different arithmetic.
+  const offenders = [];
+  for (const { selector, body } of cssRules()) {
+    if (!/font-size/.test(body)) continue;
+    const docs = /\.docs-rendered h[123]\b/.test(selector);
+    const form = /\.config-ui-heading|\.config-ui-row--heading h[123]\b/.test(selector);
+    if (docs === form) continue;   // both surfaces (the shared rule), or neither (not a heading rule)
+    offenders.push(selector + ' sets ' + /font-size:[^;]*/.exec(body)[0]);
+  }
+  assert.deepEqual(offenders, [],
+    'a heading size is set for one surface only:\n  ' + offenders.join('\n  '));
 });
 
 test('a section gap arrives with or without a divider', () => {

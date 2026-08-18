@@ -327,3 +327,50 @@ test('a block that ends with a comment still parses', () => {
   assert.ok(P.parseConfigBlockObject(P.serialize(schema, values)),
     'what the editor holds after one form interaction must still parse');
 });
+
+test('an object the block leaves empty is filled, not skipped', () => {
+  // `lightness: {}` is the block saying "three anchors, shape not known yet". Filling only keys that were
+  // already written meant it gained nothing, so reading a collection loaded the steps and left every anchor
+  // empty — and then appeared to work on the second attempt, because by then the form had written the keys
+  // in. That is what "the palette only loads after I edit it" was.
+  const block = [
+    'group: "", // @label: Group',
+    'lightness: {}, // @group: bright:number=Bright|middle:number=Middle|dark:number=Dark @label: Lightness'
+  ].join('\n');
+
+  const out = P.fillConfigBlock(block, { lightness: { bright: 98.5, middle: 78.5, dark: 19.4 } });
+  assert.match(out.text, /lightness: \{ bright: 98\.5, middle: 78\.5, dark: 19\.4 \},/);
+  assert.deepEqual(out.substituted, ['lightness.bright', 'lightness.middle', 'lightness.dark']);
+  assert.match(out.summary, /Filled 3 values/);
+
+  // The annotation is untouched, which is what makes this a fill rather than a reprint.
+  assert.match(out.text, /@group: bright:number=Bright\|middle:number=Middle\|dark:number=Dark @label: Lightness/);
+  assert.match(out.text, /group: "", \/\/ @label: Group/);
+
+  // A partly-written object gains only what it lacks, and keeps what it had.
+  const partial = 'lightness: { bright: 1 }, // @group: bright:number=Bright|dark:number=Dark';
+  const two = P.fillConfigBlock(partial, { lightness: { bright: 98.5, dark: 19.4 } });
+  assert.match(two.text, /lightness: \{ bright: 98\.5, dark: 19\.4 \},/);
+});
+
+test('the last property of an inserted entry is written like its siblings', () => {
+  // An entry's last property runs to the entry's own closing brace, so its text carries the line break that
+  // *closes the object*. Read as "written across lines", every inserted entry came out with its final key
+  // expanded and the rest inline — a three-line `dark:` beside a one-line `bright:`, from a sibling where
+  // all three are written identically.
+  const block = [
+    'modes: [',
+    '  { name: "Ash", bright: { hue: 1, sat: 2 }, dark: { hue: 3, sat: 4 } }',
+    '], // @rows: name:text=Mode @label: Modes'
+  ].join('\n');
+
+  const out = P.fillConfigBlock(block, {
+    modes: [
+      { name: 'Ash', bright: { hue: 1, sat: 2 }, dark: { hue: 3, sat: 4 } },
+      { name: 'Bark', bright: { hue: 5, sat: 6 }, dark: { hue: 7, sat: 8 } }
+    ]
+  });
+  assert.match(out.text, /\{ name: "Bark", bright: \{ hue: 5, sat: 6 \}, dark: \{ hue: 7, sat: 8 \} \}|dark: \{ hue: 7, sat: 8 \}/);
+  assert.equal(/dark: \{\n/.test(out.text), false,
+    'the inserted entry expanded its last property while its sibling wrote it inline');
+});

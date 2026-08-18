@@ -70,24 +70,27 @@ var rebindScope = "selection"; // @options: selection|variablesCollection|both @
 //
 var sourceCollection = ""; // @options: variableCollections
 var searchFor = ""; // @placeholder="color 2/*"
-// Optional, only rebind when current variable name contains this (e.g. "color 1"")
+// Rebinds only variables whose current name contains this — `color 1`. Leave it empty for every variable.
 // ---
 var targetCollection = ""; // @options: variableCollections
 var replaceWith = ""; // @placeholder="color 1"
-// Optional, replace with this variable name (e.g. "color 2")
+// The name to bind to instead. Leave it empty to keep each variable's own name and only change collection.
 //
 var matchCase = false; // @label: Match case
 var useRegex = false; // @label: Use regular expression
-// Treat searchFor as a regular expression instead of literal text with `*` wildcards.
+// Reads **Search for** as a regular expression rather than plain text with `*` wildcards.
 //
 var previewOnly = true; // @label: Preview only
-// **On by default.** Lists the bindings that would be rebound and changes nothing. Untick and run again to apply.
+// **On by default.** Lists the bindings that would be rebound and touches nothing. Untick and run again to apply.
 // ---
 var batchReplacement = ""; // @textarea
-// Batch: one line per pair. "search to replace" or "search, replace" (overrides searchFor/replaceWith)
-// **Example:**
-// color 2, color 1,
+// Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides
+// **Search for** and **Replace with**. No quotes, no trailing commas.
+//
+// ```
+// color 2, color 1
 // red, blue
+// ```
 // @UI_CONFIG_END
 //
 // Batch replacement in script only mode:

@@ -17,6 +17,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
+const fs = require('fs');
+const path = require('path');
+
 const P = require('../src/config-ui/parser.js');
 
 const ANNOTATION = '@rows: name:text|appliesTo:text|min:number|model:(metric|modular|endpoints)';
@@ -255,7 +258,9 @@ test('under @tabs the name column is the tab, not also a field', () => {
   const fs2 = require('fs');
   const path2 = require('path');
   const src = fs2.readFileSync(path2.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8');
-  assert.match(src, /if \(field\.tabs && column\.key === "name"\) return;/);
+  // `@blocks` joined the guard: its title carries the name the same way the tab strip does, so a control
+  // underneath would be the second place to rename from — and the two could disagree.
+  assert.match(src, /if \(\(field\.tabs \|\| field\.blocks\) && column\.key === "name"\) return;/);
 
   // The column stays in the parsed spec — it is still the data, and serialize still writes it.
   const f = P.parse(
@@ -263,4 +268,126 @@ test('under @tabs the name column is the tab, not also a field', () => {
   ).rows.filter((r) => r.type === 'field')[0];
   assert.deepEqual(f.columns.map((c) => c.key), ['name', 'gap'], 'the name column is still declared');
   assert.equal(f.value[0].name, 'desktop', 'and still carried');
+});
+
+/**
+ * A column carries its own helper.
+ *
+ * The gap `119d1bc` recorded and left open: "a `@rows` column cannot carry a helper, so Spacing's *Extra
+ * spacings* note has no way to be produced by the renderer today". The Colors panel is what forced it —
+ * *Lock seed* has two lines of copy explaining what the toggle chooses between, and until now the only
+ * place that copy could live was the mockup.
+ */
+test('a column helper parses, renders under its control, and round-trips', () => {
+  const block = [
+    'modes: [',
+    '  { name: "desktop", lock: false }',
+    '], // @rows: name:text=Mode|lock:checkbox=Lock seed @helper: On. Keeps its value.\\nOff. Moves to the nearest step. @tabs @label: Modes'
+  ].join('\n');
+
+  const schema = P.parse(block);
+  const field = schema.rows.filter((r) => r.type === 'field' && r.inputType === 'rows')[0];
+  assert.ok(field, 'the rows field did not parse');
+
+  const lock = field.columns.filter((c) => c.key === 'lock')[0];
+  assert.equal(lock.label, 'Lock seed', 'the helper swallowed the label');
+  assert.equal(lock.type, 'checkbox', 'the helper swallowed the type');
+  assert.equal(lock.helper, 'On. Keeps its value.\\nOff. Moves to the nearest step.');
+  // The column before it is untouched — a helper runs to the end of its own segment, not the line.
+  assert.equal(field.columns.filter((c) => c.key === 'name')[0].helper, undefined);
+
+  // Round trip: the block a user pastes comes back the way they wrote it.
+  assert.match(P.serialize(schema), /@helper: On\. Keeps its value\.\\nOff\. Moves to the nearest step\./);
+});
+
+test('a column helper hangs off its caption, not off the cell', () => {
+  // A cell is the narrowest thing in the panel, and a note drawn *under* one used to set the width of
+  // the whole column — the reason a column helper needed a rule about which grid column it landed in
+  // at all. On the caption's \u24d8 it takes no width, so the question stops existing.
+  //
+  // Checked at the source rather than through a shimmed document: one assertion is not worth a second
+  // rendering path that could disagree with the first.
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8');
+  assert.match(renderer, /caption\.className = "config-ui-rows-cell-label";[\s\S]{0,300}attachInfo\(caption, column, null\)/,
+    'a column helper is no longer attached to its caption');
+  assert.equal(/columnNote/.test(renderer), false, 'the old note under the cell is back');
+  // `\n` in the source is still a real line break: a toggle's On./Off. pair is two lines, not a
+  // paragraph. The rule moved with the text, onto the tooltip block that carries a helper.
+  assert.match(renderer, /function helperBlock\(text\) \{[^}]*replace\(\/\\\\n\/g, "\\n"\)/,
+    'a helper written as two lines will render as one');
+});
+
+/**
+ * A nested column: `bright:{hue:number=Hue|chroma:number=Chroma}=Bright`.
+ *
+ * An anchor is one thing you set and two numbers you set it with, so the config says so rather than
+ * carrying six flat keys with an annotation explaining which belong together. Márton chose the nesting
+ * over the flat-plus-grouping alternative, and this is the seam that makes it work: parse, serialize and
+ * read-back have to agree about one level of objects inside a row.
+ *
+ * The load-bearing case is the **collision**. Two groups both holding a `hue` are the normal shape here —
+ * three anchors, each with a hue — so a flat `data-row-field="hue"` lookup would read the first one three
+ * times and write it to all three anchors, which is a silent wrong answer rather than an error.
+ */
+test('a nested column parses into a group, one level deep', () => {
+  const f = fieldOf('var m = [{}]; // @rows: name:text=Mode|bright:{hue:number=Hue|chroma:number=Chroma}=Bright');
+  assert.deepEqual(f.columns.map((c) => c.key), ['name', 'bright']);
+  assert.equal(f.columns[1].type, 'group');
+  assert.equal(f.columns[1].label, 'Bright');
+  assert.deepEqual(f.columns[1].columns.map((c) => c.key), ['hue', 'chroma']);
+  assert.deepEqual(f.columns[1].columns.map((c) => c.type), ['number', 'number']);
+  assert.deepEqual(f.columns[1].columns.map((c) => c.label), ['Hue', 'Chroma']);
+});
+
+test("a group's braces are told from a condition's by position, not by content", () => {
+  // Both use braces. A condition follows a *type*; a group's braces **are** the type. Sniffing the
+  // contents instead would break on a one-column group, or on a condition whose value contains a colon.
+  const grouped = fieldOf('var m = [{}]; // @rows: a:{x:number=X}=A');
+  assert.equal(grouped.columns[0].type, 'group');
+  assert.equal(grouped.columns[0].showWhen, undefined);
+
+  const conditional = fieldOf('var m = [{}]; // @rows: t:radio(a|b)=T|r:text{t=a}=R');
+  assert.equal(conditional.columns[1].type, 'text');
+  assert.deepEqual(conditional.columns[1].showWhen, [{ field: 't', values: ['a'] }]);
+  assert.equal(conditional.columns[1].columns, undefined);
+});
+
+test('a nested column round-trips byte-identical, helper and all', () => {
+  const line = 'var m = [{ name: "Granite", bright: { hue: 250, chroma: 0.002 } }]; ' +
+    '// @rows: name:text=Mode|bright:{hue:number=Hue|chroma:number=Chroma @helper: 0 to 0.4.}=Bright @blocks @label: Modes';
+  const schema = P.parse(line);
+  assert.equal(P.serialize(schema).trim(), line.trim());
+  // The part's helper survived the nesting rather than being swallowed by the group's label.
+  const bright = fieldOf(line).columns[1];
+  assert.equal(bright.columns[1].helper, '0 to 0.4.');
+  assert.equal(bright.label, 'Bright');
+});
+
+test("a group's parts address themselves by group.part, so two hues cannot collide", () => {
+  // Three anchors each holding a `hue` is the normal shape. A flat `data-row-field="hue"` lookup would find
+  // the first one three times and write it into all three anchors — a wrong answer with no error.
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8');
+  assert.match(renderer, /var fieldKey = \(keyPrefix \|\| ""\) \+ column\.key;/,
+    'buildRowCell does not prefix a part key');
+  // `key` on a column, `name` on a field — one builder serves both, so the prefix falls back. Without the
+  // fallback a field-level group prefixed its parts with the literal string "undefined." and saved nothing.
+  assert.match(renderer, /var owner = column\.key \|\| column\.name;/,
+    'buildRowGroup no longer resolves the owning key for both a column and a field');
+  assert.match(renderer, /buildRowCell\(part, held\[part\.key\], groupName \+ "-" \+ part\.key, owner \+ "\."\)/,
+    'buildRowGroup does not pass the group key as the prefix');
+  assert.match(renderer, /'\[data-row-field="' \+ column\.key \+ "\." \+ part\.key \+ '"\]'/,
+    'collectRows does not look a part up by its compound key');
+  assert.equal(/setAttribute\("data-row-field", column\.key\)/.test(renderer), false,
+    'a cell still addresses itself by the bare column key, so a group part will collide');
+});
+
+test('the reader is one implementation, shared by columns and by group parts', () => {
+  // "A select over numbers reads back a number" is a rule that has already cost a bug. A second copy of it
+  // for group parts would be the fifth place in this codebase where two implementations of one rule drifted.
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8');
+  assert.match(renderer, /function readRowCellInto\(target, column, el\)/);
+  assert.equal((renderer.match(/column\.type === "select" && allNumericOptions/g) || []).length, 1,
+    'the numeric-select rule appears more than once');
+  assert.match(renderer, /readRowCellInto\(collected, part, partEl\)/, 'group parts do not use the reader');
+  assert.match(renderer, /readRowCellInto\(row, column, el\)/, 'plain columns do not use the reader');
 });

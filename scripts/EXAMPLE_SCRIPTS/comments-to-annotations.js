@@ -20,19 +20,21 @@
 
 // @UI_CONFIG_START
 
-var tokenStorageKey = ""; // @placeholder="figd_... or figma_personal_access_token"
-// Paste your Personal Access Token (figd_...) here, or a storage key name if you've already saved a token.
-// Create at: Help & Account -> Account Settings -> Security -> Personal Access Tokens. Scope: Files / file_comments:read
+var tokenStorageKey = ""; // @label: Access token
+// Your Figma personal access token, or the name of a key you have already saved. Create one under
+// **Help & Account → Account Settings → Security → Personal access tokens**, with the
+// *Files / file_comments:read* scope.
 //
 var fileKeyOrUrl = ""; // @placeholder="https://www.figma.com/design/3OL5s2KgkpD2RIGBXIJzst/CodeFig-test-ground?node-id=35-32&t=RqmlOo3sxABzx1pg"
-// Paste either a Figma file key or a URL from your Figma file hereIf it's a URL, the file key will be automatically extracted from it.
-// Just select any element on the artboard, right click and select "Copy link to selection", and paste it here.
+// The file to read comments from — paste its key, or any URL from it and the key is pulled out for
+// you. Easiest way: select a layer, right-click, **Copy link to selection**, paste it here.
 //
-var annotationAnchors = true;
-// Create invisible anchor frames at comment locations. his allows annotations to be precisely positioned where comments were placed
+var annotationAnchors = true; // @label: Anchor to comment position
+// Creates an invisible frame where each comment sits, so the annotation lands in the same place
+// rather than near it.
 //
-var resolvedComments = false;
-// Whether to include resolved comments in annotations. Default is false - only unresolved comments will be converted to annotations
+var resolvedComments = false; // @label: Include resolved comments
+// Off by default, so only open comments become annotations.
 // @UI_CONFIG_END
 
 // ============================================================================

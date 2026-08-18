@@ -1,0 +1,1512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colors panel — target layout</title>
+
+<!--
+  THE TARGET, not a style reference. Same rules as the other four in this folder: hand-written to
+  Márton's frames, using the plugin's own class names and the plugin's own stylesheet, linked rather
+  than copied.
+
+  **This one runs, and the others do not.** The brief asks for previews computed from the anchors, the
+  curve and gamut fitting rather than static swatches, because "if the preview is not
+  computed, the panel cannot be evaluated". So the page carries an engine. Everything it draws is
+  generated; there is not a hard-coded hex in the body. The classes are still the plugin's and the
+  stylesheet is still linked, which is what these files are for.
+
+  Four frames, section 2065:4153, oldest to newest:
+
+  | 2065:4154 | Color - Start          | HSL, empty, all placeholders     |
+  | 2065:6267 | HSL, filled            | Granite + Moss, per-mode curve   |
+  | 2071:3682 | OKLCH                  | shared tone scale, seed readout  |
+  | 2072:5165 | OKLCH, current         | plus structural fixes            |
+
+  Where the last two disagree, 2072:5165 wins. Where the HSL and OKLCH frames disagree, both are right:
+  the *Color model* radio in General switches between them, so they are two states of one panel and the
+  toggle at the top of this page is that radio.
+
+  ============================================================================================
+  What this panel does that no other one does
+  ============================================================================================
+
+  **A mode is a block, not a tab.** A title naming the mode, that mode's fields under it as a form, the
+  next mode below, one *Add mode* at the end — and no chips row. A third display on the one `@rows`
+  control (`--blocks`), beside the stacked table and `@tabs`: same values, same serialization. It suits
+  the domain rather than being a change of mind, because a ramp is eleven swatches judged by the joins
+  between neighbours, and two ramps you want to compare are two strips on one page.
+
+  **The mode picker is inside the block** — the existing `@mode` control, one per row, and the thing that
+  replaces the chips as the add-a-mode affordance.
+
+  **Two headings inside a mode block**: *Seed* and *Palette*. Measured off 2072:5165, they are `h2` —
+  14px, a step down from the 16px block title, which is itself the size of the `h1` above it.
+
+  **Lightness is shared and the rest is per mode.** In OKLCH the *OKLCH settings* block holds one curve,
+  three lightness anchors and a tone scale definition, for every mode in the script. Per mode there is
+  only hue and chroma; the Lightness column is `readonly` and shows what the ladder gave that step. In
+  HSL there is no shared block at all and the curve is per mode — deliberate, and the reason is in the
+  brief: HSL curves are legitimately per hue, whereas one shared lightness ladder is the entire point of
+  OKLCH.
+
+  **A ladder is three anchors and a curve, and nothing else.** `overrides` is gone. It existed to reproduce
+  Tailwind zinc's plateau-and-cliff, which was never the goal — the frames' swatches were pasted from zinc
+  and made matching it look like a requirement. Márton: *"I am generating my own themes, not reproducing
+  someone else's."* With the pins gone there is nothing that can be out of order, so the 15-step bug they
+  caused goes with them.
+
+  **Lock seed is re-anchoring, not an offset.** It replaces the *middle* anchor with the seed's lightness
+  and recomputes `twoSegment` through it. Bright and Dark are untouched, so the endpoints hold — which an
+  offset could not do, and which is what made the offset the wrong reading of "the curve shifts to meet
+  it". The cost is that one segment gets steeper and the other shallower, so the **interior** steps drift
+  off the shared ladder; the largest deviation is reported inline, because that number is the whole
+  decision the toggle is asking you to make.
+
+  **Placement is where Middle lands.** That is what the dropdown is for and it is the answer to the old
+  question: the seed occupies a step, and that step becomes the mode's middle anchor, so the two segments
+  are [0..placement] and [placement..last] rather than always the midpoint. The shared tone scale keeps
+  its own middle at the list's midpoint, because it is shared and cannot follow one mode.
+
+  ============================================================================================
+  Three things to look at, because they are where the spec and the frames part company
+  ============================================================================================
+
+  **1. `#717A71` does not auto-place at 500.** Its true OKLCH is `H145.3 C0.017 L56.9`. The tone scale in
+  the same frame puts 500 at `L62.0` and 600 at `L57.8`, so nearest-by-lightness is **600**. The frame's
+  caption reads `H145 C0.041 L0.634` — only the hue matches — and its `Auto (500)` follows from that
+  wrong lightness rather than from the hex. Computed honestly here, so the dropdown says `Auto (600)`.
+  Placeholder either way, but it is the one placeholder that changes what a control says.
+
+  **2. A re-anchored mode still drifts, just not at the ends.** *Re-anchored* in the stage puts Moss's seed
+  at 600 and 700 comes out 4.4 lighter than the shared ladder; *Re-anchored at 800* makes the segments
+  badly uneven and 600 comes out 9.6 darker. Both keep 98.5 and 18.0 exactly. That is the trade the toggle
+  is choosing between, and it is why the deviation is on screen rather than left to the swatches.
+
+  **3. `steps` is in the tone scale in the data model and in the Steps field in General.** Two sources
+  for one list, and the brief also says Steps is "the only source" for the placement options. Built with
+  General as the source and `steps` left out of the textarea.
+
+  ============================================================================================
+  Ignored on instruction, and worth knowing which numbers are not real
+  ============================================================================================
+
+  The frames' swatches are static zinc hexes with labels that do not match them, Granite and Moss share
+  hexes at several steps, and the chroma values are HSL saturation leftovers rising toward dark. All
+  placeholder. Chroma here peaks mid and tapers, which is what the brief says a real ramp does — its own
+  example rises to dark, and that is the half I did not follow.
+
+  Lightness is 0–1 in the data and 0–100 in the UI, converted at the boundary, per the brief. That
+  includes the seed message, whose example in the brief reads `(L0.620)`; here it reads `(L62.0)`,
+  because two scales in one panel is the thing the instruction is preventing.
+
+  Copy artefacts not reproduced: the header reads "Design System Foundations / Spacing" and the sidebar
+  highlights Spacing, in all four frames.
+
+  Not reproduced because the brief supersedes it: 2072:5165 has no inline result message and no *Seed step*
+  label on the strip, and its Lock seed copy describes an offset. All three are in the revised seed spec.
+
+  ============================================================================================
+  Two caveats for the Documentation tab, which this prototype does not have
+  ============================================================================================
+
+  Both are about what "matched" means, and both belong in prose rather than in the panel:
+
+  - **Chroma may be reduced per step to stay inside sRGB.** L and hue never move when that happens, so the
+    lightness match between modes holds regardless. Marked `C→` under the swatch it happened to.
+  - **Very saturated colours read slightly brighter than their L suggests** (Helmholtz–Kohlrausch). Not a
+    concern for the near-neutral ramps these panels are for, and worth one sentence so nobody chases it.
+-->
+
+<link rel="stylesheet" href="../../src/ui.css">
+<style>
+  /* Page furniture for the mockup only — never plugin styling. Everything here is `mock-`. */
+  body { margin: 0; display: block; height: auto; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f7; color: #1d1d1f; }
+  .mock-frame { width: 960px; margin: 12px auto 32px; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.12); overflow: hidden; }
+  .mock-caption { width: 960px; margin: 32px auto 8px; font-weight: 600; font-size: 13px; }
+  .mock-caption span { font-weight: 400; opacity: .6; }
+  .mock-tabs { display: flex; gap: 16px; padding: 10px 24px 0; border-bottom: 1px solid #e1e5e9; }
+  .mock-tab { padding-bottom: 10px; font-size: 12px; opacity: .55; }
+  .mock-tab.is-active { opacity: 1; font-weight: 600; border-bottom: 2px solid #1d1d1f; margin-bottom: -1px; }
+  .mock-body { padding: 0; }
+
+  /* The stage: not the panel. Forces each state of the seed row so every row of the matrix can be seen
+     without hand-typing a hex that happens to land there. */
+  .mock-stage { width: 960px; margin: 24px auto 0; padding: 14px 16px; background: #fff; border: 1px solid #e1e5e9; border-radius: 10px; }
+  .mock-stage-title { font-weight: 600; font-size: 12px; margin-bottom: 2px; }
+  .mock-stage-hint { font-size: 11px; opacity: .6; margin-bottom: 10px; }
+  .mock-stage-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .mock-stage-label { width: 128px; flex: none; font-size: 11px; opacity: .6; }
+  .mock-stage-btn { font: inherit; font-size: 11px; padding: 4px 9px; border: 1px solid #d2d2d7; border-radius: 6px; background: #fff; cursor: pointer; }
+  .mock-stage-btn:hover { background: #f5f5f7; }
+  .mock-stage-btn.is-active { background: #1d1d1f; border-color: #1d1d1f; color: #fff; }
+  .mock-aside { width: 960px; margin: 0 auto 8px; font-size: 12px; line-height: 1.6; opacity: .75; }
+  .mock-aside code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .mock-aside b { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="mock-stage">
+  <div class="mock-stage-title">Stage — not part of the panel</div>
+  <div class="mock-stage-hint">Everything below is computed: OKLab both directions, chroma gamut-fitted by
+    bisection, hue along the shortest arc, and Lock seed re-anchoring the ladder through the seed.
+    The Color model buttons are the radio in General.</div>
+  <div class="mock-stage-row">
+    <span class="mock-stage-label">Color model</span>
+    <button class="mock-stage-btn" type="button" data-stage="model" data-value="hsl">HSL</button>
+    <button class="mock-stage-btn" type="button" data-stage="model" data-value="oklch">OKLCH</button>
+  </div>
+  <div class="mock-stage-row">
+    <span class="mock-stage-label">File &amp; selection</span>
+    <button class="mock-stage-btn" type="button" data-stage="file" data-value="none">Nothing selected</button>
+    <button class="mock-stage-btn" type="button" data-stage="file" data-value="new">New collection</button>
+    <button class="mock-stage-btn" type="button" data-stage="file" data-value="existing">Read Neutral (zinc)</button>
+  </div>
+  <div class="mock-stage-row">
+    <span class="mock-stage-label">Moss seed state</span>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="exact">Exact</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="snapped">Snapped</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="reanchored">Re-anchored</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="empty">Empty</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="invalid">Invalid hex</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="orphan">Step removed</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="clamped">Vivid, clamped</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="edited">Anchors edited</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="offcentre">Re-anchored at 800</button>
+    <button class="mock-stage-btn" type="button" data-stage="seed" data-value="onend">Seed on step 50</button>
+  </div>
+</div>
+
+<div class="mock-caption" id="caption"></div>
+<div class="mock-frame">
+  <div class="mock-tabs">
+    <div class="mock-tab is-active">Configuration UI</div>
+    <div class="mock-tab">Configuration code</div>
+    <div class="mock-tab">Documentation</div>
+    <div class="mock-tab">Source code</div>
+  </div>
+  <div class="mock-body">
+    <div class="config-ui-form config-ui-form--rows" id="panel"></div>
+  </div>
+</div>
+
+<div class="mock-aside" id="aside"></div>
+
+<script>
+/* ============================================================================================
+   THE ENGINE
+
+   Ottosson's OKLab matrices in both directions, `applyEase` ported from `@Math Helpers` so the curves
+   are the plugin's own, and a `twoSegment` ramp run once per channel. Nothing here is a stand-in: the
+   swatches below are what these functions return.
+   ============================================================================================ */
+
+function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+function lerp(a, b, u) { return a + (b - a) * u; }
+
+/* Shortest arc. Interpolating 0 → 255 the long way sends a neutral ramp through green, and the mid
+   swatches come out visibly teal — the one bug in this file that would be mistaken for a design. */
+function lerpHue(a, b, u) {
+  var d = ((b - a + 540) % 360) - 180;
+  return (a + d * u + 360) % 360;
+}
+
+function srgbToLinear(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+function linearToSrgb(c) { return c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; }
+
+function hexToRgb(hex) {
+  var m = /^#?([0-9a-f]{6})$/i.exec(String(hex == null ? '' : hex).trim());
+  if (!m) return null;
+  var n = parseInt(m[1], 16);
+  return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+}
+function rgbToHex(rgb) {
+  return '#' + rgb.map(function (v) {
+    var b = Math.round(clamp01(v) * 255);
+    return (b < 16 ? '0' : '') + b.toString(16);
+  }).join('').toUpperCase();
+}
+function normaliseHex(hex) {
+  var rgb = hexToRgb(hex);
+  return rgb ? rgbToHex(rgb) : String(hex);
+}
+
+function linearRgbToOklab(r, g, b) {
+  var l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  var m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  var s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+  var l_ = Math.cbrt(l), m_ = Math.cbrt(m), s_ = Math.cbrt(s);
+  return [
+    0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+    1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+    0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+  ];
+}
+function oklabToLinearRgb(L, a, bb) {
+  var l_ = L + 0.3963377774 * a + 0.2158037573 * bb;
+  var m_ = L - 0.1055613458 * a - 0.0638541728 * bb;
+  var s_ = L - 0.0894841775 * a - 1.2914855480 * bb;
+  var l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  return [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+  ];
+}
+
+function hexToOklch(hex) {
+  var rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  var lab = linearRgbToOklab(srgbToLinear(rgb[0]), srgbToLinear(rgb[1]), srgbToLinear(rgb[2]));
+  var C = Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2]);
+  var H = C < 1e-7 ? 0 : (Math.atan2(lab[2], lab[1]) * 180 / Math.PI + 360) % 360;
+  return { L: lab[0], C: C, H: H };
+}
+
+/* Max chroma depends on both lightness and hue, so one chroma number cannot be honoured at every step.
+   Bisect it down with L and H held, and report that it happened so the strip can say so. */
+function oklchToHexFitted(L, C, H) {
+  var rad = H * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+  function linear(c) { return oklabToLinearRgb(L, c * cos, c * sin); }
+  function inside(lin) {
+    return lin[0] >= -1e-4 && lin[0] <= 1 + 1e-4 && lin[1] >= -1e-4 && lin[1] <= 1 + 1e-4 &&
+           lin[2] >= -1e-4 && lin[2] <= 1 + 1e-4;
+  }
+  var lin = linear(C), clamped = false, fitted = C;
+  if (!inside(lin)) {
+    clamped = true;
+    var lo = 0, hi = C;
+    for (var i = 0; i < 24; i++) {
+      var mid = (lo + hi) / 2;
+      if (inside(linear(mid))) lo = mid; else hi = mid;
+    }
+    fitted = lo;
+    lin = linear(lo);
+  }
+  return { hex: rgbToHex([linearToSrgb(lin[0]), linearToSrgb(lin[1]), linearToSrgb(lin[2])]),
+           clamped: clamped, chroma: fitted };
+}
+
+/* HSL, for the other half of the panel. L and S are 0..1 here — 0..1 in the data, 0..100 in the UI. */
+function hslToHex(h, s, l) {
+  var k = function (n) { return (n + h / 30) % 12; };
+  var a = s * Math.min(l, 1 - l);
+  var f = function (n) { return l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); };
+  return rgbToHex([f(0), f(8), f(4)]);
+}
+function hexToHsl(hex) {
+  var rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  var r = rgb[0], g = rgb[1], b = rgb[2];
+  var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  var L = (max + min) / 2;
+  var S = d === 0 ? 0 : d / (1 - Math.abs(2 * L - 1));
+  var H = 0;
+  if (d !== 0) {
+    if (max === r) H = ((g - b) / d) % 6;
+    else if (max === g) H = (b - r) / d + 2;
+    else H = (r - g) / d + 4;
+    H = (H * 60 + 360) % 360;
+  }
+  return { L: L, C: S, H: H };
+}
+
+function applyEaseBaseIn(type, tt) {
+  tt = clamp01(tt);
+  switch (type) {
+    case 'sine': return 1 - Math.cos((tt * Math.PI) / 2);
+    case 'quad': return tt * tt;
+    case 'cubic': return tt * tt * tt;
+    case 'quart': return tt * tt * tt * tt;
+    case 'quint': return tt * tt * tt * tt * tt;
+    case 'circ': return 1 - Math.sqrt(1 - tt * tt);
+    case 'exponential': return tt === 0 ? 0 : Math.pow(2, 10 * (tt - 1));
+    case 'goldenRatio': return Math.pow(tt, 2.2);
+    default: return tt;
+  }
+}
+function applyEase(type, ease, t) {
+  t = clamp01(t);
+  if (ease === 'none' || type === 'linear') return t;
+  var baseIn = function (x) { return applyEaseBaseIn(type, x); };
+  var easeOut = function (x) { return 1 - baseIn(1 - x); };
+  switch (ease) {
+    case 'in': return baseIn(t);
+    case 'out': return easeOut(t);
+    case 'inout': return t < 0.5 ? 0.5 * baseIn(t * 2) : 0.5 + 0.5 * easeOut((t - 0.5) * 2);
+    case 'outin': return t < 0.5 ? 0.5 * easeOut(t * 2) : 0.5 + 0.5 * baseIn((t - 0.5) * 2);
+    default: return t;
+  }
+}
+
+/* One dropdown, so one entry per (type, ease) pair. The frames name two of these; the rest are what
+   `@Math Helpers` already has, and the id is what the tone scale JSON stores. */
+var CURVES = [
+  { id: 'linear', label: 'Linear', type: 'linear', ease: 'none' },
+  { id: 'sine-ease-in-out', label: 'Sine easeInOut', type: 'sine', ease: 'inout' },
+  { id: 'sine-ease-in', label: 'Sine easeIn', type: 'sine', ease: 'in' },
+  { id: 'sine-ease-out', label: 'Sine easeOut', type: 'sine', ease: 'out' },
+  { id: 'quad-ease-in-out', label: 'Quad easeInOut', type: 'quad', ease: 'inout' },
+  { id: 'cubic-ease-in-out', label: 'Cubic easeInOut', type: 'cubic', ease: 'inout' },
+  { id: 'quart-ease-in-out', label: 'Quart easeInOut', type: 'quart', ease: 'inout' },
+  { id: 'circ-ease-in-out', label: 'Circ easeInOut', type: 'circ', ease: 'inout' },
+  { id: 'exponential-ease-in-out', label: 'Exponential easeInOut', type: 'exponential', ease: 'inout' }
+];
+function curveById(id) {
+  for (var i = 0; i < CURVES.length; i++) if (CURVES[i].id === id) return CURVES[i];
+  return CURVES[0];
+}
+
+/* Bright → Middle → Dark, the curve applied within each segment. `generateScale`'s `twoSegment`. */
+function segmentT(index, middleIndex, last) {
+  if (index <= middleIndex) {
+    return { from: 'bright', to: 'middle', t: middleIndex === 0 ? 1 : index / middleIndex };
+  }
+  return { from: 'middle', to: 'dark', t: last === middleIndex ? 1 : (index - middleIndex) / (last - middleIndex) };
+}
+
+/* Steps is free text and the only source for the placement options, so it is parsed and reported on
+   rather than trusted. Duplicates and blanks are dropped and counted. */
+function parseSteps(text) {
+  var raw = String(text || '').split(',').map(function (s) { return s.trim(); });
+  var steps = [], dropped = 0, seen = {};
+  raw.forEach(function (s) {
+    if (!s) { dropped++; return; }
+    if (seen[s]) { dropped++; return; }
+    seen[s] = true;
+    steps.push(s);
+  });
+  return { steps: steps, dropped: dropped };
+}
+
+/**
+ * A lightness ladder: three anchors, a curve, `twoSegment` between them. That is the whole of it.
+ *
+ * **No `overrides`.** They existed to reproduce Tailwind zinc's plateau-and-cliff, which was never the
+ * goal — the frames' swatches were pasted from zinc and made matching it look like a requirement. Márton:
+ * *"I am generating my own themes, not reproducing someone else's."* With them gone there is nothing that
+ * can be out of order, so the 15-step bug goes with them.
+ *
+ * `middleIndex` is a parameter rather than always the midpoint, because re-anchoring needs the same maths
+ * with the middle somewhere else. The shared ladder always passes the midpoint: it is shared, so it cannot
+ * follow one mode's placement.
+ */
+function buildLadder(anchors, curveId, steps, middleIndex) {
+  var last = steps.length - 1;
+  var mid = typeof middleIndex === 'number' ? middleIndex : Math.floor(last / 2);
+  var c = curveById(curveId);
+  return steps.map(function (step, i) {
+    var seg = segmentT(i, mid, last);
+    return { L: clamp01(lerp(anchors[seg.from], anchors[seg.to], applyEase(c.type, c.ease, seg.t))) };
+  });
+}
+
+function toneScaleLightness(scale, steps) {
+  return buildLadder(scale.anchors, scale.curve, steps);
+}
+
+function nearestStepIndex(ladder, L) {
+  var best = 0, bestD = Infinity;
+  ladder.forEach(function (t, i) {
+    var d = Math.abs(t.L - L);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+
+var SEED_TOLERANCE = 0.005;
+
+/**
+ * One mode's ramp, in whichever model is selected.
+ *
+ * **Lock seed is re-anchoring.** It does not offset the ladder and it does not make an exception of one
+ * step: it replaces the *middle anchor* with the seed's lightness and recomputes `twoSegment` through it.
+ * Bright and Dark are untouched, so the endpoints hold — which is what an offset could not do, and what
+ * made the offset the wrong reading of "the curve shifts to meet it".
+ *
+ *   Lock off:  50 ──curve── 500 (L62.0, shared ladder) ──curve── 950
+ *   Lock on:   50 ──curve── 500 (L56.9, the seed)      ──curve── 950
+ *              ^ fixed                                          ^ fixed
+ *
+ * The cost is real and is what the toggle chooses between: one segment gets steeper and the other
+ * shallower, so the **interior** steps drift off the shared ladder. Reported, in the largest deviation,
+ * because that number is the whole decision.
+ *
+ * OKLCH takes its lightness from the shared ladder; HSL has none, so the mode's own three anchors stand in
+ * for one and the placement and nearest-step logic stays a single implementation.
+ */
+function buildRamp(cfg) {
+  var steps = cfg.steps, mode = cfg.mode, oklch = cfg.model === 'oklch';
+  var last = steps.length - 1;
+  var toModel = oklch ? hexToOklch : hexToHsl;
+  var seed = (mode.seed.hex && toModel(mode.seed.hex)) || null;
+  var invalidHex = !!(mode.seed.hex && !seed);
+
+  var mid = Math.floor(last / 2);
+  var curveId = oklch ? cfg.tone.curve : mode.curve;
+  var curve = curveById(curveId);
+  var lightAnchors = oklch ? cfg.tone.anchors : mode.light;
+
+  /* The ladder this mode is on **without** the lock: the shared one in OKLCH, its own anchors in HSL.
+     Everything the seed row says is measured against this. */
+  var baseLadder = oklch ? cfg.ladder : buildLadder(mode.light, curveId, steps);
+
+  /* Placement is where Middle lands. Auto is nearest-by-lightness; a named step that is no longer in
+     Steps is recovered to the nearest rather than silently reassigned. */
+  var placementIndex, placementAuto = true, recoveredFrom = null;
+  if (!mode.seed.placementAuto && mode.seed.placement != null) {
+    var named = steps.indexOf(String(mode.seed.placement));
+    if (named >= 0) { placementIndex = named; placementAuto = false; }
+    else {
+      placementIndex = seed ? nearestStepIndex(baseLadder, seed.L) : mid;
+      recoveredFrom = String(mode.seed.placement);
+    }
+  } else {
+    placementIndex = seed ? nearestStepIndex(baseLadder, seed.L) : mid;
+  }
+
+  var lock = !!mode.seed.lock;
+  var hue = { bright: mode.hue.bright, middle: mode.hue.middle, dark: mode.hue.dark };
+  /* Chroma is 0..0.4 and saturation is a fraction of 1; they are different units, so they are different
+     fields rather than one number reinterpreted when the model changes. */
+  var source = oklch ? mode.chroma : mode.sat;
+  var chroma = { bright: source.bright, middle: source.middle, dark: source.dark };
+
+  /* The seed does **not** write hue and chroma here. It writes them once, when the hex is entered
+     (`seedTheAnchors`), and after that the fields are the input — the stated workflow is place a colour,
+     generate a scale from it, then adjust the scale. Re-applying it every render is what made those two
+     fields impossible to type in.
+
+     Lightness is the exception, because the lock is *about* lightness: re-anchoring is derived from
+     `seed.hex` and `seed.lock` every time, so there is nothing per-mode to store. */
+  var reanchored = !!(seed && lock);
+  /* A seed placed *on* the first or last step is the same step as that anchor, so the seed replaces it —
+     one segment has no length and there is no endpoint left to keep. The engine reports this as
+     `collapsed`, because a caller promising "endpoints unchanged" has to learn when it cannot. */
+  var collapsed = reanchored && (placementIndex === 0 || placementIndex === last);
+  var light = {
+    bright: lightAnchors.bright,
+    middle: reanchored ? seed.L : (oklch ? baseLadder[placementIndex].L : lightAnchors.middle),
+    dark: lightAnchors.dark
+  };
+  /* Re-anchored, the ladder is this mode's own: same anchors at the ends, the seed in the middle, and the
+     middle sitting wherever placement put it. Unlocked in OKLCH it is the shared ladder untouched. */
+  var ladder = reanchored ? buildLadder(light, curveId, steps, placementIndex)
+    : oklch ? baseLadder : buildLadder(mode.light, curveId, steps, placementIndex);
+
+  var rows = steps.map(function (step, i) {
+    var seg = segmentT(i, placementIndex, last);
+    var u = applyEase(curve.type, curve.ease, seg.t);
+    var H = lerpHue(hue[seg.from], hue[seg.to], u);
+    var C = lerp(chroma[seg.from], chroma[seg.to], u);
+    var L = ladder[i].L;
+    var fit = oklch ? oklchToHexFitted(L, C, H) : { hex: hslToHex(H, C, L), clamped: false, chroma: C };
+    return { step: step, L: L, C: C, H: H, hex: fit.hex, clamped: fit.clamped, fittedChroma: fit.chroma,
+             base: baseLadder[i].L, isSeed: !!seed && i === placementIndex };
+  });
+
+  /* The largest **interior** deviation from the shared ladder. The endpoints are anchors and cannot move,
+     so including them would only ever report zero and hide the number that matters. */
+  var drift = null;
+  if (reanchored) {
+    for (var i = 1; i < last; i++) {
+      var d = ladder[i].L - baseLadder[i].L;
+      if (!drift || Math.abs(d) > Math.abs(drift.delta)) drift = { step: steps[i], delta: d };
+    }
+  }
+
+  /* The one message the seed row carries. Snapping moves lightness only — hue never moves — and a
+     chroma change is the gamut's doing rather than the curve's, so it is reported on its own line. */
+  var seedRow = rows[placementIndex];
+  var message = null, messageInvalid = false, seedState = 'none';
+  if (invalidHex) {
+    message = 'Not a valid hex color';
+    messageInvalid = true;
+  } else if (seed) {
+    /* Against the ladder the mode would be on without the lock — which is the question the matrix asks,
+       and after re-anchoring the seed trivially sits where it was put. */
+    if (Math.abs(seed.L - baseLadder[placementIndex].L) <= SEED_TOLERANCE) seedState = 'exact';
+    else if (lock && collapsed) {
+      /* The fifth row of the matrix. The ordinary message would say the endpoints are unchanged, and here
+         one of them is the seed — so it says which end stopped matching instead of promising it did not. */
+      seedState = 'reanchored';
+      message = 'Ladder re-anchored · the seed replaces step ' + steps[placementIndex] + ', so the ' +
+        (placementIndex === 0 ? 'bright' : 'dark') + ' end no longer matches the shared ladder';
+    } else if (lock) {
+      seedState = 'reanchored';
+      message = 'Ladder re-anchored';
+      if (drift && Math.abs(drift.delta) >= 0.0005) {
+        message += ' · ' + drift.step + ' is ' + pct(Math.abs(drift.delta)) +
+          (drift.delta > 0 ? ' lighter' : ' darker') +
+          (oklch ? ' than the shared ladder' : ' than without the lock');
+      }
+    } else {
+      seedState = 'snapped';
+      message = 'Seed changed to ' + seedRow.hex + ' (L' + pct(seedRow.L) + ') to adapt to the ladder';
+    }
+  }
+  if (recoveredFrom) {
+    message = 'Step ' + recoveredFrom + ' no longer exists. Moved to ' + steps[placementIndex] + '.';
+  }
+  var chromaNote = (seed && !invalidHex && seedRow.clamped)
+    ? 'Chroma reduced to ' + seedRow.fittedChroma.toFixed(3) + ' to fit sRGB' : null;
+
+  /* The seed filled hue and chroma when it was entered; a later edit to either means the ramp no longer
+     runs through the colour that was placed, so the row says so and offers to do it again. */
+  var anchorsEdited = false;
+  if (seed && !invalidHex) {
+    anchorsEdited = Math.abs(mode.hue.middle - seed.H) > 0.05 ||
+      Math.abs((oklch ? mode.chroma.middle : mode.sat.middle) - seed.C) > 0.0005;
+  }
+
+  return { rows: rows, seed: seed, invalidHex: invalidHex, placementIndex: placementIndex,
+           placementAuto: placementAuto, recoveredFrom: recoveredFrom,
+           reanchored: reanchored, collapsed: collapsed, drift: drift, anchorsEdited: anchorsEdited,
+           message: message, messageInvalid: messageInvalid, chromaNote: chromaNote,
+           seedState: seedState, anchors: { hue: hue, chroma: chroma, light: light }, ladder: ladder };
+}
+
+/* ============================================================================================
+   WHAT THE FILE ALREADY HOLDS
+
+   The real panel asks `foundationAutoImport(collection, group, domain)` the moment Collection and Group
+   point somewhere — read-only, so asking costs nothing and happens on every edit rather than behind an
+   import button. It answers `recorded` from a manifest CodeFig wrote, `recognised` from the variables
+   themselves, or `none`. Colours would be a second `recognised` domain beside Grid's `gridRecognise`.
+
+   This page cannot reach Figma, so the fixture below stands in for the variables and the stage's
+   *File & selection* row stands in for pointing the two fields at them. **Granite here is Tailwind zinc
+   on purpose**: a hand-made ramp that sits on no curve at all, which is the case the comparison strip
+   exists for.
+   ============================================================================================ */
+
+/* What the Steps field suggests when it is empty, and what the preview draws from until it is filled. */
+var PLACEHOLDER_STEPS = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+
+var FILE = {
+  collection: 'Neutral',
+  group: 'Neutral variations',
+  /* Steps come from the variable *names* found in the group — `Neutral variations/50` and so on. */
+  steps: PLACEHOLDER_STEPS.slice(),
+  modes: {
+    Granite: ['#FAFAFA', '#F4F4F5', '#E4E4E7', '#D4D4D8', '#A1A1AA', '#71717A',
+              '#52525B', '#3F3F46', '#27272A', '#18181B', '#09090B'],
+    Slate:   ['#F8FAFC', '#F1F5F9', '#E2E8F0', '#CBD5E1', '#94A3B8', '#64748B',
+              '#475569', '#334155', '#1E293B', '#0F172A', '#020617']
+  }
+};
+
+/* ============================================================================================
+   STATE
+
+   Numbers are placeholders on instruction; the structure is the deliverable. Chroma peaks mid and
+   tapers, which is what a real neutral ramp does.
+   ============================================================================================ */
+
+var state = {
+  model: 'oklch',
+  collection: 'Neutral',
+  group: 'Neutral variations',
+  stepsText: '50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950',
+  tone: {
+    anchors: { bright: 0.985, middle: 0.620, dark: 0.180 },
+    curve: 'sine-ease-in-out'
+  },
+  modes: [
+    {
+      name: 'Granite', curve: 'linear',
+      seed: { hex: '', placement: null, placementAuto: true, lock: false },
+      hue: { bright: 250, middle: 264, dark: 275 },
+      chroma: { bright: 0.002, middle: 0.012, dark: 0.006 },
+      sat: { bright: 0.00, middle: 0.04, dark: 0.10 },
+      light: { bright: 0.98, middle: 0.46, dark: 0.04 }
+    },
+    {
+      name: 'Moss', curve: 'sine-ease-in-out',
+      seed: { hex: '#717A71', placement: null, placementAuto: true, lock: false },
+      hue: { bright: 135, middle: 145, dark: 155 },
+      chroma: { bright: 0.004, middle: 0.022, dark: 0.010 },
+      sat: { bright: 0.01, middle: 0.04, dark: 0.10 },
+      light: { bright: 0.98, middle: 0.46, dark: 0.04 }
+    }
+  ]
+};
+
+/**
+ * Prefill the panel from what the file holds — the `recognised` answer, applied.
+ *
+ * **What comes back cleanly**: the steps, from the variable names; hue and chroma per anchor, read from the
+ * real first, middle and last values; the lightness anchors, likewise; and the existing values themselves,
+ * for the comparison strip.
+ *
+ * **What does not, and is deliberately not guessed**: the curve. An existing ramp has eleven colour values
+ * and no record of how they were made, and a hand-made one may sit on no curve at all. Fitting one would be
+ * a guess presented as a reading, so Curve type keeps its default and the panel draws the file's ramp under
+ * the generated one instead. The gap between the two strips is the honest version of the same information.
+ */
+function prefillFromFile() {
+  state.collection = FILE.collection;
+  state.group = FILE.group;
+  state.stepsText = FILE.steps.join(', ');
+
+  var names = Object.keys(FILE.modes);
+  var mid = Math.floor((FILE.steps.length - 1) / 2);
+
+  /* The lightness anchors come from the *first* mode read — they are shared, so one mode has to supply
+     them, and the panel says which. Every mode's own hue and chroma come from its own values. */
+  var lead = FILE.modes[names[0]].map(hexToOklch);
+  state.tone.anchors = { bright: lead[0].L, middle: lead[mid].L, dark: lead[lead.length - 1].L };
+
+  state.modes = names.map(function (name) {
+    var read = FILE.modes[name].map(hexToOklch);
+    var readHsl = FILE.modes[name].map(hexToHsl);
+    var last = read.length - 1;
+    return {
+      name: name, curve: state.tone.curve,
+      seed: { hex: '', placement: null, placementAuto: true, lock: false },
+      hue: { bright: read[0].H, middle: read[mid].H, dark: read[last].H },
+      chroma: { bright: read[0].C, middle: read[mid].C, dark: read[last].C },
+      sat: { bright: readHsl[0].C, middle: readHsl[mid].C, dark: readHsl[last].C },
+      light: { bright: readHsl[0].L, middle: readHsl[mid].L, dark: readHsl[last].L },
+      /* Kept alongside, so the strip can draw what is there now beside what a Run would write. */
+      existing: FILE.modes[name].slice()
+    };
+  });
+}
+
+/* A seed fills the Middle anchor's hue and its colourfulness, and then gets out of the way. Lightness is
+   not among them: in OKLCH it belongs to the shared ladder, and in HSL the lock is what moves it. */
+function seedTheAnchors(mode) {
+  var reading = state.model === 'oklch' ? hexToOklch(mode.seed.hex) : hexToHsl(mode.seed.hex);
+  if (!reading) return;
+  mode.hue.middle = reading.H;
+  if (state.model === 'oklch') mode.chroma.middle = reading.C;
+  else mode.sat.middle = reading.C;
+}
+
+/* The stage's seven states, applied to Moss. `exact` is computed rather than typed: a hex that happens
+   to sit on the ladder cannot be written down, because the ladder moves with the curve and the anchors. */
+function applyStageSeed(which) {
+  var m = state.modes[1];
+  var parsed = parseSteps(state.stepsText);
+  var ladder = toneScaleLightness(state.tone, parsed.steps);
+
+  /* Moss's own greens, restored first so one state does not inherit the previous one's anchors. The
+     vivid case replaces them, because a clamp needs a chroma large enough to fall out of sRGB. */
+  if (which === 'clamped') {
+    m.hue = { bright: 262, middle: 264, dark: 266 };
+    m.chroma = { bright: 0.03, middle: 0.19, dark: 0.08 };
+    m.sat = { bright: 0.15, middle: 0.80, dark: 0.40 };
+  } else {
+    m.hue = { bright: 135, middle: 145, dark: 155 };
+    m.chroma = { bright: 0.004, middle: 0.022, dark: 0.010 };
+    m.sat = { bright: 0.01, middle: 0.04, dark: 0.10 };
+  }
+
+  if (which === 'empty') m.seed = { hex: '', placement: null, placementAuto: true, lock: false };
+  else if (which === 'invalid') m.seed = { hex: '#12345', placement: null, placementAuto: true, lock: false };
+  else if (which === 'orphan') m.seed = { hex: '#717A71', placement: '250', placementAuto: false, lock: false };
+  else if (which === 'clamped') m.seed = { hex: '#1D4ED8', placement: '500', placementAuto: false, lock: false };
+  else if (which === 'reanchored') m.seed = { hex: '#717A71', placement: null, placementAuto: true, lock: true };
+  /* A locked seed at a step nowhere near the middle, which is where the endpoints have to be checked: the
+     two segments come out badly uneven and an offset would have dragged 50 and 950 with them. */
+  else if (which === 'offcentre') m.seed = { hex: '#3F4A40', placement: '800', placementAuto: false, lock: true };
+  else if (which === 'edited') m.seed = { hex: '#717A71', placement: null, placementAuto: true, lock: false };
+  /* The collapse: locked, and placed on the very first step, where there is no endpoint left to keep. */
+  else if (which === 'onend') m.seed = { hex: '#E8EDE8', placement: '50', placementAuto: false, lock: true };
+  else if (which === 'snapped') m.seed = { hex: '#717A71', placement: null, placementAuto: true, lock: false };
+  else if (which === 'exact') {
+    /* Land a hex exactly on a step: take the ladder's lightness there and the mode's own hue and
+       colourfulness, then read the resulting hex back as the seed. A hex that sits on the ladder cannot
+       be written down, because the ladder moves with the curve and the anchors. */
+    var i = Math.min(6, ladder.length - 1);
+    m.seed = {
+      hex: state.model === 'oklch'
+        ? oklchToHexFitted(ladder[i].L, m.chroma.middle, m.hue.middle).hex
+        : hslToHex(m.hue.middle, m.sat.middle, m.light.middle),
+      placement: String(parsed.steps[i]), placementAuto: false, lock: false
+    };
+  }
+
+  /* Last, and for every state: a hex that has just been placed seeds the Middle anchor, exactly as
+     typing one into the field does. An early return here is what made the strip show the stage's own
+     anchor rather than the seed. */
+  seedTheAnchors(m);
+
+  /* And then, for this one state, the designer adjusts — which is the workflow the one-shot seed exists
+     for, and the thing the row has to notice. */
+  if (which === 'edited') m.hue.middle = (m.hue.middle + 40) % 360;
+}
+var stageSeed = 'reanchored';
+var stageFile = 'new';
+
+/* The default two modes, so *New collection* can be returned to after reading the file. */
+var PRISTINE_MODES = JSON.parse(JSON.stringify(state.modes));
+var PRISTINE_TONE = JSON.parse(JSON.stringify(state.tone));
+
+/**
+ * `none` — frame 2065:4154: Collection and Group point nowhere, so nothing has been read and every value
+ *          is a placeholder. One mode block, unnamed, no seed.
+ * `new`   — a collection about to be created: the panel's own defaults, nothing in the file to compare to.
+ * `existing` — frame 2065:6267's other half: the file holds a set, and the panel fills itself from it.
+ */
+function applyStageFile(which) {
+  stageFile = which;
+  /* Reading the file replaces the modes and their curves, so a note explaining the last model switch is
+     about modes that are gone. */
+  curveCarryNote = null;
+  /* No seed, deliberately: a set read out of the file has no record of one, and arriving with a seed
+     already locked would be the panel claiming something the variables never said. Adding one afterwards
+     is the ordinary workflow, and the seed buttons still do it. */
+  if (which === 'existing') { prefillFromFile(); return; }
+
+  state.collection = which === 'none' ? '' : 'Neutral';
+  state.group = which === 'none' ? '' : 'Neutral variations';
+  state.stepsText = which === 'none' ? ''
+    : '50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950';
+  state.tone = JSON.parse(JSON.stringify(PRISTINE_TONE));
+
+  if (which === 'none') {
+    /* One block, and it has never been told which mode it is. Everything below reads as a placeholder,
+       which is what the frame draws. */
+    state.modes = [Object.assign(JSON.parse(JSON.stringify(PRISTINE_MODES[0])), {
+      name: '',
+      seed: { hex: '', placement: null, placementAuto: true, lock: false }
+    })];
+    return;
+  }
+
+  state.modes = JSON.parse(JSON.stringify(PRISTINE_MODES));
+  applyStageSeed(stageSeed);
+}
+
+/* A hex reads into chroma in one model and into saturation in the other, so switching re-reads it. */
+function reseedAll() { state.modes.forEach(seedTheAnchors); }
+
+/**
+ * The curve, carried across a change of model.
+ *
+ * The two models keep it in different places on purpose — per mode in HSL, shared in OKLCH — so the switch
+ * had two separate fields with separate values and silently showed a different curve than the one you set.
+ * Structurally right, behaviourally wrong: you chose *Sine easeIn*, moved the radio, and got
+ * *Sine easeInOut* with no explanation.
+ *
+ * So: going to OKLCH, if every mode agrees on a curve the shared one adopts it; if they disagree there is
+ * no single answer and the shared curve stands, said out loud rather than picked arbitrarily. Going to
+ * HSL, every mode takes the shared curve, which is lossless in the other direction.
+ */
+var curveCarryNote = null;
+function carryCurve(to) {
+  curveCarryNote = null;
+  if (to === 'oklch') {
+    var counts = {}, best = null;
+    state.modes.forEach(function (m) {
+      counts[m.curve] = (counts[m.curve] || 0) + 1;
+      if (!best || counts[m.curve] > counts[best]) best = m.curve;
+    });
+    var distinct = Object.keys(counts);
+    state.tone.curve = best;
+    if (distinct.length > 1) {
+      /* A tie has no most-common, and saying otherwise would dress up iteration order as a decision. */
+      var tied = distinct.filter(function (id) { return counts[id] === counts[best]; }).length > 1;
+      curveCarryNote = 'The modes had ' + distinct.length + ' different curves, so the shared one took ' +
+        (tied ? 'the first of the tie' : 'the most common') + ': ' + curveById(best).label +
+        '. Each mode keeps its own, so switching back is lossless.';
+    }
+  } else {
+    state.modes.forEach(function (m) { m.curve = state.tone.curve; });
+  }
+}
+
+/* ============================================================================================
+   RENDER
+
+   Class attributes are literal on both sides of every branch, so `mockup-panels.test.js` can still see
+   which classes this file uses. Interpolating a class name would hide it from the check that exists to
+   keep these files honest — and the check reads the whole body, this comment included, so it caught an
+   earlier draft of this paragraph for quoting one.
+   ============================================================================================ */
+
+/**
+ * The field being typed in, held as the **literal string** the user has entered so far.
+ *
+ * Every keystroke re-renders the whole panel, so a numeric field's value was round-tripped through
+ * `Number()` on the way back in — and `Number('0.')` is `0`, so the decimal point vanished the instant it
+ * was typed. Márton: *"I can't enter fractional numbers, it doesn't accept '.'"*
+ *
+ * A draft rather than a smarter formatter, because the trailing `.` is a *state of typing* and not a
+ * number: there is no numeric value it could round-trip through and survive. Cleared on `change`, which
+ * is when the value is final and the panel may format it.
+ */
+var editing = null;
+
+function draftOr(bind, value) {
+  return (editing && editing.bind === bind) ? editing.raw : value;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function attr(name, value) { return ' ' + name + '="' + esc(value) + '"'; }
+function num(v, digits) { return (Math.round(v * Math.pow(10, digits)) / Math.pow(10, digits)).toString(); }
+/* A lightness always carries its decimal, so a column of them lines up. */
+function pct(v) { return (v * 100).toFixed(1); }
+
+function options(list, selected) {
+  return list.map(function (o) {
+    var sel = String(o.value) === String(selected) ? ' selected' : '';
+    return '<option' + attr('value', o.value) + sel + '>' + esc(o.label) + '</option>';
+  }).join('');
+}
+
+function fieldRow(label, control, note) {
+  return '<div class="config-ui-row config-ui-row--field">' +
+    '<div class="config-ui-field">' +
+      '<div class="config-ui-field__row">' +
+        '<label class="config-ui-field__label">' + esc(label) + '</label>' +
+        '<div class="config-ui-field__control">' + control + '</div>' +
+        // Escaped for the same reason as the cell's: the renderer sets a note with `textContent`.
+        (note ? '<div class="config-ui-field-note">' + esc(note) + '</div>' : '') +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+/* A section heading of the form. Level 1 only: the two headings inside a mode block are the control's
+   own, not the form's — see `subtitle`. */
+function heading(text) {
+  return '<div class="config-ui-row config-ui-row--heading">' +
+    '<h1 class="config-ui-heading">' + esc(text) + '</h1>' +
+  '</div>';
+}
+
+/* *Seed* and *Palette*. The **form's own heading**, one level down and unwrapped: `#Seed` among the columns
+   parses to the same `{ type: "heading", level }` a `// ## Heading` line does, and the renderer builds this
+   element for both — so the two size ladders cannot drift. A form *row* around it would bring the panel's
+   inline padding and indent the heading past the fields it names. */
+function subtitle(text) {
+  return '<h2 class="config-ui-heading">' + esc(text) + '</h2>';
+}
+
+function renderGeneral() {
+  var out = heading('General');
+
+  out += '<div class="config-ui-row config-ui-row--field">' +
+    '<div class="config-ui-field config-ui-field--collection">' +
+      '<div class="config-ui-field__row">' +
+        '<label class="config-ui-field__label">Collection</label>' +
+        '<div class="config-ui-field__control">' +
+          '<div class="config-ui-collection config-ui-picker">' +
+            '<select class="config-ui-input config-ui-input--select config-ui-collection-select">' +
+              '<option>' + esc(state.collection) + '</option>' +
+            '</select>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  /* No Collection modes chips row, in any of the four frames. The mode picker inside each block is what
+     adds a mode here. */
+  out += fieldRow('Group within collection',
+    '<input class="config-ui-input config-ui-input--text"' + attr('value', state.group) +
+      attr('data-bind', 'group') + attr('placeholder', 'eg. Primitives/Neutrals') + '>');
+
+  var parsed = parseSteps(state.stepsText);
+  out += fieldRow('Steps',
+    '<input class="config-ui-input config-ui-input--text"' + attr('value', state.stepsText) +
+      attr('data-bind', 'stepsText') +
+      attr('placeholder', 'Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950') + '>',
+    parsed.dropped
+      ? parsed.steps.length + ' steps. ' + parsed.dropped + ' blank or repeated entr' +
+        (parsed.dropped === 1 ? 'y was' : 'ies were') + ' dropped.'
+      : parsed.steps.length + ' steps, and the only source for token placement below.');
+
+  /* The radio that decides the panel's structure. */
+  out += fieldRow('Color model',
+    '<span class="config-ui-radio-group">' +
+      '<label class="config-ui-radio-label"><input class="config-ui-radio" type="radio"' +
+        attr('name', 'color-model') + attr('data-bind', 'model') + attr('data-value', 'hsl') +
+        (state.model === 'hsl' ? ' checked' : '') + '> HSL</label>' +
+      '<label class="config-ui-radio-label"><input class="config-ui-radio" type="radio"' +
+        attr('name', 'color-model') + attr('data-bind', 'model') + attr('data-value', 'oklch') +
+        (state.model === 'oklch' ? ' checked' : '') + '> OKLCH</label>' +
+    '</span>');
+
+  return out;
+}
+
+/* One cell of a mode block: label left, control right, the plugin's own 3fr/7fr rows cell. */
+function cell(label, control, modifier, note) {
+  var open = modifier === 'picker'
+      ? '<div class="config-ui-rows-cell config-ui-rows-cell--stacked config-ui-rows-cell--picker">'
+    : modifier === 'group'
+      ? '<div class="config-ui-rows-cell config-ui-rows-cell--stacked config-ui-rows-cell--group">'
+    : modifier === 'seed'
+      ? '<div class="config-ui-rows-cell config-ui-rows-cell--stacked config-ui-rows-cell--seed">'
+    : modifier === 'toggle'
+      ? '<div class="config-ui-rows-cell config-ui-rows-cell--stacked config-ui-rows-cell--toggle">'
+    : '<div class="config-ui-rows-cell config-ui-rows-cell--stacked">';
+  return open +
+    '<span class="config-ui-rows-cell-label">' + esc(label) + '</span>' + control +
+    // Escaped, because the renderer sets a note with `textContent` and a mockup that accepts markup here
+    // would be showing something the plugin cannot produce. Line breaks are real newlines, honoured by
+    // `white-space: pre-line` — the same mechanism, not a lookalike.
+    (note ? '<div class="config-ui-field-note">' + esc(note) + '</div>' : '') +
+  '</div>';
+}
+
+/* Three captioned numbers in one cell. Used twice over, transposed: per mode the row is an anchor and
+   the parts are channels, and in the shared block the row is Lightness and the parts are the anchors. */
+/*
+ * **`type="text" inputmode="decimal"`, and this is a deliberate divergence from the renderer.**
+ *
+ * `buildRowCell` emits `type="number"` for a number column, and Chrome will not let that field report a
+ * value of `0.` — it reads back as the empty string, verified in this browser. So with a number input the
+ * decimal point cannot survive a re-render no matter how the value is formatted, and no draft can rescue
+ * it. Text plus a decimal keypad reports exactly what was typed.
+ *
+ * That makes it a question for the build and not a licence taken here: the renderer's number column needs
+ * either this treatment or surgical DOM updates, and it needs a `step` — with the default of 1, a chroma of
+ * `0.017` is `:invalid` in the plugin today. Colours are the first fractional config the plugin has had.
+ */
+function group(parts) {
+  return '<span class="config-ui-rows-group">' + parts.map(function (p) {
+    var input = p.readonly
+      ? '<input class="config-ui-input config-ui-input--number" type="text" readonly' +
+        attr('value', p.value) + '>'
+      : '<input class="config-ui-input config-ui-input--number" type="text" inputmode="decimal"' +
+        attr('value', draftOr(p.bind, p.value)) + attr('data-bind', p.bind) + '>';
+    return '<label class="config-ui-rows-group-part">' +
+      '<span class="config-ui-rows-group-label">' + esc(p.label) + '</span>' + input +
+    '</label>';
+  }).join('') + '</span>';
+}
+
+function renderToneScale() {
+  var out = heading('OKLCH settings');
+
+  out += fieldRow('Curve type',
+    '<select class="config-ui-input config-ui-input--select"' + attr('data-bind', 'tone.curve') + '>' +
+      options(CURVES.map(function (c) { return { value: c.id, label: c.label }; }), state.tone.curve) +
+    '</select>');
+
+  /* The frame transposes the group here: the row is Lightness and the three parts are the anchors,
+     because there is only one channel left to set once the modes own hue and chroma. */
+  out += '<div class="config-ui-row config-ui-row--field">' +
+    '<div class="config-ui-field">' +
+      '<div class="config-ui-field__row">' +
+        '<label class="config-ui-field__label">Lightness</label>' +
+        '<div class="config-ui-field__control">' + group([
+          { label: 'Bright', value: pct(state.tone.anchors.bright), bind: 'tone.anchors.bright' },
+          { label: 'Middle', value: pct(state.tone.anchors.middle), bind: 'tone.anchors.middle' },
+          { label: 'Dark', value: pct(state.tone.anchors.dark), bind: 'tone.anchors.dark' }
+        ]) + '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  /* `steps` is deliberately not in here: General's Steps field is the only source for the list, and two
+     places holding it is the conflict flagged at the top of this file. */
+  var json = "anchors: { bright: " + num(state.tone.anchors.bright, 3) +
+    ", middle: " + num(state.tone.anchors.middle, 3) +
+    ", dark: " + num(state.tone.anchors.dark, 3) + " },\n" +
+    "curve: '" + state.tone.curve + "'";
+
+  out += fieldRow('Tone scale definition',
+    '<textarea class="config-ui-input config-ui-input--text config-ui-textarea" rows="5"' +
+      attr('data-bind', 'tone.json') + '>' + esc(json) + '</textarea>',
+    'Shared by every mode. Three anchors and a curve — modes match on lightness, not colour, which is what makes them read as the same tone in greyscale.');
+
+  return out;
+}
+
+function renderSeed(mode, index, ramp, steps) {
+  var out = subtitle('Seed');
+
+  /* `Auto (600)`, and the reason goes under the field rather than into the option. In the option it made
+     the dropdown 210px against the frames' 96 and the widest control in the section, for a sentence that
+     belongs with the other reading of the same colour. */
+  var placementOptions = [{ value: 'auto', label: 'Auto (' + steps[ramp.placementIndex] + ')' }]
+    .concat(steps.map(function (s) { return { value: s, label: s }; }));
+  /* A recovered placement shows *Auto (600)*, because that is what it now is — and the message beside it
+     says which step went missing. The stored `placement` is deliberately left as it was: if Steps gets
+     250 back, the row returns to it rather than having been silently reassigned. */
+  var selected = ramp.placementAuto ? 'auto' : String(mode.seed.placement);
+
+  var hexInput = '<span class="color-seed-field">' +
+    '<input class="config-ui-input config-ui-input--text"' + attr('value', mode.seed.hex) +
+      attr('data-bind', 'modes.' + index + '.seed.hex') + attr('placeholder', 'eg. #71717A') + '>' +
+  '</span>';
+
+  var placementInput = '<span class="color-seed-field color-seed-field--placement">' +
+    (ramp.invalidHex
+      ? '<select class="config-ui-input config-ui-input--select" disabled>' +
+          options(placementOptions, selected) + '</select>'
+      : '<select class="config-ui-input config-ui-input--select"' +
+          attr('data-bind', 'modes.' + index + '.seed.placement') + '>' +
+          options(placementOptions, selected) + '</select>') +
+  '</span>';
+
+  var lines = '';
+  if (ramp.message) {
+    lines += ramp.messageInvalid
+      ? '<span class="color-seed-message color-seed-message--invalid">' + esc(ramp.message) + '</span>'
+      : '<span class="color-seed-message">' + esc(ramp.message) + '</span>';
+  }
+  if (ramp.chromaNote) {
+    lines += '<span class="color-seed-message">' + esc(ramp.chromaNote) + '</span>';
+  }
+  var message = lines ? '<span class="color-seed-messages">' + lines + '</span>' : '';
+
+  /* The readout is the same colour said differently, so it sits under the field rather than beside it.
+     The channel letters are muted; the numbers are what you read. */
+  var readout = '';
+  if (ramp.seed) {
+    var keys = state.model === 'oklch' ? ['H', 'C', 'L'] : ['H', 'S', 'L'];
+    var vals = state.model === 'oklch'
+      ? [num(ramp.seed.H, 1), num(ramp.seed.C, 3), pct(ramp.seed.L)]
+      : [num(ramp.seed.H, 1), pct(ramp.seed.C), pct(ramp.seed.L)];
+    readout = '<span class="color-seed-readout">' + keys.map(function (k, i) {
+      return '<span class="color-seed-readout-key">' + k + '</span>' + esc(vals[i]);
+    }).join(' ') +
+      /* Why *auto* chose the step it chose. Under the field, beside the colour's own coordinates, because
+         it is another reading of the same colour rather than a label for the control. */
+      (ramp.placementAuto
+        ? '<span class="color-seed-readout-key"> · ' + esc(steps[ramp.placementIndex]) +
+          ' is closest to L' + esc(pct(ramp.ladder[ramp.placementIndex].L)) + '</span>'
+        : '') +
+    '</span>';
+  }
+
+  out += cell('Seed color and token placement',
+    '<span class="color-seed">' +
+      '<span class="color-seed-fields">' + hexInput + placementInput + message + '</span>' +
+      readout +
+    '</span>', 'seed');
+
+  if (ramp.anchorsEdited) {
+    out += cell('',
+      '<span class="color-seed">' +
+        '<span class="color-seed-fields">' +
+          '<button class="color-seed-reapply" type="button"' +
+            attr('data-reapply', String(index)) + '>Re-apply seed</button>' +
+          '<span class="color-seed-message">Anchors edited since seeding</span>' +
+        '</span>' +
+      '</span>', 'seed');
+  }
+
+  /* "endpoints unchanged" is false when the seed sits *on* an endpoint, so that state gets a line of its own
+     rather than a promise the panel is not keeping. */
+  var lockCopy = 'On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.' +
+    '\nOff. Seed moves to the nearest step on the ladder.';
+  if (ramp.collapsed) {
+    lockCopy += '\nAt ' + steps[ramp.placementIndex] + ' there is no endpoint left to keep: it is ' +
+      'the seed’s own step, so the seed replaces it.';
+  }
+  out += cell('Lock seed',
+    '<span class="config-ui-toggle-wrap">' +
+      '<input class="config-ui-toggle" type="checkbox"' +
+        attr('data-bind', 'modes.' + index + '.seed.lock') +
+        (mode.seed.lock ? ' checked' : '') + '>' +
+    '</span>', 'toggle', lockCopy);
+
+  return out;
+}
+
+function renderPalette(mode, index, ramp) {
+  var out = subtitle('Palette');
+  var oklch = state.model === 'oklch';
+  var chromaLabel = oklch ? 'Chroma' : 'Saturation';
+
+  ['bright', 'middle', 'dark'].forEach(function (anchor, ai) {
+    var label = anchor.charAt(0).toUpperCase() + anchor.slice(1);
+    /* In OKLCH the Lightness column is the ladder's answer for the step this anchor sits on, and it is
+       read-only because the ladder is shared. Bright and Dark are the ends; Middle is the placement. */
+    var lightIndex = ai === 0 ? 0 : ai === 1 ? ramp.placementIndex : ramp.rows.length - 1;
+    var parts = [
+      { label: 'Hue', value: num(ramp.anchors.hue[anchor], 1), bind: 'modes.' + index + '.hue.' + anchor },
+      { label: chromaLabel,
+        value: oklch ? num(ramp.anchors.chroma[anchor], 3) : pct(ramp.anchors.chroma[anchor]),
+        bind: 'modes.' + index + (oklch ? '.chroma.' : '.sat.') + anchor },
+      oklch
+        ? { label: 'Lightness', value: pct(ramp.rows[lightIndex].L), readonly: true }
+        : { label: 'Lightness', value: pct(ramp.anchors.light[anchor]),
+            bind: 'modes.' + index + '.light.' + anchor }
+    ];
+    out += cell(label, group(parts), 'group');
+  });
+
+  return out;
+}
+
+/* What the file holds, drawn under what a Run would write. `ΔL` per step is the number the strip is for. */
+function renderExistingRamp(mode, ramp) {
+  if (!mode.existing || !mode.existing.length) return '';
+  var readings = mode.existing.map(hexToOklch);
+  var cards = mode.existing.map(function (hex, i) {
+    var generated = ramp.rows[i];
+    var delta = (generated && readings[i]) ? (readings[i].L - generated.L) : null;
+    var note = '';
+    if (delta != null && Math.abs(delta) >= 0.0005) {
+      var text = 'ΔL ' + (delta > 0 ? '+' : '−') + pct(Math.abs(delta));
+      note = Math.abs(delta) >= 0.02
+        ? '<span class="color-ramp-preview-delta color-ramp-preview-delta--wide">' + esc(text) + '</span>'
+        : '<span class="color-ramp-preview-delta">' + esc(text) + '</span>';
+    }
+    return '<span class="color-ramp-preview-card">' +
+      '<span class="color-ramp-preview-swatch"' + attr('style', 'background:' + hex) + '></span>' +
+      '<span class="color-ramp-preview-token">' + esc(ramp.rows[i] ? ramp.rows[i].step : '') + '</span>' +
+      '<span class="color-ramp-preview-hex">' + esc(hex) + '</span>' + note +
+    '</span>';
+  }).join('');
+
+  var worst = null;
+  readings.forEach(function (r, i) {
+    if (!ramp.rows[i]) return;
+    var d = r.L - ramp.rows[i].L;
+    if (!worst || Math.abs(d) > Math.abs(worst.delta)) worst = { step: ramp.rows[i].step, delta: d };
+  });
+
+  return '<div class="color-ramp-preview color-ramp-preview--existing">' +
+    '<div class="color-ramp-preview-caption">In the file now' +
+      (worst && Math.abs(worst.delta) >= 0.0005
+        ? ' · furthest from the ladder: ' + esc(worst.step) + ' by ' + esc(pct(Math.abs(worst.delta))) +
+          (worst.delta > 0 ? ' lighter' : ' darker')
+        : ' · already on the ladder') +
+      '. No curve was fitted — Curve type keeps its default.' +
+    '</div>' +
+    '<div class="color-ramp-preview-strip">' + cards + '</div>' +
+  '</div>';
+}
+
+function renderRamp(ramp, steps, comparing) {
+  var last = ramp.rows.length - 1;
+
+  var anchors = ramp.rows.map(function (row, i) {
+    if (i === 0) {
+      return '<span class="color-ramp-preview-anchor color-ramp-preview-anchor--start">Bright' +
+        '<span class="color-ramp-preview-anchor-mark"></span></span>';
+    }
+    if (i === last) {
+      return '<span class="color-ramp-preview-anchor color-ramp-preview-anchor--end">Dark' +
+        '<span class="color-ramp-preview-anchor-mark"></span></span>';
+    }
+    if (i === ramp.placementIndex) {
+      return '<span class="color-ramp-preview-anchor color-ramp-preview-anchor--middle">Middle' +
+        '<span class="color-ramp-preview-anchor-mark"></span></span>';
+    }
+    return '<span></span>';
+  }).join('');
+
+  var cards = ramp.rows.map(function (row) {
+    /* `Seed step` and nothing more. Whether the seed survived intact, snapped, or re-anchored the ladder is
+       what the seed row's message is for; saying it twice let the two drift apart the moment an anchor was
+       edited after seeding. */
+    var seedLabel = row.isSeed
+      ? '<span class="color-ramp-preview-seed">Seed step</span>' : '';
+    /* The only note left on a swatch: chroma the gamut would not take. */
+    var pin = row.clamped
+      ? '<span class="color-ramp-preview-pin">C→' + esc(num(row.fittedChroma, 3)) + '</span>' : '';
+    return '<span class="color-ramp-preview-card">' +
+      '<span class="color-ramp-preview-swatch"' + attr('style', 'background:' + row.hex) + '></span>' +
+      '<span class="color-ramp-preview-token">' + esc(row.step) + '</span>' +
+      '<span class="color-ramp-preview-hex">' + esc(row.hex) + '</span>' +
+      seedLabel + pin +
+    '</span>';
+  }).join('');
+
+  return '<div class="color-ramp-preview">' +
+    (comparing ? '<div class="color-ramp-preview-caption">This run would write</div>' : '') +
+    '<div class="color-ramp-preview-anchors">' + anchors + '</div>' +
+    '<div class="color-ramp-preview-strip">' + cards + '</div>' +
+  '</div>';
+}
+
+function renderModeBlock(mode, index, steps, ladder) {
+  var ramp = buildRamp({ steps: steps, ladder: ladder, tone: state.tone, mode: mode, model: state.model });
+
+  var title = mode.name
+    ? '<div class="config-ui-rows-item-title">Mode <span class="config-ui-rows-item-title-name">' +
+        esc(mode.name) + '</span></div>'
+    : '<div class="config-ui-rows-item-title">Mode</div>';
+
+  /* **No Mode control.** Márton, after seeing it built: *"I'm reconsidering if we need the mode select for
+     the individual modes. It doesn't make sense, remove it."* The title above already says *Mode Granite*,
+     so a dropdown underneath repeats it — and it allowed a block to point at a mode the file does not have,
+     or two blocks at one mode, which the name-keyed fill has no answer for. The names come from the
+     collection now, which is the only place they were ever true. */
+  var body = '<div class="config-ui-rows-item config-ui-rows-item--stacked">' + title;
+
+  /* Per mode in HSL, shared in the OKLCH settings block. The frames put it here in one model and there
+     in the other, and that is the whole difference between them. */
+  if (state.model === 'hsl') {
+    body += cell('Curve type',
+      '<select class="config-ui-input config-ui-input--select"' +
+        attr('data-bind', 'modes.' + index + '.curve') + '>' +
+        options(CURVES.map(function (c) { return { value: c.id, label: c.label }; }), mode.curve) +
+      '</select>');
+  }
+
+  body += renderSeed(mode, index, ramp, steps);
+  body += renderPalette(mode, index, ramp);
+  body += renderRamp(ramp, steps, !!(mode.existing && mode.existing.length));
+  body += renderExistingRamp(mode, ramp);
+  body += '</div>';
+
+  return { html: body, ramp: ramp };
+}
+
+function render() {
+  var parsed = parseSteps(state.stepsText);
+  /* Frame 2065:4154 draws a full ramp with every field on a placeholder, so an empty Steps field previews
+     the placeholder list rather than collapsing. `['500']` was the earlier fallback and it made all three
+     Lightness read-outs the same number, because with one step the first, middle and last are one step. */
+  var steps = parsed.steps.length ? parsed.steps : PLACEHOLDER_STEPS;
+  var ladder = toneScaleLightness(state.tone, steps);
+
+  var out = renderGeneral();
+  out += '<div class="config-ui-row config-ui-row--divider config-ui-row--divider-section"><hr></div>';
+  if (state.model === 'oklch') out += renderToneScale();
+  out += heading('Mode settings');
+
+  var blocks = state.modes.map(function (mode, i) { return renderModeBlock(mode, i, steps, ladder); });
+
+  out += '<div class="config-ui-row config-ui-row--field config-ui-row--fullwidth">' +
+    '<div class="config-ui-field config-ui-field--rows">' +
+      '<div class="config-ui-field__row">' +
+        '<div class="config-ui-field__control">' +
+          '<div class="config-ui-rows config-ui-rows--blocks">' +
+            '<div class="config-ui-rows-body">' +
+              blocks.map(function (b) { return b.html; }).join('') +
+            '</div>' +
+            '<button class="config-ui-rows-add" type="button">Add mode</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  var caption = stageFile === 'none'
+    ? 'Colors <span>· 2065:4154 · nothing selected yet, every value a placeholder</span>'
+    : stageFile === 'existing'
+      ? 'Colors <span>· read from the file · Neutral / Neutral variations, two modes prefilled</span>'
+    : state.model === 'oklch'
+      ? 'Colors <span>· 2072:5165 · OKLCH · one mode that exists, one being created</span>'
+      : 'Colors <span>· 2065:6267 · HSL · one mode that exists, one being created</span>';
+  /* The second block, when there is one. `blocks[1]` unguarded threw here — and, because the panel's markup
+     had already gone in by this point, the form looked right while the caption, the aside and the stage
+     buttons all showed the state before it. Nine further errors followed from that one missing guard.
+     The guard is still worth having; **committing last is what makes the shape impossible.** */
+  var moss = blocks.length > 1 ? blocks[1].ramp : null;
+  var ladderText = ladder.map(function (t) {
+    return pct(t.L);
+  }).join('  ');
+  var notes;
+  if (state.model === 'oklch') {
+    /* Named from the modes that are actually there. The sentence read "Moss 200 and Granite 200" whatever
+       the panel was showing, which is the kind of line that stops being true and never says so. */
+    var pair = state.modes.length > 1
+      ? esc(state.modes[1].name || 'the second mode') + ' 200 and ' +
+        esc(state.modes[0].name || 'the first') + ' 200 sit'
+      : 'two modes at 200 sit';
+    notes = '<b>Shared ladder</b> ' + esc(ladderText) +
+      '<br><b>Modes match on lightness, not colour.</b> ' + pair + ' at the same L with ' +
+      'different hue and chroma — which is what makes them read as the same tone under a greyscale ' +
+      'filter, and the whole reason a shared ladder exists.';
+    if (!moss) {
+      notes += '<br>Nothing selected, so nothing has been read: every field is a placeholder and the strip ' +
+        'previews the placeholder steps. Pointing Collection and Group somewhere is what asks the file.';
+    } else {
+    /* Inside the guard, where it belongs: computing this above the `if` was a null dereference that aborted
+       `render` after the panel's own markup had already gone in — so the form looked right while the aside
+       and the stage buttons showed the state before it. */
+    var mossLadder = moss.ladder.map(function (t, i) {
+      return pct(t.L) + (moss.reanchored && i > 0 && i < moss.ladder.length - 1 &&
+        Math.abs(t.L - ladder[i].L) >= 0.0005 ? '*' : '');
+    }).join('  ');
+    notes += '<br><b>' + esc(state.modes[1].name || 'Second mode') + '</b> placement ' +
+      esc(steps[moss.placementIndex]) + (moss.placementAuto ? ' (auto)' : ' (chosen)');
+    if (moss.reanchored) {
+      notes += ', <b>re-anchored</b> ' + esc(mossLadder) +
+        ' &nbsp;<span>(* drifted from the shared ladder)</span>' +
+        '<br>Endpoints ' + esc(pct(moss.ladder[0].L)) + ' and ' +
+        esc(pct(moss.ladder[moss.ladder.length - 1].L)) + ' — ' +
+        (Math.abs(moss.ladder[0].L - ladder[0].L) < 1e-9 &&
+         Math.abs(moss.ladder[moss.ladder.length - 1].L - ladder[ladder.length - 1].L) < 1e-9
+          ? '<b>unmoved</b>, which is what re-anchoring buys over an offset.'
+          : '<b>MOVED, which is a bug</b>.') +
+        (moss.drift ? ' Largest interior deviation: ' + esc(moss.drift.step) + ' by ' +
+          esc(pct(Math.abs(moss.drift.delta))) + (moss.drift.delta > 0 ? ' lighter.' : ' darker.') : '');
+    } else {
+      notes += ' — on the shared ladder.';
+    }
+    }
+  } else {
+    notes = 'HSL: no shared block, a curve per mode, and Lightness editable per anchor. ' +
+      'The four frames put Curve type here and in the OKLCH settings block respectively, and that is the ' +
+      'whole structural difference between the two models.';
+  }
+  if (curveCarryNote) notes += '<br>' + esc(curveCarryNote);
+
+  /* ---- Nothing above this line has touched the DOM. Everything below only writes. ----
+
+     **Compute the whole render, then commit it.** The partial-render bug was not the missing guard; it was
+     that the markup went in *before* the aside was computed, so a throw in between left a form showing one
+     state and a caption showing another — and a stage whose buttons had not been re-enabled, which is where
+     the next nine errors came from. Guarding each case as it appears makes that shape survivable; ordering
+     the writes last makes it impossible, because a throw now happens while the previous state is still
+     entirely on screen. */
+  var focused = document.activeElement;
+  var bind = focused && focused.getAttribute ? focused.getAttribute('data-bind') : null;
+  var caret = (bind && typeof focused.selectionStart === 'number') ? focused.selectionStart : null;
+
+  document.getElementById('panel').innerHTML = out;
+  document.getElementById('caption').innerHTML = caption;
+  document.getElementById('aside').innerHTML = notes;
+
+  document.querySelectorAll('[data-stage]').forEach(function (btn) {
+    var stage = btn.getAttribute('data-stage'), value = btn.getAttribute('data-value');
+    var on = stage === 'model' ? value === state.model
+      : stage === 'file' ? value === stageFile
+      : value === stageSeed;
+    btn.classList.toggle('is-active', on);
+    /* The seed states act on the second mode block, so they are off while there is only one. Keyed on the
+       modes themselves rather than on the file state: one condition, and it cannot disagree with reality. */
+    if (stage === 'seed') btn.disabled = state.modes.length < 2;
+  });
+
+  /* Focus last, because it is the one write that depends on the markup already being there. Typing in a
+     field would otherwise stop after one character. */
+  if (bind) {
+    var again = document.querySelector('[data-bind="' + bind + '"]');
+    if (again) {
+      again.focus();
+      if (caret != null && typeof again.setSelectionRange === 'function') {
+        try { again.setSelectionRange(caret, caret); } catch (e) { /* a select has no caret */ }
+      }
+    }
+  }
+}
+
+/* ---- Writes. One delegated handler, one path into `state`. ---- */
+
+function setPath(path, value) {
+  var parts = path.split('.'), target = state;
+  for (var i = 0; i < parts.length - 1; i++) target = target[parts[i]];
+  target[parts[parts.length - 1]] = value;
+}
+
+function parseToneJson(text) {
+  /* The textarea is the authoritative store per the brief, so it is read back rather than being a
+     readout. Wrapped in braces and evaluated as an object literal — the same thing the config block's
+     own parser does with a `@CONFIG` block, and the reason the panel can hold JSON at all. */
+  try {
+    var obj = new Function('return {' + text + '}')();
+    if (obj && obj.anchors) {
+      ['bright', 'middle', 'dark'].forEach(function (k) {
+        if (typeof obj.anchors[k] === 'number') state.tone.anchors[k] = clamp01(obj.anchors[k]);
+      });
+    }
+    if (obj && typeof obj.curve === 'string') state.tone.curve = obj.curve;
+    return true;
+  } catch (e) { return false; }
+}
+
+document.getElementById('panel').addEventListener('input', onWrite);
+document.getElementById('panel').addEventListener('change', onWrite);
+
+/* Re-apply seed: put the hex back into the Middle anchor, which is the only thing the seed ever wrote. */
+document.getElementById('panel').addEventListener('click', function (event) {
+  var target = event.target.closest ? event.target.closest('[data-reapply]') : null;
+  if (!target) return;
+  seedTheAnchors(state.modes[Number(target.getAttribute('data-reapply'))]);
+  render();
+});
+
+function onWrite(event) {
+  var el = event.target;
+  var bind = el.getAttribute && el.getAttribute('data-bind');
+  if (!bind) return;
+
+  /* `change` means the value is final — on blur, or on picking from a dropdown — so the draft is done and
+     the panel may format the number properly again. */
+  if (event.type === 'change') editing = null;
+  else if (editing && editing.bind !== bind) editing = null;
+
+  if (bind === 'model') {
+    state.model = el.getAttribute('data-value');
+    carryCurve(state.model);
+    reseedAll();
+    render();
+    return;
+  }
+  if (bind === 'tone.json') { parseToneJson(el.value); render(); return; }
+
+  if (/\.seed\.lock$/.test(bind)) { setPath(bind, el.checked); render(); return; }
+
+  if (/\.seed\.hex$/.test(bind)) {
+    setPath(bind, el.value);
+    seedTheAnchors(state.modes[Number(bind.split('.')[1])]);
+    render();
+    return;
+  }
+
+  if (/\.seed\.placement$/.test(bind)) {
+    var base = bind.replace(/\.placement$/, '');
+    if (el.value === 'auto') {
+      setPath(base + '.placementAuto', true);
+      setPath(bind, null);
+    } else {
+      setPath(base + '.placementAuto', false);
+      setPath(bind, el.value);
+    }
+    render();
+    return;
+  }
+
+  /* `0.`, `-`, `` — all states of typing rather than numbers. The draft keeps them on screen and the
+     stored value simply does not move until there is a number to store, so the preview never flickers
+     through a zero the user did not ask for. */
+  function writeNumber(transform) {
+    editing = { bind: bind, raw: el.value };
+    var n = Number(el.value);
+    if (el.value.trim() !== '' && isFinite(n)) setPath(bind, transform(n));
+    render();
+  }
+
+  var pctIn = function (n) { return clamp01(n / 100); };
+  if (/^tone\.anchors\./.test(bind)) { writeNumber(pctIn); return; }
+  if (/\.light\./.test(bind)) { writeNumber(pctIn); return; }
+  /* OKLCH chroma reads as itself; HSL saturation is a percentage. Different fields, different units. */
+  if (/\.chroma\./.test(bind)) { writeNumber(function (n) { return Math.max(0, n); }); return; }
+  if (/\.sat\./.test(bind)) { writeNumber(pctIn); return; }
+  if (/\.hue\./.test(bind)) { writeNumber(function (n) { return ((n % 360) + 360) % 360; }); return; }
+
+  setPath(bind, el.value);
+  render();
+}
+
+document.querySelectorAll('[data-stage]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var stage = btn.getAttribute('data-stage'), value = btn.getAttribute('data-value');
+    if (stage === 'model') {
+      state.model = value;
+      carryCurve(state.model);
+      reseedAll();
+    } else if (stage === 'file') {
+      applyStageFile(value);
+    } else {
+      stageSeed = value;
+      applyStageSeed(stageSeed);
+    }
+    render();
+  });
+});
+
+applyStageSeed(stageSeed);
+render();
+</script>
+
+</body>
+</html>

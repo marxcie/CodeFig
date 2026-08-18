@@ -78,14 +78,36 @@
     return out;
   }
 
+  /**
+   * A variable name as a label — **sentence case**, which is what Figma writes and what the labels
+   * somebody actually authored in this repo already use.
+   *
+   * This split the camelCase humps and then left them capitalised, so `fileKeyOrUrl` came out as
+   * *File Key Or Url*. 87 of the plugin's 123 field labels are generated here — no `@label:` was ever
+   * written for them — so two thirds of the labels in the panel were Title Case and the other third,
+   * the hand-written ones, were sentence case. The plugin disagreed with itself on the first thing
+   * anyone reads.
+   *
+   * `serialize` compares a row's label against this function to decide whether `@label:` needs writing
+   * out, and both sides of that comparison call it — so changing the casing here does not start
+   * spelling labels into anyone's config block.
+   */
+  var LABEL_ACRONYMS = { url: "URL", id: "ID", json: "JSON", css: "CSS", api: "API", ui: "UI" };
+
   function labelFromName(n) {
     if (!n || typeof n !== "string") return "";
-    return n
+    var words = n
       .replace(/([A-Z])/g, " $1")
-      .replace(/^./, function (s) {
-        return s.toUpperCase();
+      .trim()
+      .split(/\s+/);
+    return words
+      .map(function (w, i) {
+        var lower = w.toLowerCase();
+        if (LABEL_ACRONYMS[lower]) return LABEL_ACRONYMS[lower];
+        // Sentence case: the first word carries the capital and the rest do not.
+        return i === 0 ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
       })
-      .trim();
+      .join(" ");
   }
 
   /**
@@ -959,7 +981,20 @@
           value: val,
           label: fieldLabel,
           labelSpelled: labelSpelled,
-          tooltip: tip,
+          // **The prose in the comment, not the rest of the comment.**
+          //
+          // `tip` is the annotation soup with the four that slice themselves out already gone, so it
+          // still holds `@options: a|b|c`, `@showWhen: x=y`, `@textarea` and the rest — the syntax that
+          // built the control rather than anything to say about it. That never showed, because this
+          // fed a native `title` and the class the renderer added for it had no rule anywhere; the ⓘ
+          // shows it, and 66 of the 82 fields in `scripts/` would have opened a bubble reading
+          // "@textarea".
+          //
+          // An annotation runs to the next `@` or to the end of the line — that is the rule everywhere
+          // in this block — so the prose is what comes before the first one. Which is also where people
+          // write it: 16 fields carry a real description here, every one of them ahead of the
+          // annotations, because `@helper:` has to be last and the rest read to end of line.
+          tooltip: tip.split("@")[0].trim(),
           inputType: inputType,
         };
         if (phMatch) f.placeholder = phMatch[1];

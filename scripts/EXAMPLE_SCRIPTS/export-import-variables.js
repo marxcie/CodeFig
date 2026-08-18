@@ -24,11 +24,12 @@
 var mode = "Export"; // @options: Export|Import @radio
 // ---
 // # Export @showWhen: mode=Export
-// Choose every local collection to include in the export payload. @showWhen: mode=Export
 var collections = []; // @options: localVariableCollections @multi @showWhen: mode=Export
+// Every collection you tick goes into the payload, with its modes and values. @showWhen: mode=Export
+//
 // # Import @showWhen: mode=Import
-// Paste JSON copied from Export mode in another file. @showWhen: mode=Import
 var importPayload = ""; // @textarea @placeholder="Paste JSON exported from another file" @showWhen: mode=Import
+// The JSON that Export produced in the other file. Collections that do not exist here are created. @showWhen: mode=Import
 // @UI_CONFIG_END
 
 var EXPORT_VERSION = 1;

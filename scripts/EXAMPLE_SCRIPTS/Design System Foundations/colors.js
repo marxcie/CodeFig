@@ -73,12 +73,16 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 
   // # General
   collectionName: "", // @collection @label: Collection
+  //
   // The collection's own modes. The chips are the mode list — a read fills them, and there is one mode block
   // below per chip, in chip order. Removing and renaming happen here, which is why a block carries neither.
   // @collectionModes: Collection modes
   group: "", // @label: Group within collection @placeholder="eg.: Primitives/Neutrals"
   steps: "", // @label: Steps @placeholder="Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950" @helper: Named lightest to darkest, and the only source for token placement below. The variables are <group>/<step>.
   colorModel: "hsl", // @options: hsl:HSL|oklch:OKLCH @radio @label: Color model @helper: HSL keeps a curve per mode. OKLCH shares one lightness ladder across every mode, which is what makes them match in greyscale.
+  // Each anchor keeps a hue for both models: OKLCH's is a perceptual angle, HSL's is where the
+  // maximum channel sits, and on a near-neutral ramp the two disagree by more than 30°. Both are
+  // filled when the panel reads a collection, so switching model loses nothing.
 
   // --- @section
 
@@ -88,12 +92,6 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   lightness: {}, // @group: bright:number=Bright|middle:number=Middle|dark:number=Dark @label: Lightness @showWhen: colorModel=oklch @helper: 0 to 100. The ends hold exactly; the curve fills between them.
 
   // # Mode settings
-  // Amount is how far towards the named curve to go, 0 being linear. An easing's departure from linear
-  // is a fraction of the range it spans, so the same curve is 5 lightness points across a 27-point
-  // segment and 13 across a 64-point one — 0% or 100% alone is too coarse a choice.
-  // Hue is two keys: OKLCH's is a perceptual angle, HSL's is where the maximum channel sits, and on a
-  // near-neutral ramp they disagree by more than 30°. Both are filled on a read so the model switch
-  // loses nothing either way.
   modes: [
     {
       name: "",
@@ -104,7 +102,7 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
       middle: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 46 },
       dark: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 4 }
     }
-  ], // @rows: name:text=Mode|lower:{family:(original:Original|linear:Linear|sine:Sine|quad:Quad|cubic:Cubic|circ:Circ)=Family|easing:(in:easeIn|out:easeOut|inout:easeInOut|outin:easeOutIn){family=sine|quad|cubic|circ}=Easing|amount:number{family=sine|quad|cubic|circ}@placeholder="eg. 100"=Amount}=Lower curve|upper:{family:(original:Original|linear:Linear|sine:Sine|quad:Quad|cubic:Cubic|circ:Circ)=Family|easing:(in:easeIn|out:easeOut|inout:easeInOut|outin:easeOutIn){family=sine|quad|cubic|circ}=Easing|amount:number{family=sine|quad|cubic|circ}@placeholder="eg. 100"=Amount}=Upper curve|#Seed{lower.family=linear|sine|quad|cubic|circ}|seed:{hex:text@placeholder="eg. #71717A"=Seed color|placement:text@placeholder="Auto"=Token placement|lock:checkbox=Lock seed @helper: On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder.}{lower.family=linear|sine|quad|cubic|circ}=Seed|#Palette|bright:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Bright|middle:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Middle|dark:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Dark @disabledNote: Anchors take effect once you choose a curve.|@preview @blocks @label: Modes
+  ], // @rows: name:text=Mode|lower:{family:(original:Original|linear:Linear|sine:Sine|quad:Quad|cubic:Cubic|circ:Circ)=Family|easing:(in:easeIn|out:easeOut|inout:easeInOut|outin:easeOutIn){family=sine|quad|cubic|circ}=Easing|amount:number{family=sine|quad|cubic|circ}@placeholder="eg. 100"=Amount @helper: How far to bend towards the chosen family — 0 is linear. The bend is a share of the segment it spans, so the same number moves a short ramp less than a long one.}=Lower curve|upper:{family:(original:Original|linear:Linear|sine:Sine|quad:Quad|cubic:Cubic|circ:Circ)=Family|easing:(in:easeIn|out:easeOut|inout:easeInOut|outin:easeOutIn){family=sine|quad|cubic|circ}=Easing|amount:number{family=sine|quad|cubic|circ}@placeholder="eg. 100"=Amount @helper: How far to bend towards the chosen family — 0 is linear. The bend is a share of the segment it spans, so the same number moves a short ramp less than a long one.}=Upper curve|#Seed{lower.family=linear|sine|quad|cubic|circ}|seed:{hex:text@placeholder="eg. #71717A"=Seed color|placement:text@placeholder="Auto"=Token placement|lock:checkbox=Lock seed @helper: On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder.}{lower.family=linear|sine|quad|cubic|circ}=Seed|#Palette|bright:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Bright|middle:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Middle|dark:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Dark @disabledNote: Anchors take effect once you choose a curve.|@preview @blocks @label: Modes
 
   // @CONFIG_END
 };

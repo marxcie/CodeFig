@@ -7,7 +7,223 @@
   var p = P || (typeof ConfigUIParser !== "undefined" ? ConfigUIParser : null);
   if (!p) throw new Error("ConfigUI Renderer requires Parser");
 
-  function buildField(field, idx) {
+  /**
+   * One channel for a control's explanation, behind an ⓘ.
+   *
+   * Three of them used to compete. `@helper:` drew a 10px note under the control; leftover comment
+   * prose set `wrap.title` and showed *nothing*, because the class it added for the purpose —
+   * `config-ui-field__label--has-tooltip` — had no rule anywhere in `ui.css`; and a paragraph row
+   * printed its explanation between the fields as loose prose. So a form of eight fields carried
+   * three kinds of grey text, one of them invisible, and no way to tell which text belonged to which
+   * control. They are one thing now: an ⓘ after the label, and the text on hover or on focus.
+   *
+   * **Not `title`.** A native tooltip cannot be styled, waits about a second before appearing, and
+   * lays a two-sentence helper — which most of them are — into one unreadable strip. One shared
+   * bubble, positioned against the button, is the whole of the machinery below.
+   */
+
+  // A block of tooltip content keeps the rendering its source had. Prose came from a paragraph row,
+  // which has always been markdown, so `**bold**` and `` `code` `` in a shipped config keep working.
+  // A helper is plain text with its newlines honoured, which is what `white-space: pre-line` on the
+  // old note gave it — a toggle's *On.* and *Off.* cases are a table of two, and running them
+  // together makes one sentence that contradicts itself. Rendering both as markdown looked simpler
+  // and is not: a helper reading `@options: small|medium|large` becomes a GFM table.
+  function proseBlock(text) { return { kind: "md", text: String(text) }; }
+  function helperBlock(text) { return { kind: "text", text: String(text).replace(/\\n/g, "\n") }; }
+
+  /** The blocks a control shows, in the order a reader met them: its own note, then any prose. */
+  function tipBlocks(owner, prose) {
+    var blocks = [];
+    if (owner && owner.tooltip) blocks.push(helperBlock(owner.tooltip));
+    if (owner && owner.helper) blocks.push(helperBlock(owner.helper));
+    (prose || []).forEach(function (t) { blocks.push(proseBlock(t)); });
+    return blocks;
+  }
+
+  var tipEl = null;
+  var tipOwner = null;
+  var tipPinned = false;
+
+  function tooltipHost() {
+    if (tipEl) return tipEl;
+    if (typeof document === "undefined" || !document.body) return null;
+    tipEl = document.createElement("div");
+    tipEl.className = "config-ui-tip";
+    tipEl.setAttribute("role", "tooltip");
+    tipEl.hidden = true;
+    document.body.appendChild(tipEl);
+    return tipEl;
+  }
+
+  function fillTip(el, blocks) {
+    el.innerHTML = "";
+    blocks.forEach(function (b) {
+      var part = document.createElement("div");
+      part.className = "config-ui-tip__block";
+      if (b.kind === "md" && typeof window !== "undefined" && window.marked && window.marked.parse) {
+        part.className += " docs-rendered";
+        // **A newline in the source is a wrap, not a break.** A paragraph in a config block is a run of
+        // `//` lines wrapped at whatever width the `.js` file is kept to, and forcing each one to a
+        // `<br>` put a hard break wherever the author happened to hit the margin — 18 of them landed
+        // mid-sentence, which is what "one mode block ⏎ below per chip" was. Markdown's own rule is
+        // the right one: a single newline reflows, a blank line starts a paragraph, and a list stays a
+        // list. An author who wants a break writes one of those.
+        part.innerHTML = window.marked.parse(b.text, { gfm: true });
+      } else {
+        part.textContent = b.text;
+      }
+      el.appendChild(part);
+    });
+  }
+
+  /**
+   * Placed against the button, clamped to the panel.
+   *
+   * The plugin panel is narrow and the ⓘ can sit at its right edge, so a bubble anchored naively
+   * runs off the side where nothing scrolls it back. It is measured, then pushed inside an 8px
+   * margin, and flipped above the button when there is no room below.
+   */
+  function placeTip(el, btn) {
+    if (!btn.getBoundingClientRect || !el.getBoundingClientRect) return;
+    var a = btn.getBoundingClientRect();
+    var vw = window.innerWidth || 320;
+    var vh = window.innerHeight || 480;
+    el.style.left = "0px";
+    el.style.top = "0px";
+    var box = el.getBoundingClientRect();
+    var left = Math.min(Math.max(8, a.left + a.width / 2 - box.width / 2), Math.max(8, vw - box.width - 8));
+    var below = a.bottom + 6;
+    var top = (below + box.height > vh - 8 && a.top - box.height - 6 > 8) ? a.top - box.height - 6 : below;
+    el.style.left = Math.round(left) + "px";
+    el.style.top = Math.round(top) + "px";
+  }
+
+  function showTip(btn, blocks) {
+    var el = tooltipHost();
+    if (!el || !blocks.length) return;
+    fillTip(el, blocks);
+    el.hidden = false;
+    tipOwner = btn;
+    btn.setAttribute("aria-expanded", "true");
+    placeTip(el, btn);
+  }
+
+  function hideTip(force) {
+    if (tipPinned && !force) return;
+    tipPinned = false;
+    if (tipOwner && tipOwner.setAttribute) tipOwner.setAttribute("aria-expanded", "false");
+    tipOwner = null;
+    if (tipEl) tipEl.hidden = true;
+  }
+
+  /**
+   * The ⓘ itself — a real `button`, so it is reachable by Tab and answers Enter.
+   *
+   * Hover alone would have been half a control: the panel is used from the keyboard, and a hint
+   * nobody can reach is the state this change set out to leave behind. Click pins the bubble open so
+   * a two-sentence explanation can be read without holding the pointer still.
+   */
+  function buildInfo(blocks) {
+    if (!blocks || !blocks.length) return null;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "config-ui-info";
+    btn.setAttribute("aria-label", "Explain this setting");
+    btn.setAttribute("aria-expanded", "false");
+    // The text, on the button. The bubble is built when it is shown, so without this the explanation
+    // is nowhere in the document — which would put it out of reach of the specimen page, which renders
+    // the form once and never hovers anything, and of every test that checks a control says what it
+    // should. It is the content, not a duplicate of it: `fillTip` reads the same blocks.
+    btn.setAttribute("data-info", blocks.map(function (b) { return b.text; }).join("\n\n"));
+    btn.textContent = "i";
+    btn.addEventListener("mouseenter", function () { if (!tipPinned) showTip(btn, blocks); });
+    btn.addEventListener("mouseleave", function () { if (!tipPinned) hideTip(); });
+    btn.addEventListener("focus", function () { showTip(btn, blocks); });
+    btn.addEventListener("blur", function () { hideTip(true); });
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (tipPinned && tipOwner === btn) { hideTip(true); return; }
+      tipPinned = false;
+      showTip(btn, blocks);
+      tipPinned = true;
+    });
+    btn.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") hideTip(true);
+    });
+    return btn;
+  }
+
+  /** Hangs the ⓘ off a label, when there is anything to say. */
+  function attachInfo(labelEl, owner, prose) {
+    var blocks = tipBlocks(owner, prose);
+    var btn = buildInfo(blocks);
+    if (btn && labelEl) labelEl.appendChild(btn);
+    return btn;
+  }
+
+  /**
+   * Which control each paragraph belongs to.
+   *
+   * A paragraph row has no owner in the block — it is a comment line between two other lines — so
+   * the question is decided by adjacency, and the shipped scripts answer it two different ways. Most
+   * write the explanation *under* the field (`rename-variables` and the six scripts shaped like it);
+   * a few write it *above* (`merge-variable-collections`, `config`). A blank or bare `//` line is
+   * what separates one from the next, and it turns out to be a reliable signal: where an author put
+   * a spacer, they meant the paragraph to go with the other side.
+   *
+   * So: an owner touching it above wins, then one touching it below, then the nearest either way. A
+   * divider ends a section and blocks the search — prose after a rule belongs to what follows it, not
+   * to what the rule just closed off. Checked against all 68 paragraphs in `scripts/`; the two that
+   * came out attached to the wrong control were the two blocks whose spacing disagreed with their
+   * intent, and both were given the spacer that says what they mean.
+   *
+   * The fold is presentational and lives here rather than in the parser on purpose: `serialize`
+   * writes rows back out to rebuild the config block, and a parser that swallowed paragraphs would
+   * drop a person's comments out of their own config the first time they touched a field.
+   */
+  function foldProse(rows) {
+    var prose = {};
+    var folded = {};
+    if (!rows || !rows.length) return { prose: prose, folded: folded };
+    // `@prose` — this block is a reference, and its paragraphs are what it exists to show.
+    for (var d = 0; d < rows.length; d++) {
+      if (rows[d].directive === "prose") return { prose: prose, folded: folded };
+    }
+    function owns(r) { return r.type === "field" || r.type === "heading" || r.type === "chips"; }
+    function gap(r) { return r.type === "blank" || r.type === "lineBreak"; }
+
+    function seek(from, step) {
+      var adjacent = true;
+      for (var j = from; j >= 0 && j < rows.length; j += step) {
+        var r = rows[j];
+        if (r.type === "paragraph") continue;
+        if (gap(r)) { adjacent = false; continue; }
+        if (owns(r)) return { at: j, adjacent: adjacent };
+        return null; // a divider, a preview slot, anything else: the search stops here
+      }
+      return null;
+    }
+
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].type !== "paragraph") continue;
+      var back = seek(i - 1, -1);
+      var fwd = seek(i + 1, 1);
+      var target =
+        (back && back.adjacent) ? back.at :
+        (fwd && fwd.adjacent) ? fwd.at :
+        back ? back.at :
+        fwd ? fwd.at : null;
+      // Nothing to explain — a paragraph alone between two rules stays on the page rather than
+      // vanishing, because the alternative is losing text with nowhere to put it.
+      if (target === null) continue;
+      (prose[target] || (prose[target] = [])).push(rows[i].text);
+      folded[i] = true;
+    }
+    return { prose: prose, folded: folded };
+  }
+
+  function buildField(field, idx, prose) {
     var n = field.name;
     var t = field.type;
     var v = field.value;
@@ -31,10 +247,13 @@
       lab.className = "config-ui-field__label";
       lab.htmlFor = id;
       lab.textContent = l;
-      if (tip) (wrap.title = tip), lab.classList.add("config-ui-field__label--has-tooltip");
+      attachInfo(lab, field, prose);
       row.appendChild(lab);
-    } else if (tip) {
-      wrap.title = tip;
+    } else if (tip || field.helper || (prose && prose.length)) {
+      // A `@rows` control is a section rather than a field and has no label to hang an ⓘ from — the
+      // heading above it is what a reader is looking at. Nothing in `scripts/` folds prose onto one,
+      // and the native title stays as the fallback rather than inventing a header to hold a button.
+      wrap.title = tipBlocks(field, prose).map(function (b) { return b.text; }).join("\n\n");
     }
     var cw = document.createElement("div");
     cw.className = "config-ui-field__control";
@@ -70,13 +289,13 @@
         inp.type = "radio";
         inp.name = "cfg-" + n + "-" + idx;
         inp.id = id + "-" + i;
-        inp.value = opt;
-        inp.checked = opt === ov;
+        inp.value = fieldOptionValue(opt);
+        inp.checked = fieldOptionValue(opt) === ov;
         inp.className = "config-ui-radio";
         inp.setAttribute("data-field", n);
         lbl.appendChild(inp);
         var sp = document.createElement("span");
-        sp.textContent = opt;
+        sp.textContent = fieldOptionLabel(opt);
         lbl.appendChild(sp);
         rg.appendChild(lbl);
       });
@@ -151,13 +370,18 @@
       var ov2 = v != null ? String(v) : "";
       field.options.forEach(function (opt) {
         var o = document.createElement("option");
-        o.value = opt;
-        o.textContent = opt;
-        if (opt === ov2) o.selected = true;
+        o.value = fieldOptionValue(opt);
+        o.textContent = fieldOptionLabel(opt);
+        if (fieldOptionValue(opt) === ov2) o.selected = true;
         sel2.appendChild(o);
       });
-      if (!sel2.value && field.options[0]) sel2.value = field.options[0];
+      if (!sel2.value && field.options[0]) sel2.value = fieldOptionValue(field.options[0]);
       cw.appendChild(sel2);
+    } else if (t === "group" && field.columns && field.columns.length) {
+      // The same control a nested `@rows` column builds, at field level: one labelled row, captioned parts.
+      // Reusing it is the point — the OKLCH settings Lightness row and a mode's Bright anchor are the same
+      // shape, and two builders for one shape is how they drift.
+      cw.appendChild(buildRowGroup(field, v && typeof v === "object" ? v : {}, "cfg-" + n + "-" + idx));
     } else if (t === "collection") {
       cw.appendChild(buildCollectionControl(field, v == null ? "" : String(v)));
     } else if (t === "mode") {
@@ -210,15 +434,12 @@
       cw.appendChild(ti);
     }
     row.appendChild(cw);
-    // Under the **control**, not under the row: a note at the label's left edge reads as prose about
-    // the section rather than as an explanation of this input. It goes in the grid's second column,
-    // which is what puts it under the field it describes.
-    if (field.helper) {
-      var helper = document.createElement("div");
-      helper.className = "config-ui-field-note";
-      helper.textContent = field.helper;
-      row.appendChild(helper);
-    }
+    // `@helper:` used to draw a note here, under the control. It is in the ⓘ beside the label now,
+    // with the field's leftover prose and any paragraph written against it — one explanation per
+    // control instead of three places to look. `.config-ui-field-note` stays for the notes that
+    // report *state* rather than meaning: `@disabledNote:`, the collection and mode notes, and the
+    // pending mode removal. Those are things about to happen, and hiding a consequence behind a
+    // hover is not the same trade as hiding a description.
     wrap.appendChild(row);
     return wrap;
   }
@@ -240,7 +461,7 @@
     return candidates.length === 1 ? candidates[0].value : "";
   }
 
-  function buildRow(r, idx, schema) {
+  function buildRow(r, idx, schema, prose) {
     if (r.type === "lineBreak") {
       var wr = document.createElement("div");
       wr.className = "config-ui-row config-ui-row--line-break";
@@ -265,6 +486,10 @@
       var h = document.createElement(tag);
       h.className = "config-ui-heading";
       h.textContent = r.text;
+      // A section's own intro folds onto its heading: the paragraph under `# Mode settings` explains
+      // the four fields below it rather than any one of them, so the heading is the only honest place
+      // to hang it.
+      attachInfo(h, r, prose);
       wrap.appendChild(h);
       return wrap;
     }
@@ -277,11 +502,13 @@
       }
       var mdWrap = document.createElement("div");
       mdWrap.className = "docs-rendered";
-      var md = r.text.replace(/\n/g, "  \n");
+      // The same rule the tooltip uses: a source newline is a wrap, not a break. One paragraph
+      // renderer, one answer — the shelf in Help and a bubble cannot disagree about where a line ends.
+      var md = r.text;
       mdWrap.innerHTML =
         typeof window.marked !== "undefined" && window.marked.parse
           ? window.marked.parse(md, { gfm: true })
-          : md.replace(/&/g, "&amp;").replace(/\x3c/g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+          : md.replace(/&/g, "&amp;").replace(/\x3c/g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, " ");
       wrap2.appendChild(mdWrap);
       return wrap2;
     }
@@ -317,6 +544,7 @@
       var chipsLabel = document.createElement("label");
       chipsLabel.className = "config-ui-field__label";
       chipsLabel.textContent = r.label || "Collection modes";
+      attachInfo(chipsLabel, r, prose);
       chipsRow.appendChild(chipsLabel);
       var chipsControl = document.createElement("div");
       chipsControl.className = "config-ui-field__control";
@@ -347,71 +575,55 @@
       // The value of the collection this mode picker follows, read from the block rather than from
       // the DOM: at this point the collection picker may not have been built yet.
       if (r.inputType === "mode") f.collectionValue = seedCollectionValue(r, schema);
-      wrap3.appendChild(buildField(f, idx));
+      wrap3.appendChild(buildField(f, idx, prose));
       return wrap3;
     }
     return document.createElement("div");
   }
 
-  function buildSection(sec, idx) {
-    if (sec.divider) {
-      var wr = document.createElement("div");
-      wr.className = "config-ui-section config-ui-section--divider";
-      wr.setAttribute("data-section", String(idx));
-      wr.appendChild(document.createElement("hr"));
-      return wr;
-    }
-    var el = document.createElement("div");
-    el.className = "config-ui-section";
-    el.setAttribute("data-section", String(idx));
-    if (sec.title || sec.intro) {
-      var intro = sec.intro || "";
-      var introForMd = intro.replace(/\n\n/g, "\n\n").replace(/\n/g, "  \n");
-      var md = sec.title ? (introForMd ? sec.title + "  \n" + introForMd : sec.title) : introForMd;
-      var mdWrap = document.createElement("div");
-      mdWrap.className = "docs-rendered";
-      mdWrap.innerHTML =
-        typeof window.marked !== "undefined" && window.marked.parse
-          ? window.marked.parse(md, { gfm: true })
-          : md.replace(/&/g, "&amp;").replace(/\x3c/g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
-      el.appendChild(mdWrap);
-    }
-    var fe = document.createElement("div");
-    fe.className = "config-ui-section__fields";
-    sec.fields.forEach(function (f, i) {
-      fe.appendChild(buildField(f, idx * 1000 + i));
-    });
-    el.appendChild(fe);
-    return el;
-  }
-
   function buildForm(schema, container) {
     if (!schema) {
+      hideTip(true);
       container.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
       return;
     }
     if (schema.rows && schema.rows.length) {
+      // The bubble lives on `document.body`, not in the form, so a rebuild — every `@showWhen` change,
+      // every sync — would leave it on screen pointing at a button that no longer exists.
+      hideTip(true);
       container.innerHTML = "";
       container.className = "config-ui-form config-ui-form--rows";
+      // **Who owns the membership of the mode list.** A chips row *is* the list of modes, so wherever one
+      // exists the array control must not offer its own Add — two controls for one action is the shape that
+      // produced the mode-picker confusion. This used to be decided by `field.tabs`, which was only ever a
+      // proxy for "there are chips above"; `@blocks` has chips now too.
+      var hasChips = schema.rows.some(function (r) { return r.type === "chips"; });
+      if (hasChips) {
+        schema.rows.forEach(function (r) {
+          if (r.type === "field" && r.inputType === "rows") r.membershipFromChips = true;
+        });
+      }
       var fieldIdx = 0;
+      // Which paragraph explains which control, decided once for the whole block — a row cannot
+      // answer it alone, because the answer is about the rows on either side of it.
+      var fold = foldProse(schema.rows);
       schema.rows.forEach(function (r, i) {
+        // A folded paragraph is not dropped from the schema, only from the page: it is still in
+        // `schema.rows`, so `serialize` writes it back into the config block exactly as it was.
+        if (fold.folded[i]) return;
         // The schema goes with the row: the chips control needs the mode names, which live in another
         // row's value. Passing context beats either control reaching into the DOM for the other,
         // which would depend on render order.
-        var el = buildRow(r, r.type === "field" ? fieldIdx++ : 0, schema);
+        var el = buildRow(r, r.type === "field" ? fieldIdx++ : 0, schema, fold.prose[i]);
         el.setAttribute("data-row-index", String(i));
         container.appendChild(el);
       });
       return;
     }
-    if (schema.sections && schema.sections.length) {
-      container.innerHTML = "";
-      container.className = "config-ui-form";
-      schema.sections.forEach(function (sec, i) {
-        container.appendChild(buildSection(sec, i));
-      });
-      return;
-    }
+    // `parse()` returns `{ rows }` and nothing else, so there is one rendering. A second branch here
+    // built a `.config-ui-section` tree that no schema could reach, and it carried its own copy of the
+    // heading, divider and container styles — which is how "the config form" came to mean two
+    // different sets of CSS. Removed with those rules.
     container.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
   }
 
@@ -1172,7 +1384,11 @@
    */
   function buildRowsControl(field, rows) {
     var wrap = document.createElement("div");
-    wrap.className = "config-ui-rows" + (field.tabs ? " config-ui-rows--tabs" : "");
+    // Three displays, one control. `--blocks` shows every row in full, one under the next, each titled —
+    // which is what a ramp needs, because two ramps you want to compare have to be on one page.
+    wrap.className = "config-ui-rows" +
+      (field.tabs ? " config-ui-rows--tabs" : "") +
+      (field.blocks ? " config-ui-rows--blocks" : "");
     wrap.setAttribute("data-rows-field", field.name);
 
     var body = document.createElement("div");
@@ -1208,25 +1424,145 @@
 
       list.forEach(function (row, index) {
         var rowEl = document.createElement("div");
-        rowEl.className = field.tabs ? "config-ui-rows-item config-ui-rows-item--stacked"
+        // A block reads as a form for the same reason a tab does: one labelled field per line. The flat
+        // strip of cells is only right when rows are stacked *and being compared*, which is the table.
+        rowEl.className = (field.tabs || field.blocks)
+          ? "config-ui-rows-item config-ui-rows-item--stacked"
           : "config-ui-rows-item";
         rowEl.setAttribute("data-row-index", String(index));
 
+        // "Mode **Granite**" — the word is the kind of thing and the name is which one, so the name is the
+        // half that carries the weight. Under `@tabs` the tab strip does this job; in the table there is no
+        // room for it. Drawn by the control, because there is no comment per row for the parser to have read.
+        //
+        // The word comes from the **`name` column's own label** — `name:text=Mode` says "Mode" — not from
+        // depluralising the field's. Chopping a trailing `s` off *Modes* works and off *Radius* does not, and
+        // the right word is already written down one line away.
+        if (field.blocks) {
+          var title = document.createElement("div");
+          title.className = "config-ui-rows-item-title";
+          var kind = null;
+          (field.columns || []).forEach(function (column) {
+            if (column.key === "name" && column.label) kind = column.label;
+          });
+          title.textContent = kind ? kind + " " : "";
+          var named = document.createElement("span");
+          named.className = "config-ui-rows-item-title-name";
+          named.textContent = rowLabel(row, index);
+          title.appendChild(named);
+
+          /**
+           * **Collapse, and where its state lives.**
+           *
+           * On the title row as the frame draws it, and collapsed shows the title and the strip only — the
+           * strip because that is the thing you scan a list of modes *for*.
+           *
+           * The state is a class on the item and nothing else: it is a fact about the sitting, not about the
+           * config, so it is never written to the block. The starting position is **derived** — a mode that
+           * already has a name came from the collection and starts collapsed, an unnamed one is the block you
+           * are filling in and starts open. No flag, no stored default.
+           */
+          var chevron = document.createElement("button");
+          chevron.type = "button";
+          chevron.className = "config-ui-rows-collapse";
+          chevron.setAttribute("aria-expanded", "true");
+          chevron.setAttribute("data-rows-collapse", String(index));
+          /**
+           * **Márton's own chevron, from node 2112:11828.** Two text glyphs came before this and neither was
+           * right: `\u2304` rendered as a thin undersized caret, and `\u25be` is a filled triangle where the
+           * design is a stroked chevron. A drawn icon settles both the shape and the size — a 20px box with an
+           * 8\u00d74 stroke through the middle, which is the frame's geometry exactly.
+           *
+           * `currentColor` rather than the frame's `#666666`, so it takes the panel's own text colour and
+           * follows the hover the other functional icons have. Flipped for the open state the way the frame
+           * flips it, and the *direction says where the block will go*: down to open, up to close.
+           */
+          function setChevron(closed) {
+            chevron.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" ' +
+              'aria-hidden="true" focusable="false"' +
+              (closed ? "" : ' style="transform:scaleY(-1)"') + '>' +
+              '<path d="M6 8L10 12L14 8" stroke="currentColor" stroke-width="1.33333" ' +
+              'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            chevron.setAttribute("aria-expanded", closed ? "false" : "true");
+            chevron.setAttribute("aria-label", (closed ? "Expand " : "Collapse ") + rowLabel(row, index));
+          }
+          chevron.addEventListener("click", function () {
+            setChevron(rowEl.classList.toggle("is-collapsed"));
+          });
+          title.appendChild(chevron);
+          var startsClosed = !!(row && typeof row === "object" &&
+            typeof row.name === "string" && row.name.trim());
+          if (startsClosed) rowEl.classList.add("is-collapsed");
+          setChevron(startsClosed);
+          rowEl.appendChild(title);
+        }
+
         (field.columns || []).forEach(function (column) {
+          // `#Seed` among the columns: the same `h2.config-ui-heading` the form builds from a `// ## Heading`
+          // line, so the size ladder is the form's rather than a second one invented here. It groups *rows*,
+          // where a nested column groups *cells* — two jobs, and this is the one that already had a
+          // mechanism.
+          // The per-row preview slot. Filled by the panel the same way the section-level one is — the
+          // renderer marks where it goes and never computes what is in it, because computing it needs a run.
+          if (column.type === "preview") {
+            var slot = document.createElement("div");
+            slot.className = "config-ui-row-preview";
+            slot.setAttribute("data-preview-slot", "true");
+            // **Keyed by index, not by name.** `rowLabel` falls back to "Row 1" for an unnamed entry while the
+            // preview knows that mode as `""`, so the two sides disagreed the moment the shipped default became
+            // an empty block — and the strips silently vanished. An index is the same on both sides whatever
+            // the entry is called. The name rides along for diagnosis only.
+            slot.setAttribute("data-preview-row", String(index));
+            slot.setAttribute("data-preview-name", rowLabel(row, index));
+            rowEl.appendChild(slot);
+            return;
+          }
+          if (column.type === "heading") {
+            var sub = document.createElement("h" + (column.level || 2));
+            sub.className = "config-ui-heading";
+            sub.textContent = column.text;
+            // A heading left standing over a section its condition has hidden reads as a failed render.
+            if (column.showWhen) {
+              sub.setAttribute("data-row-show-when", JSON.stringify(column.showWhen));
+            }
+            rowEl.appendChild(sub);
+            return;
+          }
           // Under `@tabs` the row's `name` **is** the tab, so it is not also a field. Renaming happens
           // on the chips, which is the only rename affordance — a second one here would be a second
           // place to do the same thing, and the two could disagree.
-          if (field.tabs && column.key === "name") return;
+          //
+          // **Under `@blocks` the title does that job**, and the same reasoning applies: the block already
+          // says *Mode  Ash* across its top, so a control underneath repeating it is the second place. It
+          // was a dropdown of the collection's modes, which also let a block point at a mode that is not in
+          // the file, or two blocks point at one mode — states the name-keyed fill has no answer for.
+          // `collectRows` starts each row from the value it already had and only overwrites what it finds a
+          // control for, so a column with no control keeps its name rather than losing it.
+          if ((field.tabs || field.blocks) && column.key === "name") return;
           // A radio cell is a `div`, every other cell a `label`. A `label` wrapping a radio group is
           // nested labels: clicking anywhere in the cell — the caption included — would activate the
           // outer label's first labelable descendant, which is the first radio. So the caption would
           // silently reset the scale type to Modular.
-          var cell = document.createElement(column.type === "radio" ? "div" : "label");
-          // With `@tabs` a tab shows one row at a time, so its fields read as a form — one labelled
-          // field per line, as the frames show — rather than as a horizontal strip of cells, which is
-          // the right shape only when rows are stacked and being compared.
-          cell.className = field.tabs ? "config-ui-rows-cell config-ui-rows-cell--stacked"
+          // A radio cell is a `div`, and so is a group: both contain labels of their own, and a `label`
+          // wrapping them would make clicking the group's caption focus its first input.
+          var cell = document.createElement(
+            (column.type === "radio" || column.type === "group") ? "div" : "label"
+          );
+          // With `@tabs` or `@blocks` a row is shown on its own, so its fields read as a form — one labelled
+          // field per line, as the frames show — rather than as a horizontal strip of cells, which is the
+          // right shape only in the table, where rows are side by side and being compared.
+          //
+          // **`@blocks` was missing here** while the *item* above already had it, so every cell in a block
+          // fell back to the table form: labels shoved to the right edge, fields at 1229px, and a layout
+          // nothing in the design asks for. Two lines that have to agree, one of them updated — which is why
+          // `layout` is now read back through the bridge rather than trusted.
+          cell.className = (field.tabs || field.blocks)
+            ? "config-ui-rows-cell config-ui-rows-cell--stacked"
             : "config-ui-rows-cell";
+          // A group's captions sit above its inputs, so the row is taller than a plain cell and the label
+          // has to line up with the *fields* rather than with the middle of the pair — centred, it floats
+          // between the caption and the input and reads as belonging to neither.
+          if (column.type === "group") cell.className += " config-ui-rows-cell--group";
           // A column can depend on another column **in the same row**: a modular scale needs a ratio,
           // a metric one needs a step, and showing both leaves half of every tab inert. The condition
           // travels on the cell, and is evaluated against that row's own values rather than the form's
@@ -1234,22 +1570,48 @@
           if (column.showWhen) {
             cell.setAttribute("data-row-show-when", JSON.stringify(column.showWhen));
           }
+          // Inert rather than absent — the value is real and worth reading, it just is not in play yet.
+          if (column.disabledWhen) {
+            cell.setAttribute("data-row-disabled-when", JSON.stringify(column.disabledWhen));
+          }
+          if (column.disabledNote) {
+            cell.setAttribute("data-row-disabled-note", column.disabledNote);
+          }
           var caption = document.createElement("span");
           caption.className = "config-ui-rows-cell-label";
           caption.textContent = column.label;
+          // A column's own `@helper:`, on the ⓘ beside its caption. A cell is the narrowest thing in
+          // the panel and a note under it used to set the width of the whole column.
+          attachInfo(caption, column, null);
           cell.appendChild(caption);
           cell.appendChild(buildRowCell(
             column, row ? row[column.key] : undefined,
             "config-ui-row-radio-" + field.name + "-" + index + "-" + column.key
           ));
+          // A column can carry its own `@helper:` now. `.config-ui-field-note` is `grid-column: 2`, so in
+          // a `--stacked` cell — which is a 3fr/7fr grid — it lands under the control it explains rather
+          // than under the row, which is where a sibling of the cell would put it. That is the shape the
+          // Colors prototype used by hand, and closing this gap is what lets the shipped block carry the
+          // *Lock seed* copy instead of the mockup carrying it.
           rowEl.appendChild(cell);
         });
 
-        var remove = field.tabs ? null : document.createElement("button");
+        // No Remove under `@tabs`: the chips above manage the modes, and two places to remove one is one too
+        // many. `@blocks` keeps it — the frames show Add and no Remove, but they also never draw the state
+        // where you added a block by mistake, and Add without Remove is a one-way door. Safe either way,
+        // because this removes a *config* entry and nothing reaches the document until Run.
+        var remove = (field.tabs || field.membershipFromChips) ? null : document.createElement("button");
         if (remove) {
         remove.type = "button";
-        remove.className = "config-ui-rows-remove";
-        remove.textContent = "Remove";
+        // **In a block, a small affordance rather than a full-width button.** No frame has a Remove at all;
+        // the capability still has to exist, because Add without it is a one-way door, but a bar the width of
+        // the panel competes with Add for attention and reads as the primary action of the block. So under
+        // `@blocks` it is a `×` beside the block's own title, where it is about *this* block.
+        remove.className = field.blocks
+          ? "config-ui-rows-remove config-ui-rows-remove--block"
+          : "config-ui-rows-remove";
+        remove.textContent = field.blocks ? "\u00d7" : "Remove";
+        if (field.blocks) remove.setAttribute("aria-label", "Remove this " + (rowLabel(row, index) || "entry"));
         // Remove-then-add is how a row is replaced, so removal needs no confirmation here — this
         // control edits a config, and nothing reaches the document until the script runs.
         remove.addEventListener("click", function () {
@@ -1258,7 +1620,10 @@
           draw(next, Math.max(0, Math.min(index, next.length - 1)));
           wrap.dispatchEvent(new Event("change", { bubbles: true }));
         });
-        rowEl.appendChild(remove);
+        // Into the title row when there is one, so it sits with the thing it removes rather than at the far
+        // end of a block that is now several hundred pixels tall.
+        var titleRow = field.blocks ? rowEl.querySelector(".config-ui-rows-item-title") : null;
+        if (titleRow) titleRow.appendChild(remove); else rowEl.appendChild(remove);
         }
         body.appendChild(rowEl);
 
@@ -1276,12 +1641,11 @@
         }
       });
 
-      // With `@tabs` the modes are managed by the chips above, so Add does not belong here — two
-      // places to add a mode is one too many.
-      if (field.tabs) {
-        if (field.tabs) selectTab(typeof active === "number" ? active : 0);
-        return;
-      }
+      // The chips above are the mode list, so Add does not belong here — two places to add a mode is one too
+      // many. `@tabs` has always had chips; `@blocks` has them now, and the test is the chips rather than the
+      // display, because it is the chips that make Add redundant.
+      if (field.tabs) selectTab(typeof active === "number" ? active : 0);
+      if (field.tabs || field.membershipFromChips) return;
 
       var add = document.createElement("button");
       add.type = "button";
@@ -1291,6 +1655,36 @@
         var next = collectRows(wrap, field);
         var blank = {};
         (field.columns || []).forEach(function (column) {
+          // `#Seed` among the columns: the same `h2.config-ui-heading` the form builds from a `// ## Heading`
+          // line, so the size ladder is the form's rather than a second one invented here. It groups *rows*,
+          // where a nested column groups *cells* — two jobs, and this is the one that already had a
+          // mechanism.
+          // The per-row preview slot. Filled by the panel the same way the section-level one is — the
+          // renderer marks where it goes and never computes what is in it, because computing it needs a run.
+          if (column.type === "preview") {
+            var slot = document.createElement("div");
+            slot.className = "config-ui-row-preview";
+            slot.setAttribute("data-preview-slot", "true");
+            // **Keyed by index, not by name.** `rowLabel` falls back to "Row 1" for an unnamed entry while the
+            // preview knows that mode as `""`, so the two sides disagreed the moment the shipped default became
+            // an empty block — and the strips silently vanished. An index is the same on both sides whatever
+            // the entry is called. The name rides along for diagnosis only.
+            slot.setAttribute("data-preview-row", String(index));
+            slot.setAttribute("data-preview-name", rowLabel(row, index));
+            rowEl.appendChild(slot);
+            return;
+          }
+          if (column.type === "heading") {
+            var sub = document.createElement("h" + (column.level || 2));
+            sub.className = "config-ui-heading";
+            sub.textContent = column.text;
+            // A heading left standing over a section its condition has hidden reads as a failed render.
+            if (column.showWhen) {
+              sub.setAttribute("data-row-show-when", JSON.stringify(column.showWhen));
+            }
+            rowEl.appendChild(sub);
+            return;
+          }
           blank[column.key] = column.type === "number" ? 0
             : column.type === "checkbox" ? false
             : (column.type === "select" || column.type === "radio")
@@ -1310,14 +1704,114 @@
     return wrap;
   }
 
-  function buildRowCell(column, value, groupName) {
+  /**
+   * A nested group: `bright:{hue:number=Hue|chroma:number=Chroma}=Bright`.
+   *
+   * The group's own label goes in the cell's label column, the same as any other; the parts sit in the
+   * control column, each captioned, at a number's own width. That is what the Colors frames draw for an
+   * anchor — one thing you set, two numbers you set it with — and it is why the config nests rather than
+   * carrying six flat keys with an annotation explaining which belong together.
+   *
+   * Each part's `data-row-field` is `group.part`, so `collectRows` can find it without two groups that
+   * both hold a `hue` colliding on whichever came first.
+   */
+  /**
+   * `oklch:OKLCH` → the value half, and the label half.
+   *
+   * **A column option has always been able to carry its own label** (`1.618:1.618 Golden ratio`), and a field
+   * option could not — the same spelling meant two different things depending on where in the annotation you
+   * wrote it. So `colorModel: "oklch"` with `@options: oklch:OKLCH|hsl:HSL` matched neither radio, nothing
+   * was checked, and the two sections gated on it with `@showWhen` were invisible. Nothing said so: an
+   * unchecked radio group is a legal thing for a form to show.
+   *
+   * Split here rather than in the parser, so `field.options` keeps the strings the block wrote and
+   * serialization round-trips untouched. A bare option is its own label, exactly as before — and no shipped
+   * script had a colon in a field-level option list, so nothing changes meaning.
+   */
+  function fieldOptionValue(option) {
+    var text = String(option);
+    var at = text.indexOf(":");
+    return at === -1 ? text : text.slice(0, at).trim();
+  }
+
+  function fieldOptionLabel(option) {
+    var text = String(option);
+    var at = text.indexOf(":");
+    return at === -1 ? text : text.slice(at + 1).trim();
+  }
+
+  function buildRowGroup(column, value, groupName) {
+    var wrap = document.createElement("span");
+    wrap.className = "config-ui-rows-group";
+    // Only a *field*-level group is addressable on its own: a group inside a `@rows` row is read by
+    // `collectRows` along with the rest of its row, and marking it here would have `getValues` collect it
+    // twice — once as a row and once as a top-level key that does not exist in the config.
+    if (!column.key && column.name) wrap.setAttribute("data-group-field", column.name);
+    var held = (value && typeof value === "object") ? value : {};
+
+    (column.columns || []).forEach(function (part) {
+      var partWrap = document.createElement("label");
+      partWrap.className = "config-ui-rows-group-part";
+
+      // **A part carries its own condition**, the same `{field=value}` a column does, on the part rather
+       // than the cell — because the two parts that swap are inside one group. HSL has no shared ladder, so a
+       // mode's Lightness *is* its ladder and Chroma is spelled Saturation; OKLCH shares the ladder, so
+       // Lightness is not a mode's to hold. Same anchor, different parts, decided by *Color model*.
+      if (part.showWhen) {
+        partWrap.setAttribute("data-row-show-when", JSON.stringify(part.showWhen));
+      }
+      if (part.disabledWhen) {
+        partWrap.setAttribute("data-row-disabled-when", JSON.stringify(part.disabledWhen));
+      }
+
+      var caption = document.createElement("span");
+      caption.className = "config-ui-rows-group-label";
+      caption.textContent = part.label;
+      attachInfo(caption, part, null);
+      partWrap.appendChild(caption);
+
+      // `key` on a column, `name` on a field — this builder serves both, which is the point of reusing it.
+      // Without the fallback the prefix was the literal string "undefined." and nothing could be read back.
+      var owner = column.key || column.name;
+      var control = buildRowCell(part, held[part.key], groupName + "-" + part.key, owner + ".");
+      partWrap.appendChild(control);
+
+      wrap.appendChild(partWrap);
+    });
+    return wrap;
+  }
+
+  function buildRowCell(column, value, groupName, keyPrefix) {
+    var fieldKey = (keyPrefix || "") + column.key;
+    if (column.type === "group") return buildRowGroup(column, value, groupName);
+    /**
+     * A mode picker in a row: the collection's own modes plus *New mode*.
+     *
+     * Three things have to line up or this control lists the right modes and saves nothing — which is the
+     * failure this panel has already produced twice. It is **built** here; it carries `data-row-field` so
+     * `collectRows` can find it (`buildModeControl` only sets `data-mode-field`, which the flat sweep reads
+     * and a row must not); and `readRowCellInto` knows to read it with `readModeControl` rather than as an
+     * input. `ui.html` populates every `[data-mode-field]` it finds, so the options arrive with no extra
+     * wiring.
+     */
+    if (column.type === "mode") {
+      var held = value == null ? "" : String(value);
+      var picker = buildModeControl({ name: fieldKey, collectionField: null }, held);
+      picker.setAttribute("data-row-field", fieldKey);
+      // **Seeded with the value it was given.** `buildModeControl` only pre-fills its select when it knows the
+      // collection, which a *column* never does — so a row whose config said `Granite` drew an empty dropdown,
+      // and reading the form back wrote that emptiness over the name. The real list replaces this the moment it
+      // arrives; until then the control shows what the config says, which is the only honest thing it can show.
+      if (held) populateModeControl(picker, [held], held, { collection: "" });
+      return picker;
+    }
     if (column.type === "list") {
       // `extras: [0, 1, 2]` is a list in a cell. Text on screen, an array in the config — a string
       // there would read as an array of one to `rampExtras` and quietly generate nothing.
       var list = document.createElement("input");
       list.type = "text";
       list.className = "config-ui-input config-ui-input--text";
-      list.setAttribute("data-row-field", column.key);
+      list.setAttribute("data-row-field", fieldKey);
       list.setAttribute("data-row-list", "true");
       list.value = p.listToText(value);
       return list;
@@ -1328,7 +1822,7 @@
       // a scale type on Desktop clears Mobile's.
       var group = document.createElement("span");
       group.className = "config-ui-radio-group";
-      group.setAttribute("data-row-field", column.key);
+      group.setAttribute("data-row-field", fieldKey);
       group.setAttribute("data-row-radio", "true");
       var options = column.options || [];
       var matched = false;
@@ -1356,7 +1850,7 @@
     if (column.type === "select") {
       var sel = document.createElement("select");
       sel.className = "config-ui-input config-ui-input--select";
-      sel.setAttribute("data-row-field", column.key);
+      sel.setAttribute("data-row-field", fieldKey);
       var choices = (column.options || []).slice();
       // **A value the list does not offer is added to the list, not replaced by the first entry.**
       // A `<select>` always shows something, so an unlisted value showed the first option *and* would be
@@ -1384,7 +1878,7 @@
       var cb = document.createElement("input");
       cb.type = "checkbox";
       cb.className = "config-ui-toggle";
-      cb.setAttribute("data-row-field", column.key);
+      cb.setAttribute("data-row-field", fieldKey);
       cb.checked = value === true;
       return cb;
     }
@@ -1395,7 +1889,11 @@
     // filled their column.
     input.className = "config-ui-input config-ui-input--" +
       (column.type === "number" ? "number" : "text");
-    input.setAttribute("data-row-field", column.key);
+    input.setAttribute("data-row-field", fieldKey);
+    // A column's own example. The empty-state frame is a full table of grey examples, and without them a
+    // numeric cell labelled *Chroma* gives a first-time reader nothing to go on — 0.012 and 12 are both
+    // plausible guesses and only one of them is a colour.
+    if (column.placeholder != null) input.placeholder = String(column.placeholder);
     input.value = value == null ? "" : String(value);
     return input;
   }
@@ -1425,9 +1923,20 @@
    * `unsupported` and left out of `getValues` rather than collected as `"[object Object]"`. This is
    * that rule for the inside of a row: the panel may only overwrite what it actually shows.
    */
-  function collectRows(wrap, field) {
+  function collectRows(wrap, field, base) {
     var out = [];
-    var existing = Array.isArray(field.value) ? field.value : [];
+    // **What a cell that wrote nothing falls back to.**
+    //
+    // A row is seeded with the values it already had, so a cell the form did not read — hidden by its own
+    // condition, or absent — keeps what the config says rather than being blanked. The source of "what it
+    // already had" matters: `field.value` is the schema the form was *built* from, and the form is only
+    // re-built on a projection. Every edit in between goes through the merge, which writes the block and
+    // deliberately does not re-project, so that value is frozen at load time.
+    //
+    // Left alone, hiding a cell restores the value it held when the panel opened. Editing a mode's Curve and
+    // then switching to OKLCH — which hides Curve — silently put `original` back over it. `base` lets the
+    // caller pass values read from the block as it is now, which is the only current answer there is.
+    var existing = Array.isArray(base) ? base : (Array.isArray(field.value) ? field.value : []);
     wrap.querySelectorAll(".config-ui-rows-item").forEach(function (rowEl, index) {
       var row = {};
       var was = existing[index];
@@ -1435,6 +1944,22 @@
         for (var key in was) row[key] = was[key];
       }
       (field.columns || []).forEach(function (column) {
+        // A group is read one level down, into an object of its own. Its parts carry a compound
+        // `data-row-field` (`bright.hue`) so the flat lookup below cannot mistake a part for a column —
+        // two groups both holding a `hue` would otherwise collide on the first one found.
+        if (column.type === "group") {
+          var was = row[column.key];
+          var nested = (was && typeof was === "object") ? was : {};
+          var collected = {};
+          for (var key in nested) collected[key] = nested[key];
+          (column.columns || []).forEach(function (part) {
+            var partEl = rowEl.querySelector('[data-row-field="' + column.key + "." + part.key + '"]');
+            if (!partEl) return;
+            readRowCellInto(collected, part, partEl);
+          });
+          row[column.key] = collected;
+          return;
+        }
         var el = rowEl.querySelector('[data-row-field="' + column.key + '"]');
         if (!el) return;
         // **A cell its condition hides does not write.** This is the same rule as the one above, one
@@ -1445,40 +1970,75 @@
         // default.
         var cell = typeof el.closest === "function" ? el.closest(".config-ui-rows-cell") : null;
         if (cell && cell.style.display === "none") return;
-        if (column.type === "radio") {
-          // Left alone when nothing is checked, rather than blanked. `buildRowCell` always checks
-          // something, so no-selection means the DOM is not what this code thinks it is — and keeping
-          // the value the config already had is the answer that cannot lose data.
-          var picked = el.querySelector("input:checked");
-          if (picked) row[column.key] = picked.value;
-        } else if (column.type === "list") {
-          row[column.key] = p.textToList(el.value);
-        } else if (column.type === "number") {
-          var n = parseFloat(el.value, 10);
-          row[column.key] = Number.isNaN(n) ? 0 : n;
-        } else if (column.type === "select" && allNumericOptions(column)) {
-          // A select over numbers reads back a number. A `<select>`'s value is always a string, so
-          // picking *1.25 Major third* wrote `ratio: "1.25"` — which `resolveModularRatio` answers
-          // with "unknown ratio" and an empty scale. The config also stops looking like the one that
-          // shipped, and this is a file people read.
-          var picked = parseFloat(el.value, 10);
-          row[column.key] = Number.isNaN(picked) ? el.value : picked;
-        } else if (column.type === "checkbox") {
-          row[column.key] = !!el.checked;
-        } else {
-          row[column.key] = el.value;
-        }
+        readRowCellInto(row, column, el);
       });
       out.push(row);
     });
     return out;
   }
 
+  /**
+   * One cell's value, typed, written into `target[column.key]`.
+   *
+   * Split out so a group's parts read back through exactly the same rules as a top-level column — a second
+   * copy of "a select over numbers reads back a number" would be the fifth place in this file where two
+   * implementations of one rule drifted.
+   */
+  function readRowCellInto(target, column, el) {
+    if (column.type === "mode") {
+      // Its own reader, because a picker's value is not `el.value`: choosing *New mode* means the answer is in
+      // the name input beside the select, and `readModeControl` is the one place that knows that.
+      //
+      // **An empty answer never overwrites a name.** The same rule the rest of this collector follows — the
+      // panel may only overwrite what it actually shows — and here it is load-bearing twice over: the mode list
+      // arrives a beat after render, and any form change in that window would otherwise blank every mode name
+      // in the block.
+      var picked = readModeControl(el);
+      if (picked) target[column.key] = picked;
+      return;
+    }
+    if (column.type === "radio") {
+      // Left alone when nothing is checked, rather than blanked. `buildRowCell` always checks
+      // something, so no-selection means the DOM is not what this code thinks it is — and keeping
+      // the value the config already had is the answer that cannot lose data.
+      var checked = el.querySelector("input:checked");
+      if (checked) target[column.key] = checked.value;
+    } else if (column.type === "list") {
+      target[column.key] = p.textToList(el.value);
+    } else if (column.type === "number") {
+      var n = parseFloat(el.value, 10);
+      target[column.key] = Number.isNaN(n) ? 0 : n;
+    } else if (column.type === "select" && allNumericOptions(column)) {
+      // A select over numbers reads back a number. A `<select>`'s value is always a string, so
+      // picking *1.25 Major third* wrote `ratio: "1.25"` — which `resolveModularRatio` answers
+      // with "unknown ratio" and an empty scale. The config also stops looking like the one that
+      // shipped, and this is a file people read.
+      var numeric = parseFloat(el.value, 10);
+      target[column.key] = Number.isNaN(numeric) ? el.value : numeric;
+    } else if (column.type === "checkbox") {
+      target[column.key] = !!el.checked;
+    } else {
+      target[column.key] = el.value;
+    }
+  }
+
   function attachListeners(container, schema, onChange) {
     if (!onChange || typeof onChange !== "function") return;
 
-    function getValues() {
+    /**
+     * `base` is a schema parsed from the block as it stands, used only for the values a control did not
+     * read. Without it those come from the form's build-time schema, which is stale the moment anything is
+     * written without re-projecting — see `collectRows`.
+     */
+    function getValues(base) {
       var vals = {};
+      function baseValueFor(name) {
+        var rows = base && base.rows ? base.rows : [];
+        for (var bi = 0; bi < rows.length; bi++) {
+          if (rows[bi].type === "field" && rows[bi].name === name) return rows[bi].value;
+        }
+        return null;
+      }
       container.querySelectorAll(".config-ui-multiselect[data-field]").forEach(function (box) {
         var n = box.getAttribute("data-field");
         if (!n) return;
@@ -1505,8 +2065,34 @@
         for (var i = 0; i < rows.length; i++) {
           if (rows[i].type === "field" && rows[i].name === n) { field = rows[i]; break; }
         }
-        if (field) vals[n] = collectRows(wrap, field);
+        if (field) vals[n] = collectRows(wrap, field, baseValueFor(n));
       });
+      // A field-level `@group:` keeps its parts under `data-row-field` — the same attribute a `@rows` cell
+      // uses, because it is the same builder — so the flat sweep below cannot see them. Collected here into
+      // the object the config holds, keyed by the group's own name.
+      //
+      // Worth the extra pass: without it the control rendered, accepted typing, and saved nothing. The form
+      // looked right and the block never changed, which is the failure mode this codebase keeps meeting.
+      container.querySelectorAll("[data-group-field]").forEach(function (wrap) {
+        var groupName = wrap.getAttribute("data-group-field");
+        if (!groupName) return;
+        var held = {};
+        var field = null;
+        var rows = schema && schema.rows ? schema.rows : [];
+        for (var gi = 0; gi < rows.length; gi++) {
+          if (rows[gi].type === "field" && rows[gi].name === groupName) { field = rows[gi]; break; }
+        }
+        if (!field) return;
+        if (field.value && typeof field.value === "object") {
+          for (var was in field.value) held[was] = field.value[was];
+        }
+        (field.columns || []).forEach(function (part) {
+          var el = wrap.querySelector('[data-row-field="' + groupName + "." + part.key + '"]');
+          if (el) readRowCellInto(held, part, el);
+        });
+        vals[groupName] = held;
+      });
+
       container.querySelectorAll("[data-field]").forEach(function (el) {
         var n = el.getAttribute("data-field");
         if (!n) return;
@@ -1556,31 +2142,130 @@
       // Row cells, judged inside their own row. `getValues` flattens the rows into one array per field,
       // which is the wrong shape for this — what a cell needs is the sibling cell beside it, so the
       // values are read from the DOM of that row and nowhere else.
-      container.querySelectorAll(".config-ui-rows-item").forEach(function (item) {
+      /** One control's value, however it is spelled. */
+      function readConditionValue(el) {
+        if (el.getAttribute("data-row-radio")) {
+          var on = el.querySelector("input:checked");
+          return on ? on.value : "";
+        }
+        return el.type === "checkbox" ? (el.checked ? "true" : "false") : el.value;
+      }
+
+      /** Every `[data-row-field]` under `root`, keyed as written and also by its last segment. */
+      function scopeUnder(root) {
         var own = {};
-        item.querySelectorAll("[data-row-field]").forEach(function (el) {
+        root.querySelectorAll("[data-row-field]").forEach(function (el) {
           var key = el.getAttribute("data-row-field");
           if (!key) return;
-          if (el.getAttribute("data-row-radio")) {
-            var on = el.querySelector("input:checked");
-            own[key] = on ? on.value : "";
-          } else {
-            own[key] = el.type === "checkbox" ? (el.checked ? "true" : "false") : el.value;
+          var value = readConditionValue(el);
+          own[key] = value;
+          var dot = key.lastIndexOf(".");
+          // **Also by short name, so a part can name its sibling.** Inside a group the controls are
+          // `lower.family` and `lower.easing`; a condition written on the Easing part says `family=sine`,
+          // because that is the sibling it is about. Without this it resolved to nothing and the part was
+          // hidden always — which is what stopped the two-segment curve controls being buildable.
+          if (dot !== -1) {
+            var short = key.slice(dot + 1);
+            if (!Object.prototype.hasOwnProperty.call(own, short)) own[short] = value;
           }
         });
-        item.querySelectorAll("[data-row-show-when]").forEach(function (cell) {
+        return own;
+      }
+
+      /**
+       * **Nearest scope wins: the group, then the row, then the form.**
+       *
+       * A part's condition is usually about its sibling part (Easing depends on Family). A cell's is usually
+       * about a sibling cell (a ratio depends on the scale type in that row). And some are about a setting
+       * above the whole table (*Color model*). One chain covers all three, closest first, so the specific
+       * case cannot be shadowed by a coincidental name higher up.
+       */
+      function applyConditions(root, scopes) {
+        root.querySelectorAll("[data-row-show-when]").forEach(function (el) {
+          if (el !== root && el.parentElement && el.parentElement.closest &&
+              el.parentElement.closest(".config-ui-rows-group") &&
+              !root.classList.contains("config-ui-rows-group")) {
+            return; // a group's parts are judged in the group's own pass
+          }
           var rules;
           try {
-            rules = JSON.parse(cell.getAttribute("data-row-show-when"));
+            rules = JSON.parse(el.getAttribute("data-row-show-when"));
           } catch (e) {
             return;
           }
           var show = true;
           for (var i = 0; i < rules.length; i++) {
-            if (rules[i].values.indexOf(showWhenValueStr(own[rules[i].field])) === -1) show = false;
+            var field = rules[i].field;
+            var seen;
+            var found = false;
+            for (var s = 0; s < scopes.length && !found; s++) {
+              if (scopes[s] && Object.prototype.hasOwnProperty.call(scopes[s], field)) {
+                seen = scopes[s][field];
+                found = true;
+              }
+            }
+            if (!found) seen = vals[field];
+            if (rules[i].values.indexOf(showWhenValueStr(seen)) === -1) show = false;
           }
-          cell.style.display = show ? "" : "none";
+          el.style.display = show ? "" : "none";
         });
+
+        // **The same rules, a different consequence.** `[…]` disables where `{…}` hides, so it runs through
+        // the same scope chain and cannot drift from it. The note lives with the state rather than beside it:
+        // one attribute, shown exactly while the disable applies.
+        root.querySelectorAll("[data-row-disabled-when]").forEach(function (el) {
+          if (el !== root && el.parentElement && el.parentElement.closest &&
+              el.parentElement.closest(".config-ui-rows-group") &&
+              !root.classList.contains("config-ui-rows-group")) {
+            return;
+          }
+          var rules;
+          try {
+            rules = JSON.parse(el.getAttribute("data-row-disabled-when"));
+          } catch (e) {
+            return;
+          }
+          var off = true;
+          for (var i = 0; i < rules.length; i++) {
+            var field = rules[i].field;
+            var seen;
+            var found = false;
+            for (var s = 0; s < scopes.length && !found; s++) {
+              if (scopes[s] && Object.prototype.hasOwnProperty.call(scopes[s], field)) {
+                seen = scopes[s][field];
+                found = true;
+              }
+            }
+            if (!found) seen = vals[field];
+            if (rules[i].values.indexOf(showWhenValueStr(seen)) === -1) off = false;
+          }
+          el.classList.toggle("is-disabled", off);
+          el.querySelectorAll("input, select, textarea").forEach(function (control) {
+            control.disabled = off;
+          });
+          var wanted = off ? (el.getAttribute("data-row-disabled-note") || "") : "";
+          var note = el.querySelector(":scope > .config-ui-field-note--disabled");
+          if (wanted && !note) {
+            note = document.createElement("div");
+            note.className = "config-ui-field-note config-ui-field-note--disabled";
+            el.appendChild(note);
+          }
+          if (note) {
+            note.textContent = wanted;
+            note.style.display = wanted ? "" : "none";
+          }
+        });
+      }
+
+      container.querySelectorAll(".config-ui-rows-item").forEach(function (item) {
+        applyConditions(item, [scopeUnder(item)]);
+      });
+
+      // Groups last and in their own scope, so a part sees its siblings before its row. Field-level groups
+      // live outside any row, which is why they were never swept at all.
+      container.querySelectorAll(".config-ui-rows-group").forEach(function (group) {
+        var row = group.closest ? group.closest(".config-ui-rows-item") : null;
+        applyConditions(group, [scopeUnder(group), row ? scopeUnder(row) : null]);
       });
 
       container.querySelectorAll("[data-show-when-field]").forEach(function (row) {
@@ -1690,7 +2375,6 @@
   return {
     buildForm: buildForm,
     buildField: buildField,
-    buildSection: buildSection,
     attachListeners: attachListeners,
     // The collection list is a backend round trip, so `ui.html` fills the picker when it arrives.
     populateCollectionControl: populateCollectionControl,
@@ -1705,5 +2389,10 @@
     // hangs it back on the chips after every redraw.
     populateChipsControl: populateChipsControl,
     readChipOp: readChipOp,
+    // The read-back for one `@rows` control. Published so a test can *run* it: every other renderer test
+    // here reads this file as source, which is how a function with an out-of-scope variable shipped and
+    // killed every form in the plugin. A nested group's read-back is exactly the kind of thing that looks
+    // right in the source and returns the first anchor's hue three times in practice.
+    collectRows: collectRows,
   };
 });

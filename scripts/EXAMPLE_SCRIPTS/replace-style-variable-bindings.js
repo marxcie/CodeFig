@@ -43,23 +43,26 @@
 
 // @UI_CONFIG_START
 var searchIn = ""; // @placeholder="V5/*"
-// Only styles whose name contains this (case-insensitive, `*` allowed). Empty = every local text, paint, and effect style.
+// Only styles whose name contains this, ignoring case, with `*` allowed. Empty means every local text,
+// paint and effect style.
 //
 var matchCase = false; // @label: Match case
 var useRegex = false; // @label: Use regular expression
-// Treat searchIn as a regular expression instead of literal text with `*` wildcards.
+// Reads **Search in** as a regular expression rather than plain text with `*` wildcards.
 //
 var sourceCollection = ""; // @options: variableCollections
-// Variables bound from this collection are replaced (skip “(all collections)” — pick a real collection).
+// Bindings pointing at this collection are the ones that move. Pick a real collection — *(all
+// collections)* does nothing here.
 //
 var targetCollection = ""; // @options: variableCollections
-// Same-named variables in this collection become the new bindings.
+// Each binding moves to the same-named variable in this collection.
 // ---
 var previewOnly = true; // @label: Preview only
-// **On by default.** Lists the bindings that would change and changes nothing. Untick and run again to apply.
+// **On by default.** Lists the bindings that would change and touches nothing. Untick and run again to apply.
 //
 var breakUnmatchedBindings = false;
-// If true: bindings from the source collection with **no** same-name variable in the target are **removed** (raw values stay). If false, those bindings are left as-is.
+// What to do when the target has no variable of that name. **On** removes the binding and leaves the
+// raw value behind; **off** leaves the binding pointing where it already does.
 // @UI_CONFIG_END
 
 /**

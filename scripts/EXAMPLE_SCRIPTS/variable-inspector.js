@@ -39,29 +39,33 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Configuration
-// Display and filter options for the Variable Inspector.
-
-// ## Display Options
-var onlyUsedVariables = true; // Show only variables used in selection/styles
-var groupByCollection = true; // Group variables by collection
-var showValuePreview = true; // Show actual variable values
-var maxNodesPreview = 5; // Max nodes in usage preview (rest: "Show all X nodes")
+// # The report
+var onlyUsedVariables = true; // @label: Only variables in use
+// Hides any variable that nothing in the selection, and no style, refers to.
+var groupByCollection = true; // @label: Group by collection
+var showValuePreview = true; // @label: Show each value
+// Prints the value a variable resolves to beside its name.
+var maxNodesPreview = 5; // @label: Usages shown
+// How many layers to name per variable before the report offers *Show all*.
 //
 // ---
 //
-// ## Variable Purpose Filters
-var typographicVariables = true; // Typography (fontSize, letterSpacing, etc.)
-var colorVariables = true; // Colors (fills, strokes)
-var dimensionVariables = true; // Dimensions & spacing
-var effectVariables = true; // Effects & opacity
-var otherVariables = true; // Other/miscellaneous
+// # Which variables to list
+var typographicVariables = true; // @label: Typography
+// Text size, letter spacing, line height and the rest of a text layer's numbers.
+var colorVariables = true; // @label: Color
+// Anything bound to a fill or a stroke.
+var dimensionVariables = true; // @label: Dimensions and spacing
+var effectVariables = true; // @label: Effects and opacity
+var otherVariables = true; // @label: Everything else
 //
 // ---
 //
-// ## Advanced
-var checkStyleUsage = true; // Check usage in text/paint/effect styles
-var showHealthScore = false; // Show variable health score (0-100)
+// # Advanced
+var checkStyleUsage = true; // @label: Include styles
+// Counts a variable as used when a text, paint or effect style refers to it, not only a layer.
+var showHealthScore = false; // @label: Health score
+// Rates the collection out of 100 on naming, duplication and unused tokens.
 // @UI_CONFIG_END
 
 // Variable Inspector

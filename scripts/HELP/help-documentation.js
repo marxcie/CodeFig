@@ -1,7 +1,5 @@
 // @Help & documentation
 // @DOC_START
-// # CodeFig – Help & documentation
-//
 // Your JavaScript Figma scripting environment (scripts are plain JS files).
 //
 // ## Documentation tab
@@ -73,45 +71,69 @@
 // - **Configuration UI** — this script's own settings tab is the live specimen shelf. Each control
 //   names the exact syntax under it, so a change can be asked for by pointing at the thing rather
 //   than describing it.
-// - **Here** — the values behind them: tokens, the two heading ladders, and what is deliberately not
+// - **Here** — the values behind them: tokens, the heading ladder, and what is deliberately not
 //   covered.
 //
 // There is also `artifacts/style-reference.html` in the repo, which loads the same `src/ui.css` in a
 // browser and **prints every computed size next to the specimen**. Font sizes cannot be measured
 // inside Figma, so that page is where a number gets checked rather than eyeballed.
 //
-// ### Two heading ladders, and they are not the same
+// ### One heading ladder
 //
-// The Documentation tab and a settings form style headings with **separate rules**. Same markdown,
-// different sizes. Check the one you mean to change.
+// The Documentation tab and a settings form render the same markdown through the same parser, so a
+// heading is **the same size in both**. There is one rule per level and one place to change it.
 //
-// | Source | Tag | Documentation tab | Configuration UI form |
+// | Source | Tag | Size | Notes |
 // |---|---|---|---|
-// | `// # Title` | `h1` | 20px, `--font-size-display` | 16px, `--font-size-title`, carries the 48px section gap |
-// | `// ## Title` | `h2` | 15px, `--font-size-headline` | 14px, `--font-size-subheadline`, half the section gap |
-// | `// ### Title` | `h3` | 14px, `--font-size-subheadline` | 12px, `--font-size-body`, semibold |
-// | any other comment line | `p` | 12px, `--font-size-body` | 12px, `--font-size-body` |
+// | `// # Title` | `h1` | 16px, `--font-size-title` | a **section**. Carries the 48px section gap |
+// | `// ## Title` | `h2` | 14px, `--font-size-subheadline` | a title inside a section. Half the gap |
+// | `// ### Title` | `h3` | 12px, `--font-size-body` | semibold; weight is what separates it from body copy |
+// | any other comment line | `p` | 12px, `--font-size-body` | |
 //
-// Rules: `.docs-rendered h1|h2|h3` for this tab, `.config-ui-form--rows .config-ui-row--heading
-// h1|h2|h3` for the form.
+// The rule names both surfaces: `.docs-rendered h1, h1.config-ui-heading`. A form's headings are **not**
+// inside `.docs-rendered` — the renderer builds `h1.config-ui-heading` directly — so a rule naming one
+// surface only is the shape of the bug this replaced. It is keyed on the **class** rather than on the
+// `.config-ui-row--heading` wrapper because a heading nested in an `@rows` block has no wrapper, and
+// keyed on the wrapper it fell through and had to restate its own size.
 //
-// The form's ladder is **even** — 16 / 14 / 12, two pixels a step, with weight rather than size
-// separating the bottom of it from body copy. The Documentation tab's is not, and it is the older of
-// the two: `--font-size-headline` (15px) now sits one pixel from `--font-size-title` and is used only
-// by the script title, this tab's `h2` and the InfoPanel header. Two sizes a pixel apart read as an
-// accident, so that is a live question rather than a decision.
+// **There is no `h1` at the top of a script's documentation, and none at the top of its config block.**
+// The document title in the editor header names the script, once, at 20px. Every block that used to
+// open by restating its own name had that line removed — most carried a *third* wording of it, so a
+// script could be called three things on one screen.
+//
+// Spacing is the one thing stated per surface, and not by choice: the Documentation tab is a block
+// container, where a heading's top margin **collapses** with the paragraph above it, so the gap is
+// written whole. A form is a flex column, where margins **add** to the row's own 12px, so it writes
+// the gap 12px short. Same 48px on screen, two arithmetics. If you change `--section-gap`, both follow.
+//
+// Two ladders shipped for months before this — 20/15/14 here against 16/14/12 in the form — which meant
+// every heading question had to be asked twice, and a rule written for the wrong surface validated,
+// shipped and changed nothing on screen. `tests/ui-css-shared-classes.test.js` now fails if a heading
+// size is set for one surface only.
 //
 // ### Type scale
 //
+// Five sizes. The document title is the only thing above 16px; everything below it is 16 to 12, two
+// pixels a step.
+//
 // | Token | Value | Used for |
 // |---|---|---|
-// | `--font-size-display` | 20px | Documentation `h1` only |
-// | `--font-size-title` | 16px | section titles in a settings form |
-// | `--font-size-headline` | 15px | the script title, Documentation `h2`, the InfoPanel header |
-// | `--font-size-subheadline` | 14px | sub-titles |
-// | `--font-size-body` | 12px | labels, inputs, paragraphs, table cells |
-// | `--font-size-helper` | 10px | the note under a field (`@helper:`), chip locks, notices |
-// | `--font-size-caption` | 10px | buttons, tags, status text |
+// | `--font-size-display` | 20px | the document title in the editor header — always present, one per script |
+// | `--font-size-title` | 16px | `h1`, a section on either surface. Also the InfoPanel header |
+// | `--font-size-subheadline` | 14px | `h2` |
+// | `--font-size-body` | 12px | `h3` (semibold), paragraphs, labels, inputs, tabs, table cells |
+// | `--font-size-small` | 10px | tooltips, state notes, captions, buttons, tags, status text |
+// | `--font-size-code` | 11px | **monospace only** |
+//
+// `--font-size-code` is deliberately not a step on the ladder: a mono face set at the body's 12px reads
+// larger than the prose beside it, so code steps down a single pixel. It is the only reason 11px exists.
+// It was in eight rules before this and was not a token, and half of those were not monospace at all —
+// those went to `--font-size-small` or to body.
+//
+// `--font-size-caption` and `--font-size-helper` are gone: they both held 10px and differed only in
+// which section of the sheet used them. One name, `--font-size-small`. `--font-size-headline` (15px) is
+// gone too — it sat one pixel from `--font-size-title`, which reads as an accident rather than a
+// decision, and its three users are now the 20px document title or the 16px section size.
 //
 // Weights: `--font-weight-normal` 400 (labels and body), `--font-weight-medium` 500,
 // `--font-weight-semibold` 600 (headings, buttons), `--font-weight-bold` 700.
@@ -137,8 +159,20 @@
 //
 // ### Radii
 //
-// `--radius-sm` 3px, `--radius-md` 6px (inputs, buttons), `--radius-lg` 12px, `--radius-full` for
-// pills.
+// Four, and **every corner in the plugin is one of them**.
+//
+// | Token | Value | Used for |
+// |---|---|---|
+// | `--radius-sm` | 3px | small inline marks: badges, tags, swatches, code spans, the progress bar |
+// | `--radius-md` | 6px | anything you can click or type in: inputs, buttons, chips, note boxes |
+// | `--radius-lg` | 12px | a panel |
+// | `--radius-full` | 9999px | pills, and a round knob |
+//
+// There were 24 hardcoded radii before this, spending 2, 3, 4, 6, 9, 10px and `50%` — so "the same
+// corner" was five different corners depending on which rule you landed in. They are folded into the
+// four above: 2 and 4 went to `sm`, the 4px on fields and note boxes to `md`, 10 to `lg`, and the 9px
+// toggle track and its `50%` knob to `full` (both were describing *fully round* in absolute units,
+// which stops being true the moment the control's height changes).
 //
 // ### Colours
 //
@@ -185,17 +219,24 @@
 // | `@textarea` | multi-line input |
 // | an array of names or numbers | one input holding a comma list; the config keeps the array |
 // | `@label: Text` | the label, instead of the prettified variable name |
-// | `@helper: Text` | a 10px note under the control, not under the row. **Last on the line:** a note runs to the end of it, so it can mention an `@annotation` without being cut in half |
+// | `@helper: Text` | what the control's ⓘ says. **Last on the line:** a note runs to the end of it, so it can mention an `@annotation` without being cut in half |
 // | `@showWhen: field=value` | the row appears only when that field holds one of those values |
+// | a comment line by itself | a paragraph, folded into the ⓘ of the control it sits against |
+// | `@prose` | on its own line: this block's paragraphs are its content — leave them on the page |
 // | `@collection` | collection picker: this file's collections, plus **New collection** |
 // | `@mode: field` | mode picker: the modes of the collection that `field` holds, plus **New mode**. Written bare it follows the block's only `@collection`. Changing that collection resets it — the modes on offer are the new collection's |
 // | `@collectionModes: Title` | the mode chips — a marker row of its own, reading names from the `modes` field |
 // | `@rows: key:type=Label\|…` | a table, one line per array entry |
 // | `@rows: …` + `@tabs` | the same array as one tab per entry, fields stacked and labelled |
+// | `@rows: …` + `@blocks` | every entry in full, one under the next, each titled from its `name` |
+// | `@group: key:type=Label\|…` | an **object** as one labelled row of captioned parts |
+// | `key:{…}=Label` inside `@rows` | the same group, nested as one column of a row |
+// | `#Heading` inside `@rows` | a heading between an entry's rows, one level below the block title |
 // | `key:(a\|b)` in a column | a dropdown in that cell. All-numeric options read back as numbers |
 // | `key:(1.25:1.25 Major third)` | the same, with the words for the value. A bare option is its own label |
 // | `key:radio(a:First\|b:Second)` | radio buttons in that cell instead of a dropdown |
-// | `key:type{other=value}` in a column | that column appears only while another column **in the same row** holds one of those values. A cell nobody can see writes nothing |
+// | `key:type{other=value}` in a column | that column appears only while another column **in the same row** holds one of those values, or — when no column is named that — the form field of that name. A cell nobody can see writes nothing |
+// | `key:type@placeholder="…"` in a column | a grey example inside that cell, the same annotation a field spells |
 // | `name-{1,10}` in a token list | a series: `name-1 … name-10`. `{10}` is short for it, `{6,1}` counts down, and `{01,10}` pads to the width you wrote |
 // | an object or array with no `@rows` | the form says it cannot hold it and points at Configuration code |
 //
@@ -233,6 +274,7 @@
 // is a reference rather than a setting — the script reads none of these values, and running it does
 // nothing to your document.
 // @UI_CONFIG_START
+// @prose
 // # Heading level 1
 // The level every panel uses for its section titles: `// # Heading level 1`. Renders as `h1`, and it
 // carries the 48px gap that separates one section from the next.
@@ -275,6 +317,16 @@ var modes = [
   { name: "Tablet", width: 834, columns: 8 },
   { name: "Mobile", width: 390, columns: 4 },
 ]; // @rows: name:text=Mode|width:number=Width|columns:number=Columns @tabs @label: Modes
+//
+// # One thing set by several numbers
+// `@group:` on an **object** — one labelled row, each part captioned at a number's own width. Use it when
+// the parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three
+// separate fields make you assemble that in your head. `@rows` cannot serve this, because that one needs an
+// array — it is a *repeatable* group.
+//
+// The same control appears nested inside `@rows`, written the same way, so an anchor in a mode block and a
+// shared ladder above it are the same shape rather than two lookalikes.
+var lightness = { bright: 98.5, middle: 62, dark: 18 }; // @group: bright:number=Bright|middle:number=Middle|dark:number=Dark @label: Lightness @helper: 0 to 100 in the UI, 0 to 1 in the data
 //
 // # A column that depends on its row
 // Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the

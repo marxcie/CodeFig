@@ -33,18 +33,22 @@
 // @UI_CONFIG_START
 // # Palettes
 var collections = []; // @options: variableCollections @multi
-// Check every collection that may contain matching COLOR tokens.
+// Tick every collection that might hold a matching colour token.
 // ---
 // # Loose matching
-var looseMatching = false;
-// Near-miss lint mode: binds closest token within tolerance (LAB ΔE).
+var looseMatching = false; // @label: Match near misses
+// Off, a colour has to match a token exactly. On, it binds to the closest token within the tolerance
+// below — useful for finding colours that were nearly right.
 //
 var matchTolerance = "standard"; // @options: conservative|standard|aggressive|custom @showWhen: looseMatching=true
+// How far a colour may sit from a token and still count, measured as LAB ΔE: conservative 2,
+// standard 4, aggressive 6. Below about 2 the eye cannot tell them apart.
 //
-var maxDeltaE = 4; // @showWhen: looseMatching=true @showWhen: matchTolerance=custom
+var maxDeltaE = 4; // @label: Custom tolerance (ΔE) @showWhen: looseMatching=true @showWhen: matchTolerance=custom
 //
-var verboseLogging = false;
-// Diagnostic console output (duplicates, near-ties, palette stats). Summary stays in the Info panel.
+var verboseLogging = false; // @label: Verbose console output
+// Duplicates, near-ties and palette statistics, in the console. The summary stays in the Info panel
+// either way.
 // @UI_CONFIG_END
 
 var MAX_ALPHA_DELTA = 0.08;

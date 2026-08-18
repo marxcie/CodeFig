@@ -188,30 +188,48 @@ test('the colour values the documentation states are the ones in ui.css', () => 
   assert.deepEqual(wrong, [], wrong.join('\n'));
 });
 
-test('the two heading ladders are described as they are actually styled', () => {
-  // The bug that prompted the reference. The docs tab and the config form style headings with
-  // separate rules, and the reference has to keep them apart — this asserts it says the right thing
-  // about each, from the CSS rather than from memory.
-  const docsH1 = CSS.match(/\.docs-rendered h1 \{[^}]*font-size: var\((--[a-z-]+)\)/)[1];
-  const formH1 = CSS.match(
-    /\.config-ui-form--rows \.config-ui-row--heading h1[\s\S]{0,120}?font-size: var\((--[a-z-]+)\)/
-  )[1];
-  assert.notEqual(docsH1, formH1,
-    'the ladders agree now — the reference table needs rewriting, not this test deleting');
+test('the one heading ladder is described as it is actually styled', () => {
+  // The bug that prompted the reference: the docs tab and the config form styled the same markdown
+  // with separate rules, and the reference had to keep two ladders apart. They are one ladder now, so
+  // this asserts the *agreement* — read off the CSS rather than from memory, in case a future edit
+  // splits them again and updates only the prose.
+  //
+  // The shared rule names both surfaces in one selector list, which is what makes a single match here
+  // sufficient: there is no second place a heading size can come from.
+  const ladder = ['h1', 'h2', 'h3'].map((tag) => {
+    const rule = CSS.match(new RegExp(
+      '\\.docs-rendered ' + tag + ',\\s*\\n\\s*' + tag +
+      '\\.config-ui-heading \\{[^}]*font-size: var\\((--[a-z-]+)\\)'
+    ));
+    assert.ok(rule,
+      tag + ' has no shared ladder rule — the Documentation tab and the config form have drifted ' +
+      'apart again, and the reference table needs rewriting rather than this test deleting');
+    return { tag, token: rule[1] };
+  });
+
+  // Distinct sizes, or it is not a ladder.
+  const tokens = ladder.map((l) => l.token);
+  assert.equal(new Set(tokens).size, tokens.length, 'two levels share a token: ' + tokens.join(', '));
 
   const doc = docBlock();
-  // A **table row**, not the first line that happens to mention the syntax — the paragraph explaining
-  // why this table exists mentions it too, and matched first.
-  const row = doc.split('\n').find(
-    (l) => /^\/\/\s*\|/.test(l) && l.includes('`// # Title`') && l.includes('`h1`')
-  );
-  assert.ok(row, 'the heading ladder table has no `// # Title` row');
-  assert.ok(row.includes(docsH1), 'the row does not name the docs tab token ' + docsH1);
-  assert.ok(row.includes(formH1), 'the row does not name the config form token ' + formH1);
+  // **Table rows**, not the first line that happens to mention the syntax — the paragraph explaining
+  // why the table exists mentions it too, and matched first.
+  const syntax = { h1: '`// # Title`', h2: '`// ## Title`', h3: '`// ### Title`' };
+  ladder.forEach(({ tag, token }) => {
+    const row = doc.split('\n').find(
+      (l) => /^\/\/\s*\|/.test(l) && l.includes(syntax[tag]) && l.includes('`' + tag + '`')
+    );
+    assert.ok(row, 'the heading ladder table has no ' + syntax[tag] + ' row');
+    assert.ok(row.includes(token),
+      'the ' + tag + ' row does not name the token the CSS uses, ' + token + ': ' + row.trim());
+  });
 
-  // And it says which rule owns which, because that is the sentence that was missing.
-  assert.match(doc, /\.docs-rendered h1\|h2\|h3/);
-  assert.match(doc, /\.config-ui-form--rows \.config-ui-row--heading\s*\n?\/\/ h1\|h2\|h3/);
+  // And it names the shared rule, because "which rule owns this" is the sentence that was missing.
+  assert.match(doc, /`\.docs-rendered h1, h1\.config-ui-heading`/);
+
+  // The document title is the one size above the ladder, and the reference has to say so — it is why
+  // a script's DOC and config blocks no longer open with their own name.
+  assert.match(doc, /--font-size-display[^\n]*document title/);
 });
 
 test('the committed HTML page is not stale', () => {

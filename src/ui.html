@@ -2642,6 +2642,20 @@
       }
 
       /**
+       * `A`, `A and B`, `A, B and C` — a list a person reads rather than one a loop produced.
+       *
+       * `join(' and ')` was fine while every note named one or two modes and wrong the moment a
+       * collection had three: *"Desktop and Pad and Mobile had no settings here"*, which is the sort of
+       * sentence that makes the rest of a panel look unfinished.
+       */
+      function nameList(names) {
+        var list = (names || []).filter(function (name) { return name; });
+        if (list.length === 0) return '';
+        if (list.length === 1) return String(list[0]);
+        return list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
+      }
+
+      /**
        * What the panel added to itself, in one line.
        *
        * Said out loud because it is a write nobody asked for, and because the numbers in a new block are
@@ -2655,7 +2669,7 @@
         var where = fileModes.collection || 'this collection';
         var parts = [where + ' has ' + fileModes.modes.length + ' modes.'];
         if (added.length) {
-          parts.push(added.join(' and ') + ' had no settings here, so ' +
+          parts.push(nameList(added) + ' had no settings here, so ' +
             (added.length === 1 ? 'a block was' : 'blocks were') +
             ' added from the nearest mode — the values are a starting point, not this file’s.');
         }
@@ -2663,7 +2677,7 @@
         // one thing this area has repeatedly got wrong. Saying which mode it was is also the only way
         // someone can tell residue from a config they pasted for a different collection.
         if (removed.length) {
-          parts.push(removed.join(' and ') +
+          parts.push(nameList(removed) +
             (removed.length === 1 ? ' is not a mode' : ' are not modes') + ' of it, so ' +
             (removed.length === 1 ? 'that block was' : 'those blocks were') +
             ' removed — nothing is created for a mode this collection does not have.');
@@ -2779,7 +2793,7 @@
         if (candidates.length > 1) {
           setAutoImportNote('No ' + configPreviewDomainLabel() + ' set under this group. This ' +
             'collection has one under ' +
-            candidates.map(function (c) { return c.group || '(no group)'; }).join(' and ') +
+            nameList(candidates.map(function (c) { return c.group || '(no group)'; })) +
             ' — set Group to the one you want.');
           return true;
         }
