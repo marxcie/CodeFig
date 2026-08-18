@@ -1,6 +1,5 @@
 // Check style and variable bindings
 // @DOC_START
-// # Check style and variable bindings
 // Audits the current selection (including descendants) for style and variable bindings that are not available in this file.
 //
 // ## Overview

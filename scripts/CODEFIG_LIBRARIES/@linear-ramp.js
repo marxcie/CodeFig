@@ -1,6 +1,5 @@
 // @Linear Ramp
 // @DOC_START
-// # @Linear Ramp
 // One generator behind **Spacing** and **Corner radius**, which were thirty near-identical
 // functions apart. Both are now thin wrappers over this, differing only in a **ramp spec**.
 //

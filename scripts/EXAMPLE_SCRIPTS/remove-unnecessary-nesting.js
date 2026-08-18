@@ -1,6 +1,5 @@
 // Remove unnecessary nesting
 // @DOC_START
-// # Remove unnecessary nesting
 // Removes or merges nesting containers (frames, auto layouts) that have no effect on their children.
 //
 // ## Overview
@@ -17,7 +16,6 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Remove unnecessary nesting
 var normalize = false; // @label: Normalize (merge padding + gap when safe)
 var recursive = true; // @label: Process descendants
 // @UI_CONFIG_END

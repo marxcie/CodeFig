@@ -1,6 +1,5 @@
 // @Test Harness
 // @DOC_START
-// # @Test Harness
 // Minimal test runner for specs that must exercise the **real** Figma API.
 //
 // ## Overview

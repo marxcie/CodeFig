@@ -1,6 +1,5 @@
 // Match colors to collection variables
 // @DOC_START
-// # Match colors to collection variables
 // Recursively walks the selection and binds **raw** paint colors (fills, strokes, gradient stops, drop/inner shadows, and per-span text fills) to **COLOR** variables from one or more collections.
 //
 // ## Matching modes

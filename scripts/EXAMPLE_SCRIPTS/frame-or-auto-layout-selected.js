@@ -1,6 +1,5 @@
 // Frame or auto layout selected
 // @DOC_START
-// # Frame or auto layout selected
 // Wrap selection in frame or auto-layout frame, unwrap such frames, or remove auto layout from frames.
 //
 // ## Overview
@@ -22,7 +21,6 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Frame or auto layout selected
 // Action and scope.
 
 var wrapperType = 'frame'; // @options: frame|autoLayout

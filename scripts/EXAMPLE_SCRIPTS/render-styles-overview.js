@@ -1,6 +1,5 @@
 // Render styles overview
 // @DOC_START
-// # Render styles overview
 // Renders **local** text, paint, and effect styles as a structured overview. **All auto-layout frames hug contents**. Path logic: **one or two** segments (`Style` or `Group / Name` such as `🚧 V6/3xs`) → **vertical** stack, one tile per row (no column strip). **Three or more** segments (`…/…/Weight`) → **last** segment is the **column** (e.g. **Normal** | **Bold**): matching endings stack **vertically**; **one horizontal** `… · columns` frame holds those columns **side by side** (weight order when names match a known list, else file order). Optional `renderStylesOverviewMinColumnWidth` sets a minimum width on each column frame. **Fills** on style cards + **root** only; **corner radius** only on filled layers. Inner group frames use **no padding**. Typography preview: **previewText** (Config textarea), or **`RENDER_TEXT_PREVIEW_SAMPLE`** if empty; line breaks from the field become **`\u2028`** (soft) in Figma.
 //
 // - **Text styles:** **previewText** (or fallback) as multiline sample + **full style name** caption (applied text style). Left-aligned, hug.
@@ -41,7 +40,6 @@ if (typeof getAllStyles !== "function") {
 }
 
 // @UI_CONFIG_START
-// # Render styles
 var styleGroup = ""; // @placeholder="Text styles"
 var previewText = "Sphinx of black quartz,\njudge my vow."; // @textarea @placeholder="Preview for text styles — Enter = soft line break"
 // @UI_CONFIG_END

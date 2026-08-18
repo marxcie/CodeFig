@@ -1,6 +1,5 @@
 // Duplicate styles collection
 // @DOC_START
-// # Duplicate styles collection
 // Duplicates every **local** style under a source path into a target path, preserving subfolders (`V1 / 3xl / SemiBold` → `V2 / 3xl / SemiBold`).
 //
 // ## Overview
@@ -40,7 +39,6 @@ if (typeof getAllStyles !== "function") {
 }
 
 // @UI_CONFIG_START
-// # Duplicate style group
 // Path prefix (segments separated by /). All local styles under the source path are copied to the target path.
 var sourceStyleGroup = ""; // @placeholder="V1"
 var targetStyleGroup = ""; // @placeholder="V2"

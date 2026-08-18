@@ -1,6 +1,5 @@
 // @Rename Preview
 // @DOC_START
-// # @Rename Preview
 // Show what a find/replace **would** do before it does it, like Figma's Rename Layers.
 //
 // ## Overview

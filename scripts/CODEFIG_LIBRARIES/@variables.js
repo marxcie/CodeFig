@@ -1,6 +1,5 @@
 // @Variables
 // @DOC_START
-// # @Variables
 // Functions for Figma variables, collections, and modes.
 //
 // ## Overview

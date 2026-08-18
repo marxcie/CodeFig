@@ -1,7 +1,5 @@
 // Select by styles or variables
 // @DOC_START
-// # Select by styles or variables
-//
 // Selects elements that use styles or variables matching a search term. Handles partial matches (e.g. "Regular" matches Text/5xl/Regular, Text/6xl/Regular).
 //
 // ## Features
@@ -31,7 +29,6 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Select by styles or variables
 var searchFor = ""; // @placeholder="Text/*/Regular"
 // Partial style or variable name (e.g. "Regular", "Text/5xl", "Text/*/Bold")
 //

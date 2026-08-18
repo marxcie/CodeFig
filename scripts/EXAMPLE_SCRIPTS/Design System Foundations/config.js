@@ -1,6 +1,5 @@
 // SCRIPT_NAME: Foundation config
 // @DOC_START
-// # Foundation config
 // Move a Design System Foundations config between files: copy it, park it on canvas, read it
 // back. It never generates variables — it reads what a file already has and writes the viewport
 // registry, nothing else.

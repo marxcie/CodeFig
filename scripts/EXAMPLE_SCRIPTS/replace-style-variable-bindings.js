@@ -1,6 +1,5 @@
 // Replace style variable bindings
 // @DOC_START
-// # Replace style variable bindings
 // Rebinds **variables on style definitions** (not on layers). Only styles whose name **partially matches** `searchIn` are processed (e.g. `V5` matches `V5 / Text / 3xs / SemiBold`). Bindings that use variables from **Source collection** are swapped to the **same-named variable** in **Target collection** (types must match).
 //
 // ## Overview
@@ -43,7 +42,6 @@
 @import { displayResults } from "@InfoPanel"
 
 // @UI_CONFIG_START
-// # Replace style variable bindings
 var searchIn = ""; // @placeholder="V5/*"
 // Only styles whose name contains this (case-insensitive, `*` allowed). Empty = every local text, paint, and effect style.
 //

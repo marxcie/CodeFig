@@ -1,6 +1,5 @@
 // Detach styles & variables
 // @DOC_START
-// # Detach styles & variables
 // Removes style and variable bindings from selected nodes (and optionally their children).
 //
 // ## Overview
@@ -16,7 +15,6 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Detach styles & variables
 var recursive = true;
 // ---
 // ## Styles

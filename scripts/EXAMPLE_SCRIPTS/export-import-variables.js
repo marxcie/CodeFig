@@ -1,6 +1,5 @@
 // Export/import variables
 // @DOC_START
-// # Export/import variables
 // Copy **local** variable collections between files as JSON.
 //
 // ## Export
@@ -22,7 +21,6 @@
 @import { finishCodefigRunProgress } from "@Core Library"
 
 // @UI_CONFIG_START
-// # Export/import variables
 var mode = "Export"; // @options: Export|Import @radio
 // ---
 // # Export @showWhen: mode=Export

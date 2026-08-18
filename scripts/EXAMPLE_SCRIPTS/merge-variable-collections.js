@@ -1,6 +1,5 @@
 // Merge variable collections
 // @DOC_START
-// # Merge variable collections
 // Moves every variable from a source collection into a target collection under a group folder named like the source collection. Optional lines map source modes to target modes; when there are no lines, the first source mode’s value is copied into every target mode.
 //
 // ## Overview
@@ -19,7 +18,6 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Merge variable collections
 // Source: emptied by merge. Target: receives a group named like the source collection.
 var sourceCollection = ''; // @options: localVariableCollections
 var collectionToMergeTo = ''; // @options: localVariableCollections

@@ -1,6 +1,5 @@
 // Text to styles
 // @DOC_START
-// # Text to styles
 // Creates local text styles from selected text nodes and keeps variable bindings.
 //
 // ## Overview

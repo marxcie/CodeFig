@@ -1,6 +1,5 @@
 // Copy simple variables JSON
 // @DOC_START
-// # Copy simple variables JSON
 // Export selected local variable collections as compact JSON.
 //
 // ## Overview
@@ -30,7 +29,6 @@
 @import { finishCodefigRunProgress } from "@Core Library"
 
 // @UI_CONFIG_START
-// # Copy simple variables JSON
 // Choose local collections, then optionally limit export to one or more mode names.
 var collections = []; // @options: localVariableCollections @multi
 var modeNames = ""; // @placeholder="Light, Dark"

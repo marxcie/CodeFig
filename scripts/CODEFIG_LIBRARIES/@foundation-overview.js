@@ -1,6 +1,5 @@
 // @Foundation overview
 // @DOC_START
-// # @Foundation overview
 // Shared overview for **Design System Foundations** when `generateOverview` is true.
 //
 // **Layout:** One page-level frame **`Design System Foundations`** (vertical auto layout) contains up to four sections (same order as the reference sheet):

@@ -1,6 +1,5 @@
 // Replace styles
 // @DOC_START
-// # Replace styles
 // Replaces style bindings on nodes by matching style names to patterns (rebinds nodes to a different style; does not rename style definitions).
 //
 // ## Overview
@@ -67,7 +66,6 @@
 // ========================================
 
 // @UI_CONFIG_START
-// # Replace styles
 var searchIn = ""; // @placeholder="color/*"
 // Optional, only rebind when current style name contains this (e.g. "color/", "Typography/")
 // ## Important

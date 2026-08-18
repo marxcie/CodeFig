@@ -1,7 +1,5 @@
 // Relink local component instances
 // @DOC_START
-// # Relink local component instances
-//
 // **Problem:** After copy-paste between files, instances can stay bound to *different* local component definitions that share the same name (e.g. `Button/Primary`). Swapping by name in the UI does not fix stray ids when the name already matches.
 //
 // **Approach:** Group **local** components by `name`. When several definitions share one name, pick a **canonical** component (the id with the **highest usage count** in the chosen scope). Walk instances in that same scope and swap any instance whose main component id is not the canonical one for that name. When each name appears only once locally, still swap stray ids to that local component, including remote → same-named local.
@@ -15,7 +13,6 @@
 @import { traverseNodes } from "@Core Library"
 
 // @UI_CONFIG_START
-// # Remap local component instances
 var scope = "Selection"; // @options: Selection|This page|All pages @radio
 // @UI_CONFIG_END
 

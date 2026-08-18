@@ -1,6 +1,5 @@
 // @InfoPanel
 // @DOC_START
-// # @InfoPanel
 // Display script results in the plugin InfoPanel with grouping and filtering.
 //
 // ## Overview

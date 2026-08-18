@@ -1,6 +1,5 @@
 // Replace variables
 // @DOC_START
-// # Replace variables
 // Replaces variable bindings on layers and/or in the **variables table**: choose scope, source/target collection (dropdowns), and find/replace on variable path (groups + variable name). Rebinds to a different variable; does not rename variable definitions.
 //
 // **Style vs native:** On layers, bindings that come from an applied **text**, **color (fill)**, **stroke**, or **effect** style are **not** replaced—only **native** bindings on the layer are updated.
@@ -67,7 +66,6 @@
 // ========================================
 
 // @UI_CONFIG_START
-// # Replace variables
 var rebindScope = "selection"; // @options: selection|variablesCollection|both @radio
 //
 var sourceCollection = ""; // @options: variableCollections

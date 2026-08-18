@@ -1,6 +1,5 @@
 // @CodeFigUI
 // @DOC_START
-// # CodeFigUI
 // Build and send native UI (toggles, inputs, sections) to the plugin so it can be shown in real time.
 //
 // **Nomenclature:** **CodeFigUI** is this feature (the library and the form rendered in the Config tab). The **@UI_CONFIG** block is the section in your script: wrap config variables between **// @UI_CONFIG_START** and **// @UI_CONFIG_END**. So: use “CodeFigUI” when referring to the feature; use “@UI_CONFIG” when referring to the config block markers.

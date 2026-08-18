@@ -1,6 +1,5 @@
 // Scale or resize elements
 // @DOC_START
-// # Scale or resize elements
 // **Scale** uses `rescale` (like the Scale tool). **Resize** uses constraint-aware `resize` (like dragging frame handles).
 //
 // ## Overview
@@ -9,7 +8,6 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Scale or resize
 var scaleOrResize = "scale"; // @options: scale|resize @radio
 // ## Scale @showWhen: scaleOrResize=scale
 var scaleMethod = "factor"; // @options: factor|width|height @radio @showWhen: scaleOrResize=scale

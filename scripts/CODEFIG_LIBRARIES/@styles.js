@@ -1,6 +1,5 @@
 // @Styles
 // @DOC_START
-// # @Styles
 // Style finding, analysis, replacement, and operations.
 //
 // ## Overview

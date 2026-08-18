@@ -1,7 +1,5 @@
 // Variable inspector (WIP)
 // @DOC_START
-// # Variable inspector (WIP)
-// 
 // Comprehensive variable analysis tool showing all variables with their values, health status, and usage in your selection and styles.
 //
 // ## Features

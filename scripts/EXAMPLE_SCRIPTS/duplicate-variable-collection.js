@@ -1,6 +1,5 @@
 // Duplicate variable collection
 // @DOC_START
-// # Duplicate variable collection
 // Clones a local variable collection (modes, variables, values, descriptions, scopes).
 //
 // ## Overview
@@ -18,7 +17,6 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Duplicate variable collection
 // Source collection (choose from existing). New name for the copy.
 var sourceCollectionName = 'website V3'; // @options: localVariableCollections
 var newCollectionName = ''; // @placeholder="website V4"

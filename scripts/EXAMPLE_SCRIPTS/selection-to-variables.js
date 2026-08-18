@@ -1,6 +1,5 @@
 // Selection to variables
 // @DOC_START
-// # Selection to variables
 // Recursively walks the selection and creates or updates variables from layer names and values.
 //
 // ## Collection
@@ -38,7 +37,6 @@
 @import { displayResults, createSelectableResult } from "@InfoPanel"
 
 // @UI_CONFIG_START
-// # Selection to variables
 // Where the variables go. Pick a collection in this file, or choose "New collection" and type a
 // name — a name that is not in this file is created on Run.
 var targetCollection = ""; // @collection @label: Collection

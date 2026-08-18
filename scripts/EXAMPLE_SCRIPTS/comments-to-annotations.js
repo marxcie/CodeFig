@@ -1,6 +1,5 @@
 // Comments to annotations
 // @DOC_START
-// # Comments to annotations
 // Converts file comments into Figma annotations and optional invisible anchor frames.
 //
 // ## Overview
@@ -20,7 +19,6 @@
 // ============================================================================
 
 // @UI_CONFIG_START
-// # Comments to Annotations
 
 var tokenStorageKey = ""; // @placeholder="figd_... or figma_personal_access_token"
 // Paste your Personal Access Token (figd_...) here, or a storage key name if you've already saved a token.

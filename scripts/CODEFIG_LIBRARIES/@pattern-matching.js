@@ -1,6 +1,5 @@
 // @Pattern Matching
 // @DOC_START
-// # @Pattern Matching
 // Pattern matching and wildcard processing for names and collections.
 //
 // ## Overview

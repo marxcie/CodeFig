@@ -1,6 +1,5 @@
 // Rename styles
 // @DOC_START
-// # Rename styles
 // Rename local styles (paint, text, effect, grid) by search/replace patterns.
 //
 // ## Overview
@@ -66,7 +65,6 @@
 // ========================================
 
 // @UI_CONFIG_START
-// # Batch rename styles
 var searchIn = ""; // @placeholder="text/*"
 // Optional, narrow to styles whose name contains this (e.g. "color/", "V4/*/Primary")
 //

@@ -1,6 +1,5 @@
 // Stack or flatten color scale
 // @DOC_START
-// # Stack or flatten color scale
 // Converts a horizontal color ramp into a top-left nested stack, or the reverse. Uses **layer order** only (not fill color).
 //
 // ## Vertical stack (`horizontalScale` = false)
@@ -11,7 +10,6 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # Color scale layout
 var startingSize = 250;
 var horizontalScale = false;
 var increment = 50; // @showWhen: horizontalScale=false

@@ -1,6 +1,5 @@
 // @Replacement Engine
 // @DOC_START
-// # @Replacement Engine
 // Find-and-replace with planning, execution, and reporting.
 //
 // ## Overview

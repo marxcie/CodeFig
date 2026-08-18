@@ -1,6 +1,5 @@
 // @Type Scale
 // @DOC_START
-// # Type Scale
 // The typography ramp as the panel writes it: one scale per mode, plus the line height and tracking
 // that travel with a font size. Also the Overview table and the specimen the Typography panel draws.
 //

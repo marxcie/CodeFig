@@ -1,6 +1,5 @@
 // @Scale Models
 // @DOC_START
-// # @Scale Models
 // Turns a description of a scale into a sequence of numbers. That is the whole boundary: no
 // viewports, no rounding, no variables, no Figma. Two consumers by design — `@Linear Ramp` for
 // spacing and corner radius, and typography — because the same four models are specified for

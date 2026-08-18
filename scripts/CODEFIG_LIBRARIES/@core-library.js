@@ -1,6 +1,5 @@
 // @Core Library
 // @DOC_START
-// # @Core Library
 // Reusable Figma operations and utilities for nodes, styles, patterns, memory, and colors.
 //
 // ## Overview

@@ -1,6 +1,5 @@
 // Rename variables
 // @DOC_START
-// # Rename variables
 // Rename variables using the same pattern as batch-rename-styles: searchIn = scope, searchFor/replaceWith = find/replace in variable name.
 //
 // ## Overview
@@ -74,7 +73,6 @@
 // ============================================================================
 
 // @UI_CONFIG_START
-// # Batch rename variables
 var searchIn = ""; // @placeholder="Typography/Body"
 // Optional scope: collection, group, or path (e.g. "Typography/", "Typography/Body", "Color/*/Accent")
 //

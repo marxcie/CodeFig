@@ -1,6 +1,5 @@
 // @Math Helpers
 // @DOC_START
-// # @Math Helpers
 // Math utilities for calculations, interpolations, and number operations.
 //
 // ## Overview
