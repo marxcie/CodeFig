@@ -398,15 +398,114 @@ test('a renamed chip keeps its position, because the match is by id first', () =
   assert.equal(out.changed, false);
 });
 
-test('a mode the file does not have follows the ones it does, and is never dropped', () => {
-  // A pasted config, or a mode added and not yet run. It is not evidence of an order, so it does not
-  // set one — but losing it would be the loss class this whole area exists to avoid.
+test('a mode you asked for with + follows the file\'s modes and keeps its place', () => {
+  // A mode added and not yet run. It is not evidence of an order, so it does not set one — and losing
+  // it would be the loss class this whole area exists to avoid. What makes it survive is the claim:
+  // `addedNames` is the record that someone typed it.
   const file = [{ modeId: '1', name: 'Desktop' }, { modeId: '2', name: 'Mobile' }];
   const out = P.alignModesToFile(
-    [{ name: 'Watch' }, { name: 'Mobile' }, { name: 'Desktop' }], [null, '2', '1'], file
+    [{ name: 'Watch' }, { name: 'Mobile' }, { name: 'Desktop' }], [null, '2', '1'], file,
+    { addedNames: ['Watch'] }
   );
   assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Mobile', 'Watch']);
-  assert.equal(out.ids[2], null);
+  assert.equal(out.ids[2], null, 'and it is still not a mode of this file');
+  assert.deepEqual(out.dropped, []);
+});
+
+test('a mode block the collection has no mode for is dropped, and named', () => {
+  // Márton, in `codefig-test`: the collection's modes are Desktop / Pad / Mobile, the shipped Spacing
+  // block ships desktop / tablet / mobile, and the panel showed four tabs — the last of them `tablet`,
+  // a mode the file does not have. Worse than cosmetic: `setupModes` takes the config's mode list
+  // literally, so a run *created* a `Tablet` mode nobody asked for. The collection is the authority on
+  // which modes exist, so residue goes; it is named, because a removal nobody can see is the failure
+  // this area keeps having.
+  const file = [
+    { modeId: '12:0', name: 'Desktop' }, { modeId: '13:2', name: 'Pad' },
+    { modeId: '13:3', name: 'Mobile' },
+  ];
+  const entries = [{ name: 'desktop', base: 4 }, { name: 'tablet', base: 3 }, { name: 'mobile', base: 2 }];
+  const out = P.alignModesToFile(entries, P.matchModeIds(entries, file), file);
+
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Pad', 'Mobile']);
+  assert.deepEqual(out.dropped, ['tablet']);
+  assert.deepEqual(out.inserted, ['Pad'], 'and the mode it does have gained a block');
+  assert.deepEqual(out.ids, ['12:0', '13:2', '13:3'], 'every entry is a real mode of the file');
+  assert.equal(out.changed, true);
+
+  // The same list with the claim attached keeps it — which is what makes this a rule about intent
+  // rather than about names.
+  const claimed = P.alignModesToFile(entries, P.matchModeIds(entries, file), file,
+    { addedNames: ['tablet'] });
+  assert.deepEqual(claimed.entries.map((e) => e.name), ['Desktop', 'Pad', 'Mobile', 'tablet']);
+  assert.deepEqual(claimed.dropped, []);
+
+  assert.equal(P.alignModesToFile(out.entries, out.ids, file).changed, false, 'and it settles');
+});
+
+test('an entry still linked to a mode of this file is never dropped', () => {
+  // The narrow half of the rule. `Pad` was renamed in the panel and the file still calls it `Tablet`,
+  // so it matches by id — but suppose the file's list no longer carries that id at all: the entry keeps
+  // its `modeId`, so it is a statement about a real mode rather than residue, and dropping it would
+  // throw away the link a run needs to rename rather than orphan.
+  const file = [{ modeId: '1', name: 'Desktop' }];
+  const out = P.alignModesToFile(
+    [{ name: 'Desktop' }, { name: 'Pad' }], ['1', '9'], file
+  );
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Pad']);
+  assert.deepEqual(out.dropped, [], 'an id is a link, and a link is not residue');
+});
+
+test('no shipped config block proposes a viewport system of its own', () => {
+  // `desktop / tablet / mobile` were an example of one Figma file. Shipping them in four scripts made
+  // them the plugin\'s opinion about every file — and because mode setup takes a config\'s mode list
+  // literally, running any of the four on a new collection *created* those three modes. Márton:
+  // "never something I meant to be built into the plugin."
+  //
+  // One starter mode instead, named `Value` — what Figma\'s variables panel shows for a single-mode
+  // collection. Not zero: a collection cannot exist without at least one mode, so one is the floor.
+  // Point a panel at a collection and its real modes replace this.
+  const DSF = path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations');
+  ['grid.js', 'spacing.js', 'typography.js', 'corner-radius.js'].forEach((file) => {
+    const source = fs.readFileSync(path.join(DSF, file), 'utf8');
+    const block = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(source)[1];
+    const modes = P.parse(block).rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];
+    assert.ok(modes, file + ' has no modes row');
+    assert.equal(modes.value.length, 1, file + ' ships more than one mode');
+    assert.equal(modes.value[0].name, 'Value', file + ' names its starter something else');
+    // And the starter carries that block\'s own columns, so its one tab has real fields rather than a
+    // name and nothing else.
+    assert.ok(Object.keys(modes.value[0]).length > 1, file + ' ships a starter with no settings');
+  });
+});
+
+test('the panel records that you pressed +, and never aligns without both intents', () => {
+  // The two remembered intents are symmetric and each one\'s absence is a silent data loss: without
+  // `removedModeIds` alignment puts back a mode you removed, and without `addedModeNames` it deletes a
+  // mode you added the moment anything re-reads the collection — correcting a typo in Group is enough.
+  // Asserted on the source because the state lives in the UI, and a call site that forgets one argument
+  // is exactly the mistake this pins.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+
+  assert.match(ui, /let addedModeNames = \[\];/, 'the record exists');
+  assert.match(ui, /if \(next\.added\) addedModeNames = addedModeNames\.concat/,
+    'pressing + writes to it');
+
+  // Every call carries both. One argument object, so a caller cannot pass the removals and forget the
+  // additions without it being visible on the line.
+  const calls = ui.match(/alignModesToFile\([\s\S]{0,220}?\)\;/g) || [];
+  assert.equal(calls.length, 1, 'one call site, so there is one place to get this right');
+  assert.match(calls[0], /removedIds: removedModeIds/);
+  assert.match(calls[0], /addedNames: addedModeNames/);
+
+  // Both belong to an address, so both are cleared when it changes — a mode asked for in one collection
+  // is not a mode asked for in the next.
+  const applyModes = ui.slice(ui.indexOf('function applyFileModes'), ui.indexOf('function orderedModesInBlock'));
+  const clear = applyModes.slice(applyModes.indexOf('if (changedCollection)'));
+  assert.match(clear, /removedModeIds = \[\]/);
+  assert.match(clear, /addedModeNames = \[\]/);
+
+  // And a run can be asked what it is about to do to the modes, including this record.
+  assert.match(ui, /addedModeNames: addedModeNames/, 'readable from the bridge for diagnosis');
 });
 
 test('the fill and the ordering are one write, not two', () => {
@@ -524,15 +623,105 @@ test('a chip shows the name the file has for that mode, not the config\'s spelli
   const entries = [{ name: 'desktop', gap: 40 }, { name: 'tablet', gap: 24 }, { name: 'mobile', gap: 16 }];
   const out = P.alignModesToFile(entries, P.matchModeIds(entries, file), file);
 
-  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Mobile', 'tablet']);
+  // Three entries for three file modes. `Pad` is a mode of this file the config has no settings for, so
+  // it gets a block; `tablet` is a mode this file does not have, so it goes. Both halves are the
+  // collection being the authority on which modes exist.
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Pad', 'Mobile']);
+  assert.deepEqual(out.inserted, ['Pad']);
+  assert.deepEqual(out.dropped, ['tablet']);
   assert.equal(out.entries[0].gap, 40, 'the values come with the name');
-  assert.equal(out.entries[1].gap, 16);
-  // `tablet` is not a mode of this file — it was renamed to `Pad` — so it keeps its own name and
-  // follows the modes that exist. Adopting a name for it would be inventing a link.
-  assert.equal(out.entries[2].name, 'tablet');
-  assert.equal(out.ids[2], null);
+  assert.equal(out.entries[2].gap, 16);
+  assert.equal(out.entries[1].gap, 40, 'and a new block is written like the mode above it');
+  assert.equal(out.ids[1], '13:2', 'linked to the file, so a run will not create it again');
+
+  const again = P.alignModesToFile(out.entries, out.ids, file);
+  assert.equal(again.changed, false, 'and it settles');
+  assert.deepEqual(again.inserted, [], 'a second pass has nothing left to add');
+  assert.deepEqual(again.dropped, [], 'nor anything left to drop');
+});
+
+test('a mode the file has and the config does not gets a block, in the file\'s position', () => {
+  // Márton's own file, and the report that found this: `Responsive System` holds five modes, the shipped
+  // Spacing block holds three, and selecting the collection showed three tabs — correctly spelled, in the
+  // file's order, with real `modeId`s on them, and silently missing two of the collection's modes.
+  // Selecting a collection is the instruction; answering with a subset of it describes the script's
+  // defaults and calls them the file.
+  const file = [
+    { modeId: '1', name: 'Desktop-large' }, { modeId: '2', name: 'Desktop' },
+    { modeId: '3', name: 'Tablet' }, { modeId: '4', name: 'Tablet-small' },
+    { modeId: '5', name: 'Mobile' },
+  ];
+  const entries = [
+    { name: 'desktop', scaleType: 'metric', base: 4, step: 4, extras: [1] },
+    { name: 'tablet', scaleType: 'metric', base: 3, step: 3, extras: [1] },
+    { name: 'mobile', scaleType: 'metric', base: 2, step: 2, extras: [1] },
+  ];
+  const out = P.alignModesToFile(entries, P.matchModeIds(entries, file), file);
+
+  assert.deepEqual(out.entries.map((e) => e.name),
+    ['Desktop-large', 'Desktop', 'Tablet', 'Tablet-small', 'Mobile']);
+  assert.deepEqual(out.inserted, ['Desktop-large', 'Tablet-small']);
+  assert.deepEqual(out.ids, ['1', '2', '3', '4', '5'], 'every chip is linked to its mode');
+  assert.deepEqual(out.dropped, [],
+    'and nothing is dropped — all three shipped names are modes of this collection');
+  assert.equal(out.changed, true);
+
+  // **The nearest sibling in the file's order, not the last entry in the array.** `Tablet-small` sits
+  // between `Tablet` and `Mobile`, so it is written like `Tablet`; appending the way a chip's `+` does
+  // would have handed it `Mobile`'s settings for no reason but where the loop ended.
+  assert.equal(out.entries[3].base, 3);
+  assert.equal(out.entries[3].step, 3);
+  // `Desktop-large` has nothing before it, so it follows the mode after it.
+  assert.equal(out.entries[0].base, 4);
+
+  // A clone, not a shared reference: editing one mode's list must not edit another's.
+  out.entries[0].extras.push(2);
+  assert.deepEqual(out.entries[1].extras, [1]);
+
+  // `name` stays first, where every config block writes it.
+  assert.equal(Object.keys(out.entries[0])[0], 'name');
 
   assert.equal(P.alignModesToFile(out.entries, out.ids, file).changed, false, 'and it settles');
+});
+
+test('a mode removed with the dash is not put back on the next pass', () => {
+  // The one fact alignment cannot derive. Without `removedIds` this would re-insert what someone had
+  // just taken out, every pass, for ever — and the panel would look like the dash does nothing.
+  const file = [
+    { modeId: '1', name: 'Desktop' }, { modeId: '2', name: 'Tablet' }, { modeId: '3', name: 'Mobile' },
+  ];
+  const entries = [{ name: 'Desktop', base: 4 }, { name: 'Tablet', base: 3 }, { name: 'Mobile', base: 2 }];
+  const removed = P.applyChipOp(entries, ['1', '2', '3'], { op: 'remove', index: 1, name: 'Tablet' });
+  assert.deepEqual(removed.removed, { modeId: '2', name: 'Tablet' });
+
+  const out = P.alignModesToFile(removed.entries, removed.ids, file,
+    { removedIds: [removed.removed.modeId] });
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Mobile']);
+  assert.deepEqual(out.inserted, []);
+  assert.equal(out.changed, false, 'and nothing is written, so the panel does not flicker');
+
+  // The removal still reaches the run — this must not have quietly cancelled it.
+  assert.deepEqual(
+    P.modeIntents('C', out.entries, out.ids, file, [removed.removed.modeId]).removals,
+    [{ modeId: '2', name: 'Tablet' }]
+  );
+
+  // And without the list it comes back, which is what makes the argument load-bearing rather than
+  // decorative: this is the call that would ship if someone dropped the parameter.
+  assert.deepEqual(
+    P.alignModesToFile(removed.entries, removed.ids, file).inserted, ['Tablet']
+  );
+});
+
+test('a config with no mode blocks at all takes the collection\'s', () => {
+  // `modes: []` in a block, or a domain whose panel has not been filled yet. There is no sibling to
+  // copy, so the entries carry their names and nothing else — which is still the file's mode list,
+  // which is what the chips are a view of.
+  const file = [{ modeId: '1', name: 'Desktop' }, { modeId: '2', name: 'Mobile' }];
+  const out = P.alignModesToFile([], [], file);
+  assert.deepEqual(out.entries, [{ name: 'Desktop' }, { name: 'Mobile' }]);
+  assert.deepEqual(out.ids, ['1', '2']);
+  assert.equal(out.changed, true);
 });
 
 test('a pending rename survives the file\'s spelling being adopted', () => {

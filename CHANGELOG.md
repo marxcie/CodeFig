@@ -25,6 +25,45 @@ deleting variable modes they did not recognise.
 
 ### Added
 
+- **A Colors panel that reads a colour set and shows you where it stands — it does not write yet.**
+  Three lightness anchors and a curve make a **ladder shared by every mode in the script**, so two modes
+  land on the same tone with different hue and chroma; that is what makes them match under a greyscale
+  filter. Each mode block carries its own seed, its own hue and chroma per anchor, and **its own palette
+  strip**. In HSL the curve stays per mode, because an HSL curve legitimately belongs to a hue.
+  - **Point it at a collection and group and the panel fills itself** from the variables: the steps from
+    their names, and hue, chroma and the three anchors from the real first, middle and last values. It
+    does **not** guess a curve — an existing ramp is a list of colours with no record of how it was made
+    — so it draws what is in the file *underneath* what it would generate, each changed step's old hex
+    struck through beside the new one.
+  - **"OKLCH scale not applied" is a question, not a stored flag.** It is re-asked on every edit by
+    comparing the file's values against the config's own output, so it cannot go stale, and the banner
+    and the strips are driven from one comparison rather than two — they cannot disagree about how many
+    steps would change.
+  - **Lock seed re-anchors, it does not offset.** The middle anchor becomes the seed's own lightness and
+    the ladder is recomputed through it; bright and dark are untouched, so the endpoints still match the
+    shared ladder exactly. Interior steps drift, and the largest deviation is reported beside the field,
+    because that number is the whole decision.
+  - What it will not read: **an aliased variable is read through and never written** — an alias is a
+    deliberate indirection and replacing it with a raw value breaks a link silently. A **non-opaque
+    variable is reported and skipped**, never composited over an assumed background to invent a
+    lightness. A group where **more than half** the variables are non-opaque is an alpha ramp, not a
+    lightness ramp, and is declined in one line rather than itemised skip by skip.
+  - **Run writes nothing.** It says so, and says why: the write path is gated on its dry run being
+    reviewed first. A Run that half-wrote a colour set would be worse than one that refuses, because
+    what it would be half-writing is a collection other files subscribe to.
+- **HSL modes are per mode again.** A mode block in HSL now carries its own **Saturation** and
+  **Lightness** beside Hue, and Chroma appears only in OKLCH. This was not cosmetic: HSL has no shared
+  ladder, so a mode's own three lightness values *are* its ladder, and with nowhere to put them every
+  HSL mode fell back to the same 98/46/4 and generated an identical ramp whatever you typed. Reading a
+  collection now fills whichever set the panel is on, from readings taken in that model — a hue in
+  OKLCH is a perceptual angle and a hue in HSL is where the maximum channel sits, and putting one in
+  the other's field is a plausible-looking wrong number in every cell.
+- **A `@rows` column can carry `@placeholder="…"`**, the same annotation a field spells, so a cell can
+  show a grey example. A numeric cell labelled *Chroma* gives a first-time reader nothing otherwise:
+  `0.012` and `12` are both plausible guesses and only one of them is a colour.
+- **A column's condition can name a form field**, not only another column in the same row. It still
+  prefers the row — two modes on two tabs can be on different scale types at once — and falls back to
+  the form, which is what lets a mode's fields depend on a setting that sits above the whole table.
 - **A settings panel fills itself from a set CodeFig never made.** Point Grid at a collection and group
   holding a grid — one built years before this plugin, or by hand — and the settings load from the
   **variables themselves**, matched by name and structure: `columns`, `gap`, `padding`,
@@ -165,6 +204,36 @@ deleting variable modes they did not recognise.
   ratio's name, answered "unknown ratio" and produced nothing for that mode. Numeric dropdowns read back
   as numbers, and a quoted number is understood wherever a ratio is accepted, so a config typed by hand
   behaves the same way.
+- **The Design System Foundations scripts no longer ship a three-viewport system.** `desktop`,
+  `tablet` and `mobile` were an example of one Figma file, and shipping them in `grid`, `spacing`,
+  `typography` and `corner-radius` made them the plugin's opinion about every file — running any of
+  the four on a new collection created those three modes. Each block now ships **one starter mode**,
+  named `Value`, which is what Figma's variables panel shows for a single-mode collection; a
+  collection cannot exist with no modes, so one is the floor rather than none. Point a panel at a
+  collection and its real modes replace the starter. **If you relied on a fresh run producing three
+  viewports, it now produces one** — add the rest with `+`, or point the panel at a collection that
+  already has them.
+- **A panel no longer proposes creating a mode your collection does not have — and a run no longer
+  creates one.** The shipped Spacing block names `desktop, tablet, mobile`; point it at a collection
+  whose modes are `Desktop / Pad / Mobile` and `tablet` matched nothing, so it sat there as a fourth
+  tab. It was not cosmetic: mode setup takes the config's mode list literally, so **running created a
+  `Tablet` mode nobody asked for**, in any file whose viewports are named differently from the
+  script's defaults. A mode block the collection has no mode for is now removed and **named** in the
+  line under Group, so it is never a silent deletion. Pressing **+** still creates a mode: that is now
+  recorded as an intent, which is what tells a mode you typed apart from one the template shipped —
+  the two are identical in the config, and treating them the same is what caused this. One caveat, by
+  design: pasting a config written for a different collection now drops the mode blocks this
+  collection has no modes for, each one named.
+- **A panel now shows every mode the collection has, not only the ones its config knew about.**
+  Pointing Spacing at a five-mode collection — Desktop-large, Desktop, Tablet, Tablet-small, Mobile —
+  left the panel on the script's three, correctly spelled and in the file's order, with two of the
+  collection's modes silently missing. The collection's modes were already being read; that read was
+  used to reorder, re-spell and report, and never to add. A mode with no settings here now gets a
+  block, in its position, **written like the mode next to it** — so the values on a new tab are a
+  copy of its neighbour and a starting point, not a reading of your file, and a line under Group says
+  so. A mode you removed with the dash is never put back. Previously this alignment also ran only when
+  a script opened, so *choosing a collection from the dropdown* — the obvious way to ask the question —
+  did less than opening the script did; both paths now do the same thing.
 - **Modes are shown in the collection's order.** A loaded config listed its modes in whatever order it
   had been stored in, which on a five-viewport system — Desktop-large, Desktop, Tablet, Tablet-small,
   Mobile — reads as no order at all. The chips and the Mode settings tabs now follow the order Figma
@@ -196,6 +265,14 @@ deleting variable modes they did not recognise.
 
 ### Removed
 
+- **Two type tokens that held the same value, and one that was a pixel from another.**
+  `--font-size-caption` and `--font-size-helper` were both 10px and differed only in which part of the
+  stylesheet used them; they are one token, `--font-size-small`. `--font-size-headline` (15px) sat one
+  pixel from `--font-size-title` (16px) — two sizes that close read as an accident rather than a
+  decision — and is gone, its three users now either the 20px document title or the 16px section size.
+  `--font-size-code` (11px) is new and monospace-only: a mono face at the body's 12px reads larger than
+  the prose beside it, which is the one reason an 11 belongs in the sheet.
+
 - **The import button is gone.** Auto-import replaced it: choose a Collection and a Group, and a
   recorded config loads itself with a line under Group saying so. The button only ever appeared when
   it had something to offer, which meant working out whether it *would* appear was a question you
@@ -204,6 +281,29 @@ deleting variable modes they did not recognise.
   unchanged until you run.
 
 ### Changed
+
+- **One heading ladder, and one title per script.** The Documentation tab and a script's settings form
+  render the same markdown, and until now they styled it with separate rules — `## Overview` was 15px in
+  one tab and 14px in the other, and every heading question had to be asked twice. There is now a single
+  ladder both read: **`#` 16px, `##` 14px, `###` 12px semibold**, with body copy at 12px. The **document
+  title in the editor header is the only text above that, at 20px** (it was 15px), and it is where a
+  script's name lives.
+  - **The duplicated titles are gone from the scripts themselves.** Every doc block used to open by
+    repeating the script's own name, and most config blocks opened by repeating it a *third* time in a
+    third wording — "Rename variables" in the sidebar, "Rename variables" again as the first heading,
+    "Batch rename variables" over the settings. 70 of those lines were removed across 49 scripts. If you
+    write your own scripts, you no longer need a `# Title` line at the top of a doc or config block; the
+    header names the script. Existing user scripts are untouched and still render their title if they
+    have one — it will simply be a 16px section heading rather than a 20px page title.
+  - Genuine section titles were kept, including the ones that only *look* like a repeat: `@codefig-ui`'s
+    "Built-in components", match-colors' "Palettes", and export/import's `# Export` / `# Import` pair.
+
+- **Sizes and corners come from tokens now, so the same thing looks the same everywhere.** Seventeen
+  font sizes and twenty-four corner radii were written as raw pixel values, which is how "the same
+  corner" came to mean 2, 3, 4, 6, 9 or 10px depending on which control you were looking at. Every one
+  is now one of four radii and one of five sizes. Two things visibly change: **11px text that was not
+  code is now 10px** (status pills, dropdown group headers, stale-config notices), and **the `@rows` tab
+  strip is 12px, matching the Documentation/Configuration/Script tabs it was always meant to match.**
 
 - **Selection to variables picks its collection the same way every other script does.** The dropdown
   now lists this file's collections with a **New collection** entry that reveals a name field, instead

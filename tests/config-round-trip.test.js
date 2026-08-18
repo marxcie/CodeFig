@@ -79,6 +79,31 @@ function recordAndPrint(config, domain, viewports) {
   return { v1, domainConfig, block: lib.formatConfigBlock(domainConfig) };
 }
 
+/**
+ * The shipped block with a mode list this test states for itself.
+ *
+ * `fillConfigBlock`'s three directions are *about* the block having more entries than the payload, or
+ * fewer — so a test of them needs to know how many the block has. It used to read that off the shipped
+ * Spacing block, which shipped `desktop / tablet / mobile`: an example of one Figma file that became
+ * the plugin's default for every file, and is now a single starter mode. Borrowing it was the mistake —
+ * a fixture has to say what it is testing. The annotations stay real, because only the array is
+ * replaced.
+ */
+function blockWithModes(file, entries) {
+  const block = shippedBlock(file);
+  const start = block.indexOf('  modes: [');
+  const end = block.indexOf('\n  ],', start);
+  assert.ok(start !== -1 && end !== -1, 'could not find the modes array in ' + file);
+  const body = entries.map((e) => '    ' + e).join(',\n');
+  return block.slice(0, start) + '  modes: [\n' + body + block.slice(end);
+}
+
+const THREE_MODE_SPACING_BLOCK = () => blockWithModes('spacing.js', [
+  '{ name: "desktop", scaleType: "metric", base: 4, step: 4, mod: 3, roundTo: 2, extras: [1] }',
+  '{ name: "tablet", scaleType: "metric", base: 3, step: 3, mod: 3, roundTo: 2, extras: [1] }',
+  '{ name: "mobile", scaleType: "metric", base: 2, step: 2, mod: 3, roundTo: 2, extras: [1] }'
+]);
+
 const VIEWPORTS = [
   { key: 'desktop', label: 'Desktop', width: 1440 },
   { key: 'mobile', label: 'Mobile', width: 375 }
@@ -114,9 +139,9 @@ test('what the sandbox prints, the UI can read', () => {
 test('the printed block fills the shipped block, and the result is what a run would read', () => {
   const { block } = recordAndPrint(SHIPPED_SPACING, 'spacing', VIEWPORTS);
   const incoming = P.parseConfigBlockObject(block);
-  const filled = P.fillConfigBlock(shippedBlock('spacing.js'), incoming);
+  const filled = P.fillConfigBlock(THREE_MODE_SPACING_BLOCK(), incoming);
 
-  // The shipped block has three modes; this file has two. That is direction 3, and it is loud.
+  // The block has three modes; this file has two. That is direction 3, and it is loud.
   assert.equal(filled.removed.length, 1);
   assert.equal(filled.removed[0].name, 'tablet');
   assert.match(filled.summary, /Removed 1 entry from modes: tablet/);
@@ -167,9 +192,9 @@ test('a file with more viewports than the block inserts them, and they generate'
   });
 
   const { block } = recordAndPrint(config, 'spacing', five);
-  const filled = P.fillConfigBlock(shippedBlock('spacing.js'), P.parseConfigBlockObject(block));
+  const filled = P.fillConfigBlock(THREE_MODE_SPACING_BLOCK(), P.parseConfigBlockObject(block));
 
-  assert.equal(filled.inserted.length, 1, 'the shipped block has three of these four');
+  assert.equal(filled.inserted.length, 1, 'the block has three of these four');
   assert.equal(filled.inserted[0].name, 'Wide');
 
   const back = P.parseConfigBlockObject(filled.text);
@@ -267,8 +292,38 @@ test('a value edit rewrites its own line and nothing else', () => {
     if (scalar) values[scalar.name] = (scalar.value || 0) + 7;
     if (rows) {
       const next = JSON.parse(JSON.stringify(rows.value));
-      const key = Object.keys(next[0] || {}).filter((k) => typeof next[0][k] === 'number')[0];
-      if (key) next[0][key] = 999;
+      const first = next[0] || {};
+      const key = Object.keys(first).filter((k) => typeof first[k] === 'number')[0];
+      if (key) first[key] = 999;
+      else {
+        // **A number one level down**, which is the only kind Colors has: a mode's numbers all live inside a
+        // nested group (`bright: { hue, chroma }`), so a picker that only looked at the top level made no
+        // edit at all and then asserted that one line had changed. Descending is also the better test — a
+        // nested value is the shape most likely to be reprinted wholesale rather than edited in place.
+        const groupKey = Object.keys(first).filter((k) => {
+          const v = first[k];
+          return v && typeof v === 'object' && !Array.isArray(v) &&
+            Object.keys(v).some((n) => typeof v[n] === 'number');
+        })[0];
+        if (groupKey) {
+          const inner = Object.keys(first[groupKey]).filter((n) => typeof first[groupKey][n] === 'number')[0];
+          first[groupKey][inner] = 999;
+        } else {
+          // **Any value, not only a number.** The invariant is "one edit, one line", whatever the type — and a
+          // shipped default can legitimately hold no numbers at all. Colors' does: it opens empty, assuming
+          // nothing, so its one mode entry is a name and a seed. With a number-only picker the test made no
+          // edit and then asserted a line had changed.
+          const strKey = Object.keys(first).filter((k) => typeof first[k] === 'string')[0];
+          if (strKey) first[strKey] = 'edited';
+          else {
+            const nested = Object.keys(first).filter((k) => first[k] && typeof first[k] === 'object')[0];
+            if (nested) {
+              const leaf = Object.keys(first[nested]).filter((n) => typeof first[nested][n] === 'string')[0];
+              if (leaf) first[nested][leaf] = 'edited';
+            }
+          }
+        }
+      }
       values[rows.name] = next;
     }
 
@@ -288,6 +343,10 @@ test('a value edit rewrites its own line and nothing else', () => {
     checked++;
   }
   assert.ok(checked >= 3, 'only ' + checked + ' blocks were actually checked');
+  // One limitation this pins by passing: the printer reprints a whole row when any value in it changes, so
+  // an *unchanged sibling's* number is renormalised — `0.010` becomes `0.01`. Same number, different text, in
+  // a file people read. Cheap to live with while blocks avoid trailing zeros; the fix is per-value source
+  // text, which is a bigger change than the one it would prevent.
 });
 
 test('an annotation the source spelled out survives an edit', () => {

@@ -1,6 +1,5 @@
 // Spacing
 // @DOC_START
-// # Spacing
 // Responsive spacing scale with range-first scaling (min → base → max per viewport).
 //
 // ## Overview
@@ -48,49 +47,22 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
   // @fromFile: domains.spacing
 
   // # General
-  // Where this goes, and what exists. Pick a collection in this file, or choose "New collection" and
-  // type a name — a name that is not in this file is created on Run.
   collectionName: "Responsive System", // @collection @label: Collection
   // @collectionModes: Collection modes
-  // The collection's own modes. The chips are a view of the file; the tabs below hold each mode's scale.
   group: "Spacing", // @label: Group within collection @placeholder="eg.: Spacing"
-  spacings: ["px", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest, and spacing-{1,10} is a series of ten. Extra spacings below fill the smallest names, and the scale takes over from there.
+  spacings: ["px", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest, and spacing-{1,10} is a series of ten. 
 
   // --- @section
 
   // # Mode settings
-  generateOverview: false, // @label: Generate overview @helper: Fills the Spacing — overview section in Design System Foundations
-  // Each mode's own scale. `metric` is a base plus a step that grows every N tokens — the way a spacing
-  // scale is usually written down. `modular` is a fixed ratio; `fibonacci` is each step the sum of the
-  // two before it, which lands on whole numbers where a 1.618 ratio needs rounding at every step.
-  //
-  // These three generate exactly what this script has always generated: `1, 4, 8, 12, 16, 24` on
-  // desktop, and the same shape halved and quartered below it. The spelling is the panel's; the numbers
-  // are unchanged.
+  generateOverview: false, // @label: Generate overview @helper: Generate Figma frames for each mode
+
   modes: [
     {
-      name: "desktop",
+      name: "Value",
       scaleType: "metric",
       base: 4,
       step: 4,
-      mod: 3,
-      roundTo: 2,
-      extras: [1]
-    },
-    {
-      name: "tablet",
-      scaleType: "metric",
-      base: 3,
-      step: 3,
-      mod: 3,
-      roundTo: 2,
-      extras: [1]
-    },
-    {
-      name: "mobile",
-      scaleType: "metric",
-      base: 2,
-      step: 2,
       mod: 3,
       roundTo: 2,
       extras: [1]

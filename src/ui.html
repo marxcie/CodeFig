@@ -19,7 +19,7 @@
           this;
         if (!g) return;
         g.CodeFigConfigUI = {
-          parse: function () { return { sections: [] }; },
+          parse: function () { return { rows: [] }; },
           serialize: function () { return ""; },
           render: function (schema, opts) {
             var c = opts && opts.container;
@@ -526,7 +526,15 @@
 
       let configUIInstance = null;
       /** The values as last seen, so a change can be attributed to a field. */
-      let configLastValues = null;
+      /**
+       * The Collection and Group the form was last seen holding, and nothing else.
+       *
+       * This was `configLastValues`, a whole copy of the form's values doing two jobs — address detection
+       * and last-values-seen — and a third was then assumed of it by a check that wanted "the values at
+       * projection time". It is not that: it is reassigned on every change, *before* the change is handled.
+       * One variable, one job, and the name says which.
+       */
+      let configLastAddress = null;
       const configCodeContainer = document.getElementById('configCodeContainer');
       const configUIContainer = document.getElementById('configUIContainer');
 
@@ -542,10 +550,15 @@
       //   `chipModeIds` — parallel to the config's `modes` array; `null` where a mode is not in the
       //                   file yet. Transformed by the same operation that transforms the array, so
       //                   the two cannot drift apart.
-      //   `removedModeIds` — the **only remembered intent** in the feature. Everything else is
-      //                   derived. It exists because "the config has no mode with this id" cannot
-      //                   tell a deliberate removal from a config pasted out of another file, and
-      //                   deleting on the latter would destroy values nobody offered up.
+      //   `removedModeIds` / `addedModeNames` — the **only remembered intents** in the feature.
+      //                   Everything else is derived. They exist because state cannot answer either
+      //                   question: "the config has no mode with this id" cannot tell a deliberate
+      //                   removal from a config pasted out of another file, and deleting on the latter
+      //                   would destroy values nobody offered up; "this entry has no id" cannot tell a
+      //                   mode somebody typed with `+` from one the script's template shipped, and
+      //                   creating a mode on the latter is how a run adds a viewport nobody asked for.
+      //                   Two questions, two records — one variable answering both is the mistake this
+      //                   file has already made twice.
       // ======================================================================
       // `document` is part of the identity, not decoration. CodeFig reopens in whatever file you are
       // in, and a collection called "Responsive System" in one file is not the one in another — the
@@ -563,6 +576,28 @@
       /** Which document the panel last heard from, so a same-named collection elsewhere cannot pass. */
       let currentDocumentId = null;
       let removedModeIds = [];
+      /**
+       * Modes typed with the chips' `+`, by name, at this address.
+       *
+       * The counterpart to `removedModeIds`, and it exists for the same reason. A mode you added and a
+       * mode the script's template shipped are the same thing in state — a name and no `modeId` — so
+       * "did someone ask for this?" cannot be read off the config. Recorded, and *only* this is
+       * recorded: a mode with no id that is not in here is residue, and alignment drops it.
+       *
+       * By name, because an added mode has no id to be known by until a run creates it. Renaming one
+       * moves its entry here, or the rename would turn a mode you asked for back into residue.
+       */
+      let addedModeNames = [];
+      /**
+       * Modes the last alignment gave a block to, so the panel can say so.
+       *
+       * Derived and short-lived — set by `orderedModesInBlock` and read by the caller that writes, in
+       * the same turn. Not a memory of what the file holds: that is `fileModes`, and asking two
+       * variables the same question is how the last three of these bugs happened.
+       */
+      let lastInsertedModes = [];
+      /** And the modes it dropped, same lifetime, same rule. */
+      let lastDroppedModes = [];
 
       /** Everything about chips that a rebuild has to put back. Derived; call it after any render. */
       function syncChipsToPanelState() {
@@ -628,6 +663,18 @@
       }
 
       /**
+       * The same predicate the config-ui uses, so the panel and the alignment cannot disagree about
+       * whether two mode names are one name. Falls back to a plain compare only if the API is missing,
+       * which is the same case in which nothing else here works either.
+       */
+      function sameChipName(a, b) {
+        var api = window.CodeFigConfigUI;
+        if (api && api.sameModeName) return api.sameModeName(a, b);
+        return String(a == null ? '' : a).trim().toLowerCase() ===
+          String(b == null ? '' : b).trim().toLowerCase();
+      }
+
+      /**
        * Apply one chip edit to the config, then let the form catch up.
        *
        * The chips deliberately do **not** go through `getValues`: that function is called again by
@@ -662,6 +709,25 @@
         const next = api.applyChipOp(row.value, chipModeIds, op);
         chipModeIds = next.ids;
         if (next.removed) removedModeIds = removedModeIds.concat([next.removed.modeId]);
+        // **`+` is the record of an intent, not just an edit.** A mode you typed and a mode the script's
+        // template shipped are indistinguishable in the config — a name and no id — so alignment drops
+        // the ones nobody claimed, and this is the claim. Without it, adding a mode and then correcting
+        // a typo in Group would silently delete the mode you had just added.
+        if (next.added) addedModeNames = addedModeNames.concat([next.added]);
+        // A rename carries the claim with it, or renaming a mode you asked for turns it back into
+        // residue. Only an entry with no id can be in this list, so a renamed *file* mode never is.
+        if (op.op === 'rename') {
+          addedModeNames = addedModeNames.map(function (name) {
+            return sameChipName(name, op.from) ? op.to : name;
+          });
+        }
+        // A mode added and then removed again is simply gone: it has no id, so there is no removal for a
+        // run to carry out, and leaving it claimed would keep re-inserting a name nothing holds.
+        if (next.removed === null && op.op === 'remove') {
+          addedModeNames = addedModeNames.filter(function (name) {
+            return !sameChipName(name, op.name);
+          });
+        }
 
         const values = {};
         values[field] = next.entries;
@@ -708,17 +774,17 @@
         }
         try {
           var schema = window.CodeFigConfigUI.parse(content);
-          if (schema && ((schema.rows && schema.rows.length > 0) || (schema.sections && schema.sections.length > 0))) {
+          if (schema && schema.rows && schema.rows.length > 0) {
             configUIContainer.innerHTML = '';
             configUIInstance = window.CodeFigConfigUI.render(schema, {
               container: configUIContainer,
               onChange: function (values) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
                 // thing that asks. Every other edit is an answer, not a question.
-                var addressChanged = !configLastValues ||
-                  values.collectionName !== configLastValues.collectionName ||
-                  values.group !== configLastValues.group;
-                configLastValues = JSON.parse(JSON.stringify(values));
+                var addressChanged = !configLastAddress ||
+                  values.collectionName !== configLastAddress.collectionName ||
+                  values.group !== configLastAddress.group;
+                configLastAddress = { collectionName: values.collectionName, group: values.group };
                 syncUIToCode(values);
                 scheduleConfigPreview();
                 if (addressChanged) scheduleAutoImport();
@@ -758,6 +824,15 @@
       let currentTab = 'source';
       /** True while Configuration code does not parse: the form must not write over broken text. */
       let configFormReadOnly = false;
+      /**
+       * The block text the form currently on screen was built from, or null before the first projection.
+       *
+       * `mergeConfigIntoMain` writes the form's values over the block, which is only sound while the form
+       * *is* that block's projection. A programmatic write breaks that for as long as it takes to
+       * re-project, and a merge landing in that window reverts it. This is what makes the window checkable
+       * rather than something each writer has to remember to close.
+       */
+      let configProjectedFrom = null;
       let scriptHasDocs = false;
       let scriptHasConfig = false;
       let scriptHasUIConfig = false; // @UI_CONFIG_START → show UI; @CONFIG_START only → show code
@@ -867,8 +942,35 @@
         // authoritative while it is the view you are in.
         const fromForm = currentTab === 'configUI' && configUIInstance && window.CodeFigConfigUI;
         if (fromForm) {
-          const schema = window.CodeFigConfigUI.parse(mainCode.slice(i + startMarker.length, j));
-          configContent = window.CodeFigConfigUI.serialize(schema, configUIInstance.getValues());
+          // **A form may only be written back over the block it was projected from.**
+          //
+          // The form is authoritative for something you typed, and the rule above is about *which view*
+          // you are in. It says nothing about *when*, and that is the hole: a programmatic write — an
+          // auto-import fill — replaces the block behind the form's back, and any merge in the window
+          // before the re-projection serialises the form's previous values straight back over it. The
+          // trace read `before: 4686, filled: 5115, afterWrite: 4686` with a nameless one-entry form
+          // landing on top of three named modes. Everything downstream then told the truth about a block
+          // that had been reverted: the fields showed Ash, Granite and Bark because the *form* had been
+          // rebuilt, and the preview drew eleven placeholder steps in grey because the *block* had not.
+          //
+          // Comparing the text rather than trusting an ordering: the previous attempt at this was to
+          // re-project inside the writer, which only holds while nothing merges in between. This holds
+          // whoever writes and whenever they do.
+          const blockNow = mainCode.slice(i + startMarker.length, j);
+          if (configProjectedFrom !== null && blockNow.trim() !== configProjectedFrom.trim()) {
+            blockWrites.push({
+              by: 'merge:refused@' + currentTab,
+              at: new Date().toLocaleTimeString(),
+              modes: 'form is a projection of different text'
+            });
+            if (blockWrites.length > 8) blockWrites.shift();
+            return;
+          }
+          const schema = window.CodeFigConfigUI.parse(blockNow);
+          // The same fresh schema is handed to `getValues` as the base for anything the form did not read.
+          // A cell hidden by its own condition writes nothing — correctly — and what it falls back to has to
+          // be the block as it stands, not the copy the form was built from before any of this was typed.
+          configContent = window.CodeFigConfigUI.serialize(schema, configUIInstance.getValues(schema));
         } else {
           configContent = configEditor ? configEditor.getValue() : '';
         }
@@ -921,6 +1023,11 @@
         const newTo = Math.max(0, Math.min(mapOffset(toIdx), newLen));
 
         code.setValue(newCode);
+        // **The form is the projection of what it just wrote.** A form edit deliberately does not
+        // re-project — rebuilding mid-keystroke destroys the control under the cursor — so without this
+        // the very next keystroke would find the block changed, decide the form was stale, and refuse.
+        // Typing would stop after one character.
+        configProjectedFrom = trimmed;
         code.setSelection(
           doc.posFromIndex(Math.min(newFrom, newTo)),
           doc.posFromIndex(Math.max(newFrom, newTo))
@@ -1104,7 +1211,14 @@
 
         configFormReadOnly = false;
         initConfigUI(block || '');
-        configLastValues = configUIInstance ? JSON.parse(JSON.stringify(configUIInstance.getValues())) : null;
+        // Recorded *after* the build, so it names the text the controls on screen actually came from.
+        configProjectedFrom = block || '';
+        if (configUIInstance) {
+          var projected = configUIInstance.getValues();
+          configLastAddress = { collectionName: projected.collectionName, group: projected.group };
+        } else {
+          configLastAddress = null;
+        }
         restoreActiveMode(wasShowing);
         syncChipsToPanelState();
         scheduleFileModes(0);
@@ -1543,6 +1657,7 @@
         fileModes = { document: null, collection: null, collectionId: null, modes: [], found: false };
         chipModeIds = [];
         removedModeIds = [];
+        addedModeNames = [];
 
         debugLog('Selecting script:', script);
         currentScript = script;
@@ -1837,6 +1952,47 @@
         ]).join('\n');
       }
 
+      /**
+       * The mode names the config's own blocks carry.
+       *
+       * "Driven by the Mode picker in the block" comes to this: the blocks *are* the pickers, and their
+       * `name` is what each one is pointing at. Read from the form rather than from the file, because a mode
+       * the panel has no block for is deliberately not read.
+       */
+      function modeNamesInConfig() {
+        var api = window.CodeFigConfigUI;
+        if (!api || typeof api.parse !== 'function') return [];
+        var schema;
+        try { schema = api.parse(currentConfigBlock()); } catch (e) { return []; }
+        var out = [];
+        (schema && schema.rows ? schema.rows : []).forEach(function (row) {
+          if (row.type !== 'field' || row.inputType !== 'rows' || !Array.isArray(row.value)) return;
+          row.value.forEach(function (entry) {
+            if (entry && typeof entry.name === 'string' && entry.name.trim()) out.push(entry.name.trim());
+          });
+        });
+        return out;
+      }
+
+      /**
+       * Which colour model the panel is on, read from the block rather than assumed.
+       *
+       * A hue is not one quantity across models — OKLCH's is a perceptual angle, HSL's is where the maximum
+       * channel sits — and the fields differ too. Reading a collection without knowing the model fills every
+       * anchor with a plausible-looking wrong number, which is worse than filling none.
+       */
+      function colorModelInConfig() {
+        var api = window.CodeFigConfigUI;
+        if (!api || typeof api.parse !== 'function') return 'oklch';
+        var schema;
+        try { schema = api.parse(currentConfigBlock()); } catch (e) { return 'oklch'; }
+        var found = null;
+        (schema && schema.rows ? schema.rows : []).forEach(function (row) {
+          if (row.type === 'field' && row.name === 'colorModel') found = row.value;
+        });
+        return found === 'hsl' ? 'hsl' : 'oklch';
+      }
+
       function configPreviewDomain() {
         const path = configBlockFromFilePath(currentConfigBlock()) || '';
         const match = /^domains\.([A-Za-z0-9_$]+)/.exec(path);
@@ -1864,10 +2020,42 @@
         _previewLastHtml = html;
         // A `@preview` marker row means the block said where this belongs, so it goes there rather than
         // in the panel-level region below the form.
-        const slot = document.querySelector('[data-preview-slot]');
+        const slots = [...document.querySelectorAll('[data-preview-slot]')];
         const region = document.getElementById('configPreview');
+
+        // **One slot per row, when `@preview` is a column of a `@blocks` control.** Every Colors frame draws
+        // the strip inside its own mode block, so one silent run has to fill several slots — and the preview
+        // function says which is which with `data-preview-for`. Distributed by name rather than by position,
+        // because a row can be added or removed between the run being asked for and its answer arriving.
+        if (slots.length > 1) {
+          const parsed = document.createElement('div');
+          parsed.innerHTML = html || '';
+          const byName = {};
+          parsed.querySelectorAll('[data-preview-for]').forEach(function (part) {
+            byName[part.getAttribute('data-preview-for')] = part.innerHTML;
+          });
+          slots.forEach(function (slot) {
+            // A slot with no row name is the section-level one, which is where the panel-wide part goes —
+            // the alignment banner. `__panel__` rather than the empty string, so an unnamed *mode* block
+            // cannot collide with it.
+            const name = slot.hasAttribute('data-preview-row')
+              ? (slot.getAttribute('data-preview-row') || '')
+              : '__panel__';
+            var part = Object.prototype.hasOwnProperty.call(byName, name) ? byName[name] : '';
+            slot.innerHTML = part;
+            // **A slot with nothing in it takes no room.** The panel-level slot holds the OKLCH alignment
+            // banner, which HSL has no equivalent of — so in HSL it drew an empty box the height of a
+            // section, under a heading that was itself hidden. An empty preview is not a preview.
+            slot.style.display = part ? '' : 'none';
+          });
+          if (region) region.style.display = 'none';
+          return;
+        }
+
+        const slot = slots[0];
         if (slot) {
           slot.innerHTML = html;
+          slot.style.display = html ? '' : 'none';
           if (region) region.style.display = 'none';
           return;
         }
@@ -1941,6 +2129,45 @@
         _previewTimer = setTimeout(requestConfigPreview, 400);
       }
 
+      /**
+       * The file's own values for the set the panel is pointing at, `{ modeName: [hex, …] }`.
+       *
+       * **Session state, not a re-read.** A `@PREVIEW:` function is pure and runs in the UI, so the only way
+       * the comparison strip can be live while anchors are being adjusted is for the values to already be
+       * here. They ride the auto-import payload — the read that already happens on a Collection or Group
+       * change — rather than costing a second round trip.
+       *
+       * Keyed by collection and group, so pointing the panel somewhere else cannot leave the previous set's
+       * colours underneath the new one's ramp. Cleared rather than kept when the address changes and the new
+       * address holds nothing.
+       */
+      var fileColorValues = { address: null, byMode: null };
+
+      function fileColorsAddress(collection, group) {
+        return String(collection || '') + '\u0000' + String(group == null ? '' : group);
+      }
+
+      function fileColorsFor(collection, group) {
+        return (fileColorValues.address === fileColorsAddress(collection, group))
+          ? fileColorValues.byMode : null;
+      }
+
+      function rememberFileColors(collection, group, byMode) {
+        fileColorValues = {
+          address: fileColorsAddress(collection, group),
+          byMode: (byMode && Object.keys(byMode).length) ? byMode : null
+        };
+      }
+
+      // **There is no "has this been touched yet" flag, deliberately.**
+      //
+      // There was one, to keep the strip quiet on a fresh load, and it cost a flag, a snapshot, a clearing
+      // path and a bug in each — the snapshot it compared against was reassigned before the comparison ran,
+      // so a real edit never registered and every edit looked like it did nothing. The quiet load is a
+      // *derived* fact now: a mode read out of a file arrives on the Original curve, which generates exactly
+      // the file's values, so there is no difference to draw. Ask the question, do not store the answer —
+      // the same conclusion the Apply banner reached.
+
       function requestConfigPreview() {
         _previewTimer = null;
         if (!currentScript) return;
@@ -1957,9 +2184,15 @@
           return;
         }
 
+        // The file's values travel *in the config*, so the preview function stays pure: it receives
+        // everything it draws and reaches for nothing. `existing` is absent when the panel is pointing at a
+        // collection that holds nothing, and the strip then draws the generated ramp alone.
+        const held = fileColorsFor(config.collectionName, config.group);
+        const forPreview = held ? Object.assign({}, config, { existing: held }) : config;
+
         const seq = ++_previewSeq;
         const started = runSilentSnippet(
-          buildPreviewSnippet(currentScript.code || '', fn, config, configPreviewDomain(), seq));
+          buildPreviewSnippet(currentScript.code || '', fn, forPreview, configPreviewDomain(), seq));
         // Busy is not a failure: another silent run is in flight and the next edit will ask again.
         if (!started && _previewTimer === null) _previewTimer = setTimeout(requestConfigPreview, 400);
       }
@@ -2049,9 +2282,54 @@
         if (blockWrites.length > 8) blockWrites.shift();
 
         if (isConfigTab(currentTab) && configUIInstance) projectConfigIntoForm();
+
+        // **And the preview with it.** The form was brought along; the strip was not, and it is the third
+        // thing that has to agree with this text. Every *other* caller happens to pair its write with
+        // `scheduleConfigPreview()`; auto-import — the one write nobody asks for — did not, so reading a
+        // collection filled every field and left the ramp showing the pristine block: eleven placeholder
+        // steps and a neutral grey, under a palette full of the file's own numbers. It caught up on the next
+        // keystroke, which is what made this look like "the palette only loads when I edit it".
+        //
+        // Here for the same reason the projection is here: this is the only place that writes the block
+        // programmatically, so it is the only place that can guarantee the three agree. Debounced, so the
+        // callers that already ask cost nothing.
+        scheduleConfigPreview();
       }
 
       /** The note under Group, which is where the answer belongs. */
+      /**
+       * Why an address came back with nothing, in one line.
+       *
+       * The recogniser already knows — a declined group, a mode the collection does not have, too few steps —
+       * so this reads its record rather than guessing. A silent no-answer is indistinguishable from a
+       * successful one that changed nothing, and the values on screen belong to wherever the panel pointed
+       * last.
+       */
+      function nothingReadNote(found) {
+        if (!found) return null;
+        var recognition = found.recognition;
+        if (recognition && recognition.declined) return recognition.declined;
+
+        var where = String(found.collection || 'that collection');
+        if (recognition && recognition.modes) {
+          var reasons = [];
+          Object.keys(recognition.modes).forEach(function (name) {
+            var per = recognition.modes[name];
+            if (per && per.found) return;
+            var why = (per && per.notes && per.notes.length) ? per.notes[0] : null;
+            reasons.push(why || ('Nothing read for ' + name + '.'));
+          });
+          if (reasons.length) {
+            return 'Nothing read from ' + where + '. ' + reasons[0] +
+              (reasons.length > 1 ? ' (' + (reasons.length - 1) + ' more.)' : '') +
+              ' The values below are the ones already in the block.';
+          }
+        }
+        if (found.candidates && found.candidates.length) return null;
+        return 'Nothing read from ' + where +
+          '. The values below are the ones already in the block.';
+      }
+
       function setAutoImportNote(text) {
         var container = document.getElementById('configUIContainer');
         if (!container) return;
@@ -2135,6 +2413,44 @@
        * keep. So opening may *move the address* when the address points at nothing, announce it, and
        * let the ordinary rule do the loading.
        */
+      /**
+       * Put the panel back to this script's defaults, keeping only the address that was just chosen.
+       *
+       * **Clear first, read second.** Márton's rule, and symptom 3 is what it is for: pointing the panel at
+       * a different collection fired a read, the read returned nothing, and the previous collection's
+       * modes, curves, anchors and steps stayed on screen. That is the difference between *this collection
+       * has no ramp* and *here is someone else's ramp*, and the panel was saying the second. Values read
+       * from one set of variables mean nothing against another.
+       *
+       * Defaults come from `originalCode` — the script exactly as it was opened — rather than from the block
+       * on screen. A prebuilt script never autosaves, so for the shipped panels that is the shipped source;
+       * for a user's own script it is their saved version, which is the right default for them.
+       *
+       * Runs inside the auto-import debounce rather than on the change itself: typing a group name is one
+       * address change per keystroke, and rebuilding the form under the caret on each of them would make the
+       * field impossible to type into.
+       */
+      function resetConfigForAddress(collection, group) {
+        var api = window.CodeFigConfigUI;
+        if (!api || !originalCode || !parsedSections) return false;
+        var pristine = '';
+        try {
+          pristine = extractConfigSection(originalCode, !!parsedSections.hasUIConfig) || '';
+        } catch (e) {
+          return false;
+        }
+        if (!pristine) return false;
+        var filled = api.fillConfigBlock(pristine, {
+          collectionName: collection,
+          group: group == null ? '' : group
+        });
+        if (!filled || !filled.text) return false;
+        // Already at defaults for this address — the first collection anyone picks, or a retry.
+        if (filled.text.trim() === currentConfigBlock().trim()) return false;
+        writeConfigBlockText(filled.text, 'address-reset');
+        return true;
+      }
+
       function requestAutoImport(attempt, detectOnly) {
         autoImportTimer = null;
         if (!scriptHasConfig || !configUIInstance) return;
@@ -2148,6 +2464,11 @@
         }
         var domain = configPreviewDomain();
         if (!domain) return;
+
+        // Before the read, never after: a read that finds nothing has to leave an empty panel. `detectOnly`
+        // is the group-detection probe, which asks a question about an address the panel is already on and
+        // must not throw away what is there.
+        if (!detectOnly) resetConfigForAddress(collection, group);
 
         var seq = ++autoImportSeq;
         lastAutoImport = { at: new Date().toLocaleTimeString(), requested: true, refused: false,
@@ -2163,12 +2484,29 @@
         // imports it and is checked by `validateResolvedCalls`. Hand-listing it here would be a second
         // list to forget — and the failure is a `ReferenceError` swallowed by a caller's try/catch,
         // seen as "recognition does nothing".
-        var started = runSilentSnippet(scriptImportLines().concat([
-          '@import { foundationAutoImport, foundationCollectionModes } from "@Foundation"',
-          '(async function () {',
-          '  var found = await foundationAutoImport(' +
+        // **Colours asks a different function, and passes the modes it wants.** A COLOR variable has a value
+        // per mode, so there is no one answer for a collection — and the modes worth reading are the ones the
+        // panel has blocks for. A collection mode with no block is the alignment report's business.
+        //
+        // Its own function rather than a branch inside `foundationAutoImport`, because extraction follows a
+        // function's calls within its own file: a colours branch in there dragged `@OKLCH` into every
+        // consumer, Grid's spec included, and the validator caught it as an unresolvable call.
+        var colourModes = (domain === 'colors') ? modeNamesInConfig() : [];
+        var importLine = domain === 'colors'
+          ? '@import { foundationColorsAutoImport, foundationCollectionModes } from "@Foundation"'
+          : '@import { foundationAutoImport, foundationCollectionModes } from "@Foundation"';
+        var call = domain === 'colors'
+          ? '  var found = await foundationColorsAutoImport(' +
             JSON.stringify(collection) + ', ' + JSON.stringify(group == null ? '' : group) + ', ' +
-            JSON.stringify(domain) + ');',
+            JSON.stringify(colourModes) + ', ' + JSON.stringify(colorModelInConfig()) + ');'
+          : '  var found = await foundationAutoImport(' +
+            JSON.stringify(collection) + ', ' + JSON.stringify(group == null ? '' : group) + ', ' +
+            JSON.stringify(domain) + ');';
+
+        var started = runSilentSnippet(scriptImportLines().concat([
+          importLine,
+          '(async function () {',
+          call,
           '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ');',
           '  window.codefigConfigLoadResult({',
           '    autoImport: found, fileModes: modes, autoImportSeq: ' + seq + ',',
@@ -2207,12 +2545,17 @@
           : { document: null, collection: null, collectionId: null, modes: [], found: false };
         if (next.document) currentDocumentId = next.document;
         // A different collection *or* a different one wearing the same name: either way, whatever was
-        // going to be removed from the old one is not going to be removed from this.
+        // going to be removed from the old one is not going to be removed from this — and a mode
+        // somebody asked for *there* is not a mode they asked for *here*. Both intents belong to an
+        // address, so both are dropped when the address changes.
         var changedCollection = next.collection !== fileModes.collection ||
           next.document !== fileModes.document ||
           next.collectionId !== fileModes.collectionId;
         fileModes = next;
-        if (changedCollection) removedModeIds = [];
+        if (changedCollection) {
+          removedModeIds = [];
+          addedModeNames = [];
+        }
 
         chipModeIds = window.CodeFigConfigUI.matchModeIds(configModeEntries(), fileModes.modes);
         syncChipsToPanelState();
@@ -2245,6 +2588,10 @@
       function orderedModesInBlock(text) {
         var api = window.CodeFigConfigUI;
         var answer = { text: text, changed: false };
+        // Cleared on the way in, so an early exit cannot leave the previous call's answer standing for
+        // the caller to report as this one's.
+        lastInsertedModes = [];
+        lastDroppedModes = [];
         function record(extra) {
           lastOrdering = { at: new Date().toLocaleTimeString() };
           for (var k in extra) lastOrdering[k] = extra[k];
@@ -2268,14 +2615,23 @@
         // so a stale success from an earlier call was the answer the instrument gave.
         if (!row) { record({ skipped: 'no "' + field + '" array in the block' }); return answer; }
 
-        var out = api.alignModesToFile(row.value, chipModeIds, fileModes.modes);
+        // Both intents travel with it, and they have to: neither "I took that one out" nor "I asked for
+        // that one" can be read off a config, and each one's absence turns into the panel undoing
+        // something a moment after it was done.
+        var out = api.alignModesToFile(row.value, chipModeIds, fileModes.modes, {
+          removedIds: removedModeIds, addedNames: addedModeNames
+        });
         chipModeIds = out.ids;
         record({
           entries: row.value.length,
           from: row.value.map(function (e) { return e && e.name; }).join(' \u2192 '),
           to: out.entries.map(function (e) { return e && e.name; }).join(' \u2192 '),
+          inserted: (out.inserted || []).join(', '),
+          dropped: (out.dropped || []).join(', '),
           changed: out.changed
         });
+        lastInsertedModes = out.inserted || [];
+        lastDroppedModes = out.dropped || [];
         if (!out.changed) return answer;
 
         var values = {};
@@ -2285,11 +2641,53 @@
         return answer;
       }
 
-      /** For a load that brought no config of its own: order what the block already holds. */
+      /**
+       * What the panel added to itself, in one line.
+       *
+       * Said out loud because it is a write nobody asked for, and because the numbers in a new block are
+       * a **copy of a neighbouring mode**, not a reading of the file — a tab that appears with plausible
+       * values on it and no explanation is worse than one that appears with a sentence under it.
+       */
+      function insertedModesNote(names, gone) {
+        var added = names || [];
+        var removed = gone || [];
+        if (!added.length && !removed.length) return null;
+        var where = fileModes.collection || 'this collection';
+        var parts = [where + ' has ' + fileModes.modes.length + ' modes.'];
+        if (added.length) {
+          parts.push(added.join(' and ') + ' had no settings here, so ' +
+            (added.length === 1 ? 'a block was' : 'blocks were') +
+            ' added from the nearest mode — the values are a starting point, not this file’s.');
+        }
+        // **Named, always.** A dropped block takes settings with it, and a removal nobody can see is the
+        // one thing this area has repeatedly got wrong. Saying which mode it was is also the only way
+        // someone can tell residue from a config they pasted for a different collection.
+        if (removed.length) {
+          parts.push(removed.join(' and ') +
+            (removed.length === 1 ? ' is not a mode' : ' are not modes') + ' of it, so ' +
+            (removed.length === 1 ? 'that block was' : 'those blocks were') +
+            ' removed — nothing is created for a mode this collection does not have.');
+        }
+        return parts.join(' ');
+      }
+
+      /**
+       * For a load that brought no config of its own: align what the block already holds to the file.
+       *
+       * → what the alignment added and dropped, for the caller to say something about. The note is the
+       * caller's because the two callers have different things to say: the read-only probe has only
+       * this to report, while a load that found nothing has to say that first.
+       */
       function orderConfigModesToFile() {
         var out = orderedModesInBlock(currentConfigBlock());
-        if (out.changed) writeConfigBlockText(out.text, 'order');
-        else syncChipsToPanelState();
+        var moved = { added: lastInsertedModes.slice(), dropped: lastDroppedModes.slice() };
+        if (out.changed) {
+          writeConfigBlockText(out.text,
+            moved.added.length || moved.dropped.length ? 'order+modes' : 'order');
+        } else {
+          syncChipsToPanelState();
+        }
+        return moved;
       }
 
       /** The config's per-mode array, or [] — read from the block, which is the truth. */
@@ -2415,10 +2813,36 @@
 
       function applyAutoImport(found) {
         lastAutoImport.source = found ? found.source : 'no-answer';
+
+        // **Remembered whatever the answer was, including nothing.** The comparison strip must not keep
+        // drawing the last collection's colours under the new one's ramp, and a declined or empty answer is
+        // exactly when that would happen — so this runs before the early return rather than after it.
+        if (found && found.collection !== undefined) {
+          rememberFileColors(found.collection, found.group, found.existing);
+          scheduleConfigPreview();
+        }
+
         if (!found || !found.config ||
             (found.source !== 'recorded' && found.source !== 'recognised')) {
           if (offerGridGroup(found)) return;
-          setAutoImportNote(null);
+          // **The modes are still read, because they were never the manifest's to give.** This branch used
+          // to return here, and choosing a collection from the dropdown is exactly what reaches it — so a
+          // five-mode collection with no recorded set left the panel on the script's three modes, and the
+          // only pass that aligned them was the probe that runs when a script opens. Two paths, one of
+          // which quietly did less than the other.
+          var onMiss = orderConfigModesToFile();
+          // **Say that nothing was read.** Clearing the note leaves the panel pointing at one collection while
+          // showing another's numbers, with no sign of it — which is how every mismatch this panel has had
+          // stayed hidden. Pointing at `color - moss` with blocks named Granite and Moss read nothing, changed
+          // nothing, and said nothing; the steps and the ladder still described the collection before it.
+          //
+          // Both sentences, in that order: the settings were not read, *and* here is what the modes did. One
+          // without the other is a half-answer, and the half that goes missing is whichever was written last.
+          var missNote = nothingReadNote(found);
+          var addedNote = insertedModesNote(onMiss.added, onMiss.dropped);
+          setAutoImportNote(
+            missNote && addedNote ? missNote + ' ' + addedNote : (addedNote || missNote)
+          );
           return;
         }
         var where = found.collection + (found.group ? ' \u00b7 ' + found.group : '');
@@ -2433,6 +2857,10 @@
         // One write: the fill's text, already in the collection's mode order. A second write that
         // re-read the block is what raced with this one.
         var ordered = orderedModesInBlock(filled.text);
+        // Captured next to the call. `writeConfigBlockText` below reprojects the form and schedules a
+        // preview, and reading a one-turn variable after all that is how a report comes to describe the
+        // call after the one it is reporting on.
+        var onLoad = { added: lastInsertedModes.slice(), dropped: lastDroppedModes.slice() };
         // Straight into the canonical text, with no tab switching. Switching to Configuration code and
         // back was what rebuilt the form, and a rebuild is what made this loop.
         //
@@ -2461,6 +2889,11 @@
           ? ' ' + filled.summary : '';
         // What was done about that different order, said by the thing that did it.
         if (ordered.changed) summary += ' The modes now follow this file\'s order.';
+        // A recorded set can still cover fewer modes than the collection has — it records the modes it
+        // was run for, and the collection gained one since. Those get a block here too, and the sentence
+        // that explains where their numbers came from has to come along.
+        var addedNoteOnLoad = insertedModesNote(onLoad.added, onLoad.dropped);
+        if (addedNoteOnLoad) summary += ' ' + addedNoteOnLoad;
 
         lastAutoImport.summary = filled.summary || null;
         if (found.source === 'recorded') {
@@ -4310,8 +4743,12 @@
                   applyFileModes(data.fileModes);
                   if (data.detectOnly) {
                     // Read-only half: point the panel at a grid if this address holds none, and
-                    // otherwise leave everything exactly as the person left it.
-                    if (!offerGridGroup(data.autoImport)) orderConfigModesToFile();
+                    // otherwise leave everything exactly as the person left it — bar the modes, which
+                    // are a view of the collection rather than something the person set here.
+                    if (!offerGridGroup(data.autoImport)) {
+                      var onProbe = orderConfigModesToFile();
+                      setAutoImportNote(insertedModesNote(onProbe.added, onProbe.dropped));
+                    }
                   } else {
                     // `applyAutoImport` writes the fill and the ordering as one text, so there is no
                     // separate ordering step here to race with it.
@@ -4324,7 +4761,8 @@
               if (data.fileModes !== undefined) {
                 if (data.fileModesSeq === fileModesSeq) {
                   applyFileModes(data.fileModes);
-                  orderConfigModesToFile();
+                  var onTable = orderConfigModesToFile();
+                  setAutoImportNote(insertedModesNote(onTable.added, onTable.dropped));
                 }
                 return;
               }
@@ -4839,12 +5277,31 @@
               text: suggestSlot.innerText || ''
             } : null;
 
-            var slot = document.querySelector('[data-preview-slot]');
-            if (slot) {
+            // **Every slot, not the first one.** The same reporting gap as the two above, one level along:
+            // `@preview` can be a *column* of a `@blocks` control, so there is a slot per row plus the
+            // section-level one — and reading only the first reported an empty preview whenever the first
+            // happened to be the panel-wide slot, which in HSL mode holds nothing. That is precisely how the
+            // colour strips looked broken from here while they were on screen, and how they looked fine from
+            // here while they were empty.
+            var slots = [].slice.call(document.querySelectorAll('[data-preview-slot]'));
+            if (slots.length) {
+              var reported = slots.map(function (one) {
+                return {
+                  key: one.hasAttribute('data-preview-row')
+                    ? one.getAttribute('data-preview-row') : '__panel__',
+                  name: one.getAttribute('data-preview-name') || null,
+                  visible: !!one.innerHTML,
+                  cards: one.querySelectorAll('.color-ramp-preview-card').length,
+                  text: one.innerText || ''
+                };
+              });
               return Promise.resolve({
-                visible: !!slot.innerHTML,
+                // True when *anything* rendered, so a panel with one empty slot and one full one does not
+                // report itself as blank.
+                visible: reported.some(function (one) { return one.visible; }),
                 where: 'form',
-                text: slot.innerText || '',
+                slots: reported,
+                text: reported.map(function (one) { return one.text; }).filter(Boolean).join('\n'),
                 suggestions: suggestions
               });
             }
@@ -4943,7 +5400,21 @@
             // control stayed broken, which is the whole point of driving the real event path.
             return actAndSettle(function () {
               if (target.type === 'checkbox' || target.type === 'radio') {
-                target.checked = a.value === true || a.value === 'true';
+                // **A radio takes its option by value, not only by `part`.** `uiControlTarget` falls back to
+                // the *first* input of a group when nothing matches `part`, and the value is then read as a
+                // boolean — so `name=colorModel value=oklch` unchecked HSL, selected nothing, and reported
+                // success. The panel then previewed HSL while the terminal believed it was on OKLCH, which is
+                // exactly the class of "verified against the wrong state" this tool exists to stop. So a
+                // string that names one of the group's options is honoured as the option.
+                var named = target.type === 'radio' && a.value != null && a.value !== true &&
+                  a.value !== 'true' && a.value !== false && a.value !== 'false'
+                  ? uiControlTarget(a.name, String(a.value), a.index)
+                  : null;
+                if (named && named.value !== String(a.value)) {
+                  throw new Error('"' + a.name + '" has no option called "' + a.value + '"');
+                }
+                if (named) target = named;
+                target.checked = named ? true : (a.value === true || a.value === 'true');
               } else {
                 target.value = a.value == null ? '' : String(a.value);
               }
@@ -5021,7 +5492,8 @@
               intents: currentModeIntents(),
               fileModes: fileModes,
               chipModeIds: chipModeIds,
-              removedModeIds: removedModeIds
+              removedModeIds: removedModeIds,
+              addedModeNames: addedModeNames
             });
 
           default:

@@ -38,6 +38,7 @@ function load() {
   return new Function('figma', 'console', 'window',
     code +
     '; return { data: typographyConfigData, variables: generateTypographyVariables(typographyConfigData),' +
+    ' generateTypographyVariables: generateTypographyVariables,' +
     ' typeScaleTable: typeScaleTable, typeScaleSizes: typeScaleSizes,' +
     ' typeScaleLineHeights: typeScaleLineHeights, typeScaleTrackings: typeScaleTrackings,' +
     ' typographyOverviewHtml: typographyOverviewHtml, typographyPreviewHtml: typographyPreviewHtml,' +
@@ -48,6 +49,32 @@ function load() {
 }
 
 const T = load();
+
+/**
+ * The three viewport modes this script used to ship, and a config carrying them.
+ *
+ * `desktop / tablet / mobile` were an example of one Figma file; shipping them made them the plugin's
+ * opinion about every file, so the block ships one starter mode now. What these tests are about is the
+ * per-mode arithmetic and the preview following the selected mode — neither is about viewport names — so
+ * they state the modes they need. Built from the block and taken through the script's own compat and
+ * materialisation steps, which is what a run does before any of this is read.
+ */
+const MODES = [
+  { name: 'desktop', scaleType: 'modular', ratio: 1.25, base: 8, letterSpacing: 0,
+    letterSpacingAtTop: -1.2, lineHeight: 12, lineHeightAtTop: 66, roundTo: 2 },
+  { name: 'tablet', scaleType: 'modular', ratio: 1.2, base: 8, letterSpacing: 0,
+    letterSpacingAtTop: -0.8, lineHeight: 12, lineHeightAtTop: 46, roundTo: 2 },
+  { name: 'mobile', scaleType: 'modular', ratio: 1.125, base: 8, letterSpacing: 0,
+    letterSpacingAtTop: -0.46, lineHeight: 12, lineHeightAtTop: 25, roundTo: 1 },
+];
+
+function threeModeConfig() {
+  const config = P.parseConfigBlockObject(BLOCK);
+  config.modes = MODES.map((m) => JSON.parse(JSON.stringify(m)));
+  T.ensureCompatTypographyConfig(config);
+  T.materializeFontSizes(config);
+  return config;
+}
 
 function render() {
   const schema = P.parse(BLOCK);
@@ -105,7 +132,11 @@ test('a mode shows the fields its scale type uses', () => {
 test('the modes come from the config, not from a payload it no longer has', () => {
   // `fontSizes` is built from `minFont`/`baseFont`/`maxFont`, which a panel-written mode does not carry —
   // so reading the mode list off it found nothing and the run wrote no modes at all.
-  assert.deepEqual(T.typographyViewportNames(T.data), ['desktop', 'tablet', 'mobile']);
+  //
+  // Asserted on the shipped block *and* on a config with several modes: one entry cannot tell a function
+  // that reads a list from one that returns the first thing it finds.
+  assert.deepEqual(T.typographyViewportNames(T.data), ['Value']);
+  assert.deepEqual(T.typographyViewportNames(threeModeConfig()), ['desktop', 'tablet', 'mobile']);
 });
 
 test('the line-height ratio falls as the size grows, which is the whole point of the pair', () => {
@@ -204,25 +235,28 @@ test('the specimen sets the type at its real size, largest last', () => {
 });
 
 test('the preview follows the mode the panel is showing', () => {
-  const desktop = T.typographyPreviewHtml({ config: T.data }, 'typography', 'desktop');
-  const mobile = T.typographyPreviewHtml({ config: T.data }, 'typography', 'mobile');
+  const data = threeModeConfig();
+  const desktop = T.typographyPreviewHtml({ config: data }, 'typography', 'desktop');
+  const mobile = T.typographyPreviewHtml({ config: data }, 'typography', 'mobile');
   assert.notEqual(desktop, mobile);
   assert.match(mobile, /font-size:23px/, 'mobile tops out at 23');
   assert.match(desktop, /font-size:60px/, 'desktop at 60');
 
   // An unknown mode name falls back to the first rather than rendering nothing — a blank preview reads
   // as a broken panel.
-  assert.equal(T.typographyPreviewHtml({ config: T.data }, 'typography', 'nonsense'), desktop);
+  assert.equal(T.typographyPreviewHtml({ config: data }, 'typography', 'nonsense'), desktop);
 });
 
 test('the variables a run writes are the table, per mode', () => {
+  const data = threeModeConfig();
+  const variables = T.generateTypographyVariables(data);
   const byMode = { Desktop: 'desktop', Tablet: 'tablet', Mobile: 'mobile' };
   Object.keys(byMode).forEach((label) => {
-    const rows = T.typeScaleTable({ config: T.data }, byMode[label]).rows;
+    const rows = T.typeScaleTable({ config: data }, byMode[label]).rows;
     rows.forEach((row) => {
-      assert.equal(T.variables['Typography/' + row.token + '/font-size'].values[label], row.size);
-      assert.equal(T.variables['Typography/' + row.token + '/line-height'].values[label], row.lineHeight);
-      assert.equal(T.variables['Typography/' + row.token + '/letter-spacing'].values[label], row.tracking);
+      assert.equal(variables['Typography/' + row.token + '/font-size'].values[label], row.size);
+      assert.equal(variables['Typography/' + row.token + '/line-height'].values[label], row.lineHeight);
+      assert.equal(variables['Typography/' + row.token + '/letter-spacing'].values[label], row.tracking);
     });
   });
 });

@@ -1,6 +1,5 @@
 // Typography
 // @DOC_START
-// # Typography
 // Responsive type scale: one scale per mode, plus the line height and tracking that travel with a size.
 //
 // ## Overview
@@ -223,35 +222,22 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
   // @fromFile: domains.typography
 
   // # General
-  // Where this goes, and what exists. Pick a collection in this file, or choose "New collection" and
-  // type a name — a name that is not in this file is created on Run.
   collectionName: "Responsive System", // @collection @label: Collection
   // @collectionModes: Collection modes
-  // The collection's own modes. The chips are a view of the file; the tabs below hold each mode's scale.
   group: "Typography", // @label: Group within collection @placeholder="eg.: Typography"
   fontScale: ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"], // @label: Tokens @helper: Named smallest to largest, and heading-{6,1} is a series of six. The Base unit below is the size of the first name here.
   fontFamily: "Inter", // @label: Font family @placeholder="eg.: Inter Tight"
-  fontWeights: [400, 600], // @label: Font weights @helper: A number is a font weight; a word is a Figma font style name, e.g. Semi Bold. Each one gets a variable and a text style.
-  createStyles: true, // @label: Create and update text styles @helper: One style per token and weight, bound to these variables
+  fontWeights: [400, 600], // @label: Font weights @helper: A number is a font weight; a word is a Figma font style name, e.g. Semi Bold. 
+  createStyles: true, // @label: Create and update text styles
   styleNaming: "Typography/{$fontScale}/{$fontWeight}", // @label: Style naming @placeholder="eg.: Typography/{$fontScale}/{$fontWeight}"
 
   // --- @section
 
   // # Mode settings
-  generateOverview: false, // @label: Generate overview @helper: Fills the Render styles — overview section in Design System Foundations
-  // Each mode's own scale, the same three models the Spacing panel offers. **Line height and letter
-  // spacing take two numbers**: the value at the smallest step, and — optionally — the value at the
-  // largest, with the steps between interpolated. That is what reproduces the interaction the type
-  // tools chart but none of them computes: absolute line height rises while its *ratio* falls, and
-  // tracking tightens as the size grows. Leave the second number out and line height keeps the base
-  // ratio and tracking stays put, which is what this script has always done.
-  //
-  // These are not the numbers this script shipped with, and they cannot be: a per-mode modular scale
-  // has no min, max or easing to reproduce a sine ramp from 8 to 200. The token *names* are unchanged,
-  // so a run updates the variables you already have rather than creating a second set beside them.
+  generateOverview: false, // @label: Generate overview
   modes: [
     {
-      name: "desktop",
+      name: "Value",
       scaleType: "modular",
       ratio: 1.25,
       base: 8,
@@ -260,28 +246,6 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
       lineHeight: 12,
       lineHeightAtTop: 66,
       roundTo: 2
-    },
-    {
-      name: "tablet",
-      scaleType: "modular",
-      ratio: 1.2,
-      base: 8,
-      letterSpacing: 0,
-      letterSpacingAtTop: -0.8,
-      lineHeight: 12,
-      lineHeightAtTop: 46,
-      roundTo: 2
-    },
-    {
-      name: "mobile",
-      scaleType: "modular",
-      ratio: 1.125,
-      base: 8,
-      letterSpacing: 0,
-      letterSpacingAtTop: -0.46,
-      lineHeight: 12,
-      lineHeightAtTop: 25,
-      roundTo: 1
     }
   ], // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.067:1.067 Minor second|1.125:1.125 Major second|1.2:1.2 Minor third|1.25:1.25 Major third|1.333:1.333 Perfect fourth|1.414:1.414 Augmented fourth|1.5:1.5 Perfect fifth|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|base:number=Base unit|letterSpacing:number=Letter spacing|letterSpacingAtTop:number=Letter spacing (largest)|lineHeight:number=Line height|lineHeightAtTop:number=Line height (largest)|roundTo:number=Round numbers to @tabs @label: Modes
 
@@ -289,7 +253,7 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
   // @suggestions
 
   // # Preview
-  overviewPreviewText: "Sphinx of black quartz,\njudge my vow.", // @label: Preview text @textarea @helper: Shown in the specimen below, and in the overview frame when you generate one
+  overviewPreviewText: "Sphinx of black quartz,\njudge my vow.", // @label: Preview text @textarea 
   // @preview
   // @CONFIG_END
 };

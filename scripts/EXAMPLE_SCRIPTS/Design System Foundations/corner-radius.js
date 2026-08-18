@@ -1,6 +1,5 @@
 // Corner radius
 // @DOC_START
-// # Corner radius
 // A corner-radius scale, one per mode.
 //
 // ## Overview
@@ -67,48 +66,21 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
   // @fromFile: domains.radius
 
   // # General
-  // Where this goes, and what exists. Pick a collection in this file, or choose "New collection" and
-  // type a name — a name that is not in this file is created on Run.
   collectionName: "Responsive System", // @collection @label: Collection
   // @collectionModes: Collection modes
-  // The collection's own modes. The chips are a view of the file; the tabs below hold each mode's scale.
   group: "Corner radius", // @label: Group within collection @placeholder="eg.: Corner radius"
-  radii: ["none", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest, and radius-{1,10} is a series of ten. Extra values below fill the smallest names, and the scale takes over from there.
+  radii: ["none", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest, and radius-{1,10} is a series of ten. 
 
   // --- @section
 
   // # Mode settings
-  generateOverview: false, // @label: Generate overview @helper: Builds the Corner radius — overview frame
-  // Each mode's own scale, the same three models Spacing offers. `metric` is a base plus a step that
-  // grows every N tokens; `none` is an extra value of 0 rather than a special case, which is why it sits
-  // in Extra values and not in the maths.
-  //
-  // These generate exactly what this script has always generated: `0, 4, 8, 12, 16, 24` on desktop, and
-  // the same shape at three quarters and half below it.
+  generateOverview: false, // @label: Generate overview @helper: Builds the Corner radius overview frame
   modes: [
     {
-      name: "desktop",
+      name: "Value",
       scaleType: "metric",
       base: 4,
       step: 4,
-      mod: 3,
-      roundTo: 2,
-      extras: [0]
-    },
-    {
-      name: "tablet",
-      scaleType: "metric",
-      base: 3,
-      step: 3,
-      mod: 3,
-      roundTo: 2,
-      extras: [0]
-    },
-    {
-      name: "mobile",
-      scaleType: "metric",
-      base: 2,
-      step: 2,
       mod: 3,
       roundTo: 2,
       extras: [0]

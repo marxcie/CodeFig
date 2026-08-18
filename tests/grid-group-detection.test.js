@@ -114,10 +114,15 @@ test('opening a panel asks where the grid is, and asks read-only', () => {
     'the render asks');
 
   // The detect-only reply must not fill.
+  //
+  // Asserted on the branch's *contents* rather than on a character distance from the `if`. The window
+  // used to be 220 characters, which made a comment inside the branch a test failure — a bound that
+  // measures prose is a bound that fails for the wrong reason, and the thing being pinned is which
+  // functions this branch may call.
   const handler = ui.slice(ui.indexOf("if (data.autoImport !== undefined)"));
   const branch = handler.slice(0, handler.indexOf('return;'));
-  assert.match(branch, /if \(data\.detectOnly\) \{[\s\S]{0,220}offerGridGroup/);
   const detectPart = branch.slice(branch.indexOf('if (data.detectOnly)'), branch.indexOf('} else {'));
+  assert.match(detectPart, /offerGridGroup/, 'the detect-only half asks where the grid is');
   assert.equal(detectPart.indexOf('applyAutoImport'), -1,
     'a detect-only answer must never reach the fill');
 });

@@ -43,6 +43,25 @@ function libs() {
 
 const L = libs();
 
+const MODES = [
+  { name: 'desktop', scaleType: 'metric', base: 4, step: 4, mod: 3, roundTo: 2, extras: [0] },
+  { name: 'tablet', scaleType: 'metric', base: 3, step: 3, mod: 3, roundTo: 2, extras: [0] },
+  { name: 'mobile', scaleType: 'metric', base: 2, step: 2, mod: 3, roundTo: 2, extras: [0] },
+];
+/**
+ * The block, with the three viewport modes this script used to ship.
+ *
+ * `desktop / tablet / mobile` were an example of one Figma file, and shipping them made them the
+ * plugin's opinion about every file — so the block now ships one starter mode instead. These tests are
+ * about the arithmetic and about the preview following the selected mode, neither of which is about
+ * viewport names, so they state the modes they need rather than borrowing whatever the block holds.
+ */
+function threeModeConfig() {
+  const config = P.parseConfigBlockObject(BLOCK);
+  config.modes = MODES.map((m) => JSON.parse(JSON.stringify(m)));
+  return config;
+}
+
 function readout(html) {
   return {
     names: [...html.matchAll(/radius-preview-name">([^<]*)</g)].map((m) => m[1]),
@@ -116,7 +135,7 @@ test('every mode generates exactly what it generated before the panel', () => {
   // The spelling moved to the panel's — `scaleType`, a numeric `base`, and `none` as an extra value of 0
   // rather than a floor the maths has to know about. These are the values the previous block produced,
   // checked mode by mode: same generator, same output, different words.
-  const config = P.parseConfigBlockObject(BLOCK);
+  const config = threeModeConfig();
   const expected = {
     desktop: [0, 4, 8, 12, 16, 24],
     tablet: [0, 4, 6, 10, 12, 18],
@@ -173,7 +192,7 @@ test('a rounded value still says what it was, and both notes can appear together
 });
 
 test('the preview follows the mode the panel is showing', () => {
-  const config = P.parseConfigBlockObject(BLOCK);
+  const config = threeModeConfig();
   const mobile = readout(L.radiusPreviewHtml(config, 'radius', 'mobile'));
   assert.deepEqual(mobile.values.map(Number), [0, 2, 4, 6, 8, 12]);
   assert.notDeepEqual(mobile.radii, readout(L.radiusPreviewHtml(config, 'radius', 'desktop')).radii);

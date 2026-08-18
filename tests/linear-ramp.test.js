@@ -343,8 +343,13 @@ test('a run that covers every mode says nothing about it', () => {
 // ---------------------------------------------------------------------------
 
 test('the shipped defaults generate the metric sequence a design system doc describes', () => {
-  // 4, 8, 12, 16, 24, 32 on desktop — a base of 4 stepping every third token, with `px` held at
-  // the minimum of 1 because the model would put it at 0.
+  // 4, 8, 12, 16, 24, 32 — a base of 4 stepping every third token, with `px` stated as an extra at 1
+  // because the model would put it at 0.
+  //
+  // **One mode, called `Value`.** The block used to ship `desktop / tablet / mobile`, which were only
+  // ever an example of one Figma file and became the plugin's opinion about every file. What this test
+  // is about is the scale — the model and the numbers — so it asserts them on the starter mode rather
+  // than on three viewport names the plugin no longer proposes.
   const ctx = baseContext();
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
   const spec = ctx.spacingRampSpec();
@@ -355,8 +360,8 @@ test('the shipped defaults generate the metric sequence a design system doc desc
   ctx.materialiseRampSizes(config, spec);
   const generated = ctx.generateRampVariables(config, spec);
 
-  const desktop = Object.keys(generated).map((name) => generated[name].values.Desktop);
-  assert.deepEqual(desktop, [1, 4, 8, 12, 16, 24]);
+  const values = Object.keys(generated).map((name) => generated[name].values.Value);
+  assert.deepEqual(values, [1, 4, 8, 12, 16, 24]);
   assert.deepEqual(Object.keys(generated), [
     'Spacing/px', 'Spacing/xs', 'Spacing/sm', 'Spacing/md', 'Spacing/lg', 'Spacing/xl'
   ], 'the token names did not change — only how their values are described');
@@ -374,7 +379,7 @@ test('the shipped radius defaults start at zero and step up', () => {
   const generated = ctx.generateRampVariables(config, spec);
 
   // The base sits at `xs`, so `none` is one step below it at 0 and the growth starts from there.
-  assert.deepEqual(Object.keys(generated).map((n) => generated[n].values.Desktop), [0, 4, 8, 12, 16, 24]);
+  assert.deepEqual(Object.keys(generated).map((n) => generated[n].values.Value), [0, 4, 8, 12, 16, 24]);
 });
 
 test('a run says which model produced its numbers', () => {
@@ -389,14 +394,15 @@ test('a run says which model produced its numbers', () => {
   ctx.materialiseRampSizes(config, spec);
 
   const lines = ctx.describeRampModels(config, spec);
-  assert.match(lines[0], /Desktop: metric, base 4, step 4, mod 3/);
+  assert.match(lines[0], /Value: metric, base 4, step 4, mod 3/);
   // **The floor line is gone from the shipped block, and that is the point of the change.** `px` used to
   // be a value the model pushed below `min: 1` and the floor caught — reported as "px held at the
   // minimum of 1". It is now `extras: [1]`: the same number, stated rather than clamped. A held value is
   // a consequence to explain; an extra is a decision, and it needs no explaining.
   assert.equal(lines.filter((l) => /held at the minimum/.test(l)).length, 0);
-  assert.match(lines[1], /Tablet: metric, base 3, step 3, mod 3/);
-  assert.equal(lines.filter((l) => /metric, base/.test(l)).length, 3, 'one per viewport');
+  assert.equal(lines.filter((l) => /metric, base/.test(l)).length, 1,
+    'one per mode, and the shipped block now ships one — the three viewports it used to name were an ' +
+    'example of one file, not a default the plugin should hold');
 
   // An unconfigured (endpoints) config says so too, with the numbers that shaped it.
   const frozen = frozenConfigBlock('spacing-before-19.js');

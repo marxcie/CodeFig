@@ -307,6 +307,20 @@
    * flat controls already have rather than inventing a second mechanism. Parentheses because the
    * column separator is `|`, so options cannot also be `|`-delimited at the top level.
    */
+  /** Where the brace opened at `from` closes, or -1. Counted rather than searched, so a nested group's own
+   *  braces do not end its parent's. */
+  function matchingBrace(text, from) {
+    var depth = 0;
+    for (var i = from; i < text.length; i++) {
+      if (text.charAt(i) === "{") depth++;
+      else if (text.charAt(i) === "}") {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return -1;
+  }
+
   function parseRowColumns(spec) {
     var columns = [];
     var depth = 0;
@@ -324,6 +338,46 @@
     for (var p = 0; p < parts.length; p++) {
       var text = parts[p].trim();
       if (!text) continue;
+
+      // **`#Seed` — a heading among the columns.**
+      //
+      // `bright:{hue|chroma}` groups *cells*; *Seed* and *Palette* group *rows*. Those are two different
+      // jobs, and the second one already has a mechanism: a `// # Heading` line at block level is what
+      // separates *General* from *Mode settings*. This is that, one level deeper, so it renders as the same
+      // `h2.config-ui-heading` the form uses and inherits the size ladder rather than starting a second one.
+      //
+      // Not a third layout for a group, and not a new annotation — Márton's instruction was to reuse the
+      // heading rather than invent something, and the reuse is this one branch plus one in the renderer.
+      // **`@preview` among the columns.** Every one of the five frames draws the colour strip *inside* its
+      // mode block, and none of them has a Preview section — so the bottom slot was not in the wrong place,
+      // it was never in the design. Written as a pseudo-column for the same reason `#Heading` is: it is a
+      // thing that appears between an entry's rows, and the row loop is what knows where those are.
+      if (/^@preview$/.test(text)) {
+        columns.push({ type: "preview" });
+        continue;
+      }
+
+      var headingInColumns = text.match(/^(#+)\s*(.+)$/);
+      if (headingInColumns) {
+        // A heading may carry a condition, the same `{…}` a column does. *Seed* is drawn only once a curve is
+        // chosen, and a heading left behind over nothing reads as a section that failed to render.
+        var headingText = headingInColumns[2].trim();
+        var headingWhen = null;
+        var hwhen = headingText.match(/\{([^}]*)\}\s*$/);
+        if (hwhen) {
+          headingWhen = parseConditionRules(hwhen[1]);
+          headingText = headingText.slice(0, hwhen.index).trim();
+        }
+        var heading = {
+          type: "heading",
+          level: Math.min(6, headingInColumns[1].length + 1),
+          text: headingText
+        };
+        if (headingWhen) heading.showWhen = headingWhen;
+        columns.push(heading);
+        continue;
+      }
+
       var at = text.indexOf(":");
       var key = (at === -1 ? text : text.slice(0, at)).trim();
       var typeText = (at === -1 ? "text" : text.slice(at + 1)).trim();
@@ -342,19 +396,93 @@
       // separated by `|` inside the braces, which is why the split above counts brace depth.
       // Taken out **first**, and from anywhere in the spec: a condition contains an `=`, so splitting
       // the label off before removing it would hand `Scaling method` the wrong half.
+      // **A nested group: `bright:{hue:number=Hue|chroma:number=Chroma}=Bright`.**
+      //
+      // An anchor is one thing you set and two numbers you set it with, so the config says so — a mode
+      // entry holds `bright: { hue, chroma }` and the block reads the way a person would write it. The
+      // alternative was six flat keys named `hueBright`, `chromaBright` and so on, with an annotation
+      // explaining which belonged together; Márton chose the nesting.
+      //
+      // **Told apart from `showWhen` by position, not by content.** Both use braces. A condition follows a
+      // type (`ratio:text{scaleType=modular}`); a group's braces *are* the type, immediately after the
+      // colon. Sniffing the contents instead — "a condition has an `=` and a group has a `:`" — would
+      // break the day someone writes a group with one column and no label.
+      //
+      // One level only. Two would be a form inside a form inside a row, and nothing asks for it.
+      var groupColumns = null;
+      if (typeText.charAt(0) === "{") {
+        var close = matchingBrace(typeText, 0);
+        if (close !== -1) {
+          groupColumns = parseRowColumns(typeText.slice(1, close));
+          typeText = typeText.slice(close + 1).trim();
+        }
+      }
+
+      // `@helper:` on a column, taken out **first** and to the end of the segment — the same rule the
+      // field-level one has, for the same reason: it is prose, and prose about this plugin says things
+      // like "an object with no `@rows`", so it cannot stop at the next `@word`.
+      //
+      // A column helper therefore cannot contain a `|`, because that is what separates columns and the
+      // split above has already happened. Stated rather than escaped: the alternative is a quoting rule
+      // in a format whose whole point is that a person reads and pastes it.
+      //
+      // Extracted before the label, because the label is split at the *first* `=` and a helper may well
+      // contain one — and *after* the group above, because a part's own helper lives inside the braces.
+      // Taking this first swallowed the closing brace and the group's label with it, and the column came
+      // back as a plain text field with no parts and nothing said so.
+      // Prose, so it runs to the end of the segment exactly as `@helper:` does — which means a column may
+      // carry one or the other, not both, and this one is taken first. It appears only while the disable
+      // applies, so the note and the state are one fact: a static helper reading "anchors take effect once
+      // you choose a curve" is false the moment a curve is chosen.
+      var disabledNote = null;
+      var noteInColumn = typeText.match(/@disabledNote:\s*(.*)$/);
+      if (noteInColumn) {
+        disabledNote = noteInColumn[1].trim();
+        typeText = typeText.slice(0, noteInColumn.index).trim();
+      }
+
+      var columnHelper = null;
+      var helperInColumn = typeText.match(/@helper:\s*(.*)$/);
+      if (helperInColumn) {
+        columnHelper = helperInColumn[1].trim();
+        typeText = typeText.slice(0, helperInColumn.index).trim();
+      }
+
+      // `@placeholder="…"` on a column, spelled the same way a field spells it. Frame 2065:4154 is the panel
+      // as it opens and every cell in it carries a grey example — a hue, a chroma, a hex — which is the only
+      // thing telling a first-time reader what belongs in a numeric cell called *Chroma*. Taken out before
+      // the condition and the label because it is quoted and may contain either character.
+      var columnPlaceholder = null;
+      var phInColumn = typeText.match(/@placeholder\s*=\s*["']([^"']*)["']/);
+      if (phInColumn) {
+        columnPlaceholder = phInColumn[1];
+        typeText = typeText.replace(/@placeholder\s*=\s*["'][^"']*["']/g, "").trim();
+      }
+
+      // **`[field=value]` — inert, not absent.** Márton, on the Palette while a mode is on Original:
+      // *"disabled, not hidden. They hold the anchors auto-import read from my file, and that is information
+      // I want to see."* Hiding a field holding a real value read out of someone's file throws that value
+      // away visually; disabling says "this is what is there, and it is not doing anything yet".
+      //
+      // Brackets rather than an `@keyword`, and for the same reason `{…}` is braces: a condition contains
+      // `=`, and the label is split at the *first* `=`. An `@disabledWhen: a=x` written before the label
+      // swallowed it — the column came back labelled from its key with the condition eaten. Positional and
+      // bracketed cannot do that.
+      //
+      // Same rule grammar as `{…}`, so `a=x;b=y` is an AND: the Palette is inert only while *both* segments
+      // are on Original.
+      var disabledWhen = null;
+      var off = typeText.match(/\[([^\]]*)\]/);
+      if (off) {
+        typeText = (typeText.slice(0, off.index) + typeText.slice(off.index + off[0].length)).trim();
+        disabledWhen = parseConditionRules(off[1]);
+      }
+
       var showWhen = null;
       var when = typeText.match(/\{([^}]*)\}/);
       if (when) {
         typeText = (typeText.slice(0, when.index) + typeText.slice(when.index + when[0].length)).trim();
-        showWhen = when[1].split(";").map(function (rule) {
-          var bits = rule.split("=");
-          if (bits.length < 2) return null;
-          return {
-            field: bits[0].trim(),
-            values: bits[1].split("|").map(function (v) { return v.trim(); }).filter(Boolean)
-          };
-        }).filter(function (rule) { return rule && rule.field && rule.values.length; });
-        if (!showWhen.length) showWhen = null;
+        showWhen = parseConditionRules(when[1]);
       }
 
       var label = null;
@@ -375,17 +503,43 @@
         key: key, label: label || labelFromName(key), type: "text", labelSpelled: label != null
       };
       if (showWhen) column.showWhen = showWhen;
+      if (disabledWhen) column.disabledWhen = disabledWhen;
+      if (disabledNote) column.disabledNote = disabledNote;
+      if (columnHelper) column.helper = columnHelper;
+      if (columnPlaceholder != null) column.placeholder = columnPlaceholder;
+      if (groupColumns && groupColumns.length) {
+        column.type = "group";
+        column.columns = groupColumns;
+        columns.push(column);
+        continue;
+      }
       var optionMatch = typeText.match(/^(radio)?\((.*)\)$/);
       if (optionMatch) {
         column.type = optionMatch[1] ? "radio" : "select";
         column.options = parseColumnOptions(optionMatch[2]);
       } else if (typeText === "number" || typeText === "checkbox" || typeText === "text" ||
-                 typeText === "list") {
+                 typeText === "list" || typeText === "mode") {
+        // `mode` is the collection's own mode list plus *New mode*, the same control `@mode` builds at field
+        // level. Every Colors frame draws a mode block's Mode field as that dropdown; as a `text` column it
+        // was a plain input, so the modes a file actually has were nowhere on screen.
         column.type = typeText;
       }
       columns.push(column);
     }
     return columns;
+  }
+
+  /** `a=x|y;b=z` → rules, ANDed. One implementation, used by the brace form and by `@disabledWhen:`. */
+  function parseConditionRules(text) {
+    var rules = String(text == null ? "" : text).split(";").map(function (rule) {
+      var bits = rule.split("=");
+      if (bits.length < 2) return null;
+      return {
+        field: bits[0].trim(),
+        values: bits[1].split("|").map(function (v) { return v.trim(); }).filter(Boolean)
+      };
+    }).filter(function (rule) { return rule && rule.field && rule.values.length; });
+    return rules.length ? rules : null;
   }
 
   /**
@@ -542,6 +696,21 @@
           i++;
           continue;
         }
+        // `@prose` on its own line is the other **directive**: this block's paragraphs are its
+        // content, so leave them on the page.
+        //
+        // Everywhere else a paragraph explains the control it sits against, and the renderer folds it
+        // into that control's ⓘ. The Help script's specimen shelf is the one block where that is
+        // backwards — it is a reference, read top to bottom, and its prose *is* the thing you came
+        // for. One flag rather than a per-script exemption in the renderer, because the block is the
+        // format: a script that means to be read says so in the block, where the next person editing
+        // it will see why their paragraph stayed put.
+        if (/^@prose\b/.test(c)) {
+          rows.push({ type: "directive", raw: line, directive: "prose" });
+          lastWasBlank = false;
+          i++;
+          continue;
+        }
 
         if (/^@suggestions\b/.test(c)) {
           rows.push({ type: "suggestions", raw: line });
@@ -676,6 +845,22 @@
         var val = parseValue(m[2].trim());
         var tip = (m[3] || "").trim();
 
+        // **`@rows:` comes out first, before the helper grab below.**
+        //
+        // A column carries its own `@helper:` inside its segment, and the field-level grab is defined as
+        // *to the end of the line* — so the first column helper swallowed the rest of the spec, `@tabs` and
+        // `@label:` with it. The column lost its type and its label, and nothing said so.
+        //
+        // Taking the rows spec out of `tip` first resolves the scope by position rather than by inventing a
+        // second word for the same thing: an `@helper:` inside the `@rows:` value belongs to the column
+        // whose segment it is in, and anything left on the line after that belongs to the field. The
+        // negative lookahead is what lets the value span several column helpers and still stop at the next
+        // real annotation.
+        var rowsMatch = tip.match(/@rows:\s*(.+?)(?=\s+@(?!helper:|disabledNote:)|$)/);
+        if (rowsMatch) {
+          tip = (tip.slice(0, rowsMatch.index) + tip.slice(rowsMatch.index + rowsMatch[0].length)).trim();
+        }
+
         // `@helper: …` — a note that belongs to *this field* and renders under its control, which is
         // where the frames put it. A comment line above the field is a paragraph row instead: it sits
         // at the label's left edge and reads as prose about the section, not about the input.
@@ -736,12 +921,27 @@
         }
 
         // A repeatable group: a list of objects, edited as rows. Claimed before the fallback
-        // below, which is what an unclaimed array falls into.
-        var rowsMatch = tip.match(/@rows:\s*(.+?)(?=\s+@|$)/);
+        // below, which is what an unclaimed array falls into. `rowsMatch` was taken above, before the
+        // helper grab could eat it.
         var rowColumns = null;
+        var f_groupColumns = null;
         if (rowsMatch && Array.isArray(val)) {
           rowColumns = parseRowColumns(rowsMatch[1]);
           if (rowColumns.length > 0) inputType = "rows";
+        }
+        // `@group: hue:number=Hue|chroma:number=Chroma` on an **object** — one labelled row with captioned
+        // parts, which is the same control a nested `@rows` column builds and the same shape the frames draw
+        // for an anchor. `@rows` cannot serve it: that one needs an array, because it is a *repeatable* group.
+        //
+        // The OKLCH settings Lightness row is the case. Written as `@rows` it fell through to `unsupported`
+        // and rendered as a code textarea — legal, silent, and not the control the design asks for.
+        var groupMatch = tip.match(/@group:\s*(.+?)(?=\s+@(?!helper:|disabledNote:)|$)/);
+        if (groupMatch && val && typeof val === "object" && !Array.isArray(val)) {
+          var groupCols = parseRowColumns(groupMatch[1]);
+          if (groupCols.length) {
+            inputType = "group";
+            f_groupColumns = groupCols;
+          }
         }
         if (inputType === "object" || inputType === "array") {
           inputType = "unsupported";
@@ -773,10 +973,17 @@
         // one or the other in practice, but recording it per row means a mixed block round-trips too.
         f.syntax = syntax;
         if (syntax === "property") f.trailingComma = trailingComma;
+        if (inputType === "group") f.columns = f_groupColumns;
         if (inputType === "rows") {
           f.columns = rowColumns;
           // A display choice on one control. Same values, same serialization.
+          //
+          // Three of them now: the stacked table (neither flag), `@tabs` (one row at a time behind a tab
+          // strip), and `@blocks` (every row in full, one under the next, each titled). Colours needed the
+          // third because a ramp is eleven swatches judged by the joins between neighbours, and two ramps
+          // you want to compare are two strips on one page rather than two tabs you flip between.
           f.tabs = /@tabs\b/.test(tip);
+          f.blocks = /@blocks\b/.test(tip);
         }
         // Exactly as the user wrote it. serialize() re-emits this verbatim unless the form
         // actually changed the value, so bare keys, single quotes and the comments explaining
@@ -785,7 +992,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|tabs|collection|mode|helper)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|helper)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -857,8 +1064,17 @@
      * whitespace rather than a constant.
      *
      * Arrays of primitives stay on one line, where a line each would be noise.
+     *
+     * **An object is printed the way the source wrote it**, inline or expanded. Not by a heuristic: the
+     * first attempt was "an object of primitives stays inline", which is right for Colours' `bright: { hue,
+     * chroma }` and wrong for Grid's mode entries, which are also objects of primitives and are written a
+     * key per line. Reshaping one block to stop reshaping another is not a fix.
+     *
+     * So `sourceText` is the row's own raw text, and a key written as `key: { … }` on one line stays that
+     * way. Without it, editing a single hue reprinted a 43-line block as 69 — still valid, and no longer
+     * something a person would have written, which is the failure this printer exists to prevent.
      */
-    function fmt(v, indent) {
+    function fmt(v, indent, sourceText, key) {
       var pad = indent || "";
       var inner = pad + "  ";
       if (v === null) return "null";
@@ -873,17 +1089,35 @@
           return "[" + v.map(function (item) { return fmt(item, ""); }).join(", ") + "]";
         }
         return "[\n" + v.map(function (item) {
-          return inner + fmt(item, inner);
+          return inner + fmt(item, inner, sourceText);
         }).join(",\n") + "\n" + pad + "]";
       }
       if (typeof v === "object") {
         var keys = Object.keys(v);
         if (keys.length === 0) return "{}";
-        return "{\n" + keys.map(function (key) {
-          return inner + printKey(key) + ": " + fmt(v[key], inner);
+        if (key && wasInlineInSource(sourceText, key)) {
+          return "{ " + keys.map(function (k) {
+            return printKey(k) + ": " + fmt(v[k], "", sourceText, k);
+          }).join(", ") + " }";
+        }
+        return "{\n" + keys.map(function (k) {
+          return inner + printKey(k) + ": " + fmt(v[k], inner, sourceText, k);
         }).join(",\n") + "\n" + pad + "}";
       }
       return JSON.stringify(v);
+    }
+
+    /**
+     * Did the source write `key: { … }` on one line?
+     *
+     * Deliberately literal: a brace-to-brace match with no newline in it. A key whose object the source
+     * expanded stays expanded, and a key the source has no opinion about — a value the panel just invented —
+     * expands too, which is the safer default in a file people read.
+     */
+    function wasInlineInSource(sourceText, key) {
+      if (typeof sourceText !== "string" || !sourceText) return false;
+      var escaped = String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp('["\']?' + escaped + '["\']?\\s*:\\s*\\{[^\\n{}]*\\}').test(sourceText);
     }
 
     /** Bare where JavaScript allows it, quoted where it does not. */
@@ -960,10 +1194,31 @@
         if (r.inputType === "mode") {
           parts.push("@mode" + (r.collectionField ? ": " + r.collectionField : ""));
         }
+        if (r.inputType === "group" && r.columns) {
+          parts.push("@group: " + r.columns.map(function (c) {
+            var named = c.label && (c.labelSpelled || c.label !== labelFromName(c.key)) ? "=" + c.label : "";
+            return c.key + ":" + c.type + named;
+          }).join("|"));
+        }
         if (r.inputType === "rows" && r.columns) {
-          parts.push("@rows: " + r.columns.map(function (c) {
+          parts.push("@rows: " + r.columns.map(function serialiseColumn(c) {
+            // A heading among the columns has no key and no type; it re-emits as it was written. `level - 1`
+            // because one `#` means "a step below the block's own title", which is level 2.
+            if (c.type === "heading") {
+              var hw = c.showWhen && c.showWhen.length
+                ? "{" + c.showWhen.map(function (rule) {
+                  return rule.field + "=" + rule.values.join("|");
+                }).join(";") + "}"
+                : "";
+              return new Array(Math.max(1, (c.level || 2) - 1) + 1).join("#") + c.text + hw;
+            }
+            if (c.type === "preview") return "@preview";
             var spec = c.type;
-            if (c.type === "select" || c.type === "radio") {
+            // A group re-emits its own columns through this same function, so a nested spec round-trips by
+            // construction rather than by a second printer that could disagree with the parser.
+            if (c.type === "group") {
+              spec = "{" + (c.columns || []).map(serialiseColumn).join("|") + "}";
+            } else if (c.type === "select" || c.type === "radio") {
               spec = (c.type === "radio" ? "radio" : "") + "(" +
                 (c.options || []).map(function (o) {
                   var value = columnOptionValue(o);
@@ -980,9 +1235,25 @@
                 return rule.field + "=" + rule.values.join("|");
               }).join(";") + "}"
               : "";
-            return c.key + ":" + spec + when + named;
+            // Last within the segment, for the same reason the field-level one is last on the line: it
+            // runs to the end, so anything emitted after it would be swallowed into the prose.
+            var note = c.helper ? " @helper: " + c.helper : "";
+            // Before the label, like the condition: the label is split at the first `=` and a placeholder is
+            // free text that may well contain one.
+            var hint = c.placeholder != null
+              ? '@placeholder="' + String(c.placeholder).replace(/"/g, "") + '"' : "";
+            // Bracketed, before the label, for the same reason the condition is.
+            var off = c.disabledWhen && c.disabledWhen.length
+              ? "[" + c.disabledWhen.map(function (rule) {
+                return rule.field + "=" + rule.values.join("|");
+              }).join(";") + "]"
+              : "";
+            // Prose, so last — and a column carries this or `@helper:`, not both.
+            var offNote = c.disabledNote ? " @disabledNote: " + c.disabledNote : "";
+            return c.key + ":" + spec + when + off + hint + named + note + offNote;
           }).join("|"));
           if (r.tabs) parts.push("@tabs");
+          if (r.blocks) parts.push("@blocks");
         }
         // Emitted before @label so the annotation order stays stable across a round trip; a
         // dropped @fromFile would silently remove the sync button from the script.
@@ -1014,9 +1285,10 @@
         // anyway. That is why it went unnoticed.
         var indent = /^[ \t]*/.exec(r.raw || "")[0];
         if (r.syntax === "property") {
-          out.push(indent + r.name + ": " + fmt(v, indent) + (r.trailingComma ? "," : "") + comment);
+          out.push(indent + r.name + ": " + fmt(v, indent, r.raw, r.name) +
+            (r.trailingComma ? "," : "") + comment);
         } else {
-          out.push(indent + "var " + r.name + " = " + fmt(v, indent) + ";" + comment);
+          out.push(indent + "var " + r.name + " = " + fmt(v, indent, r.raw, r.name) + ";" + comment);
         }
       }
     });
@@ -1169,19 +1441,67 @@
    * out. Case-only differences still never produce a **rename of the mode** — `sameModeName` sees to
    * that — so this changes what the config says and nothing about what a run does.
    *
-   * Returns `{ entries, ids, changed }`; `changed` covers order *and* spelling, so a caller can avoid
-   * writing the block for nothing.
+   * **A mode the file has and the config does not gets a block.** This is the other half of "a 1:1 view
+   * of the collection's modes", and it was the half that did not exist: the read of the collection was
+   * used to reorder, re-spell and report, so a five-mode collection facing a three-mode config kept
+   * showing three tabs — correctly spelled, in the file's order, with real `modeId`s hung on them, and
+   * silently missing two of the file's modes. Selecting a collection is the instruction; a panel that
+   * answers with a subset of it is describing the script's defaults and calling them the file.
+   *
+   * The new entry is cloned from its **nearest sibling in the file's order**, which is the same rule
+   * `applyChipOp`'s `add` already uses — there it appends, so "the last entry" *is* the nearest one.
+   * Cloning rather than starting empty because every column here is a number and a form has no way to
+   * show "unset": a blank `base` is a scale that generates zeros. The clone is a starting point and
+   * says so in the note, and it is what recognition will overwrite once it can read the values.
+   *
+   * **And a block for a mode the collection does not have is dropped.** The shipped Spacing block ships
+   * `desktop, tablet, mobile`; point it at a collection whose modes are `Desktop / Pad / Mobile` and
+   * `tablet` matches nothing. It is not a mode of this file, and leaving it produced a fourth tab beside
+   * three real modes — worse, `setupModes` takes the config's mode list literally, so running *created*
+   * a `Tablet` mode nobody asked for. Selecting a collection is the instruction, and the collection is
+   * the authority on what modes exist.
+   *
+   * **Neither intent can be derived, so both are passed in.** `intent.removedIds` is the difference
+   * between "this config never heard of that mode" and "I just took it out"; `intent.addedNames` is the
+   * difference between a mode someone typed with `+` and residue from the template. Both entries look
+   * identical in state — a name and a null id — which is exactly why the answer cannot be read off it.
+   * A mode in `addedNames` survives with no id and is created by the run; anything else with no id is
+   * residue and goes.
+   *
+   * Returns `{ entries, ids, changed, inserted, dropped }`; `changed` covers order, spelling, insertion
+   * *and* dropping, so a caller can avoid writing the block for nothing. `inserted` and `dropped` name
+   * what happened, because a write nobody asked for has to be able to say what it did — and a removed
+   * entry is the half to be loudest about.
    */
-  function alignModesToFile(entries, ids, fileModes) {
+  function alignModesToFile(entries, ids, fileModes, intent) {
     var list = Array.isArray(entries) ? entries.slice() : [];
     var idList = Array.isArray(ids) ? ids.slice() : [];
     while (idList.length < list.length) idList.push(null);
     var file = Array.isArray(fileModes) ? fileModes : [];
-    if (!list.length || !file.length) return { entries: list, ids: idList, changed: false };
+    var wishes = intent && typeof intent === "object" ? intent : {};
+    var removed = {};
+    (Array.isArray(wishes.removedIds) ? wishes.removedIds : []).forEach(function (id) {
+      removed[id] = true;
+    });
+    var keep = {};
+    (Array.isArray(wishes.addedNames) ? wishes.addedNames : []).forEach(function (name) {
+      keep[String(name == null ? "" : name).trim().toLowerCase()] = true;
+    });
+    // No collection read yet, so nothing is residue: "the file does not have this mode" is not a
+    // statement anyone can make before the file has been asked.
+    if (!file.length) {
+      return { entries: list, ids: idList, changed: false, inserted: [], dropped: [] };
+    }
 
     var taken = {};
     var ordered = [];
     var orderedIds = [];
+    var inserted = [];
+    var dropped = [];
+    // Two passes, because a fresh entry is cloned from a *sibling* and the siblings are only known
+    // once the matching is done. A one-pass version would clone whatever happened to be previous at
+    // the time, which for the first mode in the file is nothing at all.
+    var slots = [];
 
     file.forEach(function (mode) {
       for (var i = 0; i < list.length; i++) {
@@ -1192,14 +1512,35 @@
           : sameModeName(list[i] && list[i].name, mode.name);
         if (!matches) continue;
         taken[i] = true;
-        ordered.push(list[i]);
-        orderedIds.push(idList[i]);
+        slots.push({ index: i, mode: mode });
         return;
       }
+      // Not in the config. A mode someone removed stays removed; anything else is a mode of this
+      // collection with no settings here, which is what this fills in.
+      if (!removed[mode.modeId]) slots.push({ index: null, mode: mode });
     });
 
+    slots.forEach(function (slot, position) {
+      if (slot.index !== null) {
+        ordered.push(list[slot.index]);
+        orderedIds.push(idList[slot.index]);
+        return;
+      }
+      ordered.push(freshModeEntry(slot.mode.name, modeTemplateFor(slots, position, list)));
+      orderedIds.push(slot.mode.modeId || null);
+      inserted.push(slot.mode.name);
+    });
+
+    // What the file did not claim. An entry still carrying an id is a mode of *this* collection that
+    // moved or was renamed out from under the panel — it stays, because dropping it would throw away a
+    // link to a real mode. An entry with no id is residue unless someone typed it.
     for (var j = 0; j < list.length; j++) {
       if (taken[j]) continue;
+      var name = list[j] && list[j].name;
+      if (!idList[j] && !keep[String(name == null ? "" : name).trim().toLowerCase()]) {
+        dropped.push(name || "entry " + (j + 1));
+        continue;
+      }
       ordered.push(list[j]);
       orderedIds.push(idList[j]);
     }
@@ -1223,11 +1564,68 @@
       return copy;
     });
 
-    var changed = false;
-    for (var k = 0; k < list.length; k++) {
-      if (list[k] !== renamed[k]) { changed = true; break; }
+    // Length first: an insertion is a change even when every entry that was already there stayed
+    // exactly where it was, which is the common case — three matched modes and two added below them.
+    // Comparing entry by entry alone would also miss an insert-and-drop that happens to net to zero.
+    var changed = renamed.length !== list.length || inserted.length > 0 || dropped.length > 0;
+    for (var k = 0; !changed && k < list.length; k++) {
+      if (list[k] !== renamed[k]) changed = true;
     }
-    return { entries: renamed, ids: orderedIds, changed: changed };
+    return {
+      entries: renamed, ids: orderedIds, changed: changed,
+      inserted: inserted, dropped: dropped
+    };
+  }
+
+  /**
+   * A block for a mode the config has none for, in the shape of the ones around it.
+   *
+   * `name` is written first, on its own, so the key order matches every entry a config block ships —
+   * the template's own `name` is skipped rather than copied and overwritten, because an assignment
+   * afterwards moves the key to the end on some engines and a mode block whose `name` is last reads as
+   * a different kind of object.
+   */
+  function freshModeEntry(name, template) {
+    var fresh = { name: name };
+    if (!template || typeof template !== "object") return fresh;
+    for (var key in template) {
+      if (!Object.prototype.hasOwnProperty.call(template, key) || key === "name") continue;
+      fresh[key] = cloneModeValue(template[key]);
+    }
+    return fresh;
+  }
+
+  /** Deep enough for a mode block: numbers, strings, and the lists and objects a column can hold. */
+  function cloneModeValue(value) {
+    if (Array.isArray(value)) return value.map(cloneModeValue);
+    if (value && typeof value === "object") {
+      var out = {};
+      for (var key in value) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) out[key] = cloneModeValue(value[key]);
+      }
+      return out;
+    }
+    return value;
+  }
+
+  /**
+   * The entry a new mode is written like: its nearest neighbour in the file's own order.
+   *
+   * Backwards first, then forwards. `Tablet-small` sits between `Tablet` and `Mobile` in Márton's file,
+   * and it should look like `Tablet` — taking the last entry in the array instead, the way an appended
+   * chip does, would hand it `Mobile`'s settings for no reason other than where the loop ended.
+   */
+  function modeTemplateFor(slots, position, list) {
+    for (var back = position - 1; back >= 0; back--) {
+      if (slots[back].index !== null) return list[slots[back].index];
+    }
+    for (var fwd = position + 1; fwd < slots.length; fwd++) {
+      if (slots[fwd].index !== null) return list[slots[fwd].index];
+    }
+    // No mode of this file is in the config at all, so there is no sibling to follow. Anything the
+    // config does hold — a mode from a pasted block — is still a mode block, and its shape is closer
+    // to right than an object with only a name in it.
+    return list.length ? list[0] : null;
   }
 
   /**
@@ -1566,7 +1964,15 @@
       if (!k || !Object.prototype.hasOwnProperty.call(value, k) || order.indexOf(k) !== -1) continue;
       order.push(k);
       var at = itemValueStart(parts[i]);
-      if (at !== -1) inline[k] = parts[i].slice(at).replace(/\/\/[^\n]*/g, "").indexOf("\n") === -1;
+      // **Trailing whitespace trimmed before the newline test.** The last property of an entry runs to the
+      // entry's own closing brace, so its text carries the line break that *closes the object* — read as
+      // "this value was written across lines", and the last key of every inserted entry came out expanded
+      // while its siblings stayed inline. Visible in Colors as a `dark:` anchor three lines tall next to a
+      // one-line `bright:`, from a sibling where all three are written the same way.
+      if (at !== -1) {
+        inline[k] = parts[i].slice(at)
+          .replace(/\/\/[^\n]*/g, "").replace(/\s+$/, "").indexOf("\n") === -1;
+      }
     }
     var rest = Object.keys(value).filter(function (k) { return order.indexOf(k) === -1; });
 
@@ -1703,10 +2109,42 @@
       out.push({ text: fillProperty(items[i].text, value[key], path ? path + "." + key : key, report), joined: items[i].joined });
     }
 
+    // **A key the payload has and the object does not is added.** The top-level rule is the opposite — the
+    // block declares what the script reads, so a stray field would be inert — but that reasoning does not
+    // reach *inside* a value the block already declares. `lightness: {}` is the block saying "three anchors,
+    // shape not known yet", and filling nothing into it meant reading a collection loaded the steps and left
+    // every anchor empty. It then appeared to work on the second try, because by then the form had written
+    // the keys in, which is exactly how this looked like "the palette only loads after you edit it".
+    var added = [];
+    for (var key2 in value) {
+      if (!Object.prototype.hasOwnProperty.call(value, key2)) continue;
+      var already = false;
+      for (var m = 0; m < items.length; m++) {
+        if (itemKey(items[m].text) === key2) { already = true; break; }
+      }
+      if (already) continue;
+      added.push(printKeyForFill(key2) + ": " + formatConfigValue(value[key2], ""));
+      report.substituted.push(path ? path + "." + key2 : key2);
+    }
+
     var joined = "";
     for (var j = 0; j < out.length; j++) joined += (j === 0 ? "" : (out[j - 1].joined ? "" : ",")) + out[j].text;
     if (split.trailingComma) joined += ",";
+    if (added.length) {
+      // Written the way the object is written: inside `{}` there is nothing to copy, so one line.
+      // The existing text carries the space that sat before the closing brace; appending after it leaves
+      // `98.5 , dark` — a comma with a space in front of it, in a file people read.
+      var kept = joined.replace(/\s+$/, "");
+      var hadItems = kept !== "";
+      joined = (hadItems ? kept + (split.trailingComma ? " " : ", ") : " ") + added.join(", ") + " ";
+    }
     return itemText.slice(0, open + 1) + joined + split.tail + itemText.slice(close);
+  }
+
+  /** Bare where JavaScript allows it, quoted where it does not. The fill's own copy — `serialize` has one
+   *  in its closure and this runs outside it. */
+  function printKeyForFill(key) {
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
   }
 
   /** One `key: value` item, with the payload's value put into it. */

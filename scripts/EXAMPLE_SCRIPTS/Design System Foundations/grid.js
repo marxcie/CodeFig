@@ -1,6 +1,5 @@
 // Grid
 // @DOC_START
-// # Grid
 // Create and update grid system variables programmatically.
 //
 // ## Overview
@@ -102,51 +101,27 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // @fromFile: domains.grid
 
   // # General
-  // Where this goes, and what exists. Pick a collection in this file, or choose "New collection" and
-  // type a name — a name that is not in this file is created on Run, including one that arrived in a
-  // pasted config.
-  collectionName: "Responsive System", // @collection @label: Collection
-
-  // The collection's own modes. For Grid these are viewports; the chips are a view of the file, and
-  // the tabs below hold each mode's values.
+  collectionName: "Responsive System", // @collection @label: Collection @placeholder="eg. Responsive System"
   // @collectionModes: Collection modes
-
   group: "Grid", // @label: Group within collection @placeholder="eg. Grid"
 
   // --- @section
 
   // # Mode settings
-  // Global mode settings — values that apply to every mode, above the tab bar.
-  extensionColumns: 0, // @label: Extra columns @helper: These doesn't appear in the grid, just added as numeric variables for overshoot layout
-
-  generateOverview: false, // @label: Generate overview @helper: Fills the Grid — overview section in Design System Foundations, one preview frame per mode
+  extensionColumns: 0, // @label: Extra columns @helper: Added as numeric variables for overshoot layout
+  generateOverview: false, // @label: Generate overview @helper: Generate Figma frames for each mode
 
   modes: [
     {
-      name: "desktop",
+      name: "Value",
       containerWidth: 1920,
       columns: 12,
       gap: 40,
       padding: 80
-    },
-    {
-      name: "tablet",
-      containerWidth: 768,
-      columns: 8,
-      gap: 24,
-      padding: 40
-    },
-    {
-      name: "mobile",
-      containerWidth: 375,
-      columns: 4,
-      gap: 16,
-      padding: 20
     }
   ], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes
 
   // # Suggested whole number divisions
-  // Whole-number margin and gap pairs for the mode above, closest to what it holds first.
   // @suggestions
 
   // # Preview

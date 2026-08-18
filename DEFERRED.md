@@ -129,11 +129,37 @@ Linux build, so a self-hosted Mac, and it breaks on Figma updates).
 
 ---
 
-## 8. `colors.js` has never been verified against a real file
+## 8. `colors.js` reads and previews; it does not write
 
-Graduated rather than archived during plan 05's triage, but never run. Everything else under
-`scripts/` has been exercised at least once. Now that `npm run figma:run -- colors` exists, this
-is a five-minute job in a `codefig-test` file.
+Supersedes "has never been verified against a real file", which is no longer true — the panel was
+driven against `color - neutral`, `color - moss` and `colors / other` in a real file, and reading,
+recognition, the banner and both preview strips were verified there.
+
+**What is left.** The generator. Run reports that nothing was written and why. Márton's gate:
+*"Do not write to Figma until I have seen a dry run."* So the order is dry run → review → write,
+and the write path carries three rules that have to hold before it ships: **never delete** (a
+shrinking step list reports orphans and leaves them alone), **never rename** (a step leaving the
+list is not permission to rename the variable that held it), and **never write to an alias**.
+
+**One smaller gap found while building the panel**, cosmetic and in the shared config UI rather than
+in Colors: **a reprinted row normalises how a number is spelled.** `0.010` comes back as `0.01`. The
+value is identical and only the row being rewritten is affected, but someone who typed the trailing
+zero deliberately sees it vanish. (The other one, no per-column `@placeholder`, is now built.)
+
+**Still prototype-only**, drawn in `colors-target.html` and not in the panel:
+
+- ***Anchors edited since seeding*** and its Re-apply seed action. Needs the panel to remember what
+  the seed wrote, which is state the config does not hold today.
+- **The read-only Lightness column in OKLCH.** The frame draws it and the brief is clear about what
+  it is — *"Lightness never appears per mode. That is the whole design"* — a display of what the
+  shared ladder gave that step. It is the one part of the panel that needs a mechanism the config UI
+  does not have: a cell whose value is **derived** rather than held. Storing it would be the mistake
+  the Apply flag already taught (derived, never stored), so the shape that fits is letting the
+  `@PREVIEW:` function fill read-only cells the way it already fills preview slots — it runs on every
+  edit and is the only place that knows the ladder. Worth doing deliberately, not in passing.
+- **Surfacing recognition notes** — `hueUnreliable`, a declined group, a skipped non-opaque variable
+  — where a user can see them. They are computed and carried in `answer.recognition`; only the
+  summary line reaches the panel.
 
 ---
 
@@ -336,6 +362,41 @@ speculation** — it waits for the trace.
 
 ---
 
+## A ramp panel reads a manifest or nothing — recognition is wired for Grid only
+
+**Found** on `Website / DS 3.0 Beta` (Aug 2026), from "the Spacing script doesn't read the spacing
+tokens in this file". It does not, and the file is not unusual: `Responsive System` / `Spacing` holds ten
+FLOAT tokens (`space-none … space-3xl`) across five modes, made by hand, and the only CodeFig key in the
+whole file is `set:grid:Layout`. `foundationAutoImport` has two ways to answer for `spacing` — a recorded
+manifest, or a recognition branch that exists for `grid` and `colors` alone — so it answers `none`, and
+the panel keeps the script's defaults. Running Spacing once at that address fixes it *from then on*,
+which is no help to anyone opening a file they did not generate.
+
+**Not the modes.** Those were a separate bug and are fixed: `foundationCollectionModes` never needed a
+manifest, and `alignModesToFile` now gives a block to a mode the file has and the config does not.
+
+**What fixing it involves.** The reader already exists and already does the pattern matching:
+`readRampGroup` in `@Linear Ramp` (prefix on the group, FLOAT only, skips aliases and nested groups) plus
+`fitRampMode` and `recogniseScale`. Its only caller is `adoptRamp`, which **records as it fits**, and
+auto-import must not write — so this is a `rampRecognise` that stops before the `writeManifest`, plus the
+`answer.source = 'recognised'` branch in `foundationAutoImport`. Small.
+
+**The part that is not small, and blocks the above from being useful on this file.** Fed those ten
+tokens, `recogniseScale` returns **`explicit` in all five modes** — no metric, modular or fibonacci
+model reproduces them, and there is no near-fit to suggest either. `@Scale Models` supports an
+`explicit` model (`explicitSequence`, and `rampModeToSize` carries unknown per-mode keys through), so
+the config format can hold it; the panel cannot. The `@rows` control offers
+`modular | metric | fibonacci` and has no `values` column, so recognition alone would fill in the token
+names and the mode list and then have nowhere to put the numbers. **Order matters here**: recognition
+without an `explicit` control reads a real spacing set and reports a scale nobody chose.
+
+**The hazard while both are open.** The panel now shows every mode the collection has, and the ones it
+adds carry a *copy of a neighbouring mode's* settings. Running Spacing would write those over the file's
+real ladder (200/120/80/48/… in Desktop-large). The note under Group says the values are a starting
+point; that is a sentence, not a guard.
+
+---
+
 ## Typography records no manifest, so its panel can never load from the file
 
 **Found** building the Typography panel (Aug 2026). Its config block declares
@@ -355,6 +416,43 @@ twenty times still gets "nothing recorded".
 `lineHeightAtTop` fields need nothing added. **Recognition** — reading an existing typography set out of
 the variables themselves, the way `gridRecognise` does — is the larger, separate piece, and the honest
 order is manifest first: it is small, and it is what makes the panel's own claim true.
+
+---
+
+## Heading spacing is stated twice, because the two surfaces lay out differently
+
+**How it was found:** collapsing the two heading ladders into one. The *sizes* now come from a single
+rule both surfaces read. The *margins* could not: the Documentation tab is a block container, where a
+heading's top margin collapses with the paragraph above it to `max(a, b)`, and a config form is a flex
+column (`.config-ui-form--rows`), where margins do not collapse but add. So reaching the same 48px gap
+takes `var(--section-gap)` in one place and `calc(var(--section-gap) - var(--space-md))` in the other,
+and there is no single value that produces 48 in both.
+
+**Why it was left:** the numbers agree on screen and both derive from `--section-gap`, so changing the
+gap still changes both. It is one duplicated *arithmetic*, not a second design decision, and both rules
+say so in a comment. `tests/ui-css-shared-classes.test.js` covers the part that actually drifted — a
+heading **size** set for one surface only — and deliberately exempts spacing.
+
+**What fixing it involves:** making the form's row spacing a single mechanism rather than two, i.e.
+dropping `margin-bottom` from `.config-ui-form--rows .config-ui-row` in favour of `row-gap` on the
+container, then restating every heading margin against that gap. That touches the spacing of every row
+type in every config panel — dividers, line breaks, previews, chips — for a 12px arithmetic difference
+nobody can see. Worth doing only alongside other work on the form's layout.
+
+---
+
+## One heading that is redundant rather than duplicated
+
+**How it was found:** removing the duplicated `# Script name` lines. Variable-inspector's config block
+opens with `# Configuration`, which is not the script's name — it names the tab it is already on. It was
+left in place for that reason.
+
+**Why it was left:** the ask was to remove *duplicated* content, and this is a judgement call about
+wording rather than a duplication. It is that form's only heading, so removing it changes what the panel
+looks like — worth Márton's eye rather than an inference.
+
+**What fixing it involves:** deleting the one `// # Configuration` line. Nothing else; the document title
+already names the script.
 
 ---
 

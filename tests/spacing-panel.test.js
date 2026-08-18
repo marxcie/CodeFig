@@ -35,6 +35,25 @@ function libs() {
 const L = libs();
 const BLOCK = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(fs.readFileSync(SPACING, 'utf8'))[1];
 
+const MODES = [
+  { name: 'desktop', scaleType: 'metric', base: 4, step: 4, mod: 3, roundTo: 2, extras: [1] },
+  { name: 'tablet', scaleType: 'metric', base: 3, step: 3, mod: 3, roundTo: 2, extras: [1] },
+  { name: 'mobile', scaleType: 'metric', base: 2, step: 2, mod: 3, roundTo: 2, extras: [1] },
+];
+/**
+ * The block, with the three viewport modes this script used to ship.
+ *
+ * `desktop / tablet / mobile` were an example of one Figma file, and shipping them made them the
+ * plugin's opinion about every file — so the block now ships one starter mode instead. These tests are
+ * about the arithmetic and about the preview following the selected mode, neither of which is about
+ * viewport names, so they state the modes they need rather than borrowing whatever the block holds.
+ */
+function threeModeConfig() {
+  const config = P.parseConfigBlockObject(BLOCK);
+  config.modes = MODES.map((m) => JSON.parse(JSON.stringify(m)));
+  return config;
+}
+
 function readout(html) {
   const names = [...html.matchAll(/spacing-preview-name">([^<]*)</g)].map((m) => m[1]);
   const values = [...html.matchAll(/spacing-preview-value">([^<]*)</g)].map((m) => m[1]);
@@ -133,7 +152,7 @@ test('the preview draws one mode, at half size, in pixels', () => {
 });
 
 test('the preview follows the mode the panel is showing', () => {
-  const config = P.parseConfigBlockObject(BLOCK);
+  const config = threeModeConfig();
   const mobile = readout(L.spacingPreviewHtml(config, 'spacing', 'mobile'));
   assert.deepEqual(mobile.values.map(Number), [1, 2, 4, 6, 8, 12]);
   // Its own smaller base, and its own grid.
