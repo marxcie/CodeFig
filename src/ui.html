@@ -783,14 +783,19 @@
             configUIContainer.innerHTML = '';
             configUIInstance = window.CodeFigConfigUI.render(schema, {
               container: configUIContainer,
-              onChange: function (values) {
+              onChange: function (values, opts) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
                 // thing that asks. Every other edit is an answer, not a question.
                 var addressChanged = !configLastAddress ||
                   values.collectionName !== configLastAddress.collectionName ||
                   values.group !== configLastAddress.group;
                 configLastAddress = { collectionName: values.collectionName, group: values.group };
-                syncUIToCode(values);
+                // **A live edit is held, not written.** `syncUIToCode` replaces the whole config editor
+                // document and then re-merges it into the script source — two CodeMirror `setValue` calls,
+                // which is far too much to run per frame of a drag. Nothing reads that text until the
+                // preview runs or the drag ends, and both of those flush first.
+                if (opts && opts.live) _configSyncPending = values;
+                else { _configSyncPending = null; syncUIToCode(values); }
                 scheduleConfigPreview();
                 if (addressChanged) scheduleAutoImport();
               }
@@ -801,6 +806,21 @@
         } catch (e) {
           configUIContainer.innerHTML = '<div class="config-ui-empty">Could not render configuration: ' + (e && e.message ? e.message : String(e)) + '</div>';
         }
+      }
+
+      /**
+       * The values a live drag has drawn but not yet written to the config editor, or `null`.
+       *
+       * **Held, never dropped.** Every reader of the block text goes through `flushConfigSync()` first, so
+       * the deferral is invisible: the text is current the instant anything asks for it. The drag itself
+       * ends with a non-live change, so letting go commits even if nothing reads.
+       */
+      let _configSyncPending = null;
+      function flushConfigSync() {
+        if (!_configSyncPending) return;
+        const values = _configSyncPending;
+        _configSyncPending = null;
+        syncUIToCode(values);
       }
 
       function syncUIToCode(values) {
@@ -1041,6 +1061,10 @@
       }
 
       function getFullCode() {
+        // A drag holds its edits out of the editor (see `_configSyncPending`); anything that reads the code
+        // has to land them first. Re-entrant-safe: the flush clears the pending value before syncing, so a
+        // sync that reaches back here finds nothing to do.
+        flushConfigSync();
         if (scriptHasConfig) mergeConfigIntoMain();
         return code.getValue();
       }
@@ -1849,6 +1873,7 @@
        * never resolveImports — this runs on every keystroke, same rule as the InfoPanel button.
        */
       function currentConfigBlock() {
+        flushConfigSync();
         if (!scriptHasConfig || !parsedSections || !code || !code.getValue) return '';
         try {
           return extractConfigSection(code.getValue(), !!parsedSections.hasUIConfig) || '';
@@ -2984,9 +3009,14 @@
         writeConfigBlockText(ordered.text, 'auto-import:' + found.source +
           (ordered.changed ? '+ordered' : ''));
         lastAutoImport.trace.afterWrite = blockSize(currentConfigBlock());
+        // **The object, not the variable.** `lastAutoImport` is reassigned by the next auto-import, so a
+        // timer that reads it 800ms later can find a fresh one with no `trace` on it yet — an uncaught
+        // TypeError, from diagnostic code, landing in the log where real errors are looked for. Holding the
+        // trace it was measuring means a second import cannot make the first one's timer throw.
+        var trace = lastAutoImport.trace;
         setTimeout(function () {
-          lastAutoImport.trace.later = blockSize(currentConfigBlock());
-          lastAutoImport.trace.stuck = lastAutoImport.trace.later === lastAutoImport.trace.afterWrite;
+          trace.later = blockSize(currentConfigBlock());
+          trace.stuck = trace.later === trace.afterWrite;
         }, 800);
 
         var summary = filled.summary && filled.summary.indexOf('Nothing to fill') === -1

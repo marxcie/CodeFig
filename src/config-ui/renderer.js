@@ -1812,7 +1812,13 @@
       }
       draw();
       if (!opts || !opts.quiet) {
-        wrap.dispatchEvent(new Event("change", { bubbles: true }));
+        var ev = new Event("change", { bubbles: true });
+        // **A live change is drawn but not written through.** Mid-drag the form and the preview should
+        // follow the handle; the config editor's text does not have to, because nothing reads it until the
+        // preview runs or the drag ends. The flag rides the event so the one listener can tell the two
+        // apart without the renderer having to know what a host does with either.
+        if (opts && opts.live) ev.codefigLive = true;
+        wrap.dispatchEvent(ev);
       }
     }
 
@@ -1948,13 +1954,27 @@
       if (target.focus) target.focus();
       evt.preventDefault();
     });
-    svg.addEventListener("pointermove", function (evt) {
-      if (dragging === null && !draggingGrowth) return;
-      var at = pointAt(evt);
-      if (!at) return;
+    /**
+     * **One update per frame, not one per pointer event.**
+     *
+     * A trackpad delivers `pointermove` well above 120Hz and the screen paints at 60, so at least half of
+     * what a drag used to do was thrown away before anyone saw it — and each one of those redrew this SVG
+     * from nothing, redrew every *other* curve on the page, and rewrote the config editor's whole document.
+     * Colours felt worst because it has the largest config block and the most curve controls, and those two
+     * costs multiply.
+     *
+     * Coalescing here fixes it at the source: the last position wins, and the work happens once per frame.
+     *
+     * **Synchronous where there is no `requestAnimationFrame`.** The DOM shim the tests run against has
+     * none, and a drag that only lands a frame later is a drag the tests cannot observe. No rAF, no
+     * coalescing — which is the honest behaviour rather than a fake one.
+     */
+    var queuedAt = null;
+    var frame = null;
+    function applyMove(at) {
       if (draggingGrowth) {
         setGrowthRatio(curveGrowthRatio(at.y));
-        setPoints(wrap.getAttribute("data-curve-value"));
+        setPoints(wrap.getAttribute("data-curve-value"), { live: true });
         return;
       }
       var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
@@ -1966,12 +1986,35 @@
       pts[dragging + 1] = lift > 0 ? at.y / lift : at.y;
       // `keepText` is off: the field is a readout while you drag, and a paste in progress is not a state
       // you can be in and dragging at the same time.
-      setPoints(pts);
+      setPoints(pts, { live: true });
+    }
+    svg.addEventListener("pointermove", function (evt) {
+      if (dragging === null && !draggingGrowth) return;
+      var at = pointAt(evt);
+      if (!at) return;
+      if (typeof requestAnimationFrame !== "function") { applyMove(at); return; }
+      queuedAt = at;
+      if (frame !== null) return;
+      frame = requestAnimationFrame(function () {
+        frame = null;
+        var next = queuedAt;
+        queuedAt = null;
+        if (!next || (dragging === null && !draggingGrowth)) return;
+        applyMove(next);
+      });
     });
     function endDrag(evt) {
       if (dragging === null && !draggingGrowth) return;
+      // Land the last position the pointer reached before the frame that would have drawn it, or letting go
+      // mid-flick loses up to a frame of movement.
+      if (frame !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+      frame = null;
+      if (queuedAt) { applyMove(queuedAt); queuedAt = null; }
       dragging = null;
       draggingGrowth = false;
+      // **The settle.** Everything above was `live` — drawn, but not written through to the config editor.
+      // This is the one non-live change of the whole drag, and it is what commits the text.
+      setPoints(wrap.getAttribute("data-curve-value"), { keepText: true });
       if (svg.releasePointerCapture && evt.pointerId != null) {
         try { svg.releasePointerCapture(evt.pointerId); } catch (err) { /* already gone */ }
       }
@@ -3132,26 +3175,48 @@
       return false;
     }
 
-    container.addEventListener("change", function (e) {
-      if (isControlEvent(e.target)) {
-        applyVisibility();
-        refreshCurveControls(container, e.target);
-        refreshModePickers();
-        onChange(getValues());
-      }
-    });
-    container.addEventListener("input", function (e) {
-      if (isControlEvent(e.target) && e.target.type !== "checkbox") {
-        applyVisibility();
-        refreshCurveControls(container, e.target);
-        refreshModePickers();
-        onChange(getValues());
-      }
-    });
+    /**
+     * **A dragged handle cannot have moved another curve.** `refreshCurveControls` exists so a growth
+     * readout shared between controls catches up; nothing about dragging *this* curve's handle changes what
+     * any other curve should draw. Redrawing them anyway meant one drag rebuilt N+1 SVGs from nothing every
+     * frame, on a panel whose whole point is having several ramps side by side.
+     */
+    function handleControlEvent(e) {
+      applyVisibility();
+      if (!e.codefigLive) refreshCurveControls(container, e.target);
+      refreshModePickers();
+      onChange(getValues(), e.codefigLive ? { live: true } : null);
+    }
+    /**
+     * **Named, so they can be taken off again.**
+     *
+     * These are delegated listeners on the *container*, which outlives the form inside it — `destroy()`
+     * empties the container's children, and a child's listeners go with it, but these two never do. Every
+     * re-render therefore used to add another pair to the same element, and nothing ever removed one. After
+     * N renders a single keystroke ran the whole change pipeline N times: visibility, every curve control,
+     * the mode pickers, and a full read-serialise-write of the config editor, N times over.
+     *
+     * That is the "it gets slower the longer I work in it" report. It is not a leak that shows up as memory
+     * — the listeners are tiny — it shows up as *time*, growing linearly in how many times the form has
+     * been rebuilt. Colours rebuilds it most: mode chips, auto-import fills, a collection change and a model
+     * switch all re-render.
+     */
+    function onChangeEvent(e) {
+      if (isControlEvent(e.target)) handleControlEvent(e);
+    }
+    function onInputEvent(e) {
+      if (isControlEvent(e.target) && e.target.type !== "checkbox") handleControlEvent(e);
+    }
+    container.addEventListener("change", onChangeEvent);
+    container.addEventListener("input", onInputEvent);
     return {
       getValues: getValues,
       applyVisibility: applyVisibility,
       refreshModePickers: refreshModePickers,
+      detach: function () {
+        container.removeEventListener("change", onChangeEvent);
+        container.removeEventListener("input", onInputEvent);
+      },
     };
   }
 

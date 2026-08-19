@@ -394,6 +394,19 @@ deleting variable modes they did not recognise.
   fixed. Nothing else about loading changed: it still writes into the editor only, and your file is
   unchanged until you run.
 
+### Fixed
+
+- **The configuration panel no longer gets slower the longer you work in it.** The form's `change` and
+  `input` listeners sit on a container that outlives the form inside it, and nothing removed them — so
+  every rebuild of the form added another pair, and one keystroke ran the whole pipeline once per rebuild
+  that had ever happened. Colors rebuilds the form most (mode chips, auto-import, a collection change, a
+  model switch), so it degraded fastest: deleting a digit came to take about a second.
+
+- **Dragging a curve handle is smooth.** Moves are coalesced to one per animation frame instead of one
+  per pointer event, the config editor is no longer rewritten mid-drag — the text is committed when you
+  let go, and flushed before anything reads it — and dragging one curve no longer redraws every other
+  curve on the page.
+
 ### Changed
 
 - **Colors has one curve, not two.** *Lower* and *Upper* are gone; a colour ramp is described by a single

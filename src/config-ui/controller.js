@@ -11,15 +11,23 @@
     var applyV = null;
     var onCh = (opts && opts.onChange) || null;
 
+    // The listeners `attachListeners` puts on the container, so a re-render can take the previous set off.
+    // Without this they accumulate and every keystroke does the work of every render that came before it.
+    var attached = null;
+
     function render(s) {
       schema = s;
+      if (attached && attached.detach) attached.detach();
       R.buildForm(schema, container);
-      var attached = R.attachListeners(
+      attached = R.attachListeners(
         container,
         schema,
         onCh
-          ? function (v) {
-              onCh(v);
+          ? function (v, o) {
+              // **Both arguments.** The second says whether this change is `live` — drawn mid-drag but not
+              // yet written through to the config editor. Dropping it here made the host treat every frame
+              // of a drag as a committed edit, which is the whole cost the flag exists to avoid.
+              onCh(v, o);
             }
           : null
       );
@@ -76,6 +84,8 @@
         }
       },
       destroy: function () {
+        if (attached && attached.detach) attached.detach();
+        attached = null;
         if (container) container.innerHTML = "";
         schema = null;
         getV = null;

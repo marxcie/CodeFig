@@ -188,9 +188,18 @@ test('every control kind reaches onChange, not only the ones with data-field', (
   assert.match(fn[0], /config-ui-multiselect-cb/);
   assert.match(fn[0], /data-collection-field/);
 
-  // And the listeners ask that question rather than re-deriving it.
-  assert.match(renderer, /addEventListener\("change", function \(e\) \{\s*\n\s*if \(isControlEvent\(e\.target\)\)/);
-  assert.match(renderer, /addEventListener\("input", function \(e\) \{\s*\n\s*if \(isControlEvent\(e\.target\) && e\.target\.type !== "checkbox"\)/);
+  // And the listeners ask that question rather than re-deriving it. They are **named** functions now, so
+  // `detach()` can take them off again — a delegated listener on the container outlives the form inside it,
+  // and re-attaching without removing made every keystroke do the work of every render before it.
+  assert.match(renderer, /function onChangeEvent\(e\) \{\s*\n\s*if \(isControlEvent\(e\.target\)\)/);
+  assert.match(renderer,
+    /function onInputEvent\(e\) \{\s*\n\s*if \(isControlEvent\(e\.target\) && e\.target\.type !== "checkbox"\)/);
+  assert.match(renderer, /container\.addEventListener\("change", onChangeEvent\)/);
+  assert.match(renderer, /container\.addEventListener\("input", onInputEvent\)/);
+  assert.match(renderer, /container\.removeEventListener\("change", onChangeEvent\)/,
+    'the change listener cannot be detached — it will accumulate on every re-render');
+  assert.match(renderer, /container\.removeEventListener\("input", onInputEvent\)/,
+    'the input listener cannot be detached — it will accumulate on every re-render');
 });
 
 test('the mode input replaces the plus, and never sits beside it', () => {
