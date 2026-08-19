@@ -586,6 +586,61 @@ That is the difference between view state and the kind of stored answer this cod
 
 ---
 
+## Colours: one curve instead of a lower and an upper
+
+Colours describes its lightness ladder as **two** curves — *lower* for bright→middle and *upper* for
+middle→dark, each normalised into its own half. That already **is** one curve with a middle anchor. The
+three-point form did not exist when Colours was built; it does now, and Márton's call is to collapse them:
+*"I can achieve with custom what I tried to do with the lower and upper curve, especially with a mid point
+and a custom bezier for both parts."*
+
+**The maths is done and proven**, and shipped: `bezierJoin` / `bezierSplit` in `@Bezier` convert a pair of
+halves to one three-point curve and back, exactly. Checked against the real `oklchLadder` across **735**
+legacy combinations — every family pair, three anchor sets, five middle placements — worst difference
+8.7e-7, which is the six-decimal storage rounding and nothing else. So no existing colour config changes
+the numbers it generates.
+
+**How it was found:** Márton, reviewing the colour panel after the scale work.
+
+**Why it was left:** the maths is the easy half. The hard half is one design seam that has to land with the
+config change, not before it — **`lightness.middle` and the curve's middle anchor are the same fact.** Once
+there is one curve, the anchor's height *is* the middle lightness and its x *is* the token placement, so
+either the curve owns them and those fields become views onto it, or the fields own them and the anchor is
+a readout. Half-landing that leaves two truths, which is the failure this codebase keeps paying for.
+
+An attempt that reverted: changing `oklchLadder` first left four tests failing, and every one of them was
+pointing at that seam — the middle is only pinned when the curve has an anchor at that step, and until the
+config drops `lightness.middle` both spellings exist at once.
+
+**What fixing it involves**, in the order it has to happen:
+
+1. `oklchLadder` takes one curve: `L(i) = bright + (dark − bright) × bezierAt(curve, i / last)`, with the
+   ends still taken by index — reading them off the curve costs the exactness re-anchoring depends on.
+   Accept `{ lower, upper }` and convert with `bezierJoin`, **putting each half through `oklchCurveOf`
+   first**: a pair can hold coordinates, a `{ type, ease }` object or a curve id, and `bezierJoin`
+   understands only the first. Handed anything else it reads an empty curve and falls back to linear, which
+   silently flattens every pre-editor config. A test caught exactly that.
+2. `oklchReanchor` moves the curve's anchor rather than handing the ladder a different `anchors.middle` —
+   and the ladder it compares against must use the same anchor position, or the drift it reports includes
+   the anchor moving rather than only the lightness changing. A seed on the first or last step still
+   replaces that end; there is no half left to re-anchor.
+3. `colors.js` collapses `lower`/`upper` into one curve per scope. The `{lower=curve}` and
+   `[lower=original;upper=original]` conditions collapse with it, and *Original* becomes one empty state
+   instead of two.
+4. The middle anchor writes the middle lightness and the token placement.
+
+**One loss, and it is inherent.** Two halves that each have a middle anchor are five anchors; a curve holds
+three. So a half that is itself three-point — every `easeInOut` and `easeOutIn` — is collapsed on the way
+in, and `quad · easeInOut` and `cubic · easeInOut` land on the same ladder. Fitting the closest single cubic
+instead of matching the tangents was tried and converged on the same answer: a curve that leaves and arrives
+flat pins both handles to the axes whatever family it came from. Not worth a second attempt.
+
+**A two-point colour curve becomes possible**, which it is not today — a ladder with no kink at all, where
+the middle lightness is a consequence rather than an input. Márton: *"I'm fine with a two point curve for
+colors."*
+
+---
+
 ---
 
 ## Habits worth keeping

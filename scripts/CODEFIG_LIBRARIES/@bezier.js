@@ -64,7 +64,7 @@
 // | Category | Functions |
 // |----------|-----------|
 // | Reading | bezierAt, bezierNormalise, bezierIsEmpty, bezierAnchorCount |
-// | Editing | bezierWithMiddle, bezierWithoutMiddle, bezierSegments |
+// | Editing | bezierWithMiddle, bezierWithoutMiddle, bezierSegments, bezierJoin, bezierSplit |
 // | Presets | bezierFromEase, bezierEaseName, bezierEaseError, bezierEaseNames, bezierEaseTable |
 // | Text | bezierParse, bezierFormat |
 // @DOC_END
@@ -461,6 +461,79 @@ function bezierEaseName(curve) {
     }
   }
   return null;
+}
+
+/**
+ * Two segment curves and the anchor between them, as one three-point curve.
+ *
+ * **This is not a conversion so much as a spelling change.** A ladder described by a *lower* curve and an
+ * *upper* curve — each normalised into its own half — already *is* a single curve with a middle anchor;
+ * the two halves are that curve written in two pieces. Colours had it the long way round because the
+ * three-point form did not exist when it was built.
+ *
+ * `mx` and `my` are where the join sits in the whole curve's own square: for a lightness ladder that is
+ * the step the middle anchor lands on, and how far the middle lightness is from bright towards dark.
+ *
+ * Exact, and exactly reversible — checked against the real `oklchLadder` to 3e-7, which is the six-decimal
+ * storage rounding and nothing else. It is the same construction `bezierFromEase` uses for `inout`, which
+ * is itself two halves pretending to be one curve.
+ */
+function bezierJoin(lower, upper, mx, my) {
+  var x = bezierClamp01(mx);
+  var y = bezierClamp01(my);
+  var lo = bezierPlace(bezierHalf(lower), 0, 0, x, y);
+  var hi = bezierPlace(bezierHalf(upper), x, y, 1, 1);
+  return bezierNormalise([lo[0], lo[1], lo[2], lo[3], x, y, hi[0], hi[1], hi[2], hi[3]]);
+}
+
+/**
+ * One half of a join, as the single cubic a half has to be.
+ *
+ * **A three-point half does not survive, and cannot.** Two halves that each have a middle anchor are five
+ * anchors between them; a curve holds three. So a half like that is collapsed with `bezierWithoutMiddle`.
+ * Every `easeInOut` and `easeOutIn` is three-point, so this is the case a colour config written before the
+ * editor actually hits.
+ *
+ * The loss is **inherent, not a weak collapse** — fitting the closest single cubic instead of matching the
+ * tangents was tried and converged on the same answer, because a curve that leaves and arrives flat pins
+ * both handles to the axes whatever family it came from. `quad · easeInOut` and `cubic · easeInOut`
+ * therefore land on the same ladder. That is the price of one curve instead of two, and it is the shape
+ * that was asked for: a middle, and a custom bend either side of it.
+ *
+ * Nothing (`[]`) is the straight line, which is what makes a ladder on *Original* joinable at all.
+ */
+function bezierHalf(curve) {
+  var points = bezierNormalise(curve);
+  if (points.length === 4) return points;
+  if (points.length === 10) return bezierWithoutMiddle(points);
+  return bezierFromEase('linear', 'none', 1);
+}
+
+/**
+ * The inverse: a three-point curve as the two halves it is made of, each back in its own unit square.
+ *
+ * → `{ lower, upper, mx, my }`, or `null` for a curve that has no middle anchor to split at. A two-point
+ * curve is not two halves — that is the whole point of being able to have one.
+ */
+function bezierSplit(curve) {
+  var n = bezierNormalise(curve);
+  if (n.length !== 10) return null;
+  var mx = n[4];
+  var my = n[5];
+  function unplace(x1, y1, x2, y2, x0, y0, w, h) {
+    var dx = w - x0;
+    var dy = h - y0;
+    return bezierNormalise([
+      dx ? (x1 - x0) / dx : 0, dy ? (y1 - y0) / dy : 0,
+      dx ? (x2 - x0) / dx : 1, dy ? (y2 - y0) / dy : 1
+    ]);
+  }
+  return {
+    mx: mx,
+    my: my,
+    lower: unplace(n[0], n[1], n[2], n[3], 0, 0, mx, my),
+    upper: unplace(n[6], n[7], n[8], n[9], mx, my, 1, 1)
+  };
 }
 
 // ============================================================================

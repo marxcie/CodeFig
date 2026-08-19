@@ -15,6 +15,8 @@ const EXPORTS = [
   'bezierSegments',
   'bezierWithMiddle',
   'bezierWithoutMiddle',
+  'bezierJoin',
+  'bezierSplit',
   'bezierFromEase',
   'bezierEaseName',
   'bezierEaseNames',
