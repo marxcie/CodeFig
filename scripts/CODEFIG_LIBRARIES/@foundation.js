@@ -3203,16 +3203,13 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     if (colorModel !== 'hsl') {
       // OKLCH's curve is the collection's, so *Original* goes on the shared block rather than on each mode —
       // set once below, outside this loop.
-      entry.lower = undefined;
-      entry.upper = undefined;
+      entry.curve = undefined;
     }
     if (colorModel === 'hsl') {
-      // Both segments, so the pair behaves as one control until it is deliberately split. **Original is the
-      // empty curve** — no points, no curve — which is the whole of how the editor spells it. There is no
-      // family or easing to carry alongside: a read fills the coordinates and nothing else, so there is
-      // nothing here that a dragged handle could later disagree with.
-      entry.lower = [];
-      entry.upper = [];
+      // **Original is the empty curve** — no points, no curve — which is the whole of how the editor spells
+      // it. There is no family or easing to carry alongside: a read fills the coordinates and nothing else,
+      // so there is nothing here that a dragged handle could later disagree with.
+      entry.curve = [];
     }
     perMode.push(entry);
   }
@@ -3226,11 +3223,11 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     steps: perMode[0].steps.join(', '),
     // **OKLCH arrives on Original at collection scope.** The ladder is shared, so the claim "this is the ramp
     // already in the file" is one the collection makes, not one each mode makes separately.
-    lower: colorModel === 'hsl' ? undefined : [],
-    upper: colorModel === 'hsl' ? undefined : [],
+    curve: colorModel === 'hsl' ? undefined : [],
+    // **No middle.** The ladder's bend is the curve's own anchor now, so a middle lightness here would be a
+    // second answer to a question the curve already answers — and the block has no field to show it in.
     lightness: {
       bright: colorsRound1(leadAnchors.bright * 100),
-      middle: colorsRound1(leadAnchors.middle * 100),
       dark: colorsRound1(leadAnchors.dark * 100)
     },
     // No `seed`: a file holds no record of one, and `fillConfigBlock` only touches the keys a payload

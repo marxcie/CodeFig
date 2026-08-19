@@ -83,15 +83,13 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // closest curve on offer is 10.4% out at its worst step where the tolerance is 0.5%. So the honest value
   // for a freshly read segment is *no curve* — these are the colours, and choosing a curve replaces them.
   //
-  // The two halves are set separately, so one may be a curve while the other is still what the file holds.
-  // That is a state the design allows, and it is answered after generation rather than before, by
-  // substituting the file's own steps for the ones an Original segment covers.
+  // It is answered after generation rather than before, by substituting the file's own steps for every step
+  // the curve would otherwise have covered.
   //
   // **HSL only.** OKLCH's ladder is shared by every mode, so *Original* there is a property of the
-  // collection and lives in the shared block — `colorsSegmentCurves` reads the pair from `config` in OKLCH
-  // and from the mode in HSL, which is the whole of that distinction.
+  // collection and lives in the shared block — `colorsCurve` reads the curve from `config` in OKLCH and
+  // from the mode in HSL, which is the whole of that distinction.
   var held = (config.existing && config.existing[mode.name]) ? config.existing[mode.name] : null;
-  var segments = colorsSegmentCurves(config, mode, oklch);
   var last = steps.length - 1;
   var read = oklch ? oklchFromHex : oklchHslFromHex;
   var seedHex = (mode.seed && mode.seed.hex) ? String(mode.seed.hex).trim() : '';
@@ -108,52 +106,47 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
       dark: oklchClamp01(colorsNumber(mode.dark && mode.dark.lightness, 4) / 100)
     };
   }
-  var curveId = { lower: segments.lower, upper: segments.upper };
+  // **After the anchors, because a legacy pair is joined at the middle they describe.** The curve is the
+  // ladder's whole shape now, so it cannot be resolved before the lightness it spans — or the step it bends
+  // at — is known. A named placement is readable without a ladder; only a seed's *nearest* step needs one,
+  // and a seed re-anchors the curve anyway, which moves that anchor for a second time.
+  var wanted = (mode.seed && mode.seed.placement != null) ? String(mode.seed.placement).trim() : '';
+  var namedIndex = wanted ? steps.indexOf(wanted) : -1;
+  var segments = colorsCurve(config, mode, oklch, steps, anchors,
+    namedIndex >= 0 ? namedIndex : colorsMidIndex(steps));
+  var curveId = segments.curve;
   var base = (oklch && sharedLadder) ? sharedLadder : oklchLadder(anchors, curveId, steps);
 
   // Placement is where Middle lands. Auto is nearest-by-lightness; a named step no longer in the list is
   // recovered to the nearest rather than silently reassigned, and the stored value is left alone so it comes
   // back if the step does.
-  var wanted = (mode.seed && mode.seed.placement != null) ? String(mode.seed.placement).trim() : '';
   var placementIndex, placementAuto = true, recoveredFrom = null;
   if (wanted) {
-    var named = steps.indexOf(wanted);
+    var named = namedIndex;
     if (named >= 0) { placementIndex = named; placementAuto = false; }
     else { placementIndex = seed ? oklchNearestStep(base, seed.L) : colorsMidIndex(steps); recoveredFrom = wanted; }
   } else {
     placementIndex = seed ? oklchNearestStep(base, seed.L) : colorsMidIndex(steps);
   }
 
-  // **The ladder and the ramp have to kink at the same step.**
-  //
-  // `base` was built before the placement was known, so it used `oklchLadder`'s own default middle —
-  // `floor(last/2)` — while `oklchRamp` interpolates hue and chroma around `placementIndex`. Set *Token
-  // placement* to anything but the auto middle and the lightness turned its corner at one step while the
-  // colour turned it at another: a ramp that goes pale in one place and grey in another, from one config.
-  //
-  // Two passes, because the placement can only be found from a ladder: build one to measure against, then
-  // rebuild it around the step that measurement chose.
-  if (!(oklch && sharedLadder) && placementIndex !== Math.floor((steps.length - 1) / 2)) {
-    base = oklchLadder(anchors, curveId, steps, placementIndex);
-  }
-
   var lock = !!(mode.seed && mode.seed.lock);
   var reanchored = !!(seed && lock);
   var reanchor = reanchored ? oklchReanchor(anchors, seed.L, curveId, steps, placementIndex) : null;
   var ladder = reanchor ? reanchor.ladder : base;
+  // Re-anchoring moves the curve, so the ramp eases its hue and chroma on the moved one. Handing it the
+  // curve the ladder no longer follows is how the colour and the lightness came to turn at different steps.
+  var walked = reanchor ? reanchor.curve : curveId;
 
   var rows = oklchRamp({
-    steps: steps, ladder: ladder, curve: curveId, middleIndex: placementIndex,
+    steps: steps, ladder: ladder, curve: walked, middleIndex: placementIndex,
     model: oklch ? 'oklch' : 'hsl',
     hue: colorsChannel(mode, 'hue', oklch),
     chroma: colorsChannel(mode, 'chroma', oklch)
   });
 
   // Original is not a curve, so it cannot be eased into place — the steps it covers are simply the file's.
-  if (held && (segments.lowerOriginal || segments.upperOriginal)) {
+  if (held && segments.original) {
     for (var oi = 0; oi < rows.length; oi++) {
-      var inLower = oi <= placementIndex;
-      if (!(inLower ? segments.lowerOriginal : segments.upperOriginal)) continue;
       var wasHex = held[oi];
       if (!wasHex) continue;
       var seenIt = read(wasHex);
@@ -182,8 +175,8 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
     placementIndex: placementIndex, placementAuto: placementAuto, recoveredFrom: recoveredFrom,
     seed: seed, seedHex: seedHex, invalidHex: invalidHex, seedRow: seedRow, seedState: seedState,
     reanchored: reanchored, collapsed: !!(reanchor && reanchor.collapsed),
-    drift: reanchor ? reanchor.drift : null, clamped: clamped, anchors: anchors, curve: curveId,
-    original: segments.lowerOriginal && segments.upperOriginal
+    drift: reanchor ? reanchor.drift : null, clamped: clamped, anchors: anchors, curve: walked,
+    original: segments.original
   };
 }
 
@@ -236,25 +229,26 @@ function colorsPct(value) {
 }
 
 /**
- * The two segment curves, as ids the ladder understands.
+ * **One curve**, as coordinates the ladder understands.
  *
- * *Lower* is bright→middle and *Upper* is middle→dark — the reading order of the frame, and the order of the
- * step names. *Original* is not a curve: it comes back as an empty one, so the ladder has
- * something to walk, and is reported separately so the caller can substitute the file's own steps.
+ * A ladder used to be described by a *Lower* curve (bright→middle) and an *Upper* one (middle→dark), each
+ * normalised into its own half. That was always one curve written down twice: a pair of halves joined at a
+ * middle anchor **is** a single curve with three anchors, which `bezierJoin` reproduces to 8.7e-7 across the
+ * 735 legacy combinations `tests/bezier.test.js` walks. So the pair is joined here, once, on the way in, and
+ * nothing downstream has two of anything to keep in step.
  *
- * The pair comes from the shared block in OKLCH, where the ladder belongs to the collection, and from the
- * mode in HSL, where it belongs to the mode. That is the whole of the HSL-only rule.
+ * *Original* is not a curve: it comes back empty, so the ladder still has something to walk, and is reported
+ * separately so the caller can substitute the file's own steps. **A curve is Original or it is not** — the
+ * old model let one half be Original while the other was a curve, which one curve cannot express and which
+ * `bezierJoin` therefore resolves by treating an Original half as linear.
+ *
+ * The curve comes from the shared block in OKLCH, where the ladder belongs to the collection, and from the
+ * mode in HSL, where it belongs to the mode. That is the whole of the HSL-only rule, and it is why OKLCH
+ * shows one curve for every mode while HSL shows one per mode.
  */
-function colorsSegmentCurves(config, mode, oklch) {
-  // **Where the pair lives is the whole of the model difference.** OKLCH shares one ladder across every mode,
-  // so its two segment curves belong to the collection and are read from the shared block; in HSL the ladder
-  // is the mode's own, so they are read from the mode. Same controls, same maths, different owner — which is
-  // also why a mode's Lower and Upper rows are `{colorModel=hsl}`: in OKLCH they would be controls that drive
-  // nothing, and a panel that shows one of those is worse than a panel that shows none.
-  //
-  // A collection whose curve is *Original* therefore puts every mode on the file's own steps at once, which is
-  // what makes a fresh OKLCH load as quiet as a fresh HSL one.
+function colorsCurve(config, mode, oklch, steps, anchors, joinIndex) {
   var from = oklch ? config : mode;
+
   /**
    * **A curve is coordinates.** The panel writes an array — four numbers for one segment, ten for two,
    * and `[]` for *Original*, which is not a curve at all but the file's own steps.
@@ -264,14 +258,11 @@ function colorsSegmentCurves(config, mode, oklch) {
    * within 0.01 of the rest — the numbers are in `bezierEaseTable`. Two evaluators would disagree exactly
    * where it matters least visibly: a file written by the old panel, opened in the new one.
    */
-  function curveFor(which) {
-    var held = from ? from[which] : null;
-
+  function curveFrom(held) {
     if (Array.isArray(held)) {
       var points = bezierNormalise(held);
       return { curve: points, original: points.length === 0 };
     }
-
     var legacy = held || {};
     var family = legacy.family || 'original';
     if (family === 'original') return { curve: [], original: true };
@@ -283,9 +274,32 @@ function colorsSegmentCurves(config, mode, oklch) {
     var amount = colorsNumber(legacy.amount, 100) / 100;
     return { curve: bezierFromEase(family, ease, oklchClamp01(amount)), original: false };
   }
-  var lower = curveFor('lower'), upper = curveFor('upper');
-  return { lower: lower.curve, upper: upper.curve,
-    lowerOriginal: lower.original, upperOriginal: upper.original };
+
+  // The shape the panel writes now.
+  if (from && from.curve !== undefined && from.curve !== null) return curveFrom(from.curve);
+
+  // The shape it wrote before: two halves, joined at the middle the config described. Both Original stays
+  // Original — there is no curve to join — and anything else becomes the three-anchor curve the pair was.
+  var lower = curveFrom(from ? from.lower : null);
+  var upper = curveFrom(from ? from.upper : null);
+  if (lower.original && upper.original) return { curve: [], original: true };
+
+  var last = steps && steps.length ? steps.length - 1 : 0;
+  var straight = bezierFromEase('linear', 'none', 1);
+  var span = anchors ? (anchors.dark - anchors.bright) : -1;
+  var my = (anchors && Math.abs(span) > 1e-9) ? (anchors.middle - anchors.bright) / span : 0.5;
+  // **Joined at the placed step, not at the automatic middle.** The pair described a ladder that bent where
+  // the colour turned; joining at `floor(last/2)` when the placement says 700 puts the lightness corner at
+  // 500 and the hue corner at 700 — one config, a ramp that goes pale in one place and grey in another.
+  // That is the bug `tests/colors-alignment.test.js` was written for, and it comes straight back if the
+  // join forgets where the middle was.
+  var at = (typeof joinIndex === 'number' && joinIndex >= 0) ? joinIndex : colorsMidIndex(steps);
+  var mx = last > 0 ? at / last : 0.5;
+  return {
+    curve: bezierJoin(lower.original ? straight : lower.curve,
+                      upper.original ? straight : upper.curve, mx, my),
+    original: false
+  };
 }
 
 /**
@@ -376,17 +390,27 @@ function colorsAnchorStrip(made, steps) {
  * One swatch and its labels. `was` is the hex the file holds when this step would change — struck through
  * above the new one, which is how the frame draws it: the old value is what you are being asked to give up.
  */
-function colorsCard(step, hex, seedLabel, pin, was, delta) {
-  var out = ['<span class="color-ramp-preview-card">'];
-  // Split when the step would change: the file's colour on one side, the run's on the other, so the pair is
+/**
+ * One step's swatch, for the continuous bar.
+ *
+ * **No border and no radius of its own.** The ramp is judged by the joins between neighbours, and a
+ * hairline between every pair is a hairline between every pair of colours you are trying to compare. The
+ * frame around the whole bar carries the edge instead, which is how a palette is drawn everywhere else.
+ */
+function colorsSwatch(hex, was) {
+  // Split when the step would change: the file's colour on top, the run's below, so the pair is
   // legible before reading either hex.
   if (was) {
-    out.push('<span class="color-ramp-preview-swatch color-ramp-preview-swatch--split" style="background:' +
-      'linear-gradient(135deg,' + colorsEscapeHtml(was) + ' 0 50%,' + colorsEscapeHtml(hex) + ' 50% 100%)' +
-      '"></span>');
-  } else {
-    out.push('<span class="color-ramp-preview-swatch" style="background:' + colorsEscapeHtml(hex) + '"></span>');
+    return '<span class="color-ramp-preview-swatch color-ramp-preview-swatch--split" style="background:' +
+      'linear-gradient(to bottom,' + colorsEscapeHtml(was) + ' 0 50%,' + colorsEscapeHtml(hex) + ' 50% 100%)' +
+      '"></span>';
   }
+  return '<span class="color-ramp-preview-swatch" style="background:' + colorsEscapeHtml(hex) + '"></span>';
+}
+
+/** One step's labels, in the row under the bar: the token, its hex, and anything worth saying about it. */
+function colorsCard(step, hex, seedLabel, pin, was, delta) {
+  var out = ['<span class="color-ramp-preview-card">'];
   out.push('<span class="color-ramp-preview-token">' + colorsEscapeHtml(step) + '</span>');
   if (was) {
     out.push('<span class="color-ramp-preview-hex color-ramp-preview-hex--was">' +
@@ -445,9 +469,10 @@ function colorsAlignment(config) {
   var parsed = colorsParseSteps(config.steps);
   var steps = parsed.steps.length ? parsed.steps : colorsPlaceholderSteps();
   var oklch = (config.colorModel || 'hsl') !== 'hsl';
-  // The shared ladder is built with the shared pair, or the two would disagree about the collection's curve.
+  // The shared ladder is built with the shared curve, or the two would disagree about the collection's.
+  var sharedAnchors = colorsLightnessAnchors(config);
   var shared = oklch
-    ? oklchLadder(colorsLightnessAnchors(config), colorsSegmentCurves(config, {}, true), steps)
+    ? oklchLadder(sharedAnchors, colorsCurve(config, {}, true, steps, sharedAnchors).curve, steps)
     : null;
 
   var tolerance = colorsTolerance();
@@ -515,6 +540,10 @@ function colorsStrip(entry, steps) {
   var changedAt = {};
   entry.changed.forEach(function (c) { changedAt[c.index] = c; });
 
+  var swatches = made.rows.map(function (row, i) {
+    var change = changedAt[i];
+    return colorsSwatch(row.hex, change ? change.was : null);
+  });
   var cards = made.rows.map(function (row, i) {
     var change = changedAt[i];
     var delta = null;
@@ -523,7 +552,7 @@ function colorsStrip(entry, steps) {
       delta = 'ΔL ' + (change.dL > 0 ? '−' : '+') + colorsPct(Math.abs(change.dL));
     }
     return colorsCard(row.step, row.hex,
-      i === made.placementIndex && made.seed ? 'Seed step' : null,
+      i === made.placementIndex && made.seed ? 'Seed color' : null,
       row.clamped ? 'C→' + row.chroma.toFixed(3) : null,
       change ? change.was : null, delta);
   });
@@ -538,6 +567,10 @@ function colorsStrip(entry, steps) {
       '</div>');
   }
   out.push(colorsAnchorStrip(made, steps));
+  // **The bar and its labels are two grids, not one.** A swatch has to touch its neighbours — a ramp is
+  // read by the joins between them — so the swatches sit in a clipped, framed row of their own and the
+  // labels in a matching one beneath. Sharing a grid would put the gap between the labels inside the bar.
+  out.push('<div class="color-ramp-preview-bar">' + swatches.join('') + '</div>');
   out.push('<div class="color-ramp-preview-strip">' + cards.join('') + '</div>');
   out.push('</div>');
   return out.join('');

@@ -337,6 +337,16 @@ function oklchCurveOf(curve) {
   if (Array.isArray(curve)) {
     return { id: null, points: bezierNormalise(curve), amount: 1 };
   }
+  // **A `{ lower, upper }` pair joins rather than falling through.** `colorsCurve` converts every pair before
+  // the engine sees one, so this should be unreachable — but the fall-through below ends at
+  // `oklchCurveById`, which answers *linear* for anything it does not recognise. That is precisely the
+  // failure this file already carries a warning about: 13 of 20 combinations silently generating a linear
+  // ramp because an unrecognised spelling had a plausible-looking answer. A pair that never said where its
+  // middle sat joins at the middle, which is what it meant.
+  if (curve && typeof curve === 'object' && (curve.lower || curve.upper)) {
+    return { id: null, amount: 1,
+      points: bezierJoin(oklchCurveOf(curve.lower).points, oklchCurveOf(curve.upper).points, 0.5, 0.5) };
+  }
   if (curve && typeof curve === 'object' && curve.type) {
     var amount = typeof curve.amount === 'number' ? oklchClamp01(curve.amount) : 1;
     return { id: null, points: bezierFromEase(curve.type, curve.ease || 'none', amount), amount: 1 };
@@ -386,17 +396,18 @@ function oklchCurveById(id) {
  * `middleIndex` defaults to the list's midpoint. A **shared** ladder always uses the midpoint, since it
  * is shared and cannot follow one mode's seed; `oklchReanchor` is the one caller that moves it.
  */
-function oklchLadder(anchors, curveId, steps, middleIndex) {
+function oklchLadder(anchors, curveId, steps) {
   var last = steps.length - 1;
-  var middle = typeof middleIndex === 'number' ? middleIndex : Math.floor(last / 2);
-  // **One curve per segment.** `curveId` may be a single id — every caller but Colors passes one — or
-  // `{ lower, upper }`. The two halves of a real ramp are not the same shape: measured on a hand-made
-  // neutral set the lower half fits an exponent of 1.71 and the upper 0.84, and one curve forced across
-  // both was 7.7% out at its worst step where the tolerance is 0.5%.
-  var pair = curveId && typeof curveId === 'object' && (curveId.lower || curveId.upper)
-    ? curveId : { lower: curveId, upper: curveId };
-  var lowerCurve = oklchCurveOf(pair.lower);
-  var upperCurve = oklchCurveOf(pair.upper);
+  // **One curve, across every step.** It used to be two — a *lower* shape for bright→middle and an *upper*
+  // one for middle→dark — because a real neutral ramp is not one exponent end to end: measured on a
+  // hand-made set the lower half fits 1.71 and the upper 0.84, and a single *two-anchor* curve forced across
+  // both was 7.7% out where the tolerance is 0.5%.
+  //
+  // A *three-anchor* curve says the same thing without the second variable. Its middle anchor is the bend,
+  // so the two halves still differ; they are just written down once. There is no `middleIndex` here any more
+  // for the same reason — where the ladder turns is a property of the curve, and asking the caller for it as
+  // well is how the two came to disagree.
+  var curve = oklchCurveOf(curveId);
   var out = [];
   for (var i = 0; i < steps.length; i++) {
     // **The three anchor steps take their anchor's value, not an interpolation of it.** They *are* the
@@ -408,14 +419,9 @@ function oklchLadder(anchors, curveId, steps, middleIndex) {
     // the user pointed at it — so one segment has no length and re-anchoring collapses to replacing that
     // endpoint. The alternative is ignoring a placement the user made on purpose.
     var L;
-    if (i === middle) L = anchors.middle;
-    else if (i === 0) L = anchors.bright;
+    if (i === 0) L = anchors.bright;
     else if (i === last) L = anchors.dark;
-    else {
-      var seg = oklchSegmentAt(i, middle, last);
-      var curve = seg.from === 'bright' ? lowerCurve : upperCurve;
-      L = oklchLerp(anchors[seg.from], anchors[seg.to], oklchEaseAt(curve, seg.t));
-    }
+    else L = oklchLerp(anchors.bright, anchors.dark, oklchEaseAt(curve, last === 0 ? 1 : i / last));
     out.push({ step: steps[i], L: oklchClamp01(L) });
   }
   return out;
@@ -452,9 +458,27 @@ function oklchReanchor(anchors, seedL, curveId, steps, placementIndex) {
   var last = steps.length - 1;
   var middle = typeof placementIndex === 'number' ? placementIndex : Math.floor(last / 2);
   var base = oklchLadder(anchors, curveId, steps);
-  var moved = oklchLadder(
-    { bright: anchors.bright, middle: seedL, dark: anchors.dark }, curveId, steps, middle
-  );
+
+  // **Re-anchoring moves the curve, not a second copy of the middle.** The ladder used to be rebuilt with
+  // `middle: seedL` while the curve stayed where it was, so the middle lightness lived in the anchors *and*
+  // in the curve's own anchor, and the two could disagree — which is exactly the "a variable does one job"
+  // fault. One curve across the whole range leaves nowhere for a second answer: put its anchor on the seed
+  // and the ladder passes through the seed by construction.
+  //
+  // **A seed on an end replaces that end.** An anchor cannot be placed at x=0 or x=1 — that is where the
+  // endpoints already are — so the curve has nothing to move and the endpoint itself is what the user
+  // pointed at. `collapsed` below already said so; this is the half of that promise that changes a number.
+  var span = anchors.dark - anchors.bright;
+  var ends = middle === 0 || middle === last;
+  var seated = ends
+    ? { bright: middle === 0 ? seedL : anchors.bright, middle: anchors.middle,
+        dark: middle === last ? seedL : anchors.dark }
+    : anchors;
+  var at = last === 0 ? 1 : middle / last;
+  var points = oklchCurveOf(curveId).points;
+  var curve = (ends || Math.abs(span) < 1e-9) ? points
+    : bezierThrough(points, at, (seedL - anchors.bright) / span);
+  var moved = oklchLadder(seated, curve, steps);
 
   var drift = null;
   for (var i = 1; i < last; i++) {
@@ -464,7 +488,7 @@ function oklchReanchor(anchors, seedL, curveId, steps, placementIndex) {
     }
   }
   return {
-    ladder: moved, base: base, drift: drift, moved: true,
+    ladder: moved, base: base, curve: curve, drift: drift, moved: true,
     collapsed: middle === 0 || middle === last
   };
 }
@@ -499,10 +523,12 @@ function oklchRamp(spec) {
   var middle = typeof spec.middleIndex === 'number' ? spec.middleIndex : Math.floor(last / 2);
   // Hue and chroma follow the *same* two curves the lightness does, or a split ramp eases its colour on one
   // schedule and its lightness on another.
-  var ramPair = spec.curve && typeof spec.curve === 'object' && (spec.curve.lower || spec.curve.upper)
-    ? spec.curve : { lower: spec.curve, upper: spec.curve };
-  var lowerRam = oklchCurveOf(ramPair.lower);
-  var upperRam = oklchCurveOf(ramPair.upper);
+  var ramCurve = oklchCurveOf(spec.curve);
+  // Where the *curve* puts the middle step. Hue and chroma still travel bright → middle → dark between three
+  // anchors, so they need a 0..1 within each half; the lightness now runs on one curve across the whole
+  // range, and reading its progress at the middle step is what keeps the two on the same schedule. Deriving
+  // it rather than storing it is the same rule the curve itself follows: the numbers are the answer.
+  var gm = oklchEaseAt(ramCurve, last === 0 ? 1 : middle / last);
   var oklch = spec.model !== 'hsl';
   var rows = [];
 
@@ -534,8 +560,11 @@ function oklchRamp(spec) {
 
   for (var i = 0; i < steps.length; i++) {
     var seg = oklchSegmentAt(i, middle, last);
-    var curve = seg.from === 'bright' ? lowerRam : upperRam;
-    var u = oklchEaseAt(curve, seg.t);
+    var g = oklchEaseAt(ramCurve, last === 0 ? 1 : i / last);
+    var u = seg.from === 'bright'
+      ? (gm > 1e-9 ? g / gm : 1)
+      : (gm < 1 - 1e-9 ? (g - gm) / (1 - gm) : 1);
+    u = oklchClamp01(u);
     var H = oklchLerpHue(spec.hue[seg.from], spec.hue[seg.to], u);
     var L = spec.ladder[i].L;
     var C, fit, thinned = false;

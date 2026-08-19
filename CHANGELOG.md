@@ -396,6 +396,19 @@ deleting variable modes they did not recognise.
 
 ### Changed
 
+- **Colors has one curve, not two.** *Lower* and *Upper* are gone; a colour ramp is described by a single
+  curve running bright to dark, and *Add middle point* is what bends the two halves differently. In **HSL**
+  that is one curve per mode; in **OKLCH** it is one curve for the whole collection, which is what makes
+  every mode land on the same lightness ladder and match in greyscale.
+
+  The curve's middle anchor now *is* the middle lightness and the step it sits on, so the separate **Middle**
+  lightness field is gone — it was a second answer to a question the curve already answered, and the two
+  could disagree. Existing configs written with a *Lower* and an *Upper* curve are joined into the single
+  curve they always described, reproducing their ladders to under 1e-6; nothing you have made moves.
+
+  One capability goes with it: a half on *Original* while the other half was a curve. A curve is now either
+  *Original* — the file's own colours, untouched — or a shape spanning every step.
+
 - **Bezier is the default scale everywhere.** Spacing and Corner radius ship it now too, so a fresh panel
   opens on the model the whole thing is built around rather than the one you have to switch to. The starter
   numbers change with it — a geometric ramp does not land on a flat 4/8/12/16 grid, and that is the model

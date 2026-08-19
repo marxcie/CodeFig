@@ -502,6 +502,32 @@ function bezierJoin(lower, upper, mx, my) {
  *
  * Nothing (`[]`) is the straight line, which is what makes a ladder on *Original* joinable at all.
  */
+/**
+ * The same curve, with its middle anchor moved **to** `(mx, my)`.
+ *
+ * `bezierWithMiddle` *adds* an anchor without changing the shape; this one *places* it, which is the
+ * operation a ladder needs. Both halves keep their shape and are re-fitted either side of the new join, so
+ * asking for the anchor the curve already has returns the curve unchanged.
+ *
+ * A curve with no middle anchor grows one at `mx` first — de Casteljau, so that step alone moves nothing —
+ * and only then is the anchor placed. That is why locking a seed onto a two-point curve does not have to be
+ * a different code path from locking it onto a three-point one.
+ *
+ * This is the whole of re-anchoring now. A ladder used to be re-anchored by rebuilding it with a different
+ * `middle` *lightness* while the curve stayed put, which is how the middle came to be stored in two places
+ * that could disagree. The curve carries it, so there is one place to move it.
+ */
+function bezierThrough(curve, mx, my) {
+  var x = bezierClamp01(mx);
+  var y = bezierClamp01(my);
+  var n = bezierNormalise(curve);
+  if (bezierIsEmpty(n)) return n;
+  if (bezierAnchorCount(n) < 3) n = bezierWithMiddle(n, x);
+  var parts = bezierSplit(n);
+  if (!parts) return n;
+  return bezierJoin(parts.lower, parts.upper, x, y);
+}
+
 function bezierHalf(curve) {
   var points = bezierNormalise(curve);
   if (points.length === 4) return points;
