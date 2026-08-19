@@ -5,18 +5,36 @@
 // spacing and corner radius, and typography — because the same four models are specified for
 // both, and two implementations of one formula drift the way spacing and radius did.
 //
-// ## The four models
+// ## The models
 // | Model | What it is | Where the top comes from |
 // |---|---|---|
-// | `endpoints` | a ramp from `min` to `max` along a curve | `max` |
-// | `modular` | each step a fixed ratio above the last | the ratio and the step count |
+// | `endpoints` | a ramp from `min` to `max` along a named easing | `max` |
+// | `bezier` | a base and a **growth ratio**, with a **curve** distributing the growth | the ratio and the step count |
 // | `metric` | a base plus a step that grows every `mod` steps | the step and the step count |
+// | `fibonacci` | each step the sum of the two before it | the step and the step count |
 // | `explicit` | the numbers you typed | you |
 //
-// `min` is required in all four — it is the floor a scale starts from. `max` is only a limit in
-// `endpoints`; in `modular` and `metric` the top is derived, so a `max` beside them is ignored and
-// reported. Set `clamp` to be **told** when a scale passes a number, without it being squashed to
-// fit: squashing a modular scale changes its ratio, which is the one property it promises to hold.
+// `min` is required in all of them — it is the floor a scale starts from. `max` is a real endpoint only in
+// `endpoints`; everywhere else the top is derived, so a `max` beside those is ignored and reported. Set
+// `clamp` to be **told** when a scale passes a number, without it being squashed to fit: squashing a ramp
+// changes its shape, which is the one thing it promises to hold.
+//
+// ## `bezier` replaced `modular`, and generates the same numbers
+// A modular scale is a constant ratio between steps. In **log space that is a straight line**, so `bezier`
+// with a flat curve *is* a modular scale — the step count cancels out of the exponent, so it is exact and
+// it is **append-safe**: add three tokens and the first six do not move. Bending the curve lets the ratio
+// vary across the scale, which is what a real spacing set does and what one ratio could never say.
+//
+// **The top is derived, never typed.** A version of this briefly took a `max` instead, and that was wrong
+// in the way that matters: with both ends pinned, adding a token re-subdivides the range and moves every
+// value below it. Nobody knows the largest spacing in advance anyway — they know the base and roughly how
+// fast it grows, which is what `ratio` is. `max` is still accepted and converted, for the configs written
+// while that was the spelling.
+//
+// **`modular` is still accepted** and converts through `modularAsBezier`, exactly. That is not politeness:
+// these scales have already been generated into people's files, and a token that comes back a different
+// number on the next run breaks everything bound to it. It is left out of `scaleModelNames` so nothing
+// offers it to anyone new.
 //
 // ## Two spellings of "base", on purpose
 // A **config** names its base by token: `base: { level: "xs", size: 4 }` — that is what a user
@@ -38,18 +56,19 @@
 // functions *of* a size rather than sequence generators; they stay in typography.
 //
 // ## Companion imports
-// `@import` does not follow calls across scripts. `endpoints` delegates to `generateScale`, so a
-// consumer that uses it must import that too:
+// `@import` does not follow calls across scripts. `endpoints` delegates to `generateScale` and `bezier`
+// reads its curve with `bezierAt`, so a consumer must import both:
 //
 // ```js
 // @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 // @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
+// @import { bezierAt } from "@Bezier"
 // ```
 //
 // ## Exported functions
 // | Category | Functions |
 // |----------|-----------|
-// | Sequences | scaleSequence, scaleModelNames |
+// | Sequences | scaleSequence, scaleModelNames, scaleModelAliases |
 // | Ratios | modularRatios, resolveModularRatio |
 // @DOC_END
 
@@ -96,7 +115,20 @@ function resolveModularRatio(ratio) {
 }
 
 function scaleModelNames() {
-  return ['endpoints', 'modular', 'metric', 'fibonacci', 'explicit'];
+  return ['endpoints', 'bezier', 'metric', 'fibonacci', 'explicit'];
+}
+
+/**
+ * `modular` is still accepted and is **not** in the list above.
+ *
+ * It generates exactly what it always generated — see `modularAsBezier` — but nothing offers it any more,
+ * so a panel that lists the models does not advertise a spelling that is on its way out. Kept separate from
+ * `scaleModelNames` rather than filtered out of it: the list is what a message prints when it does not
+ * recognise a model, and suggesting `modular` to someone whose config just failed would be advice to write
+ * the old thing.
+ */
+function scaleModelAliases() {
+  return ['modular'];
 }
 
 function scaleWarning(code, message, detail) {
@@ -132,7 +164,7 @@ function scaleSequence(model, options) {
   var warnings = [];
   var name = typeof model === 'string' && model ? model : 'endpoints';
 
-  if (scaleModelNames().indexOf(name) === -1) {
+  if (scaleModelNames().indexOf(name) === -1 && scaleModelAliases().indexOf(name) === -1) {
     return {
       values: [],
       warnings: [scaleWarning('scale-model-unknown', 'Unknown scale model "' + name + '". Use one of: ' + scaleModelNames().join(', ') + '.')]
@@ -152,17 +184,30 @@ function scaleSequence(model, options) {
   if (name === 'explicit') return explicitSequence(steps, opts, warnings);
   if (name === 'endpoints') return endpointsSequence(steps, opts, warnings);
 
-  // modular, metric and fibonacci all walk outwards from a base, and all derive their top.
+  // **`modular` is `bezier` with a straight curve.** Converted here rather than kept as a second generator,
+  // because the two are the same arithmetic: see `modularAsBezier`.
+  if (name === 'modular') {
+    opts = modularAsBezier(steps, opts, warnings);
+    if (!opts) return { values: [], warnings: warnings };
+    name = 'bezier';
+  }
+
+  if (name === 'bezier') {
+    var ramp = bezierScaleSequence(steps, opts, warnings);
+    if (!ramp) return { values: [], warnings: warnings };
+    return { values: applyScaleFloor(ramp, opts, warnings), warnings: reportClamp(ramp, opts, warnings) };
+  }
+
+  // metric and fibonacci both walk outwards from a base, and both derive their top.
   if (typeof opts.max === 'number') {
     warnings.push(scaleWarning(
       'scale-max-ignored',
-      '`max` does not apply to a ' + name + ' scale — its top comes from the ' +
-      (name === 'modular' ? 'ratio' : 'step') + ' and the number of steps. Use `clamp` to be told when it goes past a number.'
+      '`max` does not apply to a ' + name + ' scale — its top comes from the step and the number of steps. ' +
+      'Use `clamp` to be told when it goes past a number.'
     ));
   }
 
-  var built = name === 'modular' ? modularSequence(steps, opts, warnings)
-    : name === 'fibonacci' ? fibonacciSequence(steps, opts, warnings)
+  var built = name === 'fibonacci' ? fibonacciSequence(steps, opts, warnings)
     : metricSequence(steps, opts, warnings);
   if (!built) return { values: [], warnings: warnings };
 
@@ -223,8 +268,119 @@ function scaleBaseValue(opts) {
   return opts.min;
 }
 
-/** `size(n) = size(n-1) × r` above the base, `÷ r` below. */
-function modularSequence(steps, opts, warnings) {
+/**
+ * An **open-ended** ramp: a base, a growth ratio, and a curve saying how that growth is distributed.
+ *
+ * `value(i) = base × ratio ^ ( (steps-1) × curve(i / (steps-1)) )`
+ *
+ * **The top is derived, never typed.** For spacing and typography nobody knows the largest value in
+ * advance — they know where the scale starts and roughly how fast it should grow, which is exactly what a
+ * modular scale always asked for. An earlier version of this took a `max` instead, and that was wrong in a
+ * way that mattered: with both ends pinned, **adding a token re-subdivides the range and moves every value
+ * below it**. Six spacing tokens already bound to things in a file, silently changed, because somebody
+ * added a seventh.
+ *
+ * Deriving the top from the ratio fixes that, and the `steps - 1` in the exponent is why:
+ *
+ * - **Flat curve → `base × ratio^i`.** The step count cancels out entirely, so the sequence does not
+ *   depend on how long it is. Add three tokens and the first six are untouched. That is a modular scale,
+ *   term for term, which is what every config in existence already holds.
+ * - **Both ends stay exact.** `curve(0)` is 0 and `curve(1)` is 1, so bending moves the interior and can
+ *   never move the base or the top.
+ *
+ * A bent curve *is* still length-dependent in its interior — the shape is spread over however many tokens
+ * there are — and that is inherent: a curve is a shape over an interval, so a longer interval redistributes
+ * it. The case that matters for existing files is the flat one, and that is exact.
+ *
+ * `max` is accepted as an alternative spelling and converted: `ratio = (max / base) ^ (1 / (steps-1))`.
+ */
+function bezierScaleSequence(steps, opts, warnings) {
+  var from = scaleBaseValue(opts);
+
+  if (!(from > 0)) {
+    warnings.push(scaleWarning(
+      'scale-bezier-positive',
+      'A bezier scale multiplies its base by a ratio, so the base has to be above zero (got ' + from + '). ' +
+      'Put a 0 in Extra values instead — an extra fills the smallest token name and the scale takes over ' +
+      'above it.'
+    ));
+    return null;
+  }
+  if (steps === 1) return [from];
+
+  var ratio = bezierScaleRatio(steps, from, opts, warnings);
+  if (ratio === null) return null;
+
+  var curve = Array.isArray(opts.curve) ? opts.curve : [];
+  var span = steps - 1;
+  var top = from * Math.pow(ratio, span);
+  var out = new Array(steps);
+  for (var i = 0; i < steps; i++) {
+    // The ends by identity rather than by `Math.pow(ratio, 0)` and `Math.pow(ratio, span)`, which are 1 and
+    // the top to within an ulp and not exactly. The same reason `oklchLadder` takes its anchors by index: a
+    // top that comes out 30.374999999999996 is invisible until something compares it.
+    out[i] = i === 0 ? from
+      : i === span ? top
+      : from * Math.pow(ratio, span * bezierAt(curve, i / span));
+  }
+  return out;
+}
+
+/**
+ * The per-step growth, however the caller spelled it.
+ *
+ * `ratio` is the spelling that keeps a scale open — it is a rate, so the sequence continues rather than
+ * being squeezed into a range. `max` is accepted because configs were briefly written that way, and it is
+ * converted rather than kept as a second code path: two ways to reach the same number is how they end up
+ * disagreeing.
+ */
+function bezierScaleRatio(steps, from, opts, warnings) {
+  var named = resolveModularRatio(opts.ratio);
+  if (named !== null) {
+    // **A scale that shrinks is not a scale.** Tokens are named smallest to largest, so a ratio at or below
+    // 1 contradicts the list it is filling — and it does not fail, it quietly generates `0, 0, 0, 1, 2, 4`
+    // and rounds most of it to nothing. Found by typing a curve's coordinates into the growth field, where
+    // `0.42` was read as the growth and the panel drew a descending ladder without comment.
+    if (named <= 1) {
+      warnings.push(scaleWarning(
+        'scale-ratio-not-growing',
+        'A growth of ' + named + ' makes each step smaller than the last, and these tokens are named ' +
+        'smallest to largest. Use a number above 1 — 1.25 is a major third, 1.5 a perfect fifth.'
+      ));
+      return null;
+    }
+    return named;
+  }
+
+  if (typeof opts.max === 'number' && isFinite(opts.max)) {
+    if (!(opts.max > 0)) {
+      warnings.push(scaleWarning(
+        'scale-bezier-positive',
+        'A bezier scale needs a largest value above zero to ramp towards (got ' + opts.max + ').'
+      ));
+      return null;
+    }
+    return Math.pow(opts.max / from, 1 / (steps - 1));
+  }
+
+  warnings.push(scaleWarning(
+    'scale-ratio-required',
+    'A bezier scale needs a `ratio` — the growth from one step to the next. The largest value comes out of ' +
+    'it and the number of tokens, so the scale keeps going when you add one instead of being squeezed to fit.'
+  ));
+  return null;
+}
+
+/**
+ * A modular scale's parameters as a bezier ramp's — which is now almost nothing, because they are the same
+ * model. A modular scale is a constant ratio; a bezier scale is a ratio with a curve on it; a flat curve is
+ * a constant ratio. The only translation left is where the base sits.
+ *
+ * `modular` walks outwards from a base that may be part-way up the token list; `bezier` starts at its base
+ * and climbs. So the base is moved down to step 0 — `base / ratio^baseIndex` — which is the same sequence
+ * read from its bottom instead of from its middle.
+ */
+function modularAsBezier(steps, opts, warnings) {
   var ratio = resolveModularRatio(opts.ratio);
   if (ratio === null || ratio <= 0) {
     warnings.push(scaleWarning(
@@ -233,14 +389,38 @@ function modularSequence(steps, opts, warnings) {
     ));
     return null;
   }
-
   var baseIndex = scaleBaseIndex(steps, opts);
-  var out = new Array(steps);
-  out[baseIndex] = scaleBaseValue(opts);
-  var i;
-  for (i = baseIndex + 1; i < steps; i++) out[i] = out[i - 1] * ratio;
-  for (i = baseIndex - 1; i >= 0; i--) out[i] = out[i + 1] / ratio;
-  return out;
+  var baseValue = scaleBaseValue(opts);
+  if (!(baseValue > 0)) {
+    warnings.push(scaleWarning(
+      'scale-bezier-positive',
+      'A modular scale multiplies its base by a ratio, so the base has to be above zero (got ' + baseValue + ').'
+    ));
+    return null;
+  }
+
+  // **A `max` beside a ratio is still ignored, and still says so.** The top comes out of the ratio, which is
+  // the whole point of the model, and a `max` sitting next to it describes a scale nobody is generating.
+  if (typeof opts.max === 'number') {
+    warnings.push(scaleWarning(
+      'scale-max-ignored',
+      '`max` does not apply to a modular scale — its top comes from the ratio and the number of steps. ' +
+      'Use `clamp` to be told when it goes past a number.'
+    ));
+  }
+
+  var next = {};
+  for (var k in opts) {
+    if (Object.prototype.hasOwnProperty.call(opts, k)) next[k] = opts[k];
+  }
+  next.baseValue = baseValue / Math.pow(ratio, baseIndex);
+  next.baseIndex = 0;
+  next.ratio = ratio;
+  next.max = undefined;
+  // A straight curve, which is what makes it modular. An `opts.curve` alongside a `ratio` would be two
+  // descriptions of one shape, so the ratio wins and the curve is dropped.
+  next.curve = [];
+  return next;
 }
 
 /**
@@ -415,7 +595,13 @@ function scaleDeviations(actual, produced) {
   return out;
 }
 
-/** A named ratio when one matches exactly, so a recognised scale reads the way it was written. */
+/**
+ * A named ratio when one matches exactly, so a scale reads the way it was written.
+ *
+ * No longer used by the recogniser — a recognised ramp is endpoints and a curve now, and has no ratio to
+ * name. Kept because a config may still *carry* a ratio through the `modular` alias, and printing 1.618 as
+ * `phi` is the difference between a message someone recognises and one they have to decode.
+ */
 function nameForRatio(ratio) {
   var table = modularRatios();
   for (var name in table) {
@@ -442,13 +628,28 @@ function deriveMetric(values, baseIndex, min) {
   return { model: 'metric', min: min, baseValue: values[0], baseIndex: baseIndex, step: step, mod: mod };
 }
 
-/** Modular's ratio, read off the first adjacent pair. */
-function deriveModular(values, baseIndex, min) {
+/**
+ * A bezier ramp between the ends, with a straight curve.
+ *
+ * **The straight curve is the only one worth deriving.** A ramp with a bend has four free numbers and a
+ * sequence of six values does not pin them — several curves fit, and picking one would be this function
+ * inventing a shape the file never claimed. Straight is the case that *is* determined: it means a constant
+ * ratio, which is what a modular scale is, so every scale the old recogniser could name is still named.
+ * Anything else comes back `explicit` with this as the near-fit, which is where a bend belongs — offered in
+ * front of the numbers it would change, not recorded silently.
+ */
+function deriveBezier(values, baseIndex, min) {
   if (values.length < 2) return null;
-  if (!(values[0] > 0) || !(values[1] > 0)) return null;
-  var ratio = values[1] / values[0];
+  if (!(values[0] > 0) || !(values[values.length - 1] > 0)) return null;
+  // The *average* growth across the whole run, not the first pair. They are the same number for a scale
+  // that really is geometric — which is the only kind this recognises — and the average is the one that
+  // reproduces the last value exactly, so verification is not left chasing a rounding error at the top.
+  var ratio = Math.pow(values[values.length - 1] / values[0], 1 / (values.length - 1));
   if (!(ratio > 1)) return null;
-  return { model: 'modular', min: min, baseValue: values[0], baseIndex: baseIndex, ratio: nameForRatio(ratio) };
+  return {
+    model: 'bezier', min: min, baseValue: values[0], baseIndex: baseIndex,
+    ratio: nameForRatio(ratio), curve: []
+  };
 }
 
 /** A straight ramp between the ends. The curve is not derivable, so only the even case. */
@@ -542,7 +743,7 @@ function recogniseScale(values) {
     var tail = values.slice(from);
     var candidates = [
       deriveMetric(tail, from, min),
-      deriveModular(tail, from, min),
+      deriveBezier(tail, from, min),
       from === 0 ? deriveEndpoints(tail, min) : null
     ];
     for (var c = 0; c < candidates.length; c++) {

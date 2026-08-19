@@ -724,15 +724,46 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="43"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="44">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="44">
+          <div class="docs-rendered">
+            <code>@unit="%"</code> prints a unit inside the input, at its right edge. It is <strong>not</strong> a placeholder — a<br>placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back<br>to <code>-1.5</code> can tell whether that is pixels or percent.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--field" data-row-index="45">
+          <div class="config-ui-field config-ui-field--group">
+            <div class="config-ui-field__row">
+              <label class="config-ui-field__label" for="config-ui-lineHeight-15">Line height</label>
+              <div class="config-ui-field__control">
+                <span class="config-ui-rows-group" data-group-field="lineHeight">
+                  <label class="config-ui-rows-group-part">
+                    <span class="config-ui-rows-group-label">Base</span>
+                    <span class="config-ui-unit">
+                      <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lineHeight.base" value="150">
+                      <span class="config-ui-unit__mark" aria-hidden="true">%</span>
+                    </span>
+                  </label>
+                  <label class="config-ui-rows-group-part">
+                    <span class="config-ui-rows-group-label">Largest</span>
+                    <span class="config-ui-unit">
+                      <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lineHeight.max" value="110">
+                      <span class="config-ui-unit__mark" aria-hidden="true">%</span>
+                    </span>
+                  </label>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="46"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="47">
           <h1 class="config-ui-heading">A column that depends on its row</h1>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="45">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="48">
           <div class="docs-rendered">
             Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the<br>scale type and watch the fields change — each tab is judged on its own values, so two modes can be<br>using different scale types at once.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="46">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="49">
           <div class="config-ui-field config-ui-field--rows">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -818,16 +849,16 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="47"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="48">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="50"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="51">
           <h1 class="config-ui-heading">Table rows</h1>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="49">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="52">
           <div class="docs-rendered">
             The same annotation without @tabs: one line per entry, with Add and Remove.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="50">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="53">
           <div class="config-ui-field config-ui-field--rows">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -859,14 +890,416 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="51"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="52">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="54"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="55">
+          <h1 class="config-ui-heading">A curve you can drag</h1>
+        </div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="56">
+          <div class="docs-rendered">
+            <code>@curve</code> on an <strong>array</strong> of four numbers — the two handles of one cubic, exactly what <code>cubic-bezier()</code><br>carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the<br>field underneath. All four are the same edit: the numbers are the value and everything on screen is a<br>reading of them, which is why the dropdown says <em>Custom</em> the moment a curve stops being a preset.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--field" data-row-index="57">
+          <div class="config-ui-field config-ui-field--curve">
+            <div class="config-ui-field__row">
+              <label class="config-ui-field__label" for="config-ui-easing-18">
+                Curve
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="The dashed diagonal is the straight ramp — a curve is read as how far it departs from it.">i</button>
+              </label>
+              <div class="config-ui-field__control">
+                <div class="config-ui-curve" data-curve-value="[0.37,0,0.63,1]" data-curve-field="easing">
+                  <div class="config-ui-curve__head">
+                    <select class="config-ui-curve__preset" value="custom">
+                      <option value="custom" selected>Custom</option>
+                      <option value="linear|none">Linear</option>
+                      <optgroup label="Sine">
+                        <option value="sine|in">Sine · easeIn</option>
+                        <option value="sine|out">Sine · easeOut</option>
+                        <option value="sine|inout">Sine · easeInOut</option>
+                        <option value="sine|outin">Sine · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quad">
+                        <option value="quad|in">Quad · easeIn</option>
+                        <option value="quad|out">Quad · easeOut</option>
+                        <option value="quad|inout">Quad · easeInOut</option>
+                        <option value="quad|outin">Quad · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Cubic">
+                        <option value="cubic|in">Cubic · easeIn</option>
+                        <option value="cubic|out">Cubic · easeOut</option>
+                        <option value="cubic|inout">Cubic · easeInOut</option>
+                        <option value="cubic|outin">Cubic · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quart">
+                        <option value="quart|in">Quart · easeIn</option>
+                        <option value="quart|out">Quart · easeOut</option>
+                        <option value="quart|inout">Quart · easeInOut</option>
+                        <option value="quart|outin">Quart · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quint">
+                        <option value="quint|in">Quint · easeIn</option>
+                        <option value="quint|out">Quint · easeOut</option>
+                        <option value="quint|inout">Quint · easeInOut</option>
+                        <option value="quint|outin">Quint · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Circ">
+                        <option value="circ|in">Circ · easeIn</option>
+                        <option value="circ|out">Circ · easeOut</option>
+                        <option value="circ|inout">Circ · easeInOut</option>
+                        <option value="circ|outin">Circ · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Exponential">
+                        <option value="exponential|in">Exponential · easeIn</option>
+                        <option value="exponential|out">Exponential · easeOut</option>
+                        <option value="exponential|inout">Exponential · easeInOut</option>
+                        <option value="exponential|outin">Exponential · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Golden ratio">
+                        <option value="goldenRatio|in">Golden ratio · easeIn</option>
+                        <option value="goldenRatio|out">Golden ratio · easeOut</option>
+                        <option value="goldenRatio|inout">Golden ratio · easeInOut</option>
+                        <option value="goldenRatio|outin">Golden ratio · easeOutIn</option>
+                      </optgroup>
+                    </select>
+                    <button type="button" class="config-ui-curve__toggle">Add middle point</button>
+                  </div>
+                  <div class="config-ui-curve__plot-wrap">
+                    <svg class="config-ui-curve__canvas" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <rect class="config-ui-curve__plot" x="0" y="0" width="100" height="100"></rect>
+                      <line class="config-ui-curve__grid" x1="25" y1="0" x2="25" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="25" x2="100" y2="25"></line>
+                      <line class="config-ui-curve__grid" x1="50" y1="0" x2="50" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="50" x2="100" y2="50"></line>
+                      <line class="config-ui-curve__grid" x1="75" y1="0" x2="75" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="75" x2="100" y2="75"></line>
+                      <line class="config-ui-curve__diagonal" x1="0" y1="100" x2="100" y2="0"></line>
+                      <path class="config-ui-curve__path" d="M0.00 100.00L1.25 99.96L2.50 99.85L3.75 99.66L5.00 99.39L6.25 99.05L7.50 98.64L8.75 98.15L10.00 97.59L11.25 96.96L12.50 96.26L13.75 95.48L15.00 94.64L16.25 93.72L17.50 92.74L18.75 91.70L20.00 90.59L21.25 89.41L22.50 88.18L23.75 86.88L25.00 85.53L26.25 84.12L27.50 82.66L28.75 81.15L30.00 79.59L31.25 77.98L32.50 76.32L33.75 74.62L35.00 72.89L36.25 71.11L37.50 69.30L38.75 67.46L40.00 65.60L41.25 63.70L42.50 61.79L43.75 59.85L45.00 57.90L46.25 55.94L47.50 53.96L48.75 51.98L50.00 50.00L51.25 48.02L52.50 46.04L53.75 44.06L55.00 42.10L56.25 40.15L57.50 38.21L58.75 36.30L60.00 34.40L61.25 32.54L62.50 30.70L63.75 28.89L65.00 27.11L66.25 25.38L67.50 23.68L68.75 22.02L70.00 20.41L71.25 18.85L72.50 17.34L73.75 15.88L75.00 14.47L76.25 13.12L77.50 11.82L78.75 10.59L80.00 9.41L81.25 8.30L82.50 7.26L83.75 6.28L85.00 5.36L86.25 4.52L87.50 3.74L88.75 3.04L90.00 2.41L91.25 1.85L92.50 1.36L93.75 0.95L95.00 0.61L96.25 0.34L97.50 0.15L98.75 0.04L100.00 0.00"></path>
+                      <line class="config-ui-curve__tether" x1="0" y1="100" x2="37" y2="100"></line>
+                      <line class="config-ui-curve__tether" x1="100" y1="0" x2="63" y2="0"></line>
+                      <circle class="config-ui-curve__end" cx="0" cy="100" r="3"></circle>
+                      <circle class="config-ui-curve__end" cx="100" cy="0" r="3"></circle>
+                      <circle class="config-ui-curve__handle" cx="37" cy="100" r="4" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.37, 0.00"></circle>
+                      <circle class="config-ui-curve__handle" cx="63" cy="0" r="4" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.63, 1.00"></circle>
+                    </svg>
+                    <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
+                  </div>
+                  <input type="text" class="config-ui-curve__text" spellcheck="false" placeholder="cubic-bezier(0.37, 0, 0.63, 1)" value="cubic-bezier(0.37, 0, 0.63, 1)">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="58"></div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="59">
+          <div class="docs-rendered">
+            <strong>Add middle point</strong> makes it a three-point curve: ten numbers, a middle anchor you can drag in both<br>directions, and a handle either side of it. The split is exact, so adding the point does not move the<br>curve. It is also what <code>easeInOut</code> has always been — the in-curve over the first half and the out-curve<br>over the second is a middle anchor at the centre, written as an <code>if</code>.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--field" data-row-index="60">
+          <div class="config-ui-field config-ui-field--curve">
+            <div class="config-ui-field__row">
+              <label class="config-ui-field__label" for="config-ui-twoSegment-19">Two-segment curve</label>
+              <div class="config-ui-field__control">
+                <div class="config-ui-curve" data-curve-value="[0.17,0,0.33,0.23,0.5,0.5,0.67,0.77,0.83,1]" data-curve-field="twoSegment">
+                  <div class="config-ui-curve__head">
+                    <select class="config-ui-curve__preset" value="custom">
+                      <option value="custom" selected>Custom</option>
+                      <option value="linear|none">Linear</option>
+                      <optgroup label="Sine">
+                        <option value="sine|in">Sine · easeIn</option>
+                        <option value="sine|out">Sine · easeOut</option>
+                        <option value="sine|inout">Sine · easeInOut</option>
+                        <option value="sine|outin">Sine · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quad">
+                        <option value="quad|in">Quad · easeIn</option>
+                        <option value="quad|out">Quad · easeOut</option>
+                        <option value="quad|inout">Quad · easeInOut</option>
+                        <option value="quad|outin">Quad · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Cubic">
+                        <option value="cubic|in">Cubic · easeIn</option>
+                        <option value="cubic|out">Cubic · easeOut</option>
+                        <option value="cubic|inout">Cubic · easeInOut</option>
+                        <option value="cubic|outin">Cubic · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quart">
+                        <option value="quart|in">Quart · easeIn</option>
+                        <option value="quart|out">Quart · easeOut</option>
+                        <option value="quart|inout">Quart · easeInOut</option>
+                        <option value="quart|outin">Quart · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quint">
+                        <option value="quint|in">Quint · easeIn</option>
+                        <option value="quint|out">Quint · easeOut</option>
+                        <option value="quint|inout">Quint · easeInOut</option>
+                        <option value="quint|outin">Quint · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Circ">
+                        <option value="circ|in">Circ · easeIn</option>
+                        <option value="circ|out">Circ · easeOut</option>
+                        <option value="circ|inout">Circ · easeInOut</option>
+                        <option value="circ|outin">Circ · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Exponential">
+                        <option value="exponential|in">Exponential · easeIn</option>
+                        <option value="exponential|out">Exponential · easeOut</option>
+                        <option value="exponential|inout">Exponential · easeInOut</option>
+                        <option value="exponential|outin">Exponential · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Golden ratio">
+                        <option value="goldenRatio|in">Golden ratio · easeIn</option>
+                        <option value="goldenRatio|out">Golden ratio · easeOut</option>
+                        <option value="goldenRatio|inout">Golden ratio · easeInOut</option>
+                        <option value="goldenRatio|outin">Golden ratio · easeOutIn</option>
+                      </optgroup>
+                    </select>
+                    <button type="button" class="config-ui-curve__toggle">Remove middle point</button>
+                  </div>
+                  <div class="config-ui-curve__plot-wrap">
+                    <svg class="config-ui-curve__canvas" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <rect class="config-ui-curve__plot" x="0" y="0" width="100" height="100"></rect>
+                      <line class="config-ui-curve__grid" x1="25" y1="0" x2="25" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="25" x2="100" y2="25"></line>
+                      <line class="config-ui-curve__grid" x1="50" y1="0" x2="50" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="50" x2="100" y2="50"></line>
+                      <line class="config-ui-curve__grid" x1="75" y1="0" x2="75" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="75" x2="100" y2="75"></line>
+                      <line class="config-ui-curve__diagonal" x1="0" y1="100" x2="100" y2="0"></line>
+                      <path class="config-ui-curve__path" d="M0.00 100.00L1.25 99.96L2.50 99.84L3.75 99.63L5.00 99.35L6.25 98.99L7.50 98.55L8.75 98.03L10.00 97.44L11.25 96.78L12.50 96.04L13.75 95.24L15.00 94.36L16.25 93.42L17.50 92.42L18.75 91.35L20.00 90.22L21.25 89.03L22.50 87.78L23.75 86.48L25.00 85.13L26.25 83.72L27.50 82.26L28.75 80.75L30.00 79.20L31.25 77.61L32.50 75.98L33.75 74.30L35.00 72.59L36.25 70.85L37.50 69.07L38.75 67.26L40.00 65.43L41.25 63.57L42.50 61.68L43.75 59.77L45.00 57.85L46.25 55.91L47.50 53.95L48.75 51.98L50.00 50.00L51.25 48.02L52.50 46.05L53.75 44.09L55.00 42.15L56.25 40.23L57.50 38.32L58.75 36.43L60.00 34.57L61.25 32.74L62.50 30.93L63.75 29.15L65.00 27.41L66.25 25.70L67.50 24.02L68.75 22.39L70.00 20.80L71.25 19.25L72.50 17.74L73.75 16.28L75.00 14.87L76.25 13.52L77.50 12.22L78.75 10.97L80.00 9.78L81.25 8.65L82.50 7.58L83.75 6.58L85.00 5.64L86.25 4.76L87.50 3.96L88.75 3.22L90.00 2.56L91.25 1.97L92.50 1.45L93.75 1.01L95.00 0.65L96.25 0.37L97.50 0.16L98.75 0.04L100.00 0.00"></path>
+                      <line class="config-ui-curve__tether" x1="0" y1="100" x2="17" y2="100"></line>
+                      <line class="config-ui-curve__tether" x1="50" y1="50" x2="33" y2="77"></line>
+                      <line class="config-ui-curve__tether" x1="50" y1="50" x2="67" y2="23"></line>
+                      <line class="config-ui-curve__tether" x1="100" y1="0" x2="83" y2="0"></line>
+                      <circle class="config-ui-curve__end" cx="0" cy="100" r="3"></circle>
+                      <circle class="config-ui-curve__end" cx="100" cy="0" r="3"></circle>
+                      <circle class="config-ui-curve__handle" cx="17" cy="100" r="4" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.17, 0.00"></circle>
+                      <circle class="config-ui-curve__handle" cx="33" cy="77" r="4" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.33, 0.23"></circle>
+                      <circle class="config-ui-curve__handle config-ui-curve__handle--anchor" cx="50" cy="50" r="4.5" data-curve-index="4" tabindex="0" role="slider" aria-label="Middle anchor at 0.50, 0.50"></circle>
+                      <circle class="config-ui-curve__handle" cx="67" cy="23" r="4" data-curve-index="6" tabindex="0" role="slider" aria-label="Handle 4 at 0.67, 0.77"></circle>
+                      <circle class="config-ui-curve__handle" cx="83" cy="0" r="4" data-curve-index="8" tabindex="0" role="slider" aria-label="Handle 5 at 0.83, 1.00"></circle>
+                    </svg>
+                    <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
+                  </div>
+                  <input type="text" class="config-ui-curve__text" spellcheck="false" placeholder="cubic-bezier(0.37, 0, 0.63, 1)" value="cubic-bezier(0.17, 0, 0.33, 0.23) 0.5, 0.5 cubic-bezier(0.67, 0.77, 0.83, 1)">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="61"></div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="62">
+          <div class="docs-rendered">
+            <code>@allowOriginal</code> adds <em>Original</em> to the preset list — the empty curve, for a script that has something<br>to fall back on. Colors uses it to mean "leave the steps this file already has".
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--field" data-row-index="63">
+          <div class="config-ui-field config-ui-field--curve">
+            <div class="config-ui-field__row">
+              <label class="config-ui-field__label" for="config-ui-maybeCurve-20">
+                Curve or original
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="Shown empty. Pick a preset to give it points.">i</button>
+              </label>
+              <div class="config-ui-field__control">
+                <div class="config-ui-curve" data-curve-value="[]" data-curve-field="maybeCurve">
+                  <div class="config-ui-curve__head">
+                    <select class="config-ui-curve__preset" value="original">
+                      <option value="original" selected>Original</option>
+                      <option value="custom">Custom</option>
+                      <option value="linear|none">Linear</option>
+                      <optgroup label="Sine">
+                        <option value="sine|in">Sine · easeIn</option>
+                        <option value="sine|out">Sine · easeOut</option>
+                        <option value="sine|inout">Sine · easeInOut</option>
+                        <option value="sine|outin">Sine · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quad">
+                        <option value="quad|in">Quad · easeIn</option>
+                        <option value="quad|out">Quad · easeOut</option>
+                        <option value="quad|inout">Quad · easeInOut</option>
+                        <option value="quad|outin">Quad · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Cubic">
+                        <option value="cubic|in">Cubic · easeIn</option>
+                        <option value="cubic|out">Cubic · easeOut</option>
+                        <option value="cubic|inout">Cubic · easeInOut</option>
+                        <option value="cubic|outin">Cubic · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quart">
+                        <option value="quart|in">Quart · easeIn</option>
+                        <option value="quart|out">Quart · easeOut</option>
+                        <option value="quart|inout">Quart · easeInOut</option>
+                        <option value="quart|outin">Quart · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Quint">
+                        <option value="quint|in">Quint · easeIn</option>
+                        <option value="quint|out">Quint · easeOut</option>
+                        <option value="quint|inout">Quint · easeInOut</option>
+                        <option value="quint|outin">Quint · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Circ">
+                        <option value="circ|in">Circ · easeIn</option>
+                        <option value="circ|out">Circ · easeOut</option>
+                        <option value="circ|inout">Circ · easeInOut</option>
+                        <option value="circ|outin">Circ · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Exponential">
+                        <option value="exponential|in">Exponential · easeIn</option>
+                        <option value="exponential|out">Exponential · easeOut</option>
+                        <option value="exponential|inout">Exponential · easeInOut</option>
+                        <option value="exponential|outin">Exponential · easeOutIn</option>
+                      </optgroup>
+                      <optgroup label="Golden ratio">
+                        <option value="goldenRatio|in">Golden ratio · easeIn</option>
+                        <option value="goldenRatio|out">Golden ratio · easeOut</option>
+                        <option value="goldenRatio|inout">Golden ratio · easeInOut</option>
+                        <option value="goldenRatio|outin">Golden ratio · easeOutIn</option>
+                      </optgroup>
+                    </select>
+                    <button type="button" class="config-ui-curve__toggle" disabled>Add middle point</button>
+                  </div>
+                  <div class="config-ui-curve__plot-wrap">
+                    <svg class="config-ui-curve__canvas config-ui-curve__canvas--empty" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <rect class="config-ui-curve__plot" x="0" y="0" width="100" height="100"></rect>
+                      <line class="config-ui-curve__grid" x1="25" y1="0" x2="25" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="25" x2="100" y2="25"></line>
+                      <line class="config-ui-curve__grid" x1="50" y1="0" x2="50" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="50" x2="100" y2="50"></line>
+                      <line class="config-ui-curve__grid" x1="75" y1="0" x2="75" y2="100"></line>
+                      <line class="config-ui-curve__grid" x1="0" y1="75" x2="100" y2="75"></line>
+                      <line class="config-ui-curve__diagonal" x1="0" y1="100" x2="100" y2="0"></line>
+                    </svg>
+                    <div class="config-ui-curve__empty-note" data-shown="true">Original</div>
+                  </div>
+                  <input type="text" class="config-ui-curve__text" spellcheck="false" placeholder="cubic-bezier(0.37, 0, 0.63, 1)" value="">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="64"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="65">
+          <h1 class="config-ui-heading">A scale with no far end</h1>
+        </div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="66">
+          <div class="docs-rendered">
+            <code>curve(growth:ratio)</code> inside <code>@rows</code> — the <strong>open-ended</strong> editor, for a scale whose largest value nobody<br>knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the<br>growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last<br>token the line carries on faintly, because it does — adding a token extends the scale rather than<br>squeezing what is already generated into the same range.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="67"></div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="68">
+          <div class="docs-rendered">
+            <strong>The dropdown is the shape control.</strong> <em>Linear</em> means no shape and draws no handles; anything else<br>reveals them, for when the growth should vary across the scale — tighter at the small end, looser at the<br>top. The field underneath carries the whole scale, growth and shape together, so copying it out and<br>pasting it back reproduces it.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="69"></div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="70">
+          <div class="docs-rendered">
+            The growth has <strong>no field of its own</strong>: one idea, one control. It is still written to the config under<br>the name after the colon, so the block reads <code>ratio: 1.5</code> beside <code>curve: []</code>.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="71">
+          <div class="config-ui-field config-ui-field--rows">
+            <div class="config-ui-field__row">
+              <div class="config-ui-field__control">
+                <div class="config-ui-rows config-ui-rows--tabs" data-rows-field="openScale">
+                  <div class="config-ui-rows-tabs">
+                    <button type="button" class="config-ui-rows-tab is-active">Value</button>
+                  </div>
+                  <div class="config-ui-rows-body">
+                    <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="0">
+                      <div class="config-ui-rows-cell config-ui-rows-cell--stacked">
+                        <span class="config-ui-rows-cell-label">Scale</span>
+                        <div class="config-ui-curve config-ui-curve--growth" data-curve-growth-value="1.5" data-curve-value="[]" data-row-field="curve">
+                          <div class="config-ui-curve__head">
+                            <select class="config-ui-curve__preset" value="linear|none">
+                              <option value="custom">Custom</option>
+                              <option value="linear|none" selected>Linear</option>
+                              <optgroup label="Sine">
+                                <option value="sine|in">Sine · easeIn</option>
+                                <option value="sine|out">Sine · easeOut</option>
+                                <option value="sine|inout">Sine · easeInOut</option>
+                                <option value="sine|outin">Sine · easeOutIn</option>
+                              </optgroup>
+                              <optgroup label="Quad">
+                                <option value="quad|in">Quad · easeIn</option>
+                                <option value="quad|out">Quad · easeOut</option>
+                                <option value="quad|inout">Quad · easeInOut</option>
+                                <option value="quad|outin">Quad · easeOutIn</option>
+                              </optgroup>
+                              <optgroup label="Cubic">
+                                <option value="cubic|in">Cubic · easeIn</option>
+                                <option value="cubic|out">Cubic · easeOut</option>
+                                <option value="cubic|inout">Cubic · easeInOut</option>
+                                <option value="cubic|outin">Cubic · easeOutIn</option>
+                              </optgroup>
+                              <optgroup label="Quart">
+                                <option value="quart|in">Quart · easeIn</option>
+                                <option value="quart|out">Quart · easeOut</option>
+                                <option value="quart|inout">Quart · easeInOut</option>
+                                <option value="quart|outin">Quart · easeOutIn</option>
+                              </optgroup>
+                              <optgroup label="Quint">
+                                <option value="quint|in">Quint · easeIn</option>
+                                <option value="quint|out">Quint · easeOut</option>
+                                <option value="quint|inout">Quint · easeInOut</option>
+                                <option value="quint|outin">Quint · easeOutIn</option>
+                              </optgroup>
+                              <optgroup label="Circ">
+                                <option value="circ|in">Circ · easeIn</option>
+                                <option value="circ|out">Circ · easeOut</option>
+                                <option value="circ|inout">Circ · easeInOut</option>
+                                <option value="circ|outin">Circ · easeOutIn</option>
+                              </optgroup>
+                              <optgroup label="Exponential">
+                                <option value="exponential|in">Exponential · easeIn</option>
+                                <option value="exponential|out">Exponential · easeOut</option>
+                                <option value="exponential|inout">Exponential · easeInOut</option>
+                                <option value="exponential|outin">Exponential · easeOutIn</option>
+                              </optgroup>
+                              <optgroup label="Golden ratio">
+                                <option value="goldenRatio|in">Golden ratio · easeIn</option>
+                                <option value="goldenRatio|out">Golden ratio · easeOut</option>
+                                <option value="goldenRatio|inout">Golden ratio · easeInOut</option>
+                                <option value="goldenRatio|outin">Golden ratio · easeOutIn</option>
+                              </optgroup>
+                            </select>
+                            <button type="button" class="config-ui-curve__toggle" disabled>Add middle point</button>
+                          </div>
+                          <div class="config-ui-curve__plot-wrap">
+                            <svg class="config-ui-curve__canvas" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <rect class="config-ui-curve__plot" x="0" y="0" width="100" height="100"></rect>
+                              <line class="config-ui-curve__grid" x1="25" y1="0" x2="25" y2="100"></line>
+                              <line class="config-ui-curve__grid" x1="0" y1="25" x2="100" y2="25"></line>
+                              <line class="config-ui-curve__grid" x1="50" y1="0" x2="50" y2="100"></line>
+                              <line class="config-ui-curve__grid" x1="0" y1="50" x2="100" y2="50"></line>
+                              <line class="config-ui-curve__grid" x1="75" y1="0" x2="75" y2="100"></line>
+                              <line class="config-ui-curve__grid" x1="0" y1="75" x2="100" y2="75"></line>
+                              <line class="config-ui-curve__diagonal" x1="0" y1="100" x2="100" y2="0"></line>
+                              <path class="config-ui-curve__path" d="M0.00 100.00L1.25 99.45L2.50 98.89L3.75 98.34L5.00 97.79L6.25 97.23L7.50 96.68L8.75 96.13L10.00 95.57L11.25 95.02L12.50 94.47L13.75 93.92L15.00 93.36L16.25 92.81L17.50 92.26L18.75 91.70L20.00 91.15L21.25 90.60L22.50 90.04L23.75 89.49L25.00 88.94L26.25 88.38L27.50 87.83L28.75 87.28L30.00 86.72L31.25 86.17L32.50 85.62L33.75 85.07L35.00 84.51L36.25 83.96L37.50 83.41L38.75 82.85L40.00 82.30L41.25 81.75L42.50 81.19L43.75 80.64L45.00 80.09L46.25 79.53L47.50 78.98L48.75 78.43L50.00 77.87L51.25 77.32L52.50 76.77L53.75 76.22L55.00 75.66L56.25 75.11L57.50 74.56L58.75 74.00L60.00 73.45L61.25 72.90L62.50 72.34L63.75 71.79L65.00 71.24L66.25 70.68L67.50 70.13L68.75 69.58L70.00 69.02L71.25 68.47L72.50 67.92L73.75 67.37L75.00 66.81L76.25 66.26L77.50 65.71L78.75 65.15L80.00 64.60L81.25 64.05L82.50 63.49L83.75 62.94L85.00 62.39L86.25 61.83L87.50 61.28L88.75 60.73L90.00 60.17L91.25 59.62L92.50 59.07L93.75 58.51L95.00 57.96L96.25 57.41L97.50 56.86L98.75 56.30L100.00 55.75"></path>
+                              <circle class="config-ui-curve__end" cx="0" cy="100" r="3"></circle>
+                              <circle class="config-ui-curve__handle config-ui-curve__handle--growth" cx="100" cy="55.74929506502401" r="5" data-curve-growth="true" tabindex="0" role="slider" aria-label="Growth, 1.5 per step"></circle>
+                            </svg>
+                            <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
+                          </div>
+                          <input type="text" class="config-ui-curve__text" spellcheck="false" placeholder="cubic-bezier(0.37, 0, 0.63, 1)" value="1.5 cubic-bezier(0.333, 0.333, 0.667, 0.667)">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="72"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="73">
           <h1 class="config-ui-heading">What the form cannot hold</h1>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="53">
+        <div class="config-ui-row config-ui-row--field" data-row-index="74">
           <div class="config-ui-field config-ui-field--unsupported">
             <div class="config-ui-field__row">
-              <label class="config-ui-field__label" for="config-ui-nested-17">
+              <label class="config-ui-field__label" for="config-ui-nested-22">
                 Nested object
                 <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="an object with no @rows — the form says so rather than dropping it">i</button>
               </label>
@@ -880,7 +1313,7 @@
             </div>
           </div>
         </div>
-        <div data-row-index="54"></div>
+        <div data-row-index="75"></div>
       </div>
       </div>
     </div>
@@ -909,6 +1342,8 @@
         <tr><td>Collection</td><td class="ref-tip">@collection — this file's collections, plus New collection</td></tr>
         <tr><td>Mode</td><td class="ref-tip">@mode: collectionName — the modes of the collection above, plus New mode</td></tr>
         <tr><td>Lightness</td><td class="ref-tip">0 to 100 in the UI, 0 to 1 in the data</td></tr>
+        <tr><td>Curve</td><td class="ref-tip">The dashed diagonal is the straight ramp — a curve is read as how far it departs from it.</td></tr>
+        <tr><td>Curve or original</td><td class="ref-tip">Shown empty. Pick a preset to give it points.</td></tr>
         <tr><td>Nested object</td><td class="ref-tip">an object with no @rows — the form says so rather than dropping it</td></tr>
       </table>
     </div>

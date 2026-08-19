@@ -474,6 +474,15 @@
       // as it opens and every cell in it carries a grey example — a hue, a chroma, a hex — which is the only
       // thing telling a first-time reader what belongs in a numeric cell called *Chroma*. Taken out before
       // the condition and the label because it is quoted and may contain either character.
+      // `@unit="%"` — a unit printed inside the input at its right edge. Quoted like a placeholder and
+      // taken out before the label for the same reason: it is free text and may contain an `=`.
+      var columnUnit = null;
+      var unitInColumn = typeText.match(/@unit\s*=\s*["']([^"']*)["']/);
+      if (unitInColumn) {
+        columnUnit = unitInColumn[1];
+        typeText = typeText.replace(/@unit\s*=\s*["'][^"']*["']/g, "").trim();
+      }
+
       var columnPlaceholder = null;
       var phInColumn = typeText.match(/@placeholder\s*=\s*["']([^"']*)["']/);
       if (phInColumn) {
@@ -529,9 +538,33 @@
       if (disabledNote) column.disabledNote = disabledNote;
       if (columnHelper) column.helper = columnHelper;
       if (columnPlaceholder != null) column.placeholder = columnPlaceholder;
+      if (columnUnit != null) column.unit = columnUnit;
       if (groupColumns && groupColumns.length) {
         column.type = "group";
         column.columns = groupColumns;
+        columns.push(column);
+        continue;
+      }
+      // `lower:curve=Lower curve`, or `lower:curve(original)=Lower curve` to add *Original* to its preset
+      // list. The parenthesis is the same one an options column uses, rather than a new annotation: this is
+      // a fixed extra choice offered by the control, which is what those parentheses have always meant.
+      //
+      // *Original* is not a curve — it is Colors saying "leave the steps this file already has". It reaches
+      // the config as an **empty array**, which is the honest spelling: no points, no curve. Only the scripts
+      // that have something to fall back to ask for it.
+      var curveMatch = typeText.match(/^curve(?:\(([^)]*)\))?$/);
+      if (curveMatch) {
+        column.type = "curve";
+        var curveMode = (curveMatch[1] || "").trim();
+        // `curve(original)` — offer *Original*, the empty curve. Colours only: it means "leave the steps
+        // this file already has", which a scale has no equivalent of.
+        if (curveMode === "original") column.allowOriginal = true;
+        // `curve(growth:ratio)` — the **open-ended** editor. The plot's y axis is logarithmic, so a constant
+        // ratio is a straight line and its slope is the growth; one handle drags that slope and writes the
+        // named sibling cell. Spacing, radius and typography do not know their largest value, and pinning
+        // one would mean adding a token re-subdivides the range and moves every value below it.
+        var growth = curveMode.match(/^growth:([A-Za-z0-9_$]+)$/);
+        if (growth) column.growth = growth[1];
         columns.push(column);
         continue;
       }
@@ -965,6 +998,14 @@
             f_groupColumns = groupCols;
           }
         }
+        // `@curve` on an array — the bezier editor. Four numbers is one segment, ten is two, and `[]` is no
+        // curve at all. Claimed here, ahead of the fallback below, for the same reason `@rows` is: an array
+        // nothing has claimed becomes a read-only block.
+        var f_curveOriginal = false;
+        if (/@curve\b/.test(tip) && (Array.isArray(val) || val == null)) {
+          inputType = "curve";
+          f_curveOriginal = /@allowOriginal\b/.test(tip);
+        }
         if (inputType === "object" || inputType === "array") {
           inputType = "unsupported";
         }
@@ -999,6 +1040,7 @@
         };
         if (phMatch) f.placeholder = phMatch[1];
         if (helperMatch) f.helper = helperMatch[1].trim();
+        if (inputType === "curve" && f_curveOriginal) f.allowOriginal = true;
         if (inputType === "mode") {
           // `null` for a bare `@mode`, and it stays null: resolution happens against the rendered
           // form, so the two spellings serialise back exactly as they were written.
@@ -1027,7 +1069,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|helper)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|helper)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -1226,6 +1268,10 @@
         if (r.inputType === "multiselect") parts.push("@multi");
         if (r.inputType === "textarea") parts.push("@textarea");
         if (r.inputType === "collection") parts.push("@collection");
+        if (r.inputType === "curve") {
+          parts.push("@curve");
+          if (r.allowOriginal) parts.push("@allowOriginal");
+        }
         if (r.inputType === "mode") {
           parts.push("@mode" + (r.collectionField ? ": " + r.collectionField : ""));
         }
@@ -1249,6 +1295,8 @@
             }
             if (c.type === "preview") return "@preview";
             var spec = c.type;
+            if (c.type === "curve" && c.allowOriginal) spec = "curve(original)";
+            if (c.type === "curve" && c.growth) spec = "curve(growth:" + c.growth + ")";
             // A group re-emits its own columns through this same function, so a nested spec round-trips by
             // construction rather than by a second printer that could disagree with the parser.
             if (c.type === "group") {
@@ -1277,6 +1325,7 @@
             // free text that may well contain one.
             var hint = c.placeholder != null
               ? '@placeholder="' + String(c.placeholder).replace(/"/g, "") + '"' : "";
+            var unit = c.unit != null ? '@unit="' + String(c.unit).replace(/"/g, "") + '"' : "";
             // Bracketed, before the label, for the same reason the condition is.
             var off = c.disabledWhen && c.disabledWhen.length
               ? "[" + c.disabledWhen.map(function (rule) {
@@ -1285,7 +1334,7 @@
               : "";
             // Prose, so last — and a column carries this or `@helper:`, not both.
             var offNote = c.disabledNote ? " @disabledNote: " + c.disabledNote : "";
-            return c.key + ":" + spec + when + off + hint + named + note + offNote;
+            return c.key + ":" + spec + when + off + unit + hint + named + note + offNote;
           }).join("|"));
           if (r.tabs) parts.push("@tabs");
           if (r.blocks) parts.push("@blocks");

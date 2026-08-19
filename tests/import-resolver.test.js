@@ -633,3 +633,47 @@ test('shipped @import targets resolve to the expected library file', () => {
     assert.strictEqual(found.filename, expected[target], target + ' resolved to the wrong file');
   });
 });
+
+// ---------------------------------------------------------------------------
+// A function passed by reference is not a function called
+// ---------------------------------------------------------------------------
+
+test('a library function passed bare to map/filter is also called somewhere, or @import cannot find it', () => {
+  // **`curve.map(bezierStore)` is a reference, not a call.** `findFunctionCallsInCode` finds a function's
+  // dependencies with `\b(\w+)\s*\(`, so a callee that only ever appears as a bare argument is never
+  // injected — and the script dies with `'bezierStore' is not defined` **inside Figma only**. `npm run
+  // validate` shares the blind spot exactly, because `validateResolvedCalls` looks for calls too.
+  //
+  // It cost a build-and-reload cycle to find, and it was invisible in three other places purely by luck:
+  // `typeScaleEscape` and `foundationStyleGoesRegularColumn` are each *also* called with parentheses a line
+  // or two away, so extraction picks them up for the wrong reason.
+  //
+  // The check is deliberately narrow — a bare reference whose name is a function declared in the same file
+  // and which never appears as `name(` in it. That is precisely the hazard and nothing else, so there is
+  // nothing here to switch off.
+  const PASSED_BARE = /\.(?:map|filter|forEach|sort|some|every|find|findIndex|reduce|flatMap|then|catch)\(\s*([A-Za-z_$][\w$]*)\s*\)/g;
+  const offenders = [];
+
+  const libDir = path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES');
+  for (const file of fs.readdirSync(libDir)) {
+    if (!file.endsWith('.js')) continue;
+    const source = fs.readFileSync(path.join(libDir, file), 'utf8');
+    const declared = new Set(
+      [...source.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1])
+    );
+    for (const [, name] of source.matchAll(PASSED_BARE)) {
+      if (!declared.has(name)) continue;
+      // Called with parentheses anywhere in the same file? Then extraction finds it, for the wrong
+      // reason but reliably enough — the resolver only ever looks within one source script.
+      if (new RegExp('\\b' + name + '\\s*\\(').test(source.replace(new RegExp('function\\s+' + name + '\\s*\\(', 'g'), ''))) continue;
+      offenders.push(file + ': ' + name);
+    }
+  }
+
+  assert.deepEqual(
+    offenders, [],
+    'These are passed by reference and never called, so `@import` will not inject them and the script ' +
+      'fails only inside Figma. Wrap the call — `.map(function (v) { return f(v); })`:\n  ' +
+      offenders.join('\n  ')
+  );
+});

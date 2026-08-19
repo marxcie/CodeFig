@@ -30,7 +30,10 @@ const HELP = path.join(ROOT, 'scripts', 'HELP', 'help-documentation.js');
 // --- the specimen shelf, rendered by the real renderer ----------------------------------------
 
 const shim = require('./tests/dom-shim.js');
-const { document, serialize } = shim.install();
+// The curve editor draws through the real library, so the reference page shows real curves rather than
+// nine empty boxes. Same object the plugin gets — `build-bezier.js` inlines it into `dist/ui.html`.
+const { loadBezierGlobal } = require('./build-bezier.js');
+const { document, serialize } = shim.install({ CodeFigBezier: loadBezierGlobal() });
 
 /**
  * Just enough inline markdown for the specimens: bold, italic, code.

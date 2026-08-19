@@ -98,15 +98,33 @@ test('the library only offers a group other than the one already asked for', () 
     'or it would offer to move you to where you already are');
 });
 
-test('opening a panel asks where the grid is, and asks read-only', () => {
+test('opening a panel asks where the grid is, and only fills an untouched block', () => {
   // Detection lived inside the fill, and the fill only runs on an address change — so finding the group
-  // required changing the very field detection was meant to fill. Opening now asks, but asks the
-  // read-only half: auto-import's whole safety property is that nothing fills over your values unless
-  // you changed the address, and opening a script is not that instruction.
+  // required changing the very field detection was meant to fill. Opening now asks.
+  //
+  // **The safety property got sharper rather than weaker.** It used to be "nothing fills unless you
+  // changed the address", which is a proxy for the thing that actually matters: nothing fills over values
+  // *you typed*. Opening a script in a file that already had a recorded set therefore showed the shipped
+  // defaults — ten typography token names over the four the file holds — because the proxy said no. The
+  // question is now asked directly: a block still equal to the script's own source, bar the address, has
+  // nothing in it anybody typed, so the set is loaded into it. An edited block is left alone.
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
 
   assert.match(ui, /function scheduleGroupDetection\(\)/);
-  assert.match(ui, /requestAutoImport\(0, true\)/, 'and it asks in detect-only mode');
+  assert.match(ui, /requestAutoImport\(0, !configBlockIsPristine\(\)\)/,
+    'detect-only exactly when the block was edited, asked when the timer fires');
+  // Asked at fire time, not schedule time: scheduling happens during the render of the script being
+  // opened, and the source of the *previous* one can still be what is loaded.
+  assert.doesNotMatch(ui, /var loadable = configBlockIsPristine\(\)/,
+    'the answer must not be captured before the script has settled');
+  assert.match(ui, /function configBlockIsPristine\(\)/);
+  // **Compared as values, not as text.** The address and the mode list are both rewritten before this is
+  // ever asked — the modes are reordered to match the collection the moment a panel opens — so a text
+  // comparison calls every block in every real file "edited" and loads nothing, which is what it did.
+  const fn = ui.slice(ui.indexOf('function configBlockIsPristine'));
+  assert.match(fn, /parseConfigBlockObject/, 'it parses rather than diffing text');
+  assert.match(fn, /collectionName: true, group: true, modes: true/, 'the address and the modes are ignored');
+  assert.match(fn, /withoutName\(starter\)/, 'and each mode is judged against the shipped starter');
   // Wired to the render, which is the moment a panel opens on an address.
   const project = ui.slice(ui.indexOf('function projectConfigIntoForm'));
   assert.ok(project.indexOf('scheduleGroupDetection()') > 0 &&

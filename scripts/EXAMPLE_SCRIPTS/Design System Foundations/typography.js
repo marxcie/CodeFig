@@ -7,7 +7,7 @@
 // weight, a font family variable, and — optionally — a text style per token and weight bound to them.
 // No canvas frames.
 //
-// **Each mode carries its own scale**: `modular` (a fixed ratio), `metric` (a step that grows every N
+// **Each mode carries its own scale**: `bezier` (a ramp along a curve you draw), `metric` (a step that grows every N
 // tokens) or `fibonacci` (each step the sum of the two before it). `base` is the size of the **first**
 // token, so tokens are named smallest to largest and nothing has to say where the base sits.
 //
@@ -26,7 +26,11 @@
 // | fontFamily | Font family name (e.g. Inter). |
 // | fontWeights | A list where a number is a weight and a word is a Figma font style name: `[400, "Semi Bold"]`. Legacy: a map from name to either. |
 // | createStyles, styleNaming | Whether to create and update text styles, and their naming (`Typography/{$fontScale}/{$fontWeight}`). Legacy: `figmaStyles.createAndUpdateStyles` / `.styleNaming`. |
-// | modes | Per mode: `scaleType`, `ratio` or `step`/`mod`, `base`, `lineHeight`, `lineHeightAtTop`, `letterSpacing`, `letterSpacingAtTop`, `roundTo`. Rounding applies to size and line height; tracking is left fractional. |
+// | modes | Per mode: `scaleType`, `ratio`/`curve` or `step`/`mod`, `base`, `lineHeight`, `letterSpacing`, `roundTo`. Rounding applies to size and line height; tracking is left fractional. |
+//
+// **Line height and letter spacing are percentages of the font size**, written as `{ base, max }` and interpolated between the smallest and largest token. Percent is Figma's own unit for both, and unlike a pixel value it still means the same thing after the scale grows. The variables are written in pixels either way, computed per token.
+//
+// A config from before the panel spells these as bare numbers — an absolute value *at* the base and at the top (`lineHeight: 12, lineHeightAtTop: 66`) — and keeps generating exactly what it always did. The two are told apart by shape rather than by range, because `-1.2` is equally plausible as −1.2px or −1.2%.
 // | generateOverview | Optional boolean (default `false`). When `true`, fills **Render styles — overview** inside **`Design System Foundations`** (see `@Foundation overview`). |
 // | overviewStyleFilter | Optional substring for text style names (case-insensitive). When empty, defaults to styles containing `group/` (e.g. `Typography/`). |
 // | overviewPreviewText | The specimen's copy, and the overview tiles' when you generate one. A newline becomes a soft line break in Figma. |
@@ -55,9 +59,10 @@
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getCollectionVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, normaliseConfig } from "@Foundation"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
-@import { typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleProgress, typeScaleLineHeights, typeScaleTrackings, typeScaleTable, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
+@import { bezierAt } from "@Bezier"
+@import { typeScaleTokens, typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleProgress, typeScaleLineHeights, typeScaleTrackings, typeScaleTable, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
 
 // ========================================
 // CONFIG HELPERS (collection, modes, fontSizes)
@@ -238,16 +243,15 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
   modes: [
     {
       name: "Value",
-      scaleType: "modular",
-      ratio: 1.25,
+      scaleType: "bezier",
       base: 8,
-      letterSpacing: 0,
-      letterSpacingAtTop: -1.2,
-      lineHeight: 12,
-      lineHeightAtTop: 66,
+      ratio: 1.25,
+      curve: [],
+      letterSpacing: { base: 0, max: -2 },
+      lineHeight: { base: 150, max: 110 },
       roundTo: 2
     }
-  ], // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.067:1.067 Minor second|1.125:1.125 Major second|1.2:1.2 Minor third|1.25:1.25 Major third|1.333:1.333 Perfect fourth|1.414:1.414 Augmented fourth|1.5:1.5 Perfect fifth|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|base:number=Base unit|letterSpacing:number=Letter spacing|letterSpacingAtTop:number=Letter spacing (largest)|lineHeight:number=Line height|lineHeightAtTop:number=Line height (largest)|roundTo:number=Round numbers to @tabs @label: Modes
+  ], // @rows: name:text=Mode|scaleType:radio(bezier:Bezier scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|curve:curve(growth:ratio){scaleType=bezier}=Scale @helper: Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top.|step:number{scaleType=metric|fibonacci}=Step @helper: Metric. The amount each step adds, before it starts growing.\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it.|mod:number{scaleType=metric}=Every N steps @helper: How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down.|base:number=Base unit|letterSpacing:{base:number@unit="%"=Base|max:number@unit="%"=Largest}=Letter spacing @helper: A percentage of the font size, the way Figma spells it — so it still means the same thing when the scale grows. Interpolated between the two ends and written as pixels.|lineHeight:{base:number@unit="%"=Base|max:number@unit="%"=Largest}=Line height @helper: A percentage of the font size. 150 is a comfortable body line; large text usually wants less, which is what the second field is for.|roundTo:number=Round numbers to @tabs @label: Modes
 
   // # Overview
   // @suggestions
@@ -717,7 +721,42 @@ async function createOrUpdateCollection(config) {
   
   var styleStats = {created: 0, updated: 0};
 
+  /**
+   * Record the set, the way the ramps and Grid do.
+   *
+   * **Typography was the last domain that never did**, and the consequence was not subtle: the panel's
+   * auto-import had nothing to find, so opening the script in a file that already had a typography set
+   * showed the shipped ten tokens instead of the four the file holds. A feature that lies, exactly as
+   * Grid's comment puts it — the read half was built, the write half never was.
+   *
+   * Written last and it cannot fail the run: the variables and the text styles are real whether or not the
+   * record of them is.
+   */
+  function recordTypographySet() {
+    try {
+      var manifest = writeManifest(collection, {
+        domain: 'typography',
+        group: groupName,
+        modes: modes,
+        tokens: typeScaleTokens(config),
+        config: normaliseConfig(config).config.domains.typography
+      });
+      if (manifest && manifest.ok) {
+        console.log('Recorded this set: ' + manifest.key + ' (' + manifest.bytes + ' characters)');
+      } else if (manifest) {
+        console.warn('Variables were written. The set could not be recorded: ' +
+          ((manifest.warnings[0] || {}).message || 'unknown reason'));
+      }
+      return manifest;
+    } catch (e) {
+      console.warn('Variables were written. The set could not be recorded: ' +
+        (e && e.message ? e.message : e));
+      return null;
+    }
+  }
+
   function finishTypographySummary(styleStats) {
+    recordTypographySet();
     console.log('=== TYPOGRAPHY SYSTEM SUMMARY ===');
     console.log('Collection: ' + collectionName);
     console.log('Variables created: ' + stats.created);

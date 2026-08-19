@@ -25,6 +25,17 @@ deleting variable modes they did not recognise.
 
 ### Added
 
+- **Change case** — recursively renames frame and group layers, component variant labels and values,
+  and optionally instance names, in lower case, title case, or camelCase.
+- **A bezier curve editor, for curves you draw rather than curves you pick from a list.** Two anchors and
+  two handles: drag them, nudge them a percent at a time with the arrow keys (ten with shift), choose a
+  starting point from the preset list, or paste `cubic-bezier(0.37, 0, 0.63, 1)` into the field underneath.
+  **Add middle point** turns it into a three-anchor, two-segment curve so the top half can bend differently
+  from the bottom — the split is exact, so adding the point does not move the curve. The coordinates *are*
+  the setting: there is no family name stored beside them, so the preview can never show one curve while a
+  run generates another, and the dropdown reads *Custom* the moment a curve stops matching a preset.
+
+
 - **A Colors panel that reads a colour set and shows you where it stands — it does not write yet.**
   Three lightness anchors and a curve make a **ladder shared by every mode in the script**, so two modes
   land on the same tone with different hue and chroma; that is what makes them match under a greyscale
@@ -230,6 +241,66 @@ deleting variable modes they did not recognise.
 
 ### Fixed
 
+- **Pointing a panel at a collection and group now loads the tokens that are there**, whether or not a set
+  was ever recorded. Only Grid read the file's variables when nothing was recorded; every other domain gave
+  up, so opening Typography on a file holding four tokens showed the shipped ten. It reads the **names**
+  only — recognising *how* a set was built is a much larger question, and a panel opening on somebody's
+  collection is not asking it. Every scale control keeps what it holds, so a real set loads and you adjust
+  it from there.
+
+- **`figma:ui readAutoImport` now says *why* a set was not loaded.** Every refusal used to look identical
+  from outside — the panel simply showed defaults. It reports the reason (`edited: spacings`, `no parser`,
+  `current block did not parse`), which is how the stale-source race above was found. Dev-only.
+
+- **Opening a foundation script now loads the set the file already has.** Auto-import only ever filled when
+  you *changed* the collection or group — opening a script ran a read-only pass, so a file with a recorded
+  set still showed the shipped defaults. The guard was a proxy for the thing that matters: nothing should
+  fill over values you typed. That is now asked directly — a block still equal to the script's own source,
+  bar the address, has nothing in it anybody typed, so the set loads into it; an edited block is left alone.
+
+- **Typography never recorded the set it wrote, so its panel could not load one.** Spacing, Corner radius
+  and Grid all write a manifest onto the collection when they run; Typography was the last domain that did
+  not. The read half had been built — the block carries `@fromFile: domains.typography` and auto-import
+  knows how to fill from it — so opening the script in a file that already had a typography set showed the
+  shipped ten token names over the four the file actually holds. A test now fails if any foundation script
+  writes variables without recording what it wrote.
+
+- **Clicking anywhere in a cell opened its ⓘ explanation and pinned it there.** A `<button>` is a labelable
+  element and the cells were `<label>`s with no `for`, so the explanation became the cell's control and every
+  click in the row was forwarded to it. It read as the whole row being a hover target, which is why nothing
+  in the hover handling touched it. Cells carrying an ⓘ — and every curve, whose dropdown had the same
+  problem — are now plain elements.
+
+- **The curve's ⓘ tooltip stayed open while you worked in the row.** Dragging a handle calls
+  `preventDefault`, which stops focus moving — so once the button had focus its bubble never dismissed, and
+  it read as the whole row being a hover target. Grabbing a handle now takes focus, which also means the
+  arrow keys work straight after a drag.
+
+- **Large typography specimens were cut off top and bottom.** A line height below the font size is a real
+  choice, but it puts the glyphs outside their own line box and the horizontal clip took the rest. The row
+  now reserves the height it needs and clips sideways only.
+
+- **The curve editor overlapped the field below it.** Its height came from `aspect-ratio` on the canvas, so
+  the row was sized from a width the grid had not finished resolving — measured at 304.88px, painted at 320,
+  and the control hung 15px into the next row. Stating the height removes the dependency. The label also sat
+  halfway down a 400px control; it now lines up with the row of buttons at the top.
+
+- **`setField` could not reach a radio inside a mode's fields, and said it had.** The cell carries the field
+  name on a wrapper, so the command set a property on a `<div>`, changed nothing, and reported success —
+  which made every *Scale type* in Spacing, Corner radius and Typography undrivable from the terminal. The
+  curve editor had the same shape, and `readForm` reported a curve as `null`. Dev-only tooling.
+
+- **A scale the generator refused now says so, instead of drawing plausible numbers.** A mode whose model
+  could not produce a sequence — a bezier ramp with no largest value, a metric one with no step — fell back
+  to the minimum for every missing step, and the monotonic guard then walked those apart by the rounding
+  grid. The result was a complete-looking ladder of invented numbers and a console warning nobody reads.
+  Spacing, Corner radius and Typography now print the reason where the preview would be, and a run stops
+  rather than writing.
+
+- **A base of `0` is a base.** `!sizes.base` read it as a mode that had declared nothing, so the viewport
+  silently produced no values — and the path it took was missing a field the caller used unconditionally, so
+  it crashed with `Cannot read properties of undefined` rather than reporting anything.
+
 - **The batch rename and rebind examples now work if you type them.** Every one of the five scripts
   showed its example as `"50, 050",` — quoted, comma-terminated — and the parser splits each line at
   its **first** comma and keeps the rest verbatim. Pasted in as shown, that renamed `"50` to `050",`,
@@ -324,6 +395,71 @@ deleting variable modes they did not recognise.
   unchanged until you run.
 
 ### Changed
+
+- **Bezier is the default scale everywhere.** Spacing and Corner radius ship it now too, so a fresh panel
+  opens on the model the whole thing is built around rather than the one you have to switch to. The starter
+  numbers change with it — a geometric ramp does not land on a flat 4/8/12/16 grid, and that is the model
+  showing what it is.
+
+- **The curve dropdown is the shape control, and *Custom* is a real state.** Picking Custom on a straight
+  line now gives you handles to drag; it used to do nothing, because "is there a shape" was derived from
+  "is the curve bent" and a straight line is not bent. *Linear* clears them again. An untouched curve still
+  stores `[]`, so an unrelated edit does not write coordinates nobody chose.
+
+- **Typography: a rounded size says so beside itself** — `Font size: 218 (218.37)` rather than a separate
+  *Rounded from* line at the bottom of the block, which left you matching it back to whichever value it
+  belonged to.
+
+- **Typography: line height and letter spacing are one row each, in percent.** `[Base][Max]` with the unit
+  drawn inside the field, and the numbers are percentages of the font size — Figma's own unit for both, and
+  unlike a pixel value a percentage still means the same thing after the scale grows. The variables are
+  still written in pixels, computed per token, so nothing downstream changes. A config from before this
+  spells them as bare numbers and keeps generating exactly what it always did; the two are told apart by
+  **shape** rather than by range, because `-1.2` is equally plausible as −1.2px or −1.2%.
+
+- **The script log is for errors and warnings.** A successful run used to fill it with a summary of what it
+  had just done, which buried the one case the block exists for. The lines are still captured and still
+  reach the dev bridge. Spacing and Corner radius also stopped repeating the scale table into the results
+  panel — the Configuration tab already draws it, live, and the copy went stale on the first edit.
+
+- **The scale editor is one control.** The growth has no field of its own, the *Add shape* button is gone,
+  and the dropdown does that job — *Linear* means no shape and draws no handles, anything else reveals them.
+  The field underneath always carries the whole scale, `1.5 cubic-bezier(0.333, 0.333, 0.667, 0.667)`, so
+  copying it out and pasting it back reproduces it; it takes a growth alone, a curve alone, or both. The
+  growth is still written to the config under its own name, so a block reads `ratio: 1.5` beside `curve: []`.
+
+- **The scale curve is open-ended again: a base, a growth ratio, and a shape — no largest value.** The first
+  version of this asked for both ends and distributed the tokens between them, which was wrong twice over.
+  Nobody knows the largest spacing in advance; and pinning both ends meant **adding a token re-subdivided
+  the range and moved every value below it** — six variables already bound to things in a file, silently
+  changed because somebody added a seventh. The top is now derived from the ratio, so the step count cancels
+  out: a flat curve is a modular scale exactly, and appending a token leaves everything before it alone.
+
+  The **named ratio dropdown is gone**. It was a closed list of eight, and the complaint was that nothing
+  sat between 1.25 and 1.333. Growth is a plain number now, and the curve's y axis is **logarithmic** — so a
+  constant ratio is a straight line whose slope *is* the ratio, and you drag it. **Add shape** reveals the
+  bezier handles for when the growth should vary across the scale. Past the last token the line continues
+  faintly, because the scale does.
+
+  Colours are unchanged: lightness is bounded, both ends are known, and the two-anchor editor is right there.
+
+- **Spacing, Corner radius and Typography: *Modular scale* is now *Bezier scale*, and generates the same
+  numbers.** A modular scale is a constant ratio between steps, which in log space is a straight line — so
+  the curve model with a straight curve *is* a modular scale, checked term for term. What it adds is the
+  ability to bend it: the ratio can vary across the scale, so a spacing set can stay tight at 4, 8, 12 and
+  still open out at the top, which one ratio could never say. A bezier mode takes **Largest value** and a
+  **Curve** where it used to take a *Scaling method* ratio.
+
+  **Configs that say `modular` keep working and keep generating exactly what they generated before** — the
+  ratio is converted to the equivalent ramp. Nothing in an existing file is regenerated to a different
+  number, which matters because these values are already bound to as variables. Typography's shipped default
+  moved from `modular`/`1.25` to `bezier` with a largest size of 60, and produces the identical ten sizes.
+
+- **Colors: the Family, Easing and Amount dropdowns are now the curve editor.** The lightness ladder's lower
+  and upper segments each get one. *Original* — the ramp already in the file — is still there, spelled as a
+  curve with no points. Configs carrying the old `{ family, easing, amount }` are converted on read;
+  `linear`, `quad` and `cubic` convert exactly, and the rest are within 0.01 of the range, which is
+  documented per family in `@Bezier`.
 
 - **One heading ladder, and one title per script.** The Documentation tab and a script's settings form
   render the same markdown, and until now they styled it with separate rules — `## Overview` was 15px in

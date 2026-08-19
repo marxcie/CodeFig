@@ -37,6 +37,7 @@ function loadModels() {
   };
   vm.createContext(ctx);
   loadInto(ctx, '@math-helpers.js');
+  loadInto(ctx, '@bezier.js');
   loadInto(ctx, '@scale-models.js');
   return ctx;
 }
@@ -79,7 +80,11 @@ test('metric: whatever the generator makes, the recogniser names', () => {
   }
 });
 
-test('modular: whatever the generator makes, the recogniser names', () => {
+test('a constant ratio: whatever the generator makes, the recogniser names', () => {
+  // **These are written as `modular` and come back as `bezier`, on purpose.** A constant ratio is a straight
+  // line in log space, so the curve model reproduces every one of them exactly — and the recogniser names the
+  // model that is still offered rather than the alias on its way out. What has to hold is unchanged: the
+  // numbers regenerate term for term, which is the last assertion.
   for (const ratio of ['minorSecond', 'majorSecond', 'majorThird', 'perfectFifth', 'phi']) {
     for (const base of [4, 16]) {
       for (const steps of [4, 6]) {
@@ -87,11 +92,14 @@ test('modular: whatever the generator makes, the recogniser names', () => {
         const { values, found } = roundTrip('modular', options);
         const label = `modular ${ratio} base ${base} × ${steps} → ${values.join(',')}`;
 
-        assert.equal(found.model, 'modular', label);
+        assert.equal(found.model, 'bezier', label);
         assert.ok(found.exact, label);
-        assert.equal(found.options.ratio, ratio, 'the name, not the raw number: ' + label);
         assert.equal(found.options.baseValue, base, label);
-        assert.deepEqual(scaleSequence('modular', found.options).values, values, label);
+        assert.deepEqual(found.options.curve, [], 'a constant ratio is a straight curve: ' + label);
+        assert.deepEqual(scaleSequence('bezier', found.options).values, values, label);
+        // And the retired spelling still generates the identical sequence, which is the only reason it
+        // could be retired at all.
+        assert.deepEqual(scaleSequence('modular', options).values, values, 'the alias drifted: ' + label);
       }
     }
   }

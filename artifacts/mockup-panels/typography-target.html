@@ -38,7 +38,8 @@
 
   - **Step** and **Every N steps**, which appear only under Metric or Fibonacci. The frames only ever
     show Modular selected, so they say nothing about that branch.
-  - **Line height (largest)** and **Letter spacing (largest)**, the optional second end of each curve.
+  - **Line height** and **Letter spacing**, each one row of two: the percentage of the font size at
+    the base and at the largest token, interpolated between them.
     Leave them empty and the panel behaves as this mockup implies — one line height ratio, one tracking.
 
   `panel-controls-match-target.test.js` compares the *control type* of every label these two share, so a
@@ -177,11 +178,29 @@
                   </label>
                   <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                     <span class="config-ui-rows-cell-label">Letter spacing</span>
-                    <input class="config-ui-input config-ui-input--number" placeholder="eg.: -0.25">
+                    <span class="config-ui-rows-group">
+                      <label class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Base</span>
+                        <span class="config-ui-unit"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 0"><span class="config-ui-unit__mark">%</span></span>
+                      </label>
+                      <label class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Largest</span>
+                        <span class="config-ui-unit"><input class="config-ui-input config-ui-input--number" placeholder="eg.: -2"><span class="config-ui-unit__mark">%</span></span>
+                      </label>
+                    </span>
                   </label>
                   <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                     <span class="config-ui-rows-cell-label">Line height</span>
-                    <input class="config-ui-input config-ui-input--number" placeholder="eg.: 20">
+                    <span class="config-ui-rows-group">
+                      <label class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Base</span>
+                        <span class="config-ui-unit"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 150"><span class="config-ui-unit__mark">%</span></span>
+                      </label>
+                      <label class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Largest</span>
+                        <span class="config-ui-unit"><input class="config-ui-input config-ui-input--number" placeholder="eg.: 110"><span class="config-ui-unit__mark">%</span></span>
+                      </label>
+                    </span>
                   </label>
                   <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                     <span class="config-ui-rows-cell-label">Round numbers to</span>
@@ -321,11 +340,29 @@
                   </label>
                   <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                     <span class="config-ui-rows-cell-label">Letter spacing</span>
-                    <input class="config-ui-input config-ui-input--number" value="-0.25">
+                    <span class="config-ui-rows-group">
+                      <label class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Base</span>
+                        <span class="config-ui-unit"><input class="config-ui-input config-ui-input--number" value="0"><span class="config-ui-unit__mark">%</span></span>
+                      </label>
+                      <label class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Largest</span>
+                        <span class="config-ui-unit"><input class="config-ui-input config-ui-input--number" value="-2"><span class="config-ui-unit__mark">%</span></span>
+                      </label>
+                    </span>
                   </label>
                   <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                     <span class="config-ui-rows-cell-label">Line height</span>
-                    <input class="config-ui-input config-ui-input--number" value="30">
+                    <span class="config-ui-rows-group">
+                      <label class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Base</span>
+                        <span class="config-ui-unit"><input class="config-ui-input config-ui-input--number" value="150"><span class="config-ui-unit__mark">%</span></span>
+                      </label>
+                      <label class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Largest</span>
+                        <span class="config-ui-unit"><input class="config-ui-input config-ui-input--number" value="110"><span class="config-ui-unit__mark">%</span></span>
+                      </label>
+                    </span>
                   </label>
                   <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                     <span class="config-ui-rows-cell-label">Round numbers to</span>

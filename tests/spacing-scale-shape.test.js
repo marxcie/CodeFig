@@ -17,7 +17,7 @@ const path = require('path');
 
 function load() {
   const dir = path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES');
-  const src = ['@math-helpers.js', '@scale-models.js', '@linear-ramp.js']
+  const src = ['@math-helpers.js', '@bezier.js', '@scale-models.js', '@linear-ramp.js']
     .map((f) => fs.readFileSync(path.join(dir, f), 'utf8'))
     .join('\n');
   return new Function('figma', 'console', 'window',

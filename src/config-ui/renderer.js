@@ -382,6 +382,10 @@
       // Reusing it is the point — the OKLCH settings Lightness row and a mode's Bright anchor are the same
       // shape, and two builders for one shape is how they drift.
       cw.appendChild(buildRowGroup(field, v && typeof v === "object" ? v : {}, "cfg-" + n + "-" + idx));
+    } else if (t === "curve") {
+      var curveWrap = buildCurveControl(field, v);
+      curveWrap.setAttribute("data-curve-field", n);
+      cw.appendChild(curveWrap);
     } else if (t === "collection") {
       cw.appendChild(buildCollectionControl(field, v == null ? "" : String(v)));
     } else if (t === "mode") {
@@ -1382,6 +1386,672 @@
    * Cells carry `data-row-field` rather than `data-field`, so the flat collector never sees them:
    * a cell called `min` must not become a top-level `min`. `collectRows` reads them back.
    */
+  // ==========================================================================
+  // THE CURVE EDITOR
+  //
+  // A curve is a flat array of numbers and this control is the only thing that draws it. Four numbers is
+  // one cubic segment, ten is two with a middle anchor, and `[]` is no curve — the three states `@Bezier`
+  // defines, with nothing added here.
+  //
+  // **The coordinates are the value; everything on screen is a reading of them.** The preset dropdown does
+  // not remember what was picked, the caption does not remember whether you dragged, and there is no
+  // "custom" flag anywhere: `curveLabelFor` looks the current numbers up in the preset table on every
+  // redraw and says what it finds. Pick *Sine · easeInOut*, nudge a handle, and the dropdown reads *Custom*
+  // because the curve is no longer that curve — not because something recorded the nudge.
+  // ==========================================================================
+
+  /** The plugin's own copy of `@Bezier`, published by `ui.html`. */
+  function curveLib() {
+    return typeof window !== "undefined" && window.CodeFigBezier ? window.CodeFigBezier : null;
+  }
+
+  /**
+   * What a curve control writes back to the config — which is simply what it holds.
+   *
+   * There used to be a fold here turning the straight curve back into `[]`, because the control wrote the
+   * substituted straight line into its own value on load and every unrelated edit then persisted six
+   * decimals nobody chose. The substitution happens at *draw* time now, so an untouched control still holds
+   * `[]` and there is nothing to undo — and `Linear` and `Custom` can be told apart, which a fold would
+   * have made impossible.
+   */
+  function curveCollected(raw) {
+    return curveValueOf(raw);
+  }
+
+  /** Numbers in, always: a stored string, a stored array, or nothing at all. */
+  function curveValueOf(raw) {
+    var B = curveLib();
+    if (!B) return Array.isArray(raw) ? raw.slice() : [];
+    if (typeof raw === "string") return B.bezierParse(raw) || [];
+    return B.bezierNormalise(raw);
+  }
+
+  var CURVE_PRESET_FAMILIES = [
+    ["linear", "Linear"], ["sine", "Sine"], ["quad", "Quad"], ["cubic", "Cubic"],
+    ["quart", "Quart"], ["quint", "Quint"], ["circ", "Circ"],
+    ["exponential", "Exponential"], ["goldenRatio", "Golden ratio"]
+  ];
+  var CURVE_PRESET_EASES = [["in", "easeIn"], ["out", "easeOut"], ["inout", "easeInOut"], ["outin", "easeOutIn"]];
+
+  /**
+   * What to call the curve currently held — re-derived, never stored.
+   *
+   * `original` for the empty array, a preset's name when the numbers are exactly one, `custom` otherwise.
+   */
+  function curveLabelFor(points) {
+    var B = curveLib();
+    if (!points || !points.length) return "original";
+    if (!B) return "custom";
+    var found = B.bezierEaseName(points);
+    if (!found) return "custom";
+    if (found.type === "linear") return "linear|none";
+    return found.type + "|" + found.ease;
+  }
+
+  function buildCurvePresetSelect(allowOriginal) {
+    var sel = document.createElement("select");
+    sel.className = "config-ui-curve__preset";
+    function add(value, text, into) {
+      var o = document.createElement("option");
+      o.value = value;
+      o.textContent = text;
+      (into || sel).appendChild(o);
+    }
+    if (allowOriginal) add("original", "Original");
+    add("custom", "Custom");
+    add("linear|none", "Linear");
+    for (var f = 1; f < CURVE_PRESET_FAMILIES.length; f++) {
+      var group = document.createElement("optgroup");
+      // `setAttribute`, not the `.label` property: a browser reflects one onto the other, and the shim the
+      // style reference renders through does not — so the generated page lost every group heading.
+      group.setAttribute("label", CURVE_PRESET_FAMILIES[f][1]);
+      for (var e = 0; e < CURVE_PRESET_EASES.length; e++) {
+        add(
+          CURVE_PRESET_FAMILIES[f][0] + "|" + CURVE_PRESET_EASES[e][0],
+          CURVE_PRESET_FAMILIES[f][1] + " · " + CURVE_PRESET_EASES[e][1],
+          group
+        );
+      }
+      sel.appendChild(group);
+    }
+    return sel;
+  }
+
+  function curveSvgEl(name, attrs) {
+    var el = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (var k in attrs) {
+      if (Object.prototype.hasOwnProperty.call(attrs, k)) el.setAttribute(k, String(attrs[k]));
+    }
+    return el;
+  }
+
+  /**
+   * **Growth mode: the plot's y axis is a logarithm, so a constant ratio is a straight line.**
+   *
+   * Spacing, radius and typography do not know their largest value. They know a base and roughly how fast
+   * the scale should grow — which is what a modular ratio always was. Pinning a top instead means adding a
+   * token re-subdivides the range and moves every value below it, and those values are already bound to
+   * things in people's files.
+   *
+   * So the scale is `base × ratio ^ ((n-1) × curve(t))`, and on a log axis that plots as:
+   *
+   *     y(t) = curve(t) × log(ratio) / log(GROWTH_MAX)
+   *
+   * — the bezier shape, scaled vertically by how fast the scale grows. Which is why nothing about the curve
+   * maths changes: `bezierAt` still answers over the unit square, and growth is one multiplier on top. The
+   * two are separable, and folding them together is the mistake the first version made by treating the
+   * endpoint as part of the curve.
+   *
+   * `GROWTH_MAX` is the top of the drag, not a limit on the config: it only decides how far up the canvas a
+   * given ratio sits. 2.5 puts every named ratio — 1.067 through φ — in the lower two thirds with room to
+   * pull past them, and a typed number outside it is honoured and pinned to the edge.
+   */
+  var CURVE_GROWTH_MAX = 2.5;
+  var CURVE_GROWTH_MIN = 1.001;
+  // What a mode that has never had a growth opens on. A perfect fifth: recognisable, and squarely in the
+  // middle of what spacing sets actually use.
+  var CURVE_GROWTH_DEFAULT = 1.5;
+
+  function curveGrowthClamp(ratio) {
+    if (typeof ratio !== "number" || !isFinite(ratio)) return null;
+    if (ratio < CURVE_GROWTH_MIN) return CURVE_GROWTH_MIN;
+    return ratio;
+  }
+
+  /** Where a ratio sits on the canvas, 0 at the bottom and 1 at `CURVE_GROWTH_MAX`. */
+  function curveGrowthHeight(ratio) {
+    var r = curveGrowthClamp(ratio);
+    if (r === null) return 0;
+    var h = Math.log(r) / Math.log(CURVE_GROWTH_MAX);
+    return h < 0 ? 0 : h > 1 ? 1 : h;
+  }
+
+  /** The inverse: a height back to a ratio, rounded the way a config should read. */
+  function curveGrowthRatio(height) {
+    var h = height < 0 ? 0 : height > 1 ? 1 : height;
+    return Math.round(Math.pow(CURVE_GROWTH_MAX, h) * 1000) / 1000;
+  }
+
+  /**
+   * The editor.
+   *
+   * Drawn in a 0-100 viewBox with **y flipped** — the curve's y goes up and SVG's goes down — so every
+   * conversion runs through `toView`/`fromView` rather than being written out at each use. Getting one of
+   * those backwards draws a curve that is right until you drag it.
+   */
+  function buildCurveControl(field, value, growthSeed) {
+    var B = curveLib();
+    var allowOriginal = !!field.allowOriginal;
+    // The sibling cell holding the growth ratio, named by `curve(growth:<key>)`. Looked up **lazily**, at
+    // draw time: the control is built before it is in the document, and the ratio is edited from two places
+    // — the handle here and the number field beside it — so reading it fresh each render is what keeps the
+    // two from disagreeing. Ask the question; do not store the answer.
+    var growthKey = typeof field.growth === "string" && field.growth ? field.growth : null;
+    var wrap = document.createElement("div");
+    wrap.className = "config-ui-curve" + (growthKey ? " config-ui-curve--growth" : "");
+    var points = curveValueOf(value);
+
+    /**
+     * **One control, two config keys, no second field.**
+     *
+     * The growth used to live in a sibling number cell that this control typed into. It does not need to:
+     * a growth field and a curve field are two inputs for one idea, and the coordinate field below the plot
+     * already has to carry both anyway — otherwise copying it does not reproduce the scale, which is the
+     * whole point of having it. So the growth is held here, on the wrapper, and `readRowCellInto` writes it
+     * out under its own name so the config block still reads `ratio: 1.5` beside `curve: []`.
+     */
+    function growthRatio() {
+      if (!growthKey) return null;
+      var raw = parseFloat(wrap.getAttribute("data-curve-growth-value"), 10);
+      return curveGrowthClamp(raw);
+    }
+    function setGrowthRatio(ratio) {
+      if (!growthKey) return;
+      wrap.setAttribute("data-curve-growth-value", String(ratio));
+    }
+    if (growthKey) {
+      var seeded = curveGrowthClamp(parseFloat(growthSeed, 10));
+      wrap.setAttribute("data-curve-growth-value", String(seeded === null ? CURVE_GROWTH_DEFAULT : seeded));
+    }
+
+    /**
+     * **An empty curve means two different things, and `@allowOriginal` is which.** For Colors it is
+     * *Original* — leave the steps this file already has, generate nothing. For a scale there is no such
+     * fallback: `bezierAt([], t)` is `t`, so an empty curve *is* the straight ramp.
+     *
+     * So a scale draws `[]` as the straight line — **at draw time only**. The stored value stays empty
+     * until somebody chooses a shape, which is what keeps an unrelated edit from writing six decimals
+     * nobody asked for, and what lets *Linear* and *Custom* be two different states of the same straight
+     * line: `[]` is "no shape", coordinates are "a shape that happens to be straight, with handles".
+     */
+    function effectivePoints(pts) {
+      if (pts.length || allowOriginal || !B) return pts;
+      return B.bezierFromEase("linear", "none", 1);
+    }
+
+    var head = document.createElement("div");
+    head.className = "config-ui-curve__head";
+    // **The dropdown is the shape control.** There was an *Add shape* button beside it doing the same job
+    // from the other end, and two controls for one state is one too many — *Linear* already means "no
+    // shape", so selecting it hides the handles and selecting anything else reveals them. Nothing has to
+    // remember whether you clicked, because the curve says.
+    var preset = buildCurvePresetSelect(allowOriginal);
+    head.appendChild(preset);
+    var toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "config-ui-curve__toggle";
+    head.appendChild(toggle);
+    wrap.appendChild(head);
+
+    // **No padding in the viewBox.** The plot fills the control, so its edges line up with the preset row
+    // above and the coordinate field below — inset by a tenth, the grey box floated 27px narrower than
+    // everything around it and read as misaligned. Handles at the corners hang outside instead, which is
+    // what `overflow: visible` on the canvas is for and what every other cubic-bezier editor looks like.
+    var SIZE = 100;
+    // The canvas sits in a positioned box so the empty-state caption can be **HTML over the top** rather
+    // than `<text>` inside. SVG text scales with the viewBox — 9 units in a 120-unit box drawn 320px wide
+    // is 24px on screen — so a size set in the stylesheet was not the size that appeared. Nothing else in
+    // this control has a font, which is why it was the only part that looked wrong.
+    var plot = document.createElement("div");
+    plot.className = "config-ui-curve__plot-wrap";
+    var svg = curveSvgEl("svg", {
+      "class": "config-ui-curve__canvas",
+      viewBox: "0 0 " + SIZE + " " + SIZE,
+      preserveAspectRatio: "none"
+    });
+    plot.appendChild(svg);
+    var emptyNote = document.createElement("div");
+    emptyNote.className = "config-ui-curve__empty-note";
+    emptyNote.textContent = "Original";
+    plot.appendChild(emptyNote);
+    wrap.appendChild(plot);
+
+    var text = document.createElement("input");
+    text.type = "text";
+    text.className = "config-ui-curve__text";
+    text.setAttribute("spellcheck", "false");
+    text.setAttribute("placeholder", "cubic-bezier(0.37, 0, 0.63, 1)");
+    wrap.appendChild(text);
+
+    function toView(x, y) { return { x: x * SIZE, y: (1 - y) * SIZE }; }
+    function fromView(vx, vy) { return { x: vx / SIZE, y: 1 - vy / SIZE }; }
+
+    /** The draggable things, as `{ x, y, index }` — `index` is where the pair lives in the flat array. */
+    function handlesOf(pts) {
+      var out = [];
+      for (var i = 0; i + 1 < pts.length; i += 2) {
+        out.push({ x: pts[i], y: pts[i + 1], index: i, anchor: pts.length === 10 && i === 4 });
+      }
+      return out;
+    }
+
+    /** Which anchor a handle hangs off, so the tether line has something to join it to. */
+    function tetherFor(pts, index) {
+      if (pts.length === 4) return index === 0 ? { x: 0, y: 0 } : { x: 1, y: 1 };
+      if (index === 0) return { x: 0, y: 0 };
+      if (index === 2 || index === 6) return { x: pts[4], y: pts[5] };
+      if (index === 8) return { x: 1, y: 1 };
+      return null;
+    }
+
+    /**
+     * Is the shape editor showing?
+     *
+     * **Derived first, revealed second.** A curve that is already bent is showing its shape whether anyone
+     * asked or not, so that is the answer most of the time. *Add shape* is a disclosure on top of it, and
+     * it stops being a disclosure the moment a handle moves — the curve is bent, so the derivation now says
+     * the same thing. *Remove shape* flattens the curve, which is a real edit rather than a hidden flag.
+     */
+    /**
+     * Is the shape editor showing?
+     *
+     * **Whether a shape has been chosen, not whether it is bent.** Picking *Custom* on a straight line has
+     * to give you handles — otherwise the choice does nothing and the only way to start shaping is to pick
+     * a preset you did not want. So the question is simply whether anything is stored: `[]` is *Linear*,
+     * and any coordinates are a shape, even the straight one.
+     */
+    function shapeShowing() {
+      if (!growthKey) return true;
+      return curveValueOf(wrap.getAttribute("data-curve-value")).length > 0;
+    }
+
+    function draw() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var stored = curveValueOf(wrap.getAttribute("data-curve-value"));
+      var pts = effectivePoints(stored);
+      var empty = !pts.length;
+
+      svg.setAttribute("class", "config-ui-curve__canvas" + (empty ? " config-ui-curve__canvas--empty" : ""));
+      svg.appendChild(curveSvgEl("rect", {
+        "class": "config-ui-curve__plot", x: 0, y: 0, width: SIZE, height: SIZE
+      }));
+      // Quarter lines, and the diagonal the curve is a departure from. Reading a curve is reading how far
+      // it sits from straight, so the straight one is on the page rather than imagined.
+      [25, 50, 75].forEach(function (at) {
+        svg.appendChild(curveSvgEl("line", { "class": "config-ui-curve__grid", x1: at, y1: 0, x2: at, y2: SIZE }));
+        svg.appendChild(curveSvgEl("line", { "class": "config-ui-curve__grid", x1: 0, y1: at, x2: SIZE, y2: at }));
+      });
+      svg.appendChild(curveSvgEl("line", {
+        "class": "config-ui-curve__diagonal", x1: 0, y1: SIZE, x2: SIZE, y2: 0
+      }));
+
+      emptyNote.setAttribute("data-shown", empty ? "true" : "false");
+      if (empty) return;
+
+      // **In growth mode every y is multiplied by how fast the scale grows.** That one factor is the whole
+      // of the difference: the shape still comes from `bezierAt` over the unit square, and the log axis
+      // turns `base × ratio^((n-1)·curve(t))` into `curve(t) × log(ratio)/log(GROWTH_MAX)`.
+      var lift = growthKey ? curveGrowthHeight(growthRatio()) : 1;
+      var showShape = shapeShowing();
+
+      // The curve, sampled rather than emitted as a path of its own segments: `bezierAt` is what the
+      // generator will call, so drawing anything else risks a picture that disagrees with the numbers.
+      var d = "";
+      for (var i = 0; i <= 80; i++) {
+        var x = i / 80;
+        var pt = toView(x, (B ? B.bezierAt(pts, x) : x) * lift);
+        d += (i === 0 ? "M" : "L") + pt.x.toFixed(2) + " " + pt.y.toFixed(2);
+      }
+      svg.appendChild(curveSvgEl("path", { "class": "config-ui-curve__path", d: d }));
+
+      var handles = showShape ? handlesOf(pts) : [];
+      handles.forEach(function (h) {
+        var to = tetherFor(pts, h.index);
+        var at = toView(h.x, h.y * lift);
+        if (to && !h.anchor) {
+          var from = toView(to.x, to.y * lift);
+          svg.appendChild(curveSvgEl("line", {
+            "class": "config-ui-curve__tether", x1: from.x, y1: from.y, x2: at.x, y2: at.y
+          }));
+        }
+      });
+      // The fixed ends, drawn but not draggable — a scale curve that started anywhere but the start would
+      // not be a scale curve, so there is nothing to offer here.
+      // The origin is always fixed. The far end is the **growth handle** in growth mode — dragging it is how
+      // you set the ratio — and a fixed anchor in the bounded one.
+      var originAt = toView(0, 0);
+      svg.appendChild(curveSvgEl("circle", {
+        "class": "config-ui-curve__end", cx: originAt.x, cy: originAt.y, r: 3
+      }));
+      var farAt = toView(1, growthKey ? lift : 1);
+      if (growthKey) {
+        svg.appendChild(curveSvgEl("circle", {
+          "class": "config-ui-curve__handle config-ui-curve__handle--growth",
+          cx: farAt.x, cy: farAt.y, r: 5,
+          "data-curve-growth": "true",
+          tabindex: 0,
+          role: "slider",
+          "aria-label": "Growth, " + (growthRatio() || 1) + " per step"
+        }));
+      } else {
+        svg.appendChild(curveSvgEl("circle", {
+          "class": "config-ui-curve__end", cx: farAt.x, cy: farAt.y, r: 3
+        }));
+      }
+      handles.forEach(function (h) {
+        var at = toView(h.x, h.y * lift);
+        var dot = curveSvgEl("circle", {
+          "class": "config-ui-curve__handle" + (h.anchor ? " config-ui-curve__handle--anchor" : ""),
+          cx: at.x, cy: at.y, r: h.anchor ? 4.5 : 4,
+          "data-curve-index": h.index,
+          tabindex: 0,
+          role: "slider",
+          "aria-label": (h.anchor ? "Middle anchor" : "Handle " + (h.index / 2 + 1)) +
+            " at " + h.x.toFixed(2) + ", " + h.y.toFixed(2)
+        });
+        svg.appendChild(dot);
+      });
+    }
+
+    /**
+     * The growth readout: `×1.5 per step`, and where that lands if the token count is knowable.
+     *
+     * The largest value is **derived and shown, never typed** — that is the whole change. It needs the token
+     * count, which lives in a field above the table rather than in this row, so it is looked up and simply
+     * left off when it cannot be found. A readout that guessed would be worse than one that is short.
+     */
+    function curveGrowthText() {
+      var ratio = growthRatio();
+      if (ratio === null) return "";
+      // **Always both, and always the coordinates — even when they are straight.** This field exists so a
+      // scale can be copied out and pasted back, and a scale is its growth *and* its shape: printing only
+      // one reproduces neither. Printing nothing at all when the curve is linear, which it used to, made
+      // the field look arbitrary — it had a value sometimes.
+      return ratio + " " + (B ? B.bezierFormat(curveShapeForText()) : "");
+    }
+
+    /** The shape to print: whatever is stored, or the straight curve when nothing is. */
+    function curveShapeForText() {
+      return effectivePoints(curveValueOf(wrap.getAttribute("data-curve-value")));
+    }
+
+    /** One writer for the value, so the attribute, the picture, the caption and the text field cannot part company. */
+    function setPoints(next, opts) {
+      var pts = curveValueOf(next);
+      wrap.setAttribute("data-curve-value", JSON.stringify(pts));
+      var label = curveLabelFor(effectivePoints(pts));
+      // The dropdown *reads* the curve. Selecting an option it does not contain leaves a `<select>` blank,
+      // so *Custom* is a real option rather than a placeholder.
+      preset.value = label === "original" && !allowOriginal ? "custom" : label;
+      if (!preset.value) preset.value = "custom";
+
+      // The middle-point button only means something once there is a shape to split.
+      if (growthKey) toggle.style.display = shapeShowing() ? "" : "none";
+      toggle.textContent = pts.length === 10 ? "Remove middle point" : "Add middle point";
+      toggle.disabled = !pts.length;
+
+      if (!opts || !opts.keepText) {
+        // **In growth mode the field reads the scale, not the curve.** Coordinates are the thing you paste
+        // when the shape is the point; here the number anyone wants is the growth, and the largest value it
+        // lands on. Both are shown because the second is the one people sanity-check, and it is derived —
+        // typing it is exactly what this model removed.
+        // Both branches read the **effective** curve, so the field agrees with the line on the plot. The
+        // bounded editor printed the raw stored value, which is empty for a scale that has not been shaped
+        // — an empty field beside a drawn straight line.
+        text.value = growthKey ? curveGrowthText() : (B ? B.bezierFormat(curveShapeForText()) : "");
+      }
+      draw();
+      if (!opts || !opts.quiet) {
+        wrap.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+
+    preset.addEventListener("change", function () {
+      var choice = preset.value;
+      if (choice === "original") return setPoints([]);
+      if (choice === "custom") {
+        // **Custom on a straight line is still a shape.** Storing the straight coordinates is what gives it
+        // handles to drag — picking *Custom* and getting nothing to grab was a choice that did nothing.
+        return setPoints(effectivePoints(curveValueOf(wrap.getAttribute("data-curve-value"))));
+      }
+      // In growth mode *Linear* is the no-shape state, so it clears rather than storing a straight curve.
+      if (growthKey && choice === "linear|none") return setPoints([]);
+      var bits = choice.split("|");
+      setPoints(B ? B.bezierFromEase(bits[0], bits[1], 1) : []);
+    });
+
+    toggle.addEventListener("click", function () {
+      if (!B) return;
+      var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
+      if (!pts.length) return;
+      setPoints(pts.length === 10 ? B.bezierWithoutMiddle(pts) : B.bezierWithMiddle(pts, 0.5));
+    });
+
+    // **Only on a real edit.** The field is redrawn from the curve on every change, so reacting to that
+    // would re-parse the control's own output and round it to the three places it prints at.
+    /**
+     * `1.5 cubic-bezier(0.333, 0.333, 0.667, 0.667)` — a growth, a shape, or both.
+     *
+     * **Split at the first `cubic-bezier`, not on whitespace.** A three-point curve prints as *two* calls
+     * with the middle anchor loose between them, so anything that tried to pick the numbers apart by
+     * position ate the anchor and refused the control's own output. Everything from the first call onward
+     * goes to `bezierParse`, which already knows both shapes; whatever precedes it is the growth.
+     *
+     * All of these work, and mean what they look like:
+     *
+     * - `1.5` — set the growth, leave the shape
+     * - `cubic-bezier(.42,0,.58,.35)` — set the shape, leave the growth (and a curve pasted from a browser)
+     * - `1.5 cubic-bezier(…)` — both, which is what this field prints
+     *
+     * A control with no growth of its own — the bounded editor Colours uses — has no leading number to
+     * find, so the whole string is a curve exactly as it always was.
+     *
+     * → `{ growth, shape }`, either possibly null, or `null` for text that is neither.
+     */
+    function typedScale(raw) {
+      var value = String(raw == null ? "" : raw).trim();
+      if (!value) return null;
+      if (!B) return null;
+
+      if (!growthKey) {
+        var only = B.bezierParse(value);
+        return only === null ? null : { growth: null, shape: only };
+      }
+
+      var at = value.search(/cubic-bezier/i);
+      if (at === -1) {
+        // No shape in the text at all: a bare number is the growth, and anything else is still offered to
+        // the curve parser so a raw coordinate list keeps working.
+        if (/^-?\d*\.?\d+$/.test(value)) {
+          var n = Number(value);
+          return isFinite(n) && n > 0 ? { growth: n, shape: null } : null;
+        }
+        var loose = B.bezierParse(value);
+        return loose === null ? null : { growth: null, shape: loose };
+      }
+
+      var head = value.slice(0, at).trim();
+      var shape = B.bezierParse(value.slice(at));
+      if (shape === null) return null;
+      if (!head) return { growth: null, shape: shape };
+      // What precedes the curve has to be *only* a number. Ignoring trailing junk is how a typo becomes a
+      // silent half-edit.
+      if (!/^-?\d*\.?\d+$/.test(head)) return null;
+      var g = Number(head);
+      if (!isFinite(g) || g <= 0) return null;
+      return { growth: g, shape: shape };
+    }
+
+    text.addEventListener("change", function () {
+      var typed = typedScale(text.value);
+      if (typed === null) {
+        wrap.classList.add("config-ui-curve--bad");
+        return;
+      }
+      wrap.classList.remove("config-ui-curve--bad");
+      // **Typed, not dragged, so it is not pinned to the canvas.** The handle can only reach
+      // `CURVE_GROWTH_MAX`, but that is a property of the drag, not of the scale — a config asking for 4 is
+      // honoured and the handle simply sits at the top.
+      if (growthKey && typed.growth !== null) setGrowthRatio(Math.round(typed.growth * 1000) / 1000);
+      setPoints(typed.shape === null ? wrap.getAttribute("data-curve-value") : typed.shape);
+    });
+    text.addEventListener("input", function () {
+      if (typedScale(text.value) !== null) wrap.classList.remove("config-ui-curve--bad");
+    });
+
+    /**
+     * Dragging.
+     *
+     * Pointer events on the `<svg>` rather than on each dot, with `setPointerCapture`, so a fast drag that
+     * leaves the 4px circle keeps hold of it. Bound once here rather than per handle, because `draw()`
+     * replaces every element on every frame — listeners attached to a dot would be thrown away by the
+     * redraw that the drag itself causes.
+     */
+    var dragging = null;
+    function pointAt(evt) {
+      var box = svg.getBoundingClientRect();
+      if (!box.width || !box.height) return null;
+      return fromView(
+        ((evt.clientX - box.left) / box.width) * SIZE,
+        ((evt.clientY - box.top) / box.height) * SIZE
+      );
+    }
+    var draggingGrowth = false;
+    svg.addEventListener("pointerdown", function (evt) {
+      var target = evt.target;
+      if (!target || typeof target.getAttribute !== "function") return;
+      if (target.getAttribute("data-curve-growth")) {
+        draggingGrowth = true;
+      } else {
+        var dot = target.getAttribute("data-curve-index");
+        if (dot === null) return;
+        dragging = parseInt(dot, 10);
+      }
+      if (svg.setPointerCapture) svg.setPointerCapture(evt.pointerId);
+      // **`preventDefault` stops focus moving, so move it deliberately.**
+      //
+      // Without this the ⓘ beside the label kept focus after it had been clicked or tabbed to, and its
+      // tooltip is shown on focus and hidden on blur — so the bubble stayed up for as long as you were
+      // working anywhere in the curve, which reads exactly like the whole row being a hover target for it.
+      // The handle is `tabindex="0"` already, so it is somewhere focus can legitimately go, and landing
+      // there also means the arrow keys work straight after a drag without tabbing back.
+      if (target.focus) target.focus();
+      evt.preventDefault();
+    });
+    svg.addEventListener("pointermove", function (evt) {
+      if (dragging === null && !draggingGrowth) return;
+      var at = pointAt(evt);
+      if (!at) return;
+      if (draggingGrowth) {
+        setGrowthRatio(curveGrowthRatio(at.y));
+        setPoints(wrap.getAttribute("data-curve-value"));
+        return;
+      }
+      var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
+      // **A shape handle is dragged in the unit square, not on the canvas.** In growth mode the drawing is
+      // lifted by the growth, so the pointer's height has to be divided back out or bending a slow-growing
+      // scale would fling the handle off the top.
+      var lift = growthKey ? curveGrowthHeight(growthRatio()) : 1;
+      pts[dragging] = at.x;
+      pts[dragging + 1] = lift > 0 ? at.y / lift : at.y;
+      // `keepText` is off: the field is a readout while you drag, and a paste in progress is not a state
+      // you can be in and dragging at the same time.
+      setPoints(pts);
+    });
+    function endDrag(evt) {
+      if (dragging === null && !draggingGrowth) return;
+      dragging = null;
+      draggingGrowth = false;
+      if (svg.releasePointerCapture && evt.pointerId != null) {
+        try { svg.releasePointerCapture(evt.pointerId); } catch (err) { /* already gone */ }
+      }
+    }
+    svg.addEventListener("pointerup", endDrag);
+    svg.addEventListener("pointercancel", endDrag);
+
+    // Arrow keys on a focused handle: 1% a press, 10% with shift. The canvas is a few hundred pixels wide,
+    // so a coordinate cannot otherwise be set exactly — which is the whole of "precise" in this control.
+    svg.addEventListener("keydown", function (evt) {
+      var el = evt.target;
+      if (!el || typeof el.getAttribute !== "function") return;
+      var dx = evt.key === "ArrowLeft" ? -1 : evt.key === "ArrowRight" ? 1 : 0;
+      var dy = evt.key === "ArrowDown" ? -1 : evt.key === "ArrowUp" ? 1 : 0;
+      if (!dx && !dy) return;
+
+      if (el.getAttribute("data-curve-growth")) {
+        // A hundredth of a ratio a press, a tenth with shift — the precision the dropdown never had, which
+        // is the reason this replaced it.
+        evt.preventDefault();
+        var current = growthRatio();
+        if (current === null) return;
+        var next = Math.round((current + dy * (evt.shiftKey ? 0.1 : 0.01)) * 1000) / 1000;
+        setGrowthRatio(next < CURVE_GROWTH_MIN ? CURVE_GROWTH_MIN : next);
+        setPoints(wrap.getAttribute("data-curve-value"));
+        var backTo = svg.querySelector("[data-curve-growth]");
+        if (backTo && backTo.focus) backTo.focus();
+        return;
+      }
+
+      var index = el.getAttribute("data-curve-index");
+      if (index === null) return;
+      evt.preventDefault();
+      var by = (evt.shiftKey ? 0.1 : 0.01);
+      var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
+      var i = parseInt(index, 10);
+      pts[i] += dx * by;
+      pts[i + 1] += dy * by;
+      setPoints(pts);
+      // The redraw replaced the element the focus was on, so it is put back by index.
+      var again = svg.querySelector('[data-curve-index="' + i + '"]');
+      if (again && again.focus) again.focus();
+    });
+
+    /**
+     * **Redraw against the form around it.**
+     *
+     * `buildCurveControl` runs before its wrapper is in the tree, so at first draw `closest` finds no row
+     * and the growth handle has no ratio to read — the plot came up flat whatever the config said. And the
+     * ratio is editable from the number field beside the plot as well as from the handle, so the picture
+     * has to be re-derived whenever anything changes rather than only when the curve itself is touched.
+     *
+     * Both are the same fix: re-run the draw on a signal the form sends after it is assembled and after
+     * every change. Quiet, so redrawing never looks like an edit.
+     */
+    wrap.addEventListener("config-ui-curve-refresh", function () {
+      setPoints(wrap.getAttribute("data-curve-value"), { quiet: true });
+    });
+
+    setPoints(points, { quiet: true });
+    return wrap;
+  }
+
+  /**
+   * Tell every curve in `root` to re-read the form around it. Cheap, and idempotent.
+   *
+   * **Except the one being typed into.** The refresh rewrites the readout from the stored ratio, and it runs
+   * on `input` — so every keystroke in a curve's own field was overwritten before the field's `change`
+   * handler ever saw it, and typing a growth was impossible. A control manages its own edits; this is for
+   * telling it that something *else* moved.
+   */
+  function refreshCurveControls(root, except) {
+    if (!root || typeof root.querySelectorAll !== "function") return;
+    root.querySelectorAll("[data-curve-value]").forEach(function (wrap) {
+      if (except && typeof wrap.contains === "function" && wrap.contains(except)) return;
+      if (except && wrap === except) return;
+      wrap.dispatchEvent(new Event("config-ui-curve-refresh"));
+    });
+  }
+
   function buildRowsControl(field, rows) {
     var wrap = document.createElement("div");
     // Three displays, one control. `--blocks` shows every row in full, one under the next, each titled —
@@ -1545,8 +2215,19 @@
           // silently reset the scale type to Modular.
           // A radio cell is a `div`, and so is a group: both contain labels of their own, and a `label`
           // wrapping them would make clicking the group's caption focus its first input.
+          // **An ⓘ makes it a `div` too, and so does a curve.** A `<button>` is a labelable element, so a
+          // caption carrying an ⓘ becomes the label's control — and then clicking *anywhere in the cell*
+          // fires a synthetic click on it, which is what pins the tooltip open. It reads exactly like the
+          // whole row being a hover target for the explanation, and no amount of fiddling with the hover
+          // handlers touches it, because it was never hover. Same shape as the radio bug above, arriving
+          // through a different labelable element.
+          //
+          // A curve is a `div` for the same reason: its preset `<select>` would otherwise be the control,
+          // so clicking the plot would drop the dropdown open.
+          var cellHasInfo = tipBlocks(column, null).length > 0;
           var cell = document.createElement(
-            (column.type === "radio" || column.type === "group") ? "div" : "label"
+            (column.type === "radio" || column.type === "group" || column.type === "curve" || cellHasInfo)
+              ? "div" : "label"
           );
           // With `@tabs` or `@blocks` a row is shown on its own, so its fields read as a form — one labelled
           // field per line, as the frames show — rather than as a horizontal strip of cells, which is the
@@ -1586,7 +2267,12 @@
           cell.appendChild(caption);
           cell.appendChild(buildRowCell(
             column, row ? row[column.key] : undefined,
-            "config-ui-row-radio-" + field.name + "-" + index + "-" + column.key
+            "config-ui-row-radio-" + field.name + "-" + index + "-" + column.key,
+            "",
+            // **The whole row, for a curve that owns two keys.** A growth curve holds the shape *and* the
+            // growth, and the growth lives under a name of its own in the config so the block stays
+            // readable — so the control has to be handed the row to find its starting value.
+            row
           ));
           // A column can carry its own `@helper:` now. `.config-ui-field-note` is `grid-column: 2`, so in
           // a `--stacked` cell — which is a 3fr/7fr grid — it lands under the control it explains rather
@@ -1750,7 +2436,9 @@
     var held = (value && typeof value === "object") ? value : {};
 
     (column.columns || []).forEach(function (part) {
-      var partWrap = document.createElement("label");
+      // A part's caption can carry an ⓘ, and a `<button>` is labelable — so a `label` here would hand the
+      // whole part's clicks to the explanation rather than to the input. Same rule as the cell above.
+      var partWrap = document.createElement(tipBlocks(part, null).length > 0 ? "div" : "label");
       partWrap.className = "config-ui-rows-group-part";
 
       // **A part carries its own condition**, the same `{field=value}` a column does, on the part rather
@@ -1781,7 +2469,7 @@
     return wrap;
   }
 
-  function buildRowCell(column, value, groupName, keyPrefix) {
+  function buildRowCell(column, value, groupName, keyPrefix, row) {
     var fieldKey = (keyPrefix || "") + column.key;
     if (column.type === "group") return buildRowGroup(column, value, groupName);
     /**
@@ -1804,6 +2492,14 @@
       // arrives; until then the control shows what the config says, which is the only honest thing it can show.
       if (held) populateModeControl(picker, [held], held, { collection: "" });
       return picker;
+    }
+    if (column.type === "curve") {
+      // The same editor at cell scope. It carries `data-row-field` and **not** `data-curve-field`, for the
+      // reason every other row control does: the flat sweep in `getValues` collects by the second, and a
+      // mode's `lower` must never become a top-level `lower`.
+      var cellCurve = buildCurveControl(column, value, row && column.growth ? row[column.growth] : undefined);
+      cellCurve.setAttribute("data-row-field", fieldKey);
+      return cellCurve;
     }
     if (column.type === "list") {
       // `extras: [0, 1, 2]` is a list in a cell. Text on screen, an array in the config — a string
@@ -1895,7 +2591,32 @@
     // plausible guesses and only one of them is a colour.
     if (column.placeholder != null) input.placeholder = String(column.placeholder);
     input.value = value == null ? "" : String(value);
+    if (column.unit) return curveUnitWrap(input, column.unit);
     return input;
+  }
+
+  /**
+   * A unit printed inside the input, at its right edge — `150` reading as `150 %`.
+   *
+   * **Not a placeholder.** A placeholder is the thing that disappears the moment you type, which is the
+   * opposite of what a unit does: the field means percent whether it is empty or full, and a reader coming
+   * back to `-1.5` needs to know it is a percentage and not pixels. So it is a sibling that stays.
+   *
+   * The input keeps `data-row-field`, so every collector, condition and address still finds it exactly
+   * where it was — the wrapper is decoration and nothing reads it.
+   */
+  function curveUnitWrap(input, unit) {
+    var box = document.createElement("span");
+    box.className = "config-ui-unit";
+    box.appendChild(input);
+    var mark = document.createElement("span");
+    mark.className = "config-ui-unit__mark";
+    mark.textContent = String(unit);
+    // Decoration only: clicks go through to the input, and a screen reader hears the label, not "percent"
+    // twice.
+    mark.setAttribute("aria-hidden", "true");
+    box.appendChild(mark);
+    return box;
   }
 
   /** Every option of this column is a number, so the column is about numbers. */
@@ -1997,6 +2718,17 @@
       if (picked) target[column.key] = picked;
       return;
     }
+    if (column.type === "curve") {
+      target[column.key] = curveCollected(el.getAttribute("data-curve-value"));
+      // **A growth curve writes two keys from one cell.** The growth has no field of its own any more — one
+      // idea, one control — but it keeps its own name in the config so the block still reads
+      // `ratio: 1.5` beside `curve: []` rather than hiding a second number inside the first.
+      if (column.growth) {
+        var grown = parseFloat(el.getAttribute("data-curve-growth-value"), 10);
+        if (isFinite(grown) && grown > 0) target[column.growth] = grown;
+      }
+      return;
+    }
     if (column.type === "radio") {
       // Left alone when nothing is checked, rather than blanked. `buildRowCell` always checks
       // something, so no-selection means the DOM is not what this code thinks it is — and keeping
@@ -2073,6 +2805,19 @@
       //
       // Worth the extra pass: without it the control rendered, accepted typing, and saved nothing. The form
       // looked right and the block never changed, which is the failure mode this codebase keeps meeting.
+      // A curve keeps its value on the wrapper rather than in an input, so the flat sweep below cannot see
+      // it. Its own pass, like the group one under it, and for the same reason: without this the editor
+      // rendered, dragged, and saved nothing.
+      container.querySelectorAll("[data-curve-field]").forEach(function (wrap) {
+        var n = wrap.getAttribute("data-curve-field");
+        if (!n) return;
+        var owner = null;
+        var rows = (schema && schema.rows) || [];
+        for (var ci = 0; ci < rows.length; ci++) {
+          if (rows[ci].type === "field" && rows[ci].name === n) { owner = rows[ci]; break; }
+        }
+        vals[n] = curveCollected(wrap.getAttribute("data-curve-value"));
+      });
       container.querySelectorAll("[data-group-field]").forEach(function (wrap) {
         var groupName = wrap.getAttribute("data-group-field");
         if (!groupName) return;
@@ -2116,8 +2861,30 @@
 
     function applyVisibility() {
       var vals = getValues();
+      /**
+       * A field's value as a condition reads it.
+       *
+       * **A curve answers `original` or `curve`, never its coordinates.** There is nothing useful to compare
+       * a handle position against, and the question every condition actually asks about a curve is whether
+       * there is one — Colors disables its anchors until a curve is chosen, and shows the seed only once one
+       * is. Two words rather than a number keeps the block readable: `{lower=curve}`, not a wildcard over
+       * four decimals.
+       */
       function showWhenValueStr(v) {
         return v === undefined || v === null ? "" : String(v);
+      }
+      function curveFieldNames() {
+        var names = {};
+        var rows = (schema && schema.rows) || [];
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i].type === "field" && rows[i].inputType === "curve") names[rows[i].name] = true;
+        }
+        return names;
+      }
+      var curveFields = curveFieldNames();
+      function conditionValueOf(name) {
+        if (curveFields[name]) return (vals[name] && vals[name].length) ? "curve" : "original";
+        return showWhenValueStr(vals[name]);
       }
       function visRules(row) {
         var rs = row.getAttribute("data-show-when-rules");
@@ -2125,7 +2892,7 @@
           try {
             var rules = JSON.parse(rs);
             for (var i = 0; i < rules.length; i++) {
-              var cur = showWhenValueStr(vals[rules[i].field]);
+              var cur = conditionValueOf(rules[i].field);
               if (rules[i].values.indexOf(cur) === -1) return false;
             }
             return true;
@@ -2147,6 +2914,14 @@
         if (el.getAttribute("data-row-radio")) {
           var on = el.querySelector("input:checked");
           return on ? on.value : "";
+        }
+        // A curve cell keeps its value on an attribute and has no `.value` at all, so without this every
+        // condition naming one read `undefined` and the cells it guards were hidden for good. Same two words
+        // the field-level reader answers with — one vocabulary, whichever layout the curve is in.
+        var curve = el.getAttribute("data-curve-value");
+        if (curve !== null) {
+          var held = curveValueOf(curve);
+          return held.length ? "curve" : "original";
         }
         return el.type === "checkbox" ? (el.checked ? "true" : "false") : el.value;
       }
@@ -2204,8 +2979,13 @@
                 found = true;
               }
             }
-            if (!found) seen = vals[field];
-            if (rules[i].values.indexOf(showWhenValueStr(seen)) === -1) show = false;
+            // **The form-level fallback goes through the same reader as everything else.** A curve field
+            // answers `original` or `curve`; `String([0.37,0,0.63,1])` is a coordinate list, which matches
+            // no condition anyone would write. The row scopes above are already curve-aware — this is the
+            // one place that was not, and it is the path a mode's condition takes when it names a setting
+            // above the whole table.
+            var reading = found ? showWhenValueStr(seen) : conditionValueOf(field);
+            if (rules[i].values.indexOf(reading) === -1) show = false;
           }
           el.style.display = show ? "" : "none";
         });
@@ -2236,8 +3016,9 @@
                 found = true;
               }
             }
-            if (!found) seen = vals[field];
-            if (rules[i].values.indexOf(showWhenValueStr(seen)) === -1) off = false;
+            // Same reader as the `{…}` branch above, for the same reason.
+            var offReading = found ? showWhenValueStr(seen) : conditionValueOf(field);
+            if (rules[i].values.indexOf(offReading) === -1) off = false;
           }
           el.classList.toggle("is-disabled", off);
           el.querySelectorAll("input, select, textarea").forEach(function (control) {
@@ -2319,6 +3100,7 @@
     }
 
     applyVisibility();
+    refreshCurveControls(container);
     refreshModePickers();
     /**
      * Is this event a control changing?
@@ -2344,6 +3126,7 @@
       // This is the failure the comment describes, arriving a second time by the same route: a control
       // that renders and cannot save.
       if (typeof target.closest === "function" && target.closest("[data-row-field]")) return true;
+      if (typeof target.closest === "function" && target.closest("[data-curve-field]")) return true;
       if (typeof target.closest === "function" && target.closest("[data-collection-field]")) return true;
       if (typeof target.closest === "function" && target.closest("[data-mode-field]")) return true;
       return false;
@@ -2352,6 +3135,7 @@
     container.addEventListener("change", function (e) {
       if (isControlEvent(e.target)) {
         applyVisibility();
+        refreshCurveControls(container, e.target);
         refreshModePickers();
         onChange(getValues());
       }
@@ -2359,6 +3143,7 @@
     container.addEventListener("input", function (e) {
       if (isControlEvent(e.target) && e.target.type !== "checkbox") {
         applyVisibility();
+        refreshCurveControls(container, e.target);
         refreshModePickers();
         onChange(getValues());
       }
@@ -2394,5 +3179,11 @@
     // killed every form in the plugin. A nested group's read-back is exactly the kind of thing that looks
     // right in the source and returns the first anchor's hue three times in practice.
     collectRows: collectRows,
+    // Published so a test can assemble a form and then tell the curves to look at it — which is the only
+    // way to exercise a control whose picture depends on a cell it does not own.
+    refreshCurveControls: refreshCurveControls,
+    // Published for the same reason `collectRows` is: the curve editor's redraw replaces every element it
+    // owns, which is exactly the kind of thing that reads correctly and loses its drag handler in practice.
+    buildCurveControl: buildCurveControl,
   };
 });

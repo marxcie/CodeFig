@@ -19,6 +19,7 @@
 @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, writeRegistry, normaliseConfig, toDomainConfig, foundationNamespace, foundationRegistryKey, expandTokenList, tokenListHasSeries } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
+@import { bezierAt } from "@Bezier"
 @import { spacingRampSpec, radiusRampSpec, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp, rampManifestSlice } from "@Linear Ramp"
 
 function currentRegistryRaw() {

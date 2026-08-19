@@ -252,13 +252,17 @@ test('the shipped Spacing panel is the one Márton asked for', () => {
 
   assert.equal(by.scaleType.type, 'radio', 'scale type is radios');
   assert.deepEqual(by.scaleType.options.map((o) => o.label),
-    ['Modular scale', 'Metric scale', 'Fibonacci']);
+    ['Bezier scale', 'Metric scale', 'Fibonacci']);
 
-  // Every ratio names itself. `1.618` reads as arithmetic; *1.618 Golden ratio* reads as a choice.
-  assert.equal(by.ratio.type, 'select');
-  assert.equal(by.ratio.options.length, 8, 'the eight named musical ratios');
-  by.ratio.options.forEach((o) => {
-    assert.match(o.label, new RegExp('^' + o.value.replace('.', '\\.') + ' [A-Z]'),
-      o.value + ' shows its number and then its name');
-  });
+  // **The ratio dropdown is gone, and its slot holds the two fields a ramp needs instead.** A named ratio
+  // is one number describing the whole scale; `max` and `curve` say where it ends and how it gets there,
+  // and a straight curve is exactly the constant ratio the dropdown used to offer.
+  // **The ratio is back as a plain number, and the dropdown of eight is gone.** A named ratio was a closed
+  // list — the complaint was that it allowed 1.25 and 1.333 and nothing between. The growth handle on the
+  // curve drags this same cell continuously, so the number is the truth and there are two ways to set it.
+  assert.equal(by.ratio, undefined, 'the growth has no field of its own — the curve control holds it');
+  assert.equal(by.max, undefined, 'a typed largest value would pin an end this model does not have');
+  assert.equal(by.curve.type, 'curve');
+  assert.equal(by.curve.growth, 'ratio', 'the curve knows which cell its growth handle drags');
+  assert.deepEqual(by.curve.showWhen[0].values, ['bezier']);
 });

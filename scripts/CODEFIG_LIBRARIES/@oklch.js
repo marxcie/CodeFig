@@ -37,12 +37,15 @@
 // exactly the ladder's anchors. An offset moved them, which is what ruled it out.
 //
 // ## Curves
-// `oklchCurves()` is the one flattened list of `(type, ease)` pairs, because a panel offers one dropdown
-// and a config stores one string. The curve maths itself is `applyEase` in **`@Math Helpers`** — import
-// that too, or every ladder comes back linear.
+// **A curve is a list of bezier coordinates.** `oklchCurveOf` also accepts the two older spellings — the
+// `{ type, ease, amount }` pair and a curve id from `oklchCurves()` — and converts both to coordinates on
+// the way in, so there is one evaluator rather than one per era of config. The maths is `@Bezier`; import
+// it too, or every ladder comes back linear.
+//
+// `oklchCurves()` remains the flattened list of `(type, ease)` pairs, now used only to read an old config.
 // @DOC_END
 
-@import { applyEase } from "@Math Helpers"
+@import { bezierAt, bezierNormalise, bezierFromEase } from "@Bezier"
 
 // ========================================
 // sRGB
@@ -316,15 +319,30 @@ function oklchCurves() {
  * So a caller that knows its family and easing passes them, and never has to hope a composed string is on a
  * list written for something else.
  */
+/**
+ * Whatever a caller has, as something `oklchEaseAt` can read.
+ *
+ * Three spellings arrive here now, and the newest wins where they overlap:
+ *
+ * - **an array of coordinates** — a bezier curve, which is what the panel writes today
+ * - `{ type, ease, amount }` — the family pair, which every config written before the editor carries
+ * - a curve id string — the original single dropdown
+ *
+ * The old two are **converted to coordinates on the way through** rather than kept as a second code path.
+ * `bezierFromEase` is exact for `linear`, `quad` and `cubic` and within 0.01 for the rest, and one evaluator
+ * cannot disagree with itself about what a config means — which two would, at exactly the boundary where a
+ * file was written by an older panel and read by a newer one.
+ */
 function oklchCurveOf(curve) {
+  if (Array.isArray(curve)) {
+    return { id: null, points: bezierNormalise(curve), amount: 1 };
+  }
   if (curve && typeof curve === 'object' && curve.type) {
-    return {
-      id: null, type: curve.type, ease: curve.ease || 'none',
-      amount: typeof curve.amount === 'number' ? oklchClamp01(curve.amount) : 1
-    };
+    var amount = typeof curve.amount === 'number' ? oklchClamp01(curve.amount) : 1;
+    return { id: null, points: bezierFromEase(curve.type, curve.ease || 'none', amount), amount: 1 };
   }
   var found = oklchCurveById(curve);
-  return { id: found.id, type: found.type, ease: found.ease, amount: 1 };
+  return { id: found.id, points: bezierFromEase(found.type, found.ease, 1), amount: 1 };
 }
 
 /**
@@ -341,12 +359,15 @@ function oklchCurveOf(curve) {
  * two still passes through them exactly, and a convex combination of two monotone functions is monotone. So no
  * amount can put a step out of order or move an anchor.
  */
+/**
+ * The curve, read at `t`.
+ *
+ * One line, because `oklchCurveOf` has already turned every accepted spelling into coordinates. The blend
+ * toward linear that `amount` used to apply here is gone from this function on purpose: `bezierFromEase`
+ * folds it into the handles, where it is exact, instead of applying it to the output afterwards.
+ */
 function oklchEaseAt(curve, t) {
-  var eased = applyEase(curve.type, curve.ease, t);
-  var amount = typeof curve.amount === 'number' ? curve.amount : 1;
-  if (amount >= 1) return eased;
-  if (amount <= 0) return t;
-  return t + (eased - t) * amount;
+  return bezierAt(curve.points || [], t);
 }
 
 /** An unknown id falls back to linear rather than throwing: a config carrying a curve this build has

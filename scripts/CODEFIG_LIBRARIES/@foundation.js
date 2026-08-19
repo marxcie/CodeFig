@@ -765,6 +765,24 @@ async function foundationAutoImport(collectionName, group, domain) {
   if (!read.manifest) {
     // Nothing recorded. For Grid, read the variables instead — a set that predates manifests is the
     // common case, not the exotic one.
+    // **Every other domain loads its token names.** Not the scale — that is `adoptRamp`'s much larger
+    // question, and a panel opening on somebody's collection is not asking it. It is asking "what are the
+    // tokens", and answering only that lets a real set load without the panel claiming to know how it was
+    // made. Without this, opening Typography on a file holding four tokens showed the shipped ten.
+    if (domain !== 'grid') {
+      var tokensKey = foundationTokensKey(domain);
+      var found = tokensKey ? await foundationTokensIn(collectionName, group, domain) : [];
+      if (found.length) {
+        answer.source = 'recognised';
+        answer.tokens = found;
+        // Only the token list. `fillConfigBlock` writes the keys a payload carries and leaves the rest, so
+        // every scale setting in the block survives being pointed at a collection.
+        answer.config = {};
+        answer.config[tokensKey] = found;
+        answer.modes = collection.modes.map(function (mode) { return mode.name; });
+      }
+      return answer;
+    }
     if (domain === 'grid') {
       var seen = await gridRecognise(collectionName, group == null ? '' : group);
       if (!seen.found) {
@@ -1375,7 +1393,7 @@ function foundationSliceKeys(domain) {
   // panel's. A field in a shipped default block is declared by definition — leave one out and the script
   // warns about its own untouched config the first time anyone runs it, which is how people learn that
   // warnings are noise.
-  if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'lightness']);
+  if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'lower', 'upper', 'lightness']);
   return keys;
 }
 
@@ -1392,7 +1410,7 @@ function foundationDomainKeys(domain) {
       'styleNaming', 'overviewPreviewText']);
   }
   if (domain === 'grid') return common.concat(['extensionColumns']);
-  if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'lightness']);
+  if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'lower', 'upper', 'lightness']);
   return common;
 }
 
@@ -1512,6 +1530,60 @@ function foundationTokensKey(domain) {
   if (domain === 'radius') return 'radii';
   if (domain === 'typography') return 'fontScale';
   return null;
+}
+
+/**
+ * The **leaf** a domain's real tokens carry, or null when its tokens are the leaf.
+ *
+ * Spacing and radius write one variable per token — `Spacing/md` — so the token *is* the name. Typography
+ * writes three — `Typography/Text-Large/font-size` and its two companions — plus a couple of things that
+ * are not tokens at all (`Typography/font-weight/600`, `Typography/font-family/primary`). Naming the leaf
+ * is what tells those apart: a group under `Typography/` is a token only if it has a `font-size`.
+ */
+function foundationTokenLeaf(domain) {
+  return domain === 'typography' ? 'font-size' : null;
+}
+
+/**
+ * The token names a collection already holds under `group`, in the order the file has them.
+ *
+ * **Names only, deliberately.** Recognising the *scale* behind a set of numbers is a much larger question
+ * — `adoptRamp` answers it, and answers it well — but it is not the question a panel is asking when it
+ * opens on a collection somebody already has. That question is "what are the tokens", and answering only
+ * that means the panel can load a real set without claiming to know how it was made. The scale controls
+ * keep whatever they hold, and you adjust them.
+ *
+ * Márton: *"the point is to load existing configs and being able to alter them afterwards."*
+ *
+ * → `[]` when the address holds nothing, which reads as "nothing to load" rather than as an empty set.
+ */
+async function foundationTokensIn(collectionName, group, domain) {
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
+  if (!collection) return [];
+
+  var prefix = namePrefix(group == null ? '' : group);
+  var leaf = foundationTokenLeaf(domain);
+  var seen = {};
+  var tokens = [];
+
+  for (var i = 0; i < collection.variableIds.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+    if (!variable) continue;
+    if (prefix && variable.name.indexOf(prefix) !== 0) continue;
+    var rest = prefix ? variable.name.slice(prefix.length) : variable.name;
+    var parts = rest.split('/');
+    var token = null;
+    if (leaf) {
+      if (parts.length === 2 && parts[1] === leaf) token = parts[0];
+    } else if (parts.length === 1) {
+      token = parts[0];
+    }
+    if (!token || seen[token]) continue;
+    seen[token] = true;
+    tokens.push(token);
+  }
+  return tokens;
 }
 
 /** A viewport payload, as a legacy config spells it: an object with layout or scale fields. */
@@ -3128,12 +3200,19 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     // Only HSL gets a curve, and only *Original*: it means "the ramp already in the file", which OKLCH has
     // no equivalent of because its ladder is shared. Left off the payload in OKLCH so `fillConfigBlock`
     // keeps whatever curve the block already had.
+    if (colorModel !== 'hsl') {
+      // OKLCH's curve is the collection's, so *Original* goes on the shared block rather than on each mode —
+      // set once below, outside this loop.
+      entry.lower = undefined;
+      entry.upper = undefined;
+    }
     if (colorModel === 'hsl') {
-      // Both segments, so the pair behaves as one control until it is deliberately split. The easing is
-      // carried even though Original ignores it: choosing a family should reveal an easing that is already
-      // set to something, not an empty dropdown.
-      entry.lower = { family: 'original', easing: 'inout', amount: 100 };
-      entry.upper = { family: 'original', easing: 'inout', amount: 100 };
+      // Both segments, so the pair behaves as one control until it is deliberately split. **Original is the
+      // empty curve** — no points, no curve — which is the whole of how the editor spells it. There is no
+      // family or easing to carry alongside: a read fills the coordinates and nothing else, so there is
+      // nothing here that a dragged handle could later disagree with.
+      entry.lower = [];
+      entry.upper = [];
     }
     perMode.push(entry);
   }
@@ -3145,6 +3224,10 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   answer.tokens = perMode[0].steps.slice();
   answer.config = {
     steps: perMode[0].steps.join(', '),
+    // **OKLCH arrives on Original at collection scope.** The ladder is shared, so the claim "this is the ramp
+    // already in the file" is one the collection makes, not one each mode makes separately.
+    lower: colorModel === 'hsl' ? undefined : [],
+    upper: colorModel === 'hsl' ? undefined : [],
     lightness: {
       bright: colorsRound1(leadAnchors.bright * 100),
       middle: colorsRound1(leadAnchors.middle * 100),

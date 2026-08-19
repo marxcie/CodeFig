@@ -35,6 +35,7 @@
         };
       })();
     </script>
+    <script id="bezier-js">/* generated at build time from scripts/CODEFIG_LIBRARIES/@bezier.js - do not edit */</script>
     <script id="config-ui-js">/* generated at build time from src/config-ui/ - do not edit */</script>
     <script id="import-resolver-js">/* generated at build time from src/import-resolver.js - do not edit */</script>
     <style id="app-css">/* generated at build time from src/ui.css - do not edit */</style>
@@ -370,8 +371,12 @@
         const warnCount = lines.filter(function (l) { return l.level === 'warn'; }).length;
         const total = lines.length;
 
-        // Hide the block when empty to avoid visual noise
-        if (!total) {
+        // **Errors and warnings only.** This block is where you find out something went wrong; a run that
+        // went fine has nothing to say here, and filling it with a summary of what happened buried the one
+        // case it exists for. Márton: *"it should be reserved for errors, not for general log — I don't
+        // need a general log."* The lines are still captured and still reach the dev bridge, which is where
+        // a full trace belongs.
+        if (!errorCount && !warnCount) {
           container.style.display = 'none';
           container.innerHTML = '';
           return;
@@ -2211,6 +2216,8 @@
       // ======================================================================
 
       var autoImportTimer = null;
+      /** Why the last pristine check answered as it did — read back by `figma:ui readAutoImport`. */
+      var lastPristine = { loadable: false, reason: 'not asked yet' };
       var autoImportSeq = 0;
       var fileModesTimer = null;
       // **Its own counter.** The mode-table read used to bump `autoImportSeq`, which is the number the
@@ -2771,7 +2778,90 @@
         if (detectedFor[key]) return;
         detectedFor[key] = true;
         if (autoImportTimer) clearTimeout(autoImportTimer);
-        autoImportTimer = setTimeout(function () { requestAutoImport(0, true); }, 400);
+        // **An untouched block loads the set; an edited one is left alone.**
+        //
+        // A full import overwrites the block, which is why opening a script only ever ran the read-only
+        // half — and the consequence was that a file with a recorded set showed the *shipped defaults*
+        // instead. Ten typography token names over the four the file holds, and a Spacing manifest naming
+        // desktop/tablet/mobile while the panel drew the starter mode.
+        //
+        // The missing distinction is whether there is anything to overwrite, and that is derivable: the
+        // script's own embedded source is the pristine block, so a block equal to it — bar the address,
+        // which choosing is what got us here — has nothing in it anybody typed. Load into that, and leave
+        // an edited block for the person who edited it.
+        // **Asked when the timer fires, not when it is set.** Scheduling happens during the render of the
+        // script being opened, and `originalCode` can still be the *previous* script's at that moment — so
+        // the check compared this block against that source and reported keys neither of them shares
+        // (`edited: extensionColumns, spacings` — one Grid's, one Spacing's). Four hundred milliseconds
+        // later everything has settled, which is the whole reason the delay is there.
+        autoImportTimer = setTimeout(function () {
+          requestAutoImport(0, !configBlockIsPristine());
+        }, 400);
+      }
+
+      /**
+       * Has anybody typed anything into this block, or is it still the script's own defaults?
+       *
+       * **Compared as values, not as text.** Three things edit the block before this question is ever
+       * asked — the address, and the mode list, which is reordered and renamed to match the collection the
+       * moment a panel opens. A text comparison therefore calls every block in every real file "edited"
+       * and loads nothing, which is exactly what it did.
+       *
+       * So the address is ignored, and each mode is compared to the **shipped starter mode** with the name
+       * left out: a file with three modes all still carrying the starter's settings has had nothing typed
+       * into it, whatever those three modes are called. Everything else must match outright.
+       */
+      function configBlockIsPristine() {
+        // Why it decided what it decided, for `figma:ui readAutoImport`. Every `false` here is a panel
+        // quietly not loading a set that exists, and from outside they all look identical.
+        lastPristine = { loadable: false, reason: null };
+        function no(reason) { lastPristine.reason = reason; return false; }
+
+        var api = window.CodeFigConfigUI;
+        if (!api || !api.parseConfigBlockObject) return no('no parser');
+        if (!originalCode || !parsedSections) return no('no source yet');
+        var pristineText = '';
+        try {
+          pristineText = extractConfigSection(originalCode, !!parsedSections.hasUIConfig) || '';
+        } catch (e) {
+          return no('source unreadable');
+        }
+        if (!pristineText) return no('no config block in the source');
+
+        var shipped = api.parseConfigBlockObject(pristineText);
+        var current = api.parseConfigBlockObject(currentConfigBlock());
+        if (!shipped) return no('shipped block did not parse');
+        if (!current) return no('current block did not parse');
+
+        var ignore = { collectionName: true, group: true, modes: true };
+        var keys = {};
+        Object.keys(shipped).forEach(function (k) { keys[k] = true; });
+        Object.keys(current).forEach(function (k) { keys[k] = true; });
+        var changed = Object.keys(keys).filter(function (k) {
+          if (ignore[k]) return false;
+          return JSON.stringify(shipped[k]) !== JSON.stringify(current[k]);
+        });
+        if (changed.length) return no('edited: ' + changed.join(', '));
+
+        var starter = Array.isArray(shipped.modes) && shipped.modes.length ? shipped.modes[0] : null;
+        var have = Array.isArray(current.modes) ? current.modes : [];
+        function withoutName(mode) {
+          var out = {};
+          Object.keys(mode || {}).sort().forEach(function (k) { if (k !== 'name') out[k] = mode[k]; });
+          return JSON.stringify(out);
+        }
+        if (!starter) {
+          if (have.length) return no('modes added to a block that ships none');
+          lastPristine.loadable = true;
+          return true;
+        }
+        var want = withoutName(starter);
+        var off = have.filter(function (mode) { return withoutName(mode) !== want; });
+        if (off.length) {
+          return no('mode edited: ' + withoutName(off[0]) + ' vs shipped ' + want);
+        }
+        lastPristine.loadable = true;
+        return true;
       }
 
       /**
@@ -5167,7 +5257,41 @@
             var tabs = rows.querySelectorAll('.config-ui-rows-tab');
             return tabs[at] || null;
           }
-          if (part) return items[at] ? items[at].querySelector('[data-row-field="' + part + '"]') : null;
+          if (part) {
+            // **`cellKey:inner` — the cell, then the thing inside it that has no address of its own.**
+            // A radio group and a curve editor both carry the cell's `data-row-field` on a *wrapper*, so
+            // an address stops at the wrapper and `target.value = 'bezier'` on a `<div>` is a no-op that
+            // reports success. That is the failure this whole tool exists to stop, one layer in from the
+            // flat radio it already handled — and it made every `scaleType` in Spacing, Corner radius and
+            // Typography undrivable from the terminal.
+            //
+            // Resolved here rather than in `setField` because addressing lives in one place: a command
+            // that can build its own selector is a short step from one that can reach Run.
+            var colon = part.indexOf(':');
+            var cellKey = colon === -1 ? part : part.slice(0, colon);
+            var inner = colon === -1 ? '' : part.slice(colon + 1);
+            var cell = items[at] ? items[at].querySelector('[data-row-field="' + cellKey + '"]') : null;
+            if (!cell || !inner) return cell;
+            // The curve editor's coordinate field — the paste path a person uses, so setting a curve from
+            // the terminal exercises the parse and the redraw rather than going round them.
+            if (inner === 'text') return cell.querySelector('.config-ui-curve__text');
+            // The editor's two buttons. Named suffixes rather than a free-form selector, for the reason the
+            // whole addressing scheme exists — and without them the shape toggle was the one part of this
+            // control that could not be driven, and therefore the one part that could not be verified.
+            if (inner === 'shape') return cell.querySelector('.config-ui-curve__toggle--shape');
+            if (inner === 'middle') {
+              var buttons = cell.querySelectorAll('.config-ui-curve__toggle');
+              for (var b = 0; b < buttons.length; b++) {
+                if (!buttons[b].classList.contains('config-ui-curve__toggle--shape')) return buttons[b];
+              }
+              return null;
+            }
+            var options = cell.querySelectorAll('input[type="radio"]');
+            for (var o = 0; o < options.length; o++) {
+              if (options[o].value === inner) return options[o];
+            }
+            return null;
+          }
           return null;
         }
 
@@ -5376,6 +5500,31 @@
               });
             }
 
+            // **A radio group inside a `@rows` cell.** The *cell* carries `data-row-field`, so an address
+            // lands on the group wrapper and the input a person actually clicks has no address at all —
+            // `target.value = 'bezier'` on a `<div>` is a no-op that reports success. That is the exact
+            // failure this tool exists to stop, one layer further in than the flat radio it already
+            // handles, and it made every `scaleType` in Spacing, Corner radius and Typography
+            // undrivable from the terminal.
+            var rowRadioOption = null;
+            if (target.getAttribute && target.getAttribute('data-row-radio') && a.value != null) {
+              rowRadioOption = uiControlTarget(a.name, a.part + ':' + String(a.value), a.index);
+              if (!rowRadioOption) {
+                throw new Error('"' + a.name + '" cell "' + a.part + '" has no option called "' +
+                  String(a.value) + '"');
+              }
+              target = rowRadioOption;
+            }
+
+            // **A curve cell** takes coordinates through its own text field, which is the paste path a
+            // person uses — so the parse and the redraw are exercised rather than bypassed. Assigning to
+            // the wrapper would set an attribute nothing reads back.
+            if (target.getAttribute && target.getAttribute('data-curve-value') !== null) {
+              var coords = uiControlTarget(a.name, a.part + ':text', a.index);
+              if (!coords) throw new Error('That curve control has no coordinate field');
+              target = coords;
+            }
+
             var tag = target.tagName.toLowerCase();
 
             // **A name that is not in a picker's list is two events, not one.** Choose "New
@@ -5420,15 +5569,20 @@
                 // success. The panel then previewed HSL while the terminal believed it was on OKLCH, which is
                 // exactly the class of "verified against the wrong state" this tool exists to stop. So a
                 // string that names one of the group's options is honoured as the option.
-                var named = target.type === 'radio' && a.value != null && a.value !== true &&
-                  a.value !== 'true' && a.value !== false && a.value !== 'false'
+                // **The flat lookup must not run when the option is already resolved.** A radio inside a
+                // `@rows` cell is addressed `cellKey:option`; re-resolving on the bare value looks for a
+                // *cell* called `bezier`, finds nothing, and falls through to `checked = false` — so the
+                // command unchecked the option it had just found and still reported `settled: change`.
+                // Same silent-success shape as the wrapper bug above, arriving from the other direction.
+                var named = !rowRadioOption && target.type === 'radio' && a.value != null &&
+                  a.value !== true && a.value !== 'true' && a.value !== false && a.value !== 'false'
                   ? uiControlTarget(a.name, String(a.value), a.index)
                   : null;
                 if (named && named.value !== String(a.value)) {
                   throw new Error('"' + a.name + '" has no option called "' + a.value + '"');
                 }
                 if (named) target = named;
-                target.checked = named ? true : (a.value === true || a.value === 'true');
+                target.checked = (named || rowRadioOption) ? true : (a.value === true || a.value === 'true');
               } else {
                 target.value = a.value == null ? '' : String(a.value);
               }
@@ -5452,9 +5606,13 @@
             // as part of a config control is a click that can eventually reach Run. `chip-remove` is
             // here because removing a mode is a click; renaming and adding are not — they are three
             // events, so they go through `setField` as a whole gesture.
-            if (['add', 'remove', 'tab', 'chip-remove', 'card'].indexOf(a.part) === -1) {
-              throw new Error('clickControl accepts part add, remove, tab, chip-remove or card — ' +
-                'not "' + a.part + '"');
+            // `cell:shape` and `cell:middle` reach the curve editor's two buttons. Named suffixes rather
+            // than a free-form selector, for the reason the whole addressing scheme exists: a command that
+            // can build its own selector is a short step from one that can reach Run.
+            var curveButton = /:(shape|middle)$/.test(String(a.part || ''));
+            if (!curveButton && ['add', 'remove', 'tab', 'chip-remove', 'card'].indexOf(a.part) === -1) {
+              throw new Error('clickControl accepts part add, remove, tab, chip-remove, card, ' +
+                '<cell>:shape or <cell>:middle — not "' + a.part + '"');
             }
             var clickable = uiControlTarget(a.name, a.part, a.index);
             if (!clickable) throw new Error('No "' + a.part + '" on control "' + a.name + '"');
@@ -5498,7 +5656,8 @@
           // is going to be a rename.
           case 'readAutoImport':
             return Promise.resolve({
-              autoImport: lastAutoImport, ordering: lastOrdering, writes: blockWrites
+              autoImport: lastAutoImport, pristine: lastPristine,
+              ordering: lastOrdering, writes: blockWrites
             });
 
           case 'readModeIntents':
@@ -5596,7 +5755,22 @@
                   row[key] = on ? on.value : null;
                   return;
                 }
-                row[key] = cell.type === 'checkbox' ? cell.checked : cell.value;
+                var curveHeld = cell.getAttribute('data-curve-value');
+                if (curveHeld !== null) {
+                  // A curve keeps its value on the wrapper, so `.value` is `undefined` — the same
+                  // lying-by-omission a radio group used to do here. Reported as the coordinates plus
+                  // what the panel calls them, because "is it the preset I chose" is the question a
+                  // reader has and four decimals do not answer it.
+                  var presetEl = cell.querySelector('.config-ui-curve__preset');
+                  var textEl = cell.querySelector('.config-ui-curve__text');
+                  row[key] = {
+                    points: curveHeld,
+                    preset: presetEl ? presetEl.value : null,
+                    text: textEl ? textEl.value : null
+                  };
+                } else {
+                  row[key] = cell.type === 'checkbox' ? cell.checked : cell.value;
+                }
                 // Whether the cell is on screen, because a hidden cell's value is not this mode's
                 // setting — `ratio` reads `1.067` in a metric mode purely because a select must show
                 // something.

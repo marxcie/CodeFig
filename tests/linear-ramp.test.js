@@ -43,6 +43,7 @@ function baseContext() {
   vm.createContext(ctx);
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@foundation.js'), 'utf8'));
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@math-helpers.js'), 'utf8'));
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@bezier.js'), 'utf8'));
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@scale-models.js'), 'utf8'));
   return ctx;
 }
@@ -342,9 +343,12 @@ test('a run that covers every mode says nothing about it', () => {
 // The shipped defaults, which changed in 19b
 // ---------------------------------------------------------------------------
 
-test('the shipped defaults generate the metric sequence a design system doc describes', () => {
-  // 4, 8, 12, 16, 24, 32 — a base of 4 stepping every third token, with `px` stated as an extra at 1
-  // because the model would put it at 0.
+test('the shipped defaults generate a bezier ramp from a base and a growth', () => {
+  // A base of 4 growing by 1.5 a step, with `px` stated as an extra at 1 because the model starts at the
+  // base. The default was metric — `4, 8, 12, 16, 24` — until Márton asked for Bezier everywhere: the
+  // curve model is the one the panel is built around now, so the starter config should demonstrate it
+  // rather than the one you have to switch to. A geometric ramp does not land on the flat 4/8/12/16 grid,
+  // and that is the model showing what it is.
   //
   // **One mode, called `Value`.** The block used to ship `desktop / tablet / mobile`, which were only
   // ever an example of one Figma file and became the plugin's opinion about every file. What this test
@@ -361,7 +365,7 @@ test('the shipped defaults generate the metric sequence a design system doc desc
   const generated = ctx.generateRampVariables(config, spec);
 
   const values = Object.keys(generated).map((name) => generated[name].values.Value);
-  assert.deepEqual(values, [1, 4, 8, 12, 16, 24]);
+  assert.deepEqual(values, [1, 4, 6, 10, 14, 20]);
   assert.deepEqual(Object.keys(generated), [
     'Spacing/px', 'Spacing/xs', 'Spacing/sm', 'Spacing/md', 'Spacing/lg', 'Spacing/xl'
   ], 'the token names did not change — only how their values are described');
@@ -379,7 +383,7 @@ test('the shipped radius defaults start at zero and step up', () => {
   const generated = ctx.generateRampVariables(config, spec);
 
   // The base sits at `xs`, so `none` is one step below it at 0 and the growth starts from there.
-  assert.deepEqual(Object.keys(generated).map((n) => generated[n].values.Value), [0, 4, 8, 12, 16, 24]);
+  assert.deepEqual(Object.keys(generated).map((n) => generated[n].values.Value), [0, 4, 6, 10, 14, 20]);
 });
 
 test('a run says which model produced its numbers', () => {
@@ -394,13 +398,13 @@ test('a run says which model produced its numbers', () => {
   ctx.materialiseRampSizes(config, spec);
 
   const lines = ctx.describeRampModels(config, spec);
-  assert.match(lines[0], /Value: metric, base 4, step 4, mod 3/);
+  assert.match(lines[0], /Value: bezier, base 4, \u00d71\.5 per step/);
   // **The floor line is gone from the shipped block, and that is the point of the change.** `px` used to
   // be a value the model pushed below `min: 1` and the floor caught — reported as "px held at the
   // minimum of 1". It is now `extras: [1]`: the same number, stated rather than clamped. A held value is
   // a consequence to explain; an extra is a decision, and it needs no explaining.
   assert.equal(lines.filter((l) => /held at the minimum/.test(l)).length, 0);
-  assert.equal(lines.filter((l) => /metric, base/.test(l)).length, 1,
+  assert.equal(lines.filter((l) => /bezier, base/.test(l)).length, 1,
     'one per mode, and the shipped block now ships one — the three viewports it used to name were an ' +
     'example of one file, not a default the plugin should hold');
 
@@ -486,17 +490,21 @@ test('adoption survives the manifest: every model, swept', () => {
       cases.push(['metric', { steps: 6, min: 4, baseValue: 8, baseIndex: 2, step, mod }]);
     }
   }
+  // **Written as `modular`, recognised as `bezier`.** A constant ratio is a straight line in log space, so
+  // the model that names these sequences now is the curve one — and it regenerates them term for term,
+  // which is what the `exact` and `deepEqual` assertions below are actually protecting. `recognisedAs`
+  // records that the name is expected to change while the numbers are not.
   for (const ratio of ['majorSecond', 'majorThird', 'perfectFifth']) {
-    cases.push(['modular', { steps: 6, min: 0, baseValue: 8, baseIndex: 0, ratio }]);
-    cases.push(['modular', { steps: 6, min: 0, baseValue: 16, baseIndex: 3, ratio }]);
+    cases.push(['modular', { steps: 6, min: 0, baseValue: 8, baseIndex: 0, ratio }, 'bezier']);
+    cases.push(['modular', { steps: 6, min: 0, baseValue: 16, baseIndex: 3, ratio }, 'bezier']);
   }
 
-  for (const [model, options] of cases) {
+  for (const [model, options, recognisedAs] of cases) {
     const values = ctx.scaleSequence(model, options).values;
     const label = `${model} ${JSON.stringify(options)} → ${values.join(',')}`;
     const { fits, generated } = adoptionRoundTrip(ctx, spec, tokens, { Desktop: values });
 
-    assert.equal(fits.Desktop.recognised.model, model, label);
+    assert.equal(fits.Desktop.recognised.model, recognisedAs || model, label);
     assert.ok(fits.Desktop.recognised.exact, label);
     assert.deepEqual(generated.Desktop, values, 'regenerated from its own manifest: ' + label);
   }

@@ -53,6 +53,7 @@ function loadContext() {
   vm.createContext(ctx);
   loadAll(ctx, 'CODEFIG_LIBRARIES/@foundation.js');
   loadAll(ctx, 'CODEFIG_LIBRARIES/@math-helpers.js');
+  loadAll(ctx, 'CODEFIG_LIBRARIES/@bezier.js');
   loadAll(ctx, 'CODEFIG_LIBRARIES/@scale-models.js');
   // The generator behind Spacing since plan 19. The property under test is about the *current*
   // generator, so this follows the collapse rather than pinning the shape it had before it.
@@ -822,4 +823,129 @@ test('a config still carrying distributeToMaxColumns is reported, not carried th
   const grid = fs.readFileSync(path.join(SCRIPTS, 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'grid.js'), 'utf8');
   assert.match(grid, /distributeToMaxColumns is no longer supported and was ignored/);
   assert.equal(/function slotToProportionalSpan/.test(grid), false, 'the arithmetic is gone, not just unused');
+});
+
+test('every foundation script records the set it wrote', () => {
+  // **Typography did not, and the panel could not tell.** The read half was built — the config block carries
+  // `@fromFile: domains.typography` and auto-import knows how to fill from it — but nothing ever wrote the
+  // record, so opening the script in a file that already had a typography set showed the shipped ten tokens
+  // instead of the four the file holds. Grid's own comment names the shape: *"an auto-import that could
+  // never fire — a feature that lies."*
+  //
+  // Checked on the source rather than by running, because the failure is an absence: there is no wrong
+  // output to catch, only a call that is not there.
+  const dir = path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations');
+  const viaRunner = { 'spacing.js': 'runLinearRamp', 'corner-radius.js': 'runLinearRamp' };
+  const missing = [];
+
+  for (const file of ['spacing.js', 'corner-radius.js', 'typography.js', 'grid.js']) {
+    const source = fs.readFileSync(path.join(dir, file), 'utf8');
+    // Either it calls `writeManifest` itself, or it hands the whole run to a library that does.
+    const records = /writeManifest\s*\(/.test(source) ||
+      (viaRunner[file] && new RegExp(viaRunner[file] + '\\s*\\(').test(source));
+    if (!records) missing.push(file);
+  }
+
+  assert.deepEqual(missing, [],
+    'these write variables and never record what they wrote, so their panel has nothing to load: ' +
+      missing.join(', '));
+});
+
+test('the typography manifest carries the tokens the panel needs back', () => {
+  // The token list is the thing that was wrong on screen — ten shipped names over four real ones — so it is
+  // the thing worth asserting travels.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'typography.js'),
+    'utf8'
+  );
+  assert.match(source, /domain: 'typography'/);
+  assert.match(source, /tokens: typeScaleTokens\(config\)/, 'the real token list, not an empty array');
+  assert.match(source, /config: normaliseConfig\(config\)\.config\.domains\.typography/);
+});
+
+// ---------------------------------------------------------------------------
+// Loading the tokens a file already has
+// ---------------------------------------------------------------------------
+
+/** A Figma stub with one collection and the variable names given. */
+function fileWith(names, modes) {
+  const vars = names.map((name, i) => ({ id: 'v' + i, name }));
+  const collection = {
+    name: 'Responsive System',
+    variableIds: vars.map((v) => v.id),
+    modes: (modes || ['Desktop']).map((n, i) => ({ modeId: 'm' + i, name: n })),
+    getSharedPluginData: () => '',
+    getSharedPluginDataKeys: () => [],
+  };
+  return {
+    variables: {
+      getLocalVariableCollectionsAsync: async () => [collection],
+      getVariableByIdAsync: async (id) => vars.filter((v) => v.id === id)[0] || null,
+    },
+    root: { getSharedPluginData: () => '' },
+  };
+}
+
+function loadFoundation(figmaStub) {
+  const vm = require('node:vm');
+  const ctx = {
+    figma: figmaStub, console: { log() {}, warn() {}, error() {} },
+    Math, String, Array, Object, JSON, Date, isNaN, isFinite, parseInt, parseFloat, Number, RegExp,
+  };
+  vm.createContext(ctx);
+  vm.runInContext(
+    fs.readFileSync(path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES', '@foundation.js'), 'utf8'),
+    ctx
+  );
+  return ctx;
+}
+
+test('a panel with no manifest loads the token names the file actually has', async () => {
+  // **The complaint this fixes.** Opening Typography on a file holding four tokens showed the shipped ten,
+  // because nothing recorded is not the same as nothing there. Only Grid read the variables; every other
+  // domain gave up.
+  const ctx = loadFoundation(fileWith([
+    'Typography/Text-Tiny/font-size', 'Typography/Text-Tiny/line-height', 'Typography/Text-Tiny/letter-spacing',
+    'Typography/Text-Small/font-size', 'Typography/Text-Small/line-height',
+    'Typography/Text-Regular/font-size',
+    'Typography/Text-Large/font-size',
+    // Not tokens: no `font-size` under them.
+    'Typography/font-weight/400', 'Typography/font-weight/600', 'Typography/font-family/primary',
+  ], ['Desktop', 'Mobile']));
+
+  const found = await ctx.foundationAutoImport('Responsive System', 'Typography', 'typography');
+  assert.equal(found.source, 'recognised');
+  assert.deepEqual(found.tokens, ['Text-Tiny', 'Text-Small', 'Text-Regular', 'Text-Large']);
+  assert.deepEqual(found.config, { fontScale: ['Text-Tiny', 'Text-Small', 'Text-Regular', 'Text-Large'] });
+  assert.deepEqual(found.modes, ['Desktop', 'Mobile']);
+});
+
+test('a flat domain takes the leaf as the token, and skips anything nested', async () => {
+  const ctx = loadFoundation(fileWith([
+    'Spacing/px', 'Spacing/xs', 'Spacing/sm',
+    // A nested name under the same group is not one of this domain's tokens.
+    'Spacing/legacy/old-md',
+    // Another group entirely.
+    'Corner radius/none',
+  ]));
+  const found = await ctx.foundationAutoImport('Responsive System', 'Spacing', 'spacing');
+  assert.deepEqual(found.tokens, ['px', 'xs', 'sm']);
+  assert.deepEqual(found.config, { spacings: ['px', 'xs', 'sm'] });
+});
+
+test('it loads the names and says nothing about the scale', async () => {
+  // Recognising *how* a set was made is `adoptRamp`'s question and a much larger one. A panel opening on
+  // somebody's collection is asking what the tokens are — answering only that lets a real set load without
+  // the panel claiming to know how it was built, and every scale control keeps what it holds because
+  // `fillConfigBlock` writes the keys a payload carries and leaves the rest.
+  const ctx = loadFoundation(fileWith(['Spacing/px', 'Spacing/xs']));
+  const found = await ctx.foundationAutoImport('Responsive System', 'Spacing', 'spacing');
+  assert.deepEqual(Object.keys(found.config), ['spacings'], 'the token list and nothing else');
+});
+
+test('an address holding nothing loads nothing', async () => {
+  const ctx = loadFoundation(fileWith(['Spacing/px', 'Spacing/xs']));
+  const found = await ctx.foundationAutoImport('Responsive System', 'Typography', 'typography');
+  assert.equal(found.source, 'none');
+  assert.equal(found.config, null, 'an empty answer, not an empty set');
 });

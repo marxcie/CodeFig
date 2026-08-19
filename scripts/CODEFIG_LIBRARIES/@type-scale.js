@@ -6,7 +6,7 @@
 // ## What a mode holds
 // | Key | Meaning |
 // |-----|---------|
-// | `scaleType` | `modular`, `metric` or `fibonacci` — the same three the Spacing panel offers. |
+// | `scaleType` | `bezier` (base + growth ratio + curve), `metric` or `fibonacci` — the same three the Spacing panel offers. `modular` is still accepted and generates what it always did. |
 // | `ratio` | Modular only: the step ratio (1.2, 1.25 …). |
 // | `step`, `mod` | Metric and fibonacci: the increment, and how often it grows. |
 // | `base` | The size of the **first** token. The scale grows from there, so tokens are named smallest to largest. |
@@ -83,7 +83,15 @@ function typeScaleSizes(mode, steps) {
     min: 1,
     baseIndex: 0,
     baseValue: base,
+    // A bezier scale is a base, a growth ratio and a curve distributing the growth — the top comes out of
+    // the ratio rather than being declared, so a scale keeps going when a token is added instead of being
+    // squeezed to fit. `max` is still read for configs written while that was the spelling.
+    //
+    // Leaving these off did not fail: `scaleSequence` reported the missing one into a warnings array
+    // nothing was reading, and every size in the panel came out 0.
     ratio: mode.ratio,
+    curve: mode.curve,
+    max: mode.max,
     step: mode.step,
     mod: mode.mod
   });
@@ -125,18 +133,41 @@ function typeScaleHasNumber(value) {
  * With no `lineHeightAtTop` the base ratio is held — line height grows with the size, which is what this
  * script has always done, and the plain reading of filling in one number.
  */
+/**
+ * The share of the font size a companion takes at the base and at the top.
+ *
+ * **The shape of the value is the spelling.** An object — `{ base: 150, max: 110 }` — is the panel's, and
+ * the numbers are **percentages of the font size**: that is Figma's own unit for both line height and
+ * letter spacing, and a percentage still means what it meant when the scale grows, which a pixel value
+ * does not. A bare number is the older spelling, an absolute value *at* the base or the top, and it is
+ * converted by dividing by the size it was measured against.
+ *
+ * Told apart by `typeof`, not by range. Both fields are genuinely ambiguous by value — `-1.2` is equally
+ * plausible as −1.2px or −1.2%, and `110` as 110px or 110% — so a heuristic could only ever guess. The
+ * nesting arrived for the panel's sake, and it doubles as the thing that says which era a config is from.
+ *
+ * → `{ base, top }` as fractions, so 150% comes back as 1.5.
+ */
+function typeScaleShares(atBase, atTop, base, top, fallback) {
+  if (atBase && typeof atBase === 'object') {
+    var pctBase = typeScaleHasNumber(atBase.base) ? atBase.base / 100 : fallback;
+    var pctTop = typeScaleHasNumber(atBase.max) ? atBase.max / 100 : pctBase;
+    return { base: pctBase, top: pctTop };
+  }
+  var absBase = typeScaleHasNumber(atBase) ? atBase : (base > 0 ? base * fallback : 0);
+  var shareBase = base > 0 ? absBase / base : fallback;
+  var shareTop = typeScaleHasNumber(atTop) && top > 0 ? atTop / top : shareBase;
+  return { base: shareBase, top: shareTop };
+}
+
 function typeScaleLineHeights(mode, sizes) {
   var base = sizes.length > 0 && typeScaleHasNumber(sizes[0]) ? sizes[0] : 16;
   var top = sizes.length > 0 && typeScaleHasNumber(sizes[sizes.length - 1]) ? sizes[sizes.length - 1] : base;
-  var atBase = typeScaleHasNumber(mode.lineHeight) ? mode.lineHeight : base * 1.5;
-  var ratioBase = base > 0 ? atBase / base : 1.5;
-  var ratioTop = typeScaleHasNumber(mode.lineHeightAtTop) && top > 0
-    ? mode.lineHeightAtTop / top
-    : ratioBase;
+  var share = typeScaleShares(mode.lineHeight, mode.lineHeightAtTop, base, top, 1.5);
   var grid = typeScaleHasNumber(mode.roundTo) && mode.roundTo > 0 ? mode.roundTo : 0;
 
   return sizes.map(function (size, i) {
-    var ratio = typeScaleBetween(ratioBase, ratioTop, typeScaleProgress(i, sizes.length));
+    var ratio = typeScaleBetween(share.base, share.top, typeScaleProgress(i, sizes.length));
     var value = (typeScaleHasNumber(size) ? size : 0) * ratio;
     return grid > 0 ? snapScaleGrid(value, grid) : Math.round(value * 100) / 100;
   });
@@ -155,17 +186,21 @@ function typeScaleLineHeights(mode, sizes) {
  * in one field.
  */
 function typeScaleTrackings(mode, sizes) {
-  var atBase = typeScaleHasNumber(mode.letterSpacing) ? mode.letterSpacing : 0;
-  if (!typeScaleHasNumber(mode.letterSpacingAtTop)) {
-    return sizes.map(function () { return Math.round(atBase * 100) / 100; });
-  }
   var base = sizes.length > 0 && typeScaleHasNumber(sizes[0]) ? sizes[0] : 16;
   var top = sizes.length > 0 && typeScaleHasNumber(sizes[sizes.length - 1]) ? sizes[sizes.length - 1] : base;
-  var shareBase = base > 0 ? atBase / base : 0;
-  var shareTop = top > 0 ? mode.letterSpacingAtTop / top : shareBase;
+
+  // The old spelling with no `AtTop` is a flat absolute value at every size, not a share — keeping that
+  // exactly is what stops a config written before the panel from moving.
+  if (!(mode.letterSpacing && typeof mode.letterSpacing === 'object') &&
+      !typeScaleHasNumber(mode.letterSpacingAtTop)) {
+    var flat = typeScaleHasNumber(mode.letterSpacing) ? mode.letterSpacing : 0;
+    return sizes.map(function () { return Math.round(flat * 100) / 100; });
+  }
+
+  var share = typeScaleShares(mode.letterSpacing, mode.letterSpacingAtTop, base, top, 0);
   return sizes.map(function (size, i) {
-    var share = typeScaleBetween(shareBase, shareTop, typeScaleProgress(i, sizes.length));
-    return Math.round((typeScaleHasNumber(size) ? size : 0) * share * 100) / 100;
+    var at = typeScaleBetween(share.base, share.top, typeScaleProgress(i, sizes.length));
+    return Math.round((typeScaleHasNumber(size) ? size : 0) * at * 100) / 100;
   });
 }
 
@@ -289,19 +324,34 @@ function typographyPreviewHtml(config, domain, modeName) {
 
   var family = typeof data.fontFamily === 'string' && data.fontFamily ? data.fontFamily : 'Inter';
   var weight = typeScaleSpecimenWeight(config);
-  var lines = typeScalePreviewText(config).split('\n').map(typeScaleEscape).join('<br>');
+  var previewLines = typeScalePreviewText(config).split('\n');
+  var lineCount = Math.max(1, previewLines.length);
+  var lines = previewLines.map(typeScaleEscape).join('<br>');
 
   var steps = table.rows.map(function (row) {
+    // **The rounding sits beside the number it moved**, not on a line of its own at the bottom. A separate
+    // *Rounded from 218.37* left you matching it back to whichever value it belonged to — and there is only
+    // ever one candidate, so the line was carrying no information its position could not.
     var meta = [
       typeScaleEscape(row.token),
       'Font weight: ' + weight,
-      'Font size: ' + typeScaleNumber(row.size),
+      'Font size: ' + typeScaleNumber(row.size) +
+        (row.rounded ? ' (' + typeScaleNumber(row.raw) + ')' : ''),
       'Line height: ' + typeScaleNumber(row.lineHeight),
       'Letter spacing: ' + typeScaleNumber(row.tracking)
     ];
-    if (row.rounded) meta.push('Rounded from ' + typeScaleNumber(row.raw));
-    var style = 'font-size:' + row.size + 'px;line-height:' + (row.size > 0 ? row.lineHeight / row.size : 1) +
-      ';letter-spacing:' + row.tracking + 'px;font-weight:' + weight;
+    // **The row reserves the taller of the line box and the glyphs.**
+    //
+    // A line height below the font size is a real choice — tight display type does exactly that — but the
+    // line *box* is then shorter than the letters, so they spill out of it and the horizontal clip cuts
+    // them off top and bottom. At 218px with a 66px line height there was more glyph outside the box than
+    // in it. `min-height` gives the box the room without touching the line height, so the specimen still
+    // shows the leading it is describing.
+    var lineBox = row.size > 0 ? row.lineHeight / row.size : 1;
+    var reserved = Math.max(row.lineHeight, row.size * 1.25) * lineCount;
+    var style = 'font-size:' + row.size + 'px;line-height:' + lineBox +
+      ';letter-spacing:' + row.tracking + 'px;font-weight:' + weight +
+      ';min-height:' + (Math.round(reserved * 100) / 100) + 'px';
     return '<div class="type-specimen-step">' +
       '<div class="type-specimen-meta">' + meta.join('<br>') + '</div>' +
       '<div class="type-specimen-sample" style="' + style + '">' + lines + '</div>' +

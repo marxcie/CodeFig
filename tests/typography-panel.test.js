@@ -115,9 +115,10 @@ test('a mode shows the fields its scale type uses', () => {
     .filter(Boolean);
 
   assert.deepEqual(shown(), [
-    'scaleType', 'ratio', 'base',
-    'letterSpacing', 'letterSpacingAtTop', 'lineHeight', 'lineHeightAtTop', 'roundTo',
-  ], 'modular: a ratio, and the frame\'s order — letter spacing above line height');
+    'scaleType', 'curve', 'base',
+    // One entry per *cell*, and each pair is one cell now — `shown()` reports its first part.
+    'letterSpacing.base', 'lineHeight.base', 'roundTo',
+  ], 'bezier: the scale, then the frame\'s order — letter spacing above line height, each a pair');
 
   const type = items[0].querySelector('[data-row-field="scaleType"]');
   const metric = type.querySelectorAll('input').filter((r) => r.value === 'metric')[0];
@@ -125,8 +126,8 @@ test('a mode shows the fields its scale type uses', () => {
   metric.dispatchEvent(new shim.Event('change', { bubbles: true }));
   assert.deepEqual(shown(), [
     'scaleType', 'step', 'mod', 'base',
-    'letterSpacing', 'letterSpacingAtTop', 'lineHeight', 'lineHeightAtTop', 'roundTo',
-  ], 'metric: a step and how often it grows, and no ratio');
+    'letterSpacing.base', 'lineHeight.base', 'roundTo',
+  ], 'metric: a step and how often it grows, and neither end of a ramp');
 });
 
 test('the modes come from the config, not from a payload it no longer has', () => {
@@ -231,7 +232,10 @@ test('the specimen sets the type at its real size, largest last', () => {
   for (let i = 1; i < sizes.length; i++) assert.ok(sizes[i] > sizes[i - 1], 'ascending, so it reads as a scale');
   assert.match(html, /class="type-specimen"/);
   assert.ok(html.indexOf('Sphinx of black quartz') !== -1, 'the preview text is the config\'s');
-  assert.ok(html.indexOf('Rounded from') !== -1, 'and a rounded step says what it was');
+  // **Beside the number it moved**, not on a line of its own — `Font size: 218 (218.37)`. A separate
+  // *Rounded from* line left you matching it back to whichever value it belonged to.
+  assert.equal(html.indexOf('Rounded from'), -1, 'the standalone line is gone');
+  assert.match(html, /Font size: [\d.]+ \([\d.]+\)/, 'and a rounded step says what it was, in place');
 });
 
 test('the preview follows the mode the panel is showing', () => {
@@ -291,4 +295,47 @@ test('an empty scale says what to do rather than rendering nothing', () => {
   const bare = { config: { fontScale: [], modes: [] } };
   assert.match(T.typographyOverviewHtml(bare, 'typography', null), /scale type|base unit/i);
   assert.match(T.typographyPreviewHtml(bare, 'typography', null), /tokens|scale/i);
+});
+
+test('line height and letter spacing are percentages, and the old spelling still generates its numbers', () => {
+  // **The shape is the version marker.** `{ base, max }` is the panel's and the numbers are percentages of
+  // the font size; a bare number is the older absolute-at-the-endpoint spelling. Told apart by `typeof`
+  // rather than by range, because both fields are genuinely ambiguous by value — `-1.2` is equally
+  // plausible as −1.2px or −1.2%, and `110` as 110px or 110%.
+  const ctx = load();
+  const sizes = ctx.typeScaleSizes(
+    { scaleType: 'bezier', base: 8, ratio: 1.25, curve: [], roundTo: 2 }, 10
+  ).values;
+  assert.deepEqual(sizes, [8, 10, 12, 16, 20, 24, 30, 38, 48, 60]);
+
+  const old = { lineHeight: 12, lineHeightAtTop: 66, letterSpacing: 0, letterSpacingAtTop: -1.2, roundTo: 2 };
+  // 12px on a base of 8 is 150%; 66px on a top of 60 is 110%. Same scale, said the other way.
+  const now = { lineHeight: { base: 150, max: 110 }, letterSpacing: { base: 0, max: -2 }, roundTo: 2 };
+
+  assert.deepEqual(ctx.typeScaleLineHeights(now, sizes), ctx.typeScaleLineHeights(old, sizes));
+  assert.deepEqual(ctx.typeScaleTrackings(now, sizes), ctx.typeScaleTrackings(old, sizes));
+  assert.deepEqual(ctx.typeScaleLineHeights(old, sizes), [12, 14, 16, 22, 26, 30, 38, 46, 54, 66]);
+
+  // A flat old letter spacing with no second end stays flat at every size, which is what it always did.
+  assert.deepEqual(
+    ctx.typeScaleTrackings({ letterSpacing: -0.5 }, sizes),
+    sizes.map(() => -0.5)
+  );
+});
+
+test('the percentage fields carry their unit in the input', () => {
+  // A placeholder disappears the moment you type; a unit has to stay, or `-1.5` is unreadable as either
+  // pixels or percent. Márton asked for it drawn inside the field at the right edge.
+  const schema = P.parse(BLOCK);
+  const modes = schema.rows.filter((r) => r.type === 'field' && r.inputType === 'rows')[0];
+  const by = {};
+  modes.columns.forEach((c) => { by[c.key] = c; });
+  for (const key of ['letterSpacing', 'lineHeight']) {
+    assert.equal(by[key].type, 'group', key + ' should be one row of two');
+    assert.deepEqual(by[key].columns.map((c) => c.key), ['base', 'max']);
+    by[key].columns.forEach((part) => {
+      assert.equal(part.unit, '%', key + '.' + part.key + ' lost its unit');
+      assert.equal(part.type, 'number');
+    });
+  }
 });

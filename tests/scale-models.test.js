@@ -37,13 +37,15 @@ function loadModels() {
   };
   vm.createContext(ctx);
   loadInto(ctx, '@math-helpers.js');
+  // `bezier` reads its curve with `bezierAt`, so the sandbox needs the library the sandbox in Figma gets.
+  loadInto(ctx, '@bezier.js');
   assert.ok(fs.existsSync(path.join(LIBS, '@scale-models.js')), '@scale-models.js does not exist yet');
   loadInto(ctx, '@scale-models.js');
   return ctx;
 }
 
 const lib = loadModels();
-const { scaleSequence, modularRatios, resolveModularRatio } = lib;
+const { scaleSequence, scaleModelNames, scaleModelAliases, modularRatios, resolveModularRatio } = lib;
 
 const values = (result) => result.values;
 const codes = (result) => result.warnings.map((w) => w.code);
@@ -88,6 +90,164 @@ test('several steps flattened onto the floor is a warning', () => {
   assert.deepEqual(codes(result), ['scale-floored']);
   assert.match(result.warnings[0].message, /3 steps land below the minimum of 10/);
   assert.match(result.warnings[0].message, /a, b, c/);
+});
+
+// ---------------------------------------------------------------------------
+// bezier — a ramp between two ends, along a curve, in log space
+//
+// The model that replaced `modular`. Everything below the first test is about the *shape* of a curved
+// ramp; the first test is the one the replacement actually rests on, and if it ever fails the right
+// response is to stop and work out which scales in which files just changed.
+// ---------------------------------------------------------------------------
+
+test('a straight bezier IS a modular scale, term for term', () => {
+  // **The claim the whole replacement rests on.** A constant ratio is a straight line in log space, so a
+  // straight curve between the ends a ratio implies reproduces the ratio exactly — not nearly. These
+  // sequences are already generated into people's files, so "nearly" would mean silently rewriting tokens
+  // that other things are bound to.
+  for (const ratio of ['minorSecond', 'majorSecond', 'minorThird', 'majorThird', 'perfectFourth',
+    'augmentedFourth', 'perfectFifth', 'phi']) {
+    for (const steps of [3, 6, 10]) {
+      for (const baseIndex of [0, 1, Math.floor((steps - 1) / 2), steps - 1]) {
+        for (const base of [1, 4, 8, 16, 4.5]) {
+          const options = { steps, min: 0, baseValue: base, baseIndex, ratio };
+          const modular = values(scaleSequence('modular', options));
+          const r = resolveModularRatio(ratio);
+          const bezier = values(scaleSequence('bezier', {
+            steps, min: 0, curve: [], ratio: ratio,
+            baseValue: base / Math.pow(r, baseIndex),
+          }));
+          const label = `${ratio} base ${base} @${baseIndex} × ${steps}`;
+          assert.equal(bezier.length, modular.length, label);
+          modular.forEach((want, i) => {
+            // 1e-12 relative, not 1e-9: at 1e-9 this passed while `bezierAt` was rounding its input to six
+            // decimals and putting a 5e-6 kink in the ratio. The tolerance is float noise or it is hiding
+            // something.
+            assert.ok(Math.abs(bezier[i] - want) < 1e-12 * Math.max(1, Math.abs(want)),
+              `${label} step ${i}: ${bezier[i]} should be ${want}`);
+          });
+        }
+      }
+    }
+  }
+});
+
+test('`modular` still generates what it always generated', () => {
+  // The alias, through the front door. Same assertion as above with the conversion left to the library,
+  // which is how every config written before the curve editor arrives.
+  assert.deepEqual(
+    values(scaleSequence('modular', { steps: 5, min: 0, baseValue: 16, baseIndex: 2, ratio: 1.25 }))
+      .map((v) => Math.round(v * 100) / 100),
+    [10.24, 12.8, 16, 20, 25]
+  );
+  assert.deepEqual(
+    values(scaleSequence('modular', { steps: 4, min: 0, baseValue: 16, baseIndex: 0, ratio: 'majorThird' }))
+      .map((v) => Math.round(v * 100) / 100),
+    [16, 20, 25, 31.25]
+  );
+});
+
+test('`modular` is accepted but not advertised', () => {
+  assert.equal(scaleModelNames().includes('bezier'), true);
+  assert.equal(scaleModelNames().includes('modular'), false, 'nothing should be offering it any more');
+  assert.equal(scaleModelAliases().includes('modular'), true, 'and it still has to work');
+  // The message a bad model prints must not suggest the retired spelling.
+  const unknown = scaleSequence('nope', { steps: 3, min: 0 });
+  assert.equal(unknown.warnings[0].message.includes('modular'), false);
+});
+
+test('both ends are exact, whatever the curve does between them', () => {
+  // A curve reshapes the pacing, never the endpoints — which is what makes it safe to bend one on a scale
+  // whose largest and smallest values are already agreed.
+  for (const preset of [[], [0.9, 0.05, 0.1, 0.95], [0.1, 0.9, 0.9, 0.1], [1, 0, 0, 1]]) {
+    const out = values(scaleSequence('bezier', { steps: 7, min: 0, baseValue: 4, max: 96, curve: preset }));
+    assert.equal(out[0], 4, JSON.stringify(preset));
+    assert.equal(out[out.length - 1], 96, JSON.stringify(preset));
+  }
+});
+
+test('a curve varies the ratio across the scale, which is the point of it', () => {
+  const ends = { steps: 8, min: 0, baseValue: 4, max: 96 };
+  const straight = values(scaleSequence('bezier', Object.assign({ curve: [] }, ends)));
+  const bent = values(scaleSequence('bezier',
+    Object.assign({ curve: [0.42, 0, 0.58, 0.35] }, ends)));
+
+  const ratios = (v) => v.slice(1).map((x, i) => x / v[i]);
+  const spread = (v) => Math.max(...ratios(v)) - Math.min(...ratios(v));
+
+  assert.ok(spread(straight) < 1e-12, 'a straight curve holds one ratio the whole way');
+  assert.ok(spread(bent) > 0.1, 'a bent one does not');
+  assert.notDeepEqual(bent, straight);
+});
+
+test('every bezier ramp climbs, however the handles are placed', () => {
+  const curves = [[], [0.9, 0.05, 0.1, 0.95], [1, 0, 0, 1], [0, 1, 1, 0],
+    [0.2, 0, 0.4, 0.3, 0.5, 0.5, 0.6, 0.7, 0.8, 1]];
+  for (const curve of curves) {
+    const out = values(scaleSequence('bezier', { steps: 12, min: 0, baseValue: 2, max: 200, curve }));
+    for (let i = 1; i < out.length; i++) {
+      assert.ok(out[i] >= out[i - 1] - 1e-9,
+        `went backwards at ${i} on ${JSON.stringify(curve)}: ${out[i - 1]} → ${out[i]}`);
+    }
+  }
+});
+
+test('a bezier scale needs a ratio, and says so rather than generating nothing', () => {
+  const noRatio = scaleSequence('bezier', { steps: 5, min: 0, baseValue: 4 });
+  assert.deepEqual(values(noRatio), []);
+  assert.ok(codes(noRatio).includes('scale-ratio-required'));
+
+  // `max` is the spelling configs were briefly written in. Converted, not refused, and not a second path:
+  // it becomes the ratio that reaches it.
+  const viaMax = scaleSequence('bezier', { steps: 6, min: 0, baseValue: 4, max: 30.375, curve: [] });
+  const viaRatio = scaleSequence('bezier', { steps: 6, min: 0, baseValue: 4, ratio: 1.5, curve: [] });
+  values(viaMax).forEach((v, i) => assert.ok(Math.abs(v - values(viaRatio)[i]) < 1e-9, 'step ' + i));
+});
+
+test('adding a token appends — it does not move the tokens already there', () => {
+  // **The property the whole model exists for.** A `max` pins both ends, so a seventh token re-subdivides
+  // the range and every value below it changes — six spacing variables already bound to things in a file,
+  // silently rewritten because somebody added a seventh. Deriving the top from the ratio makes the step
+  // count cancel out of the exponent, so the sequence does not depend on how long it is.
+  const of = (steps) => values(scaleSequence('bezier', { steps, min: 0, baseValue: 4, ratio: 1.5, curve: [] }));
+  const six = of(6);
+  for (const longer of [7, 9, 14]) {
+    const grown = of(longer);
+    six.forEach((was, i) => {
+      assert.ok(Math.abs(grown[i] - was) < 1e-9,
+        `token ${i} moved from ${was} to ${grown[i]} when the list grew to ${longer}`);
+    });
+  }
+  assert.deepEqual(six.map((v) => Math.round(v * 1000) / 1000), [4, 6, 9, 13.5, 20.25, 30.375]);
+});
+
+test('bending moves the interior and never the ends', () => {
+  const ends = { steps: 7, min: 0, baseValue: 4, ratio: 1.5 };
+  const flat = values(scaleSequence('bezier', Object.assign({ curve: [] }, ends)));
+  for (const curve of [[0.9, 0.05, 0.1, 0.95], [0.42, 0, 0.58, 0.35], [0.1, 0.6, 0.4, 0.9]]) {
+    const bent = values(scaleSequence('bezier', Object.assign({ curve }, ends)));
+    assert.ok(Math.abs(bent[0] - 4) < 1e-9, 'the base moved');
+    assert.ok(Math.abs(bent[6] - 4 * Math.pow(1.5, 6)) < 1e-9, 'the top moved');
+    assert.notDeepEqual(bent, flat, 'the bend did nothing');
+  }
+});
+
+test('a ramp between zero and anything is refused, and the message names the right end', () => {
+  // Log space has no ratio to a zero. **Which end is zero changes the advice**: a base of 0 is somebody
+  // wanting a `none` token, and an extra value is the answer; a max of 0 is an empty field on a mode just
+  // switched to this model, and pointing them at extra values sends them to the wrong control. One message
+  // for both was the first thing on screen after picking Bezier, and it was about the other end.
+  const zeroBase = scaleSequence('bezier', { steps: 5, min: 0, baseValue: 0, max: 96, curve: [] });
+  assert.deepEqual(values(zeroBase), []);
+  assert.ok(codes(zeroBase).includes('scale-bezier-positive'));
+  assert.match(zeroBase.warnings[0].message, /base has to be above zero/);
+  assert.match(zeroBase.warnings[0].message, /Extra values/, 'it should say what to do instead');
+
+  const zeroMax = scaleSequence('bezier', { steps: 5, min: 0, baseValue: 4, max: 0, curve: [] });
+  assert.deepEqual(values(zeroMax), []);
+  assert.ok(codes(zeroMax).includes('scale-bezier-positive'));
+  assert.match(zeroMax.warnings[0].message, /largest value above zero/);
+  assert.doesNotMatch(zeroMax.warnings[0].message, /Extra values/, 'that is advice about the other end');
 });
 
 // ---------------------------------------------------------------------------
@@ -317,4 +477,18 @@ test('an endpoints scale carries its adjustments out with it', () => {
   });
   assert.deepEqual(built.values, [4, 8, 10, 10]);
   assert.ok(built.adjustments.length > 0, 'and does not keep them to itself');
+});
+
+test('a growth at or below 1 is refused — a scale that shrinks is not a scale', () => {
+  // These tokens are named smallest to largest, so a ratio under 1 contradicts the list it is filling. It
+  // did not fail: it generated `0, 0, 0, 1, 2, 4` and the grid rounded most of that to nothing. Found by
+  // typing a curve's coordinates into the growth field, where `0.42` was read as the growth.
+  for (const ratio of [0.42, 0.99, 1]) {
+    const result = scaleSequence('bezier', { steps: 6, min: 0, baseValue: 4, ratio, curve: [] });
+    assert.deepEqual(values(result), [], `${ratio} generated something`);
+    assert.ok(codes(result).includes('scale-ratio-not-growing'), `${ratio} was not reported`);
+    assert.match(result.warnings[0].message, /smallest to largest/);
+  }
+  // And just above 1 still works, because the refusal is about direction, not about being cautious.
+  assert.equal(values(scaleSequence('bezier', { steps: 4, min: 0, baseValue: 4, ratio: 1.01, curve: [] })).length, 4);
 });

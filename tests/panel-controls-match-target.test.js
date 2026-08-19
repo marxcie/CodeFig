@@ -49,7 +49,11 @@ function targetCells(html) {
     if (!label) return;
     const body = chunk.slice(0, chunk.indexOf('</label>') === -1 ? chunk.length : chunk.indexOf('</label>'));
     let type = null;
-    if (/config-ui-radio-group/.test(body)) type = 'radio';
+    // **Before the input branches.** A group *contains* inputs, so anything that looked for one first
+    // reported the group as whatever its first part happens to be — which is how a pair of captioned
+    // fields and a single number read as the same control.
+    if (/config-ui-rows-group[ "]/.test(body)) type = 'group';
+    else if (/config-ui-radio-group/.test(body)) type = 'radio';
     else if (/<select/.test(body)) type = 'select';
     else if (/config-ui-input--number/.test(body)) type = 'number';
     else if (/config-ui-textarea|<textarea/.test(body)) type = 'textarea';

@@ -32,7 +32,7 @@ const BLOCK = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(fs.readFileS
 /** The libraries, loaded the way a script loads them — the ramp's calls resolve in its consumer. */
 function libs() {
   const dir = path.join(ROOT, 'scripts', 'CODEFIG_LIBRARIES');
-  const src = ['@math-helpers.js', '@scale-models.js', '@core-library.js', '@foundation.js', '@linear-ramp.js']
+  const src = ['@math-helpers.js', '@bezier.js', '@scale-models.js', '@core-library.js', '@foundation.js', '@linear-ramp.js']
     .map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   return new Function('figma', 'console', 'window',
     src + '; return { radiusPreviewHtml: radiusPreviewHtml, spacingPreviewHtml: spacingPreviewHtml,' +
@@ -95,14 +95,15 @@ test('the block renders the panel the frame shows', () => {
 
 test('the frame has three radios, which settles what the Spacing frames left open', () => {
   // Spacing's frames only ever show Modular and Metric. This one draws Fibonacci too, so the third option
-  // is the design's rather than mine.
+  // is the design's rather than mine. Modular has since become **Bezier** — a straight curve is a constant
+  // ratio, so the model that was there is the new one's default shape rather than a fourth option.
   const schema = P.parse(BLOCK);
   const modes = schema.rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];
   const by = {};
   modes.columns.forEach((c) => { by[c.key] = c; });
   assert.equal(by.scaleType.type, 'radio');
   assert.deepEqual(by.scaleType.options.map((o) => o.label),
-    ['Modular scale', 'Metric scale', 'Fibonacci']);
+    ['Bezier scale', 'Metric scale', 'Fibonacci']);
   assert.equal(by.extras.label, 'Extra values', "the domain's own word for the same control");
 });
 
@@ -120,15 +121,17 @@ test('a mode shows the fields its scale type uses', () => {
     })
     .filter(Boolean);
 
-  // Step and Every N steps sit where Scaling method does — they are what replaces it — so all three
-  // panels read the same way down the tab.
-  assert.deepEqual(shown(), ['scaleType', 'step', 'mod', 'base', 'roundTo', 'extras']);
+  // **Bezier is the shipped default**, so a fresh panel opens on the curve. Step and Every N steps sit in
+  // the same slot when you switch to metric, so all three panels read the same way down the tab.
+  assert.deepEqual(shown(), ['scaleType', 'curve', 'base', 'roundTo', 'extras']);
 
+  // Switching to metric puts Step and Every N steps in the slot the curve had, so the tab still reads
+  // top to bottom in the same order whichever model is chosen.
   const type = item.querySelector('[data-row-field="scaleType"]');
-  const modular = type.querySelectorAll('input').filter((r) => r.value === 'modular')[0];
-  modular.checked = true;
-  modular.dispatchEvent(new shim.Event('change', { bubbles: true }));
-  assert.deepEqual(shown(), ['scaleType', 'ratio', 'base', 'roundTo', 'extras']);
+  const metric = type.querySelectorAll('input').filter((r) => r.value === 'metric')[0];
+  metric.checked = true;
+  metric.dispatchEvent(new shim.Event('change', { bubbles: true }));
+  assert.deepEqual(shown(), ['scaleType', 'step', 'mod', 'base', 'roundTo', 'extras']);
 });
 
 test('every mode generates exactly what it generated before the panel', () => {
@@ -153,9 +156,9 @@ test('the preview draws the corner at its real size, on the box the frame draws'
   const out = readout(L.radiusPreviewHtml(config, 'radius', 'desktop'));
 
   assert.deepEqual(out.names, ['none', 'xs', 'sm', 'md', 'lg', 'xl']);
-  assert.deepEqual(out.values.map(Number), [0, 4, 8, 12, 16, 24]);
+  assert.deepEqual(out.values.map(Number), [0, 4, 6, 10, 14, 20]);
   // Real px, not a scale: a radius is judged against the corner it will sit on.
-  assert.deepEqual(out.radii, [0, 4, 8, 12, 16, 24]);
+  assert.deepEqual(out.radii, [0, 4, 6, 10, 14, 20]);
   out.boxes.forEach((box) => assert.deepEqual(box, [200, 120], "the frame's own box"));
   assert.deepEqual(L.radiusPreviewBox(), { width: 200, height: 120 });
 });

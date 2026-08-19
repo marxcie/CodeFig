@@ -246,6 +246,15 @@ class Element {
     // A real NodeList has forEach; the renderer relies on it.
     return out;
   }
+  /** Is `node` this element or inside it? The renderer uses it to leave a control mid-edit alone. */
+  contains(node) {
+    let el = node;
+    while (el) {
+      if (el === this) return true;
+      el = el.parentNode;
+    }
+    return false;
+  }
   closest(sel) {
     const parts = parseSelector(sel);
     let el = this;
@@ -288,6 +297,17 @@ class Element {
   }
   focus() { this._focused = true; }
   select() { this._selected = true; }
+
+  /**
+   * No layout here, so every box is empty. That is not a stub that lies: the curve editor divides by
+   * the box to turn a pointer position into a coordinate, and it already refuses a zero-sized box
+   * rather than producing Infinity. A test that wants to simulate a drag sets the numbers itself.
+   */
+  getBoundingClientRect() {
+    return this._rect || { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 };
+  }
+  setPointerCapture() {}
+  releasePointerCapture() {}
 }
 
 /**
@@ -352,13 +372,22 @@ class ShimEvent {
   stopPropagation() { this._stopped = true; }
 }
 
-function install() {
+function install(extras) {
   const document = {
     createElement: (tag) => new Element(tag),
+    // SVG, for the curve editor. The namespace is dropped: nothing here resolves one, and the only
+    // thing that changes downstream is `serialize`, which writes the tag it was given either way.
+    // Kept as a distinct entry point rather than an alias so a renderer calling it against a shim
+    // that predates SVG fails loudly, which is this file's whole convention.
+    createElementNS: (ns, tag) => new Element(tag),
     createTextNode: (t) => new TextNode(t),
     documentElement: new Element('html'),
   };
-  const window = { marked: undefined };
+  // `CodeFigBezier` is what `build-bezier.js` puts on the real window. A test that wants the curve
+  // editor to do arithmetic passes it in; one that only wants the markup does not, and the control
+  // degrades to drawing a straight line rather than throwing — which is also what the plugin does if
+  // the inlined block ever goes missing.
+  const window = Object.assign({ marked: undefined }, extras || {});
   global.document = document;
   global.window = window;
   global.Event = ShimEvent;

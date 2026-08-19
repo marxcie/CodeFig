@@ -2607,7 +2607,14 @@
            `overflow: hidden` on `.type-specimen` could not fix that: by then the grid had already been
            laid out wide, and clipping the outer box does not put the columns back. */
         min-width: 0;
-        overflow: hidden;
+        /* **Clipped sideways only.** `overflow: hidden` clips both axes, and a line height below the font
+           size — tight display type — puts the glyphs outside their own line box, so the top and bottom of
+           every large step were cut off. `clip` is the one that does not force the other axis to `auto`,
+           so the sample can be as tall as it needs while the long line still stops at the panel edge.
+           The height it needs is reserved by a `min-height` the generator computes, since only it knows
+           the size, the leading and the line count. */
+        overflow-x: clip;
+        overflow-y: visible;
       }
 
       /* ============================================================
@@ -3283,7 +3290,6 @@
         border-radius: var(--radius-md);
         background: var(--border-color);
         color: var(--text-primary);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
         font-size: var(--font-size-body);
         line-height: 1.45;
         /* It is placed against a button, never hovered itself — pointer events would let it eat the
@@ -3334,4 +3340,269 @@
 
       .config-ui-tip .docs-rendered > :last-child {
         margin-bottom: 0;
+      }
+
+      /* ============================================================
+         THE CURVE EDITOR — `.config-ui-curve`
+
+         Its own namespace, all of it. The parts here are a select, a button, an SVG and a text
+         input, and every one of those already has a shared class in this sheet that would have
+         fitted: reusing them is how `@rows` boxed every form in the plugin. So the select is
+         `.config-ui-curve__preset` and not `.config-ui-input--select`, and the widths and paddings
+         are stated rather than inherited.
+
+         Nothing here is a modifier of `.config-ui-field` or `.config-ui-row`.
+         ============================================================ */
+
+      .config-ui-curve {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        width: 100%;
+        max-width: 320px;
+      }
+
+      .config-ui-curve__head {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+      }
+
+      .config-ui-curve__preset {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 28px;
+        padding: 0 var(--space-sm);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: var(--input-bg);
+        color: var(--text-primary);
+        font-family: var(--font-family-base);
+        font-size: var(--font-size-body);
+      }
+
+      .config-ui-curve__toggle {
+        flex: 0 0 auto;
+        height: 28px;
+        padding: 0 var(--space-md);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-family: var(--font-family-base);
+        font-size: var(--font-size-small);
+        cursor: pointer;
+      }
+
+      .config-ui-curve__toggle:hover:not(:disabled) {
+        background: var(--hover-bg);
+      }
+
+      .config-ui-curve__toggle:disabled {
+        color: var(--text-secondary);
+        cursor: default;
+      }
+
+      /* Square, and it has to stay square: the curve is read as a departure from the 45° diagonal,
+         and a rectangle makes an ease-in look like an ease-out at the wrong aspect. `preserveAspect
+         Ratio="none"` on the element lets the viewBox stretch, so the squareness is enforced here. */
+      .config-ui-curve__canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        /* Handles at the corners hang outside the plot — see the note in `buildCurveControl`, and the
+           breathing room they need is the margin on `.config-ui-curve__plot-wrap`. */
+        overflow: visible;
+        touch-action: none;
+      }
+
+      .config-ui-curve__plot {
+        fill: var(--bg-tertiary);
+        stroke: var(--border-color);
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .config-ui-curve__grid {
+        stroke: var(--border-light);
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+      }
+
+      /* The straight ramp, always drawn. A curve means nothing without the thing it departs from. */
+      .config-ui-curve__diagonal {
+        stroke: var(--text-secondary);
+        stroke-width: 1;
+        stroke-dasharray: 3 3;
+        opacity: 0.5;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .config-ui-curve__path {
+        fill: none;
+        stroke: var(--active-bg);
+        stroke-width: 2;
+        stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .config-ui-curve__tether {
+        stroke: var(--active-bg);
+        stroke-width: 1;
+        opacity: 0.4;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .config-ui-curve__end {
+        fill: var(--text-secondary);
+        stroke: none;
+      }
+
+      .config-ui-curve__handle {
+        fill: var(--input-bg);
+        stroke: var(--active-bg);
+        stroke-width: 2;
+        cursor: grab;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .config-ui-curve__handle:hover,
+      .config-ui-curve__handle:focus {
+        fill: var(--active-bg);
+        outline: none;
+      }
+
+      .config-ui-curve__handle:active {
+        cursor: grabbing;
+      }
+
+      /* The middle anchor sits *on* the curve rather than off it, so it is filled by default —
+         the two kinds of point are doing different jobs and a reader should not have to count. */
+      .config-ui-curve__handle--anchor {
+        fill: var(--active-bg);
+        stroke: var(--input-bg);
+      }
+
+      /* Over the canvas, not inside it. See the note in `buildCurveControl`: SVG text scales with the
+         viewBox, so a size declared here was not the size that rendered.
+
+         **The height is stated, not derived from the width.** It used to come from `aspect-ratio: 1/1` on
+         the canvas, and that made the row's height depend on a width the grid had not finished resolving:
+         the cell was sized as though the canvas were 304.88px, the canvas then painted at 320, and the
+         control overflowed its cell by 15px — straight over the field below it. Nothing about the control
+         was wrong, and it only showed in some states, which is what made it look like a two-versus-three
+         point problem. A number here cannot race anything.
+
+         The margin is the room the corner handles need; they hang outside the plot on purpose. */
+      .config-ui-curve__plot-wrap {
+        position: relative;
+        height: 320px;
+        margin: 7px 0;
+      }
+
+      .config-ui-curve__empty-note {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        font-family: var(--font-family-base);
+        font-size: var(--font-size-small);
+        pointer-events: none;
+      }
+
+      .config-ui-curve__empty-note[data-shown="true"] {
+        display: flex;
+      }
+
+      .config-ui-curve__canvas--empty .config-ui-curve__plot {
+        stroke-dasharray: 4 3;
+      }
+
+      /* Monospace, because it is a coordinate list people paste in and read back digit by digit. */
+      .config-ui-curve__text {
+        width: 100%;
+        box-sizing: border-box;
+        height: 28px;
+        padding: 0 var(--space-sm);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: var(--input-bg);
+        color: var(--text-primary);
+        font-family: var(--font-family-mono);
+        font-size: var(--font-size-code);
+      }
+
+      /* A paste that is not a curve. Marked rather than reverted: throwing the text away as you
+         type is how a field stops being a paste target, and the last good curve is still live
+         underneath — nothing was overwritten. */
+      .config-ui-curve--bad .config-ui-curve__text {
+        border-color: #d93025;
+      }
+
+      /* ------------------------------------------------------------
+         Growth mode — the open-ended scale editor
+
+         Same control, log y axis: a constant ratio is a straight line and its slope is the growth.
+         Only the parts that differ are here; everything else is shared with the bounded editor.
+         ------------------------------------------------------------ */
+
+      /* The growth handle is the far end of the line, so it reads as an end rather than as one of the
+         two shape handles hanging off it. Filled, and a size up. */
+      .config-ui-curve__handle--growth {
+        fill: var(--active-bg);
+        stroke: var(--input-bg);
+        stroke-width: 2;
+        cursor: ns-resize;
+      }
+
+      .config-ui-curve__handle--growth:hover,
+      .config-ui-curve__handle--growth:focus {
+        stroke: var(--active-bg);
+        outline: none;
+      }
+
+      /* ------------------------------------------------------------
+         The label sits at the top of a curve, not in the middle of it
+
+         A stacked cell is `align-items: center`, which is right for a 32px input and wrong for a 380px
+         plot — the label floated halfway down the canvas, level with nothing. Aligned to the start and
+         given the head's own height so it centres against the row of buttons instead.
+         ------------------------------------------------------------ */
+      .config-ui-rows-cell--stacked:has(.config-ui-curve) {
+        align-items: start;
+      }
+
+      .config-ui-rows-cell--stacked:has(.config-ui-curve) .config-ui-rows-cell-label {
+        min-height: 28px;
+      }
+
+      /* ------------------------------------------------------------
+         A unit inside the input — `150` reading as `150 %`
+
+         Not a placeholder: a placeholder disappears the moment you type, and a unit has to stay. A
+         reader coming back to `-1.5` needs to know whether that is pixels or percent, and the field
+         is the only place that can say so without a paragraph.
+         ------------------------------------------------------------ */
+
+      .config-ui-unit {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      /* Room for the mark, so a long value never runs underneath it. */
+      .config-ui-unit .config-ui-input {
+        padding-right: 24px;
+      }
+
+      .config-ui-unit__mark {
+        position: absolute;
+        right: var(--space-sm);
+        color: var(--text-secondary);
+        font-size: var(--font-size-small);
+        line-height: 1;
+        /* Decoration: the click belongs to the input underneath it. */
+        pointer-events: none;
       }

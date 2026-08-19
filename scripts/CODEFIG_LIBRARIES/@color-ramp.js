@@ -22,7 +22,7 @@
 // disagree about where a seed landed or what the gamut refused.
 // @DOC_END
 
-@import { applyEase } from "@Math Helpers"
+@import { bezierAt, bezierNormalise, bezierFromEase } from "@Bezier"
 @import { oklchFromHex, oklchHslFromHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare } from "@OKLCH"
 
 // ========================================
@@ -239,36 +239,49 @@ function colorsPct(value) {
  * The two segment curves, as ids the ladder understands.
  *
  * *Lower* is bright→middle and *Upper* is middle→dark — the reading order of the frame, and the order of the
- * step names. A family of `original` is not a curve: it resolves to `linear` here so the ladder has
+ * step names. *Original* is not a curve: it comes back as an empty one, so the ladder has
  * something to walk, and is reported separately so the caller can substitute the file's own steps.
  *
  * The pair comes from the shared block in OKLCH, where the ladder belongs to the collection, and from the
  * mode in HSL, where it belongs to the mode. That is the whole of the HSL-only rule.
  */
 function colorsSegmentCurves(config, mode, oklch) {
-  // **OKLCH still reads the one shared curve.** Moving it to a pair in the shared block is a separate step,
-  // and until that block draws the two rows, taking the pair from `config` here would leave OKLCH stuck on
-  // Original with no control able to change it. So the split is HSL-only for now, which is also exactly the
-  // scope of the HSL-only rule: a mode's own curve.
-  if (oklch) {
-    var shared = config.curve || 'sine-ease-in-out';
-    return { lower: shared, upper: shared, lowerOriginal: false, upperOriginal: false };
-  }
-  var from = mode;
-  // **A pair, not a composed id.** `{ type, ease }` is what `applyEase` actually takes; spelling it as
-  // `quad-ease-in` and looking that up in `oklchCurves()` sent every combination the old single dropdown
-  // never offered — 13 of 20 — quietly back to linear.
+  // **Where the pair lives is the whole of the model difference.** OKLCH shares one ladder across every mode,
+  // so its two segment curves belong to the collection and are read from the shared block; in HSL the ladder
+  // is the mode's own, so they are read from the mode. Same controls, same maths, different owner — which is
+  // also why a mode's Lower and Upper rows are `{colorModel=hsl}`: in OKLCH they would be controls that drive
+  // nothing, and a panel that shows one of those is worse than a panel that shows none.
+  //
+  // A collection whose curve is *Original* therefore puts every mode on the file's own steps at once, which is
+  // what makes a fresh OKLCH load as quiet as a fresh HSL one.
+  var from = oklch ? config : mode;
+  /**
+   * **A curve is coordinates.** The panel writes an array — four numbers for one segment, ten for two,
+   * and `[]` for *Original*, which is not a curve at all but the file's own steps.
+   *
+   * A config written before the editor carries `{ family, easing, amount }` instead, and is converted here
+   * rather than kept on a path of its own. `bezierFromEase` is exact for `linear`, `quad` and `cubic`, and
+   * within 0.01 of the rest — the numbers are in `bezierEaseTable`. Two evaluators would disagree exactly
+   * where it matters least visibly: a file written by the old panel, opened in the new one.
+   */
   function curveFor(which) {
-    var held = (from && from[which]) || {};
-    var family = held.family || 'original';
-    if (family === 'original') return { curve: { type: 'linear', ease: 'none' }, original: true };
-    if (family === 'linear') return { curve: { type: 'linear', ease: 'none' }, original: false };
-    var ease = held.easing || 'inout';
+    var held = from ? from[which] : null;
+
+    if (Array.isArray(held)) {
+      var points = bezierNormalise(held);
+      return { curve: points, original: points.length === 0 };
+    }
+
+    var legacy = held || {};
+    var family = legacy.family || 'original';
+    if (family === 'original') return { curve: [], original: true };
+    if (family === 'linear') return { curve: bezierFromEase('linear', 'none', 1), original: false };
+    var ease = legacy.easing || 'inout';
     if (ease !== 'in' && ease !== 'out' && ease !== 'outin') ease = 'inout';
     // 0-100 in the panel, 0-1 in the maths. Absent means the whole curve, which is what every config written
-    // before the control existed meant.
-    var amount = colorsNumber(held.amount, 100) / 100;
-    return { curve: { type: family, ease: ease, amount: oklchClamp01(amount) }, original: false };
+    // before the control existed meant. `bezierFromEase` folds it into the handles, where it is exact.
+    var amount = colorsNumber(legacy.amount, 100) / 100;
+    return { curve: bezierFromEase(family, ease, oklchClamp01(amount)), original: false };
   }
   var lower = curveFor('lower'), upper = curveFor('upper');
   return { lower: lower.curve, upper: upper.curve,
@@ -432,8 +445,9 @@ function colorsAlignment(config) {
   var parsed = colorsParseSteps(config.steps);
   var steps = parsed.steps.length ? parsed.steps : colorsPlaceholderSteps();
   var oklch = (config.colorModel || 'hsl') !== 'hsl';
+  // The shared ladder is built with the shared pair, or the two would disagree about the collection's curve.
   var shared = oklch
-    ? oklchLadder(colorsLightnessAnchors(config), config.curve || 'sine-ease-in-out', steps)
+    ? oklchLadder(colorsLightnessAnchors(config), colorsSegmentCurves(config, {}, true), steps)
     : null;
 
   var tolerance = colorsTolerance();

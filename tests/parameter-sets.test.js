@@ -43,6 +43,7 @@ function load() {
   vm.createContext(ctx);
   loadInto(ctx, '@foundation.js');
   loadInto(ctx, '@math-helpers.js');
+  loadInto(ctx, '@bezier.js');
   loadInto(ctx, '@scale-models.js');
   loadInto(ctx, '@linear-ramp.js');
   return ctx;

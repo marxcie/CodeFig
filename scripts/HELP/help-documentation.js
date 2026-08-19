@@ -230,9 +230,14 @@
 // | `@rows: …` + `@tabs` | the same array as one tab per entry, fields stacked and labelled |
 // | `@rows: …` + `@blocks` | every entry in full, one under the next, each titled from its `name` |
 // | `@group: key:type=Label\|…` | an **object** as one labelled row of captioned parts |
+// | `@curve` | the bezier curve editor, on an **array**. Four numbers is one segment, ten is two, `[]` is none |
+// | `@curve @allowOriginal` | the same, with *Original* — the empty curve — offered in its preset list |
+// | `key:curve=Label` inside `@rows` | the same editor as one column of a row. `key:curve(original)` to offer *Original* |
+// | `key:curve(growth:other)` | the **open-ended** editor: log axis, a handle for the growth, written to the config as `other` |
 // | `key:{…}=Label` inside `@rows` | the same group, nested as one column of a row |
 // | `#Heading` inside `@rows` | a heading between an entry's rows, one level below the block title |
 // | `key:(a\|b)` in a column | a dropdown in that cell. All-numeric options read back as numbers |
+// | `key:number@unit="%"` | a unit printed inside the input at its right edge. Unlike a placeholder it stays when there is a value |
 // | `key:(1.25:1.25 Major third)` | the same, with the words for the value. A bare option is its own label |
 // | `key:radio(a:First\|b:Second)` | radio buttons in that cell instead of a dropdown |
 // | `key:type{other=value}` in a column | that column appears only while another column **in the same row** holds one of those values, or — when no column is named that — the form field of that name. A cell nobody can see writes nothing |
@@ -328,6 +333,11 @@ var modes = [
 // shared ladder above it are the same shape rather than two lookalikes.
 var lightness = { bright: 98.5, middle: 62, dark: 18 }; // @group: bright:number=Bright|middle:number=Middle|dark:number=Dark @label: Lightness @helper: 0 to 100 in the UI, 0 to 1 in the data
 //
+// `@unit="%"` prints a unit inside the input, at its right edge. It is **not** a placeholder — a
+// placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back
+// to `-1.5` can tell whether that is pixels or percent.
+var lineHeight = { base: 150, max: 110 }; // @group: base:number@unit="%"=Base|max:number@unit="%"=Largest @label: Line height
+//
 // # A column that depends on its row
 // Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the
 // scale type and watch the fields change — each tab is judged on its own values, so two modes can be
@@ -343,6 +353,41 @@ var breakpoints = [
   { label: "sm", min: 640 },
   { label: "md", min: 834 },
 ]; // @rows: label:text=Name|min:number=Min width @label: Breakpoints
+//
+// # A curve you can drag
+// `@curve` on an **array** of four numbers — the two handles of one cubic, exactly what `cubic-bezier()`
+// carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the
+// field underneath. All four are the same edit: the numbers are the value and everything on screen is a
+// reading of them, which is why the dropdown says *Custom* the moment a curve stops being a preset.
+var easing = [0.37, 0, 0.63, 1]; // @curve @label: Curve @helper: The dashed diagonal is the straight ramp — a curve is read as how far it departs from it.
+//
+// **Add middle point** makes it a three-point curve: ten numbers, a middle anchor you can drag in both
+// directions, and a handle either side of it. The split is exact, so adding the point does not move the
+// curve. It is also what `easeInOut` has always been — the in-curve over the first half and the out-curve
+// over the second is a middle anchor at the centre, written as an `if`.
+var twoSegment = [0.17, 0, 0.33, 0.23, 0.5, 0.5, 0.67, 0.77, 0.83, 1]; // @curve @label: Two-segment curve
+//
+// `@allowOriginal` adds *Original* to the preset list — the empty curve, for a script that has something
+// to fall back on. Colors uses it to mean "leave the steps this file already has".
+var maybeCurve = []; // @curve @allowOriginal @label: Curve or original @helper: Shown empty. Pick a preset to give it points.
+//
+// # A scale with no far end
+// `curve(growth:ratio)` inside `@rows` — the **open-ended** editor, for a scale whose largest value nobody
+// knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the
+// growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last
+// token the line carries on faintly, because it does — adding a token extends the scale rather than
+// squeezing what is already generated into the same range.
+//
+// **The dropdown is the shape control.** *Linear* means no shape and draws no handles; anything else
+// reveals them, for when the growth should vary across the scale — tighter at the small end, looser at the
+// top. The field underneath carries the whole scale, growth and shape together, so copying it out and
+// pasting it back reproduces it.
+//
+// The growth has **no field of its own**: one idea, one control. It is still written to the config under
+// the name after the colon, so the block reads `ratio: 1.5` beside `curve: []`.
+var openScale = [
+  { name: "Value", ratio: 1.5, curve: [] },
+]; // @rows: name:text=Mode|curve:curve(growth:ratio)=Scale @tabs @label: Open-ended scale
 //
 // # What the form cannot hold
 var nested = { outer: { inner: 1 } }; // @label: Nested object @helper: an object with no @rows — the form says so rather than dropping it

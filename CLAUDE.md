@@ -73,6 +73,12 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 
 Neither is derived from a printer that renders the other. **The block is the format**: importing a config fills values into the pristine block the UI already holds, so comments and key order survive by construction rather than by a round-trip test. That conversion is UI-side, because the UI is the only context with every script's source embedded — the sandbox runs user scripts through `new Function` and cannot reach another script's text.
 
+**`scripts/CODEFIG_LIBRARIES/@bezier.js` is inlined into the UI as well as shipped.** It is the single implementation of the curve maths — a user script `@import`s it and the sandbox runs that text, and the config UI needs the same arithmetic to *draw* the editor. `build-bezier.js` exports `inlineBezier(html)`, which wraps it into the `<script id="bezier-js">` block as `window.CodeFigBezier`, ahead of config-ui because `renderer.js` reads that global. It also exports `loadBezierGlobal()`, the same object for Node — used by `build-style-reference.js` (so the reference page draws real curves rather than nine empty boxes) and by `tests/config-ui-curve.test.js`. One export list, three consumers; a function renamed out from under the editor fails the build instead of drifting. A second copy of the maths in `src/config-ui/` would be two answers to "where does this handle sit", which is the one question the editor exists to answer.
+
+**A curve is a flat array of numbers**: 4 for one cubic segment, 10 for two with a middle anchor, `[]` for no curve. The coordinates are the whole value — no family name is stored beside them, so the preview cannot show one curve while a run generates another, and the preset caption is looked up from the numbers on every redraw rather than remembered. That is the *"ask the question, don't store the answer"* rule, applied to the thing most likely to want a flag.
+
+**`bezier` replaced `modular` as a scale model, and generates identical numbers.** A constant ratio is a straight line in log space, so a straight bezier between the ends a ratio implies reproduces it term for term (pinned in `tests/scale-models.test.js` to 1e-12). `modular` is still accepted and converts through `modularAsBezier` — not politeness: those scales are already variables in people's files, and a token that comes back a different number breaks every binding to it. It is kept out of `scaleModelNames()` so nothing offers it to anyone new.
+
 **`src/config-ui/`** (`parser.js`, `renderer.js`, `controller.js`, `bridge.js`) turns a script's config comment block into a rendered form. `build-config-ui.js` exports `inlineConfigUI(html)`, a pure string transform that concatenates these four files into the `<script id="config-ui-js">` block on the way to `dist/ui.html`. In `src/ui.html` that block is a one-line stub and stays that way — the bundle is never written back to source.
 
 **`bundle-ui.js`** inlines vendors (CodeMirror, marked) into `dist/ui.html`, and `__CODEFIG_BUILD_IS_DEV__` is substituted with `true`/`false` so the production UI never reaches for localhost.
@@ -85,7 +91,7 @@ Two rules a spec must follow: call `testFinish()` (completion is inferred, so si
 
 ## Script authoring conventions (`scripts/`)
 
-Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `prebuilt`, `HELP/` → type `help`. Library files are `@`-prefixed (`@core-library.js`, `@variables.js`, `@styles.js`, `@pattern-matching.js`, `@replacement-engine.js`, `@math-helpers.js`, `@infopanel.js`, `@codefig-ui.js`, `@foundation-overview.js`). New folders become new categories.
+Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `prebuilt`, `HELP/` → type `help`. Library files are `@`-prefixed (`@core-library.js`, `@variables.js`, `@styles.js`, `@pattern-matching.js`, `@replacement-engine.js`, `@math-helpers.js`, `@bezier.js`, `@infopanel.js`, `@codefig-ui.js`, `@foundation-overview.js`). New folders become new categories.
 
 **Excluded from the build:** anything whose file or folder name starts with `_` or `.`, and `.bak*`/`.backup`/`.old`/`.tmp` files (`shouldExclude()`, duplicated in `build-scripts.js` and `validate-scripts.js`). `_` means **"never shipped"**, which covers two different things:
 

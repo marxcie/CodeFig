@@ -25,7 +25,7 @@ function load() {
     Math, String, Array, Object, JSON, Date, isNaN, isFinite, parseInt, parseFloat, Number, RegExp
   };
   vm.createContext(ctx);
-  for (const file of ['@foundation.js', '@math-helpers.js', '@scale-models.js', '@linear-ramp.js']) {
+  for (const file of ['@foundation.js', '@math-helpers.js', '@bezier.js', '@scale-models.js', '@linear-ramp.js']) {
     const source = fs.readFileSync(path.join(LIBS, file), 'utf8');
     for (const table of source.match(/^var [A-Z][A-Z0-9_]* = \{[\s\S]*?\n\};/gm) || []) {
       vm.runInContext(table, ctx);

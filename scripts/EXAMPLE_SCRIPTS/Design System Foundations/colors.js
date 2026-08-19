@@ -36,10 +36,17 @@
 // variable names, and hue, chroma and the lightness anchors from the real first, middle and last values.
 //
 // **It does not guess a curve.** An existing ramp is a list of colours with no record of how it was made,
-// and a hand-made one may sit on no curve at all — so *Curve type* keeps its default and the panel draws
-// what is in the file *underneath* what it would generate, with the lightness gap per step. That comparison
-// is the honest version of a fit, and it is the only place you can see whether a collection you already have
-// sits on the ladder.
+// and a hand-made one may sit on no curve at all — so the curve stays on *Original* and the panel draws what
+// is in the file *underneath* what it would generate, with the lightness gap per step. That comparison is the
+// honest version of a fit, and it is the only place you can see whether a collection you already have sits on
+// the ladder.
+//
+// ## The curve
+// Two anchors and two handles, dragged, arrow-keyed, chosen from a preset list, or pasted as
+// `cubic-bezier(…)`. **Add middle point** makes it three anchors and two segments, so the half above the
+// middle can bend differently from the half below — which is what a measured neutral ramp actually does. The
+// coordinates are the whole of it: there is no family name stored beside them, so the preview cannot show
+// one curve while the run generates another.
 //
 // What it will not touch:
 // - **An aliased variable is read through to its value and never written.** An alias is a deliberate
@@ -59,7 +66,7 @@
 // everything it reaches for has to be named here too. `npm run validate` makes that a build error rather
 // than a ReferenceError swallowed by a caller's try/catch.
 @import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
-@import { applyEase } from "@Math Helpers"
+@import { bezierAt, bezierNormalise, bezierFromEase, bezierWithMiddle, bezierWithoutMiddle, bezierParse, bezierFormat, bezierEaseName } from "@Bezier"
 @import { oklchFromHex, oklchHslFromHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare, oklchDistance } from "@OKLCH"
 @import { colorsPlaceholderSteps, colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel, colorsSegmentCurves, colorsGenerateMode, colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip, colorsAlignment, colorsBannerHtml, colorsTolerance, colorsEscapeHtml, colorsPct } from "@Color Ramp"
 
@@ -87,7 +94,11 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   // --- @section
 
   // # OKLCH settings @showWhen: colorModel=oklch
-  curve: "", // @options: linear:Linear|sine-ease-in-out:Sine easeInOut|sine-ease-in:Sine easeIn|sine-ease-out:Sine easeOut|quad-ease-in-out:Quad easeInOut|cubic-ease-in-out:Cubic easeInOut|quart-ease-in-out:Quart easeInOut|circ-ease-in-out:Circ easeInOut|exponential-ease-in-out:Exponential easeInOut @label: Curve type @showWhen: colorModel=oklch
+  // The same curve editor a mode has, at collection scope: the ladder is shared, so the curve belongs to
+  // the collection rather than to one of its modes. Lower is bright->middle, Upper is middle->dark, and
+  // Original is the ramp already in the file — an empty curve, because there is no curve.
+  lower: [], // @curve @allowOriginal @label: Lower curve @showWhen: colorModel=oklch @helper: Drag a handle, pick a preset, or paste coordinates. Add middle point splits it in two, so one half can bend differently from the other — which is what a real neutral ramp does.
+  upper: [], // @curve @allowOriginal @label: Upper curve @showWhen: colorModel=oklch
   // @preview
   lightness: {}, // @group: bright:number=Bright|middle:number=Middle|dark:number=Dark @label: Lightness @showWhen: colorModel=oklch @helper: 0 to 100. The ends hold exactly; the curve fills between them.
 
@@ -95,14 +106,14 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   modes: [
     {
       name: "",
-      lower: { family: "original", easing: "inout", amount: 100 },
-      upper: { family: "original", easing: "inout", amount: 100 },
+      lower: [],
+      upper: [],
       seed: { hex: "", placement: "", lock: false },
       bright: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 98 },
       middle: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 46 },
       dark: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 4 }
     }
-  ], // @rows: name:text=Mode|lower:{family:(original:Original|linear:Linear|sine:Sine|quad:Quad|cubic:Cubic|circ:Circ)=Family|easing:(in:easeIn|out:easeOut|inout:easeInOut|outin:easeOutIn){family=sine|quad|cubic|circ}=Easing|amount:number{family=sine|quad|cubic|circ}@placeholder="eg. 100"=Amount @helper: How far to bend towards the chosen family — 0 is linear. The bend is a share of the segment it spans, so the same number moves a short ramp less than a long one.}=Lower curve|upper:{family:(original:Original|linear:Linear|sine:Sine|quad:Quad|cubic:Cubic|circ:Circ)=Family|easing:(in:easeIn|out:easeOut|inout:easeInOut|outin:easeOutIn){family=sine|quad|cubic|circ}=Easing|amount:number{family=sine|quad|cubic|circ}@placeholder="eg. 100"=Amount @helper: How far to bend towards the chosen family — 0 is linear. The bend is a share of the segment it spans, so the same number moves a short ramp less than a long one.}=Upper curve|#Seed{lower.family=linear|sine|quad|cubic|circ}|seed:{hex:text@placeholder="eg. #71717A"=Seed color|placement:text@placeholder="Auto"=Token placement|lock:checkbox=Lock seed @helper: On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder.}{lower.family=linear|sine|quad|cubic|circ}=Seed|#Palette|bright:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Bright|middle:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Middle|dark:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower.family=original;upper.family=original]=Dark @disabledNote: Anchors take effect once you choose a curve.|@preview @blocks @label: Modes
+  ], // @rows: name:text=Mode|lower:curve(original){colorModel=hsl}=Lower curve @helper: Bright to middle. Drag a handle, pick a preset, or paste coordinates.|upper:curve(original){colorModel=hsl}=Upper curve @helper: Middle to dark.|#Seed{lower=curve}|seed:{hex:text@placeholder="eg. #71717A"=Seed color|placement:text@placeholder="Auto"=Token placement|lock:checkbox=Lock seed @helper: On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder.}{lower=curve}=Seed|#Palette|bright:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower=original;upper=original]=Bright|middle:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower=original;upper=original]=Middle|dark:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[lower=original;upper=original]=Dark @disabledNote: Anchors take effect once you choose a curve.|@preview @blocks @label: Modes
 
   // @CONFIG_END
 };

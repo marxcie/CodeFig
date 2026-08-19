@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { inlineVendors } = require('./bundle-ui.js');
 const { inlineConfigUI } = require('./build-config-ui.js');
+const { inlineBezier } = require('./build-bezier.js');
 const { inlineImportResolver } = require('./build-import-resolver.js');
 const { inlineAppCSS } = require('./build-app-css.js');
 
@@ -142,6 +143,8 @@ function updateUIHtml() {
   // </script>-like strings and turns the head <link> tags into <style> elements, so
   // the other regexes stay on a small document with exactly one match each.
   let uiContent = fs.readFileSync(uiTemplatePath, 'utf8');
+  // Ahead of config-ui: the curve editor in renderer.js reads window.CodeFigBezier.
+  uiContent = inlineBezier(uiContent);
   uiContent = inlineConfigUI(uiContent);
   uiContent = inlineImportResolver(uiContent);
   uiContent = inlineAppCSS(uiContent);

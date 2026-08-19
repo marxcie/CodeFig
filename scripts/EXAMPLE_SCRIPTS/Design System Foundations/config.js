@@ -43,6 +43,7 @@
 @import { readFoundation, toPortableConfig, toDomainConfig, formatConfigBlock, foundationDomainScriptName, serialisePortableConfig, parsePortableConfig, normaliseConfig, describeConfigTranslations, describeFoundation, writeConfigToTextLayer, readConfigFromTextLayer, writeRegistry, writeManifest, stampToken, namePrefix, viewportKeyFromLabel } from "@Foundation"
 @import { spacingRampSpec, radiusRampSpec, adoptRamp } from "@Linear Ramp"
 @import { scaleSequence, recogniseScale, resolveModularRatio } from "@Scale Models"
+@import { bezierAt } from "@Bezier"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { displayResults, createResult, createCopyResult, requestClipboardCopy } from "@InfoPanel"
 

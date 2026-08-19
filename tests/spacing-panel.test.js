@@ -24,7 +24,7 @@ const SPACING = path.join(ROOT, 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Fou
 
 function libs() {
   const dir = path.join(ROOT, 'scripts', 'CODEFIG_LIBRARIES');
-  const src = ['@math-helpers.js', '@scale-models.js', '@core-library.js', '@foundation.js', '@linear-ramp.js']
+  const src = ['@math-helpers.js', '@bezier.js', '@scale-models.js', '@core-library.js', '@foundation.js', '@linear-ramp.js']
     .map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   return new Function('figma', 'console', 'window',
     src + '; return { spacingPreviewHtml: spacingPreviewHtml, rampModeToSize: rampModeToSize,' +
@@ -99,7 +99,8 @@ test('a mode shows the fields its scale type uses, and no others', () => {
   // **Step and Every N steps sit where Scaling method does**, not after Base unit. Both frames put Base
   // unit directly after Scaling method, and these two are what *replaces* it under a metric scale — so
   // the field that changes meaning keeps its position, and the three panels read the same way down.
-  assert.deepEqual(shown(), ['scaleType', 'step', 'mod', 'base', 'roundTo', 'extras']);
+  // **Bezier is the shipped default**, so a fresh panel opens on the curve.
+  assert.deepEqual(shown(), ['scaleType', 'curve', 'base', 'roundTo', 'extras']);
 
   // **Radios, at Márton's request** — *"Change Scaling type selector to radio buttons"*, which is also
   // what his frames show. This picked a `<select>` value before; the assertions about which fields a
@@ -112,9 +113,9 @@ test('a mode shows the fields its scale type uses, and no others', () => {
     input.dispatchEvent(new shim.Event('change', { bubbles: true }));
   };
 
-  pick('modular');
-  assert.deepEqual(shown(), ['scaleType', 'ratio', 'base', 'roundTo', 'extras'],
-    'a ratio in that same slot, and neither the step nor the module size');
+  pick('metric');
+  assert.deepEqual(shown(), ['scaleType', 'step', 'mod', 'base', 'roundTo', 'extras'],
+    'a step and how often it grows, in the slot the curve had');
 
   pick('fibonacci');
   assert.deepEqual(shown(), ['scaleType', 'step', 'base', 'roundTo', 'extras'],
@@ -142,13 +143,15 @@ test('the preview draws one mode, at half size, in pixels', () => {
   const out = readout(L.spacingPreviewHtml(config, 'spacing', 'desktop'));
 
   assert.deepEqual(out.names, ['px', 'xs', 'sm', 'md', 'lg', 'xl']);
-  // The numbers this script has always generated: the extra of 1 fills `px`, and the metric scale takes
-  // over from the base. The spelling changed for the panel; the output did not.
-  assert.deepEqual(out.values.map(Number), [1, 4, 8, 12, 16, 24]);
+  // The shipped default is a bezier ramp now: the extra of 1 fills `px`, and the curve takes over from
+  // the base at ×1.5 a step.
+  assert.deepEqual(out.values.map(Number), [1, 4, 6, 10, 14, 20]);
   // Half size, the same fixed scale as Grid's preview, so a ruler agrees with the number beside it.
-  assert.equal(out.bars[3], 6, 'md 12 draws 6px');
-  assert.equal(out.bars[5], 12, 'xl 24 draws 12px');
-  assert.deepEqual(out.notes, [], 'every value is already on the grid of 2, so it says nothing');
+  assert.equal(out.bars[3], 5, 'md 10 draws 5px');
+  assert.equal(out.bars[5], 10, 'xl 20 draws 10px');
+  // A geometric ramp does not land on a grid of 2, so the rounding says which values it moved — which is
+  // the difference between this default and the metric one it replaced.
+  assert.equal(out.notes.length, 3, 'three values were rounded onto the grid');
 });
 
 test('the preview follows the mode the panel is showing', () => {
@@ -164,6 +167,9 @@ test('a rounded value says what it was, and a nudged one says why', () => {
   // the token below was *nudged*, and calling that rounding is a small lie in the one place that exists
   // to explain a number.
   const config = P.parseConfigBlockObject(BLOCK);
+  // **Still written as `modular`, on purpose.** This is the shape a config saved before the curve editor
+  // has, and the numbers below are the ones it has always produced — the alias converting to a bezier ramp
+  // must not move a single one of them.
   const modular = JSON.parse(JSON.stringify(config));
   modular.modes[0] = { name: 'desktop', scaleType: 'modular', ratio: 1.618, base: 4, roundTo: 2, extras: [1] };
   const rounded = readout(L.spacingPreviewHtml(modular, 'spacing', 'desktop'));
@@ -213,4 +219,74 @@ test('a mode carries every key the config gave it', () => {
   );
   assert.deepEqual(old.base, { level: 'b', size: 4 });
   assert.equal(old.min, 1);
+});
+
+// ---------------------------------------------------------------------------
+// A scale nobody can generate says so, in the place the picture would be
+// ---------------------------------------------------------------------------
+
+test('a bezier ramp draws its curve, and a straight one is the old modular scale', () => {
+  const withCurve = (mode) => {
+    const config = P.parseConfigBlockObject(BLOCK);
+    config.modes = [Object.assign({ name: 'Value', roundTo: 2, extras: [1] }, mode)];
+    return readout(L.spacingPreviewHtml(config, 'spacing', 'Value')).values.map(Number);
+  };
+
+  // The scale a `modular` config with a ratio of 1.5 has always produced, and the same scale written the
+  // new way. Identical, which is the whole basis for retiring the model.
+  const legacy = withCurve({ scaleType: 'modular', base: 4, ratio: 1.5 });
+  const straight = withCurve({ scaleType: 'bezier', base: 4, ratio: 1.5, curve: [] });
+  assert.deepEqual(straight, legacy);
+  assert.deepEqual(legacy, [1, 4, 6, 10, 14, 20]);
+
+  // And a curve makes it something a single ratio could not say: tight at the bottom, open at the top.
+  const bent = withCurve({ scaleType: 'bezier', base: 4, ratio: 1.5, curve: [0.42, 0, 0.58, 0.35] });
+  assert.equal(bent[0], 1, 'the extra is still the extra');
+  assert.equal(bent[bent.length - 1], straight[straight.length - 1],
+    'bending redistributes; the top comes from the ratio and does not move');
+  assert.notDeepEqual(bent, straight);
+});
+
+test('a scale the generator refused is reported, not filled in', () => {
+  // **`rampValueAt` answers `opts.min` for a step the sequence does not have**, and the monotonic guard
+  // then walks those apart by the grid — so a refused scale used to render as six plausible numbers with a
+  // `console.warn` nobody sees. A bezier mode reaches that on its first click: `max` is required, and a
+  // mode switched over to it has none until somebody types one.
+  const refused = (mode) => {
+    const config = P.parseConfigBlockObject(BLOCK);
+    config.modes = [Object.assign({ name: 'Value', roundTo: 2, extras: [1] }, mode)];
+    return L.spacingPreviewHtml(config, 'spacing', 'Value');
+  };
+
+  const noRatio = refused({ scaleType: 'bezier', base: 4, curve: [] });
+  assert.match(noRatio, /needs a `ratio`/, 'it should say what is missing');
+  assert.deepEqual(readout(noRatio).values, [], 'and draw no numbers at all');
+
+  const zeroBase = refused({ scaleType: 'bezier', base: 0, ratio: 1.5, curve: [] });
+  assert.match(zeroBase, /base has to be above zero/);
+  assert.match(zeroBase, /Extra values/, 'and name the thing to do instead');
+  assert.deepEqual(readout(zeroBase).values, []);
+
+  // A max of 0 is a different mistake — an empty field, usually a mode just switched to this model. It gets
+  // the message about the end that is actually wrong; "put a 0 in Extra values" is advice about the other.
+  const zeroMax = refused({ scaleType: 'bezier', base: 4, max: 0, curve: [] });
+  assert.match(zeroMax, /largest value above zero/);
+  assert.doesNotMatch(zeroMax, /Extra values/);
+  assert.deepEqual(readout(zeroMax).values, []);
+
+  // Not a bezier rule — the same hole was open for every model that can refuse.
+  const noStep = refused({ scaleType: 'metric', base: 4 });
+  assert.match(noStep, /needs a positive `step`/);
+  assert.deepEqual(readout(noStep).values, []);
+});
+
+test('a base of 0 is a base, not a missing one', () => {
+  // `!sizes.base` treated it as a mode that declared nothing, so `buildRampScaleOpts` returned null and the
+  // viewport produced no options — and the early return it took was missing `adjustments`, so the caller
+  // died on `undefined.forEach` rather than saying anything. Two bugs behind one falsy check.
+  const config = P.parseConfigBlockObject(BLOCK);
+  config.modes = [{ name: 'Value', scaleType: 'metric', base: 0, step: 4, mod: 3, roundTo: 2, extras: [1] }];
+  const out = readout(L.spacingPreviewHtml(config, 'spacing', 'Value'));
+  assert.equal(out.values.length, 6, 'every token got a value');
+  assert.equal(Number(out.values[0]), 0, 'and the base of 0 is the smallest of them');
 });

@@ -6,10 +6,17 @@
 // Creates FLOAT variables with the **`CORNER_RADIUS`** scope only, so a binding offers itself in a corner
 // field and not in width or gap. No canvas frames unless you ask for the overview.
 //
-// **Each mode carries its own scale**: `modular` (a fixed ratio), `metric` (a step that grows every N
-// tokens) or `fibonacci` (each step the sum of the two before it). `base` is the value of the first
-// *generated* token and `roundTo` is the mode's own grid, so a 4px desktop scale and a 2px mobile one are
-// the ordinary case rather than a compromise.
+// **Each mode carries its own scale**: `bezier` (a ramp along a curve you draw), `metric` (a step that
+// grows every N tokens) or `fibonacci` (each step the sum of the two before it). `base` is the value of the
+// first *generated* token and `roundTo` is the mode's own grid, so a 4px desktop scale and a 2px mobile one
+// are the ordinary case rather than a compromise.
+//
+// **A bezier scale ramps from `base` to `max` along a curve, in log space.** Straight, that is a constant
+// ratio between steps — a modular scale, exactly. Bend it and the ratio varies across the scale, which is
+// how a radius set stays tight at the small end without flattening at the large one. Drag the handles, pick
+// a preset, or paste `cubic-bezier(…)`; **Add middle point** gives the two halves separate shapes.
+//
+// `modular` is still accepted in a config and generates precisely what it always generated.
 //
 // **`none` is an extra value, not a special case.** Put `0` in Extra values and it fills the smallest
 // token name; the scale then takes over from the base. Extras merge into the pool by value, so the number
@@ -22,7 +29,7 @@
 // | collectionName | Figma variable collection (e.g. `Responsive System`). |
 // | group | Variable name prefix folder (e.g. `Corner radius` → `Corner radius/md`). |
 // | radii | Ordered token names, smallest to largest. A series works: `radius-{1,10}` is ten of them, and it mixes with names you write — `none, xs, radius-{1,6}`. |
-// | modes | Per mode: `scaleType`, `ratio` or `step`/`mod`, `base`, `roundTo`, `extras`. |
+// | modes | Per mode: `scaleType`, `max`/`curve` or `step`/`mod`, `base`, `roundTo`, `extras`. |
 // | generateOverview | Optional boolean (default `false`). When `true`, builds a **Corner radius — overview** frame (token rows × mode columns, variable-bound swatches). Uses `@Foundation overview`. |
 // | (output) | Variables use `scopes: ['CORNER_RADIUS']`. |
 //
@@ -49,8 +56,9 @@
 @import { foundationCreateCornerRadiusOverview } from "@Foundation overview"
 @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, normaliseConfig, expandTokenList, tokenListHasSeries } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
-@import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
+@import { displayResults, createResult } from "@InfoPanel"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
+@import { bezierAt } from "@Bezier"
 @import { radiusRampSpec, radiusPreviewHtml, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
 
 // ========================================
@@ -78,14 +86,16 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
   modes: [
     {
       name: "Value",
-      scaleType: "metric",
+      scaleType: "bezier",
       base: 4,
+      ratio: 1.5,
+      curve: [],
       step: 4,
       mod: 3,
       roundTo: 2,
       extras: [0]
     }
-  ], // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.067:1.067 Minor second|1.125:1.125 Major second|1.2:1.2 Minor third|1.25:1.25 Major third|1.333:1.333 Perfect fourth|1.414:1.414 Augmented fourth|1.5:1.5 Perfect fifth|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps|base:number=Base unit|roundTo:number=Round numbers to|extras:list=Extra values @tabs @label: Modes
+  ], // @rows: name:text=Mode|scaleType:radio(bezier:Bezier scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|curve:curve(growth:ratio){scaleType=bezier}=Scale @helper: Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top.|step:number{scaleType=metric|fibonacci}=Step @helper: Metric. The amount each step adds, before it starts growing.\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it.|mod:number{scaleType=metric}=Every N steps @helper: How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down.|base:number=Base unit|roundTo:number=Round numbers to|extras:list=Extra values @helper: Values that are not part of the scale, merged in by size. Put a 0 here for a `none` token: it fills the smallest name and the scale takes over above it, so `none` needs no special case. @tabs @label: Modes
 
   // # Preview
   // @preview
@@ -124,7 +134,10 @@ runLinearRamp(cornerRadiusConfig, radiusRampSpec())
 
     // After the overview, so `displayResults` — which is what reports the run complete — is not
     // called while there is still a frame being drawn.
-    var results = [createHtmlResult(result.scaleHtml, null, 'info')];
+    // **No scale table here.** The Configuration tab already draws it, live, from the same generator — so
+    // repeating it in the results was the same numbers twice, and the second copy went stale the moment
+    // anything was edited. What is left is what a run has to say that the panel cannot: what it wrote.
+    var results = [];
     if (result.undeclaredModes) results.push(createResult('Modes this run did not write', result.undeclaredModes, 'info'));
     results.push(createResult(
       result.stats.created + ' created, ' + result.stats.updated + ' updated, ' + result.stats.skipped + ' skipped',

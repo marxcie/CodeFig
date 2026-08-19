@@ -495,6 +495,97 @@ looks like — worth Márton's eye rather than an inference.
 **What fixing it involves:** deleting the one `// # Configuration` line. Nothing else; the document title
 already names the script.
 
+## Removing a curve's middle point cannot be undone
+
+`bezierWithoutMiddle` collapses a three-anchor curve to two by keeping each end's tangent and scaling the
+handle back up to the full width. That is the closest single cubic to what was on screen, and two handles
+cannot hold what three anchors said, so the shape moves.
+
+**How it was found:** writing the function. It is inherent rather than a bug — a cubic has four degrees of
+freedom and the curve being discarded has ten.
+
+**Why it was left:** the alternative is remembering the discarded middle so a re-add restores it, which is
+state that exists only to remember what the user already did — and this codebase has paid for that three
+times in the Colors build alone. The coordinates would then disagree with a curve someone had dragged in
+between.
+
+**What fixing it involves:** a real undo stack for the config form, which would serve every control rather
+than this one. Nothing has asked for one yet.
+
+---
+
+## The curve editor is 320px tall, so a plain `@rows` table would be unusable
+
+Every shipped script that uses `@curve` in a row shows one row at a time — Spacing, Corner radius and
+Typography use `@tabs`, Colors uses `@blocks`. In a stacked table (`@rows` with neither flag) a 320px
+control per row would make a three-mode table a thousand pixels tall.
+
+**How it was found:** looking at the tabbed layout in a browser and asking what the other one would do.
+
+**Why it was left:** no shipped script does it, so the fix would be styling a case nobody is in — and the
+sensible fix (a collapsed thumbnail that expands on click) is a second rendering of the control, which is
+the kind of thing that drifts from the first.
+
+**What fixing it involves:** a `.config-ui-rows-cell:not(.config-ui-rows-cell--stacked) .config-ui-curve`
+rule shrinking the canvas, or a disclosure. Decide which when a script actually needs it.
+
+---
+
+## The scale can be stored twice, and nothing reconciles the two
+
+A foundation set is recorded on its collection as invisible plugin data (`setSharedPluginData`), and the
+per-mode `ratio` and `curve` are already in it. Márton also wants it written as a **hidden STRING variable**
+— one value per mode, excluded from publishing and with no scopes — so the scale is readable and copyable
+from the variables panel without opening the plugin.
+
+Two stores means they can disagree: a run writes both, but someone can edit the variable by hand, or paste
+a different config into the block and run again from another file. The agreed answer is a panel modelled on
+the *"Multiple configs detected"* mockup — both values side by side, per mode, with a radio to choose and an
+Apply.
+
+**How it was found:** designing the feature. It is not a bug that exists today, because the variable half is
+not built.
+
+**Why it was left:** Márton's call — *"not urgent, and a rare use case."* It also cannot be built before the
+question of when the panel reads a saved set at all is settled, and that is the more common complaint.
+
+**What fixing it involves:** the write half (a toggle below *Generate overview*, a STRING variable per mode
+with `hiddenFromPublishing` and `scopes: []`), a comparison against the manifest slice, and the chooser
+panel. The string format already exists — the curve field prints `1.5 cubic-bezier(0.333, 0.333, 0.667,
+0.667)` and parses it back.
+
+---
+
+## The typography preview shows one font weight, and cannot switch
+
+The specimen picks the **highest** weight in `fontWeights` and says so — *"Desktop · font weight 600"*.
+A file with 400 and 600 can only be previewed at 600. Márton asked for the note to read
+`Font weight: 400 600` with the weight you are *not* seeing clickable, switching the preview.
+
+**How it was found:** using the panel. It is a readout limitation, not a fault — nothing is wrong, there is
+just one view where there could be two.
+
+**Why it was left:** Márton's call — *"a small nice to have, but not a must,"* and there were more pressing
+things. Nothing depends on it.
+
+**What fixing it involves**, having checked the plumbing rather than guessed — roughly 80 lines, a third of
+them tests, and every pattern it needs already exists:
+
+- `buildPreviewSnippet` already passes `activeModeName()` into the preview call; the weight becomes a
+  fourth argument beside it.
+- `configUIContainer` already carries a delegated `click` listener for `.grid-suggestion` cards, because a
+  preview is replaced wholesale on every recompute and a listener on its contents would be thrown away.
+  A `[data-preview-weight]` branch goes there.
+- `typographyPreviewHtml` renders the note as buttons rather than a string, and takes the weight it is
+  given instead of calling `typeScaleSpecimenWeight`.
+
+The one new thing is a module-level "which weight is being previewed" — view state with no config
+equivalent, like which mode tab is open. Make it **self-correcting**: if the remembered weight is no longer
+in `fontWeights`, fall back to the default, so editing the weight list cannot leave it pointing at nothing.
+That is the difference between view state and the kind of stored answer this codebase keeps regretting.
+
+---
+
 ---
 
 ## Habits worth keeping

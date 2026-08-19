@@ -626,7 +626,9 @@ function useFullRangeRamp(config) {
 
 function buildRampScaleOpts(totalSteps, viewport, config, spec) {
   var sizes = config[spec.sizesKey][viewport];
-  if (!sizes || !sizes.base) return null;
+  // `== null`, not falsy: a base of **0** is a real base — `none` in a radius set — and `!sizes.base`
+  // treated it as a mode with nothing declared, so the whole viewport silently produced no options.
+  if (!sizes || sizes.base == null || sizes.base === '') return null;
 
   var tokens = config[spec.tokensKey];
   // **Extras are values, not tokens.** They merge into the sequence below, so the generated part is
@@ -670,10 +672,15 @@ function buildRampScaleOpts(totalSteps, viewport, config, spec) {
     easeInExponent: scaling.easeInExponent,
     easeOutExponent: scaling.easeOutExponent,
     defaultRangeMode: 'full',
-    // modular, metric, explicit. `baseValue`/`baseIndex` is the library's spelling; the config's
-    // is `base: { level, size }`, and this is the translation one way. rampModePayloadFor is the
-    // other. Both directions or neither — see @Scale Models.
+    // bezier, metric, fibonacci, explicit. `baseValue`/`baseIndex` is the library's spelling; the
+    // config's is `base: { level, size }`, and this is the translation one way. rampModePayloadFor is
+    // the other. Both directions or neither — see @Scale Models.
     baseValue: baseValue,
+    // The bezier ramp's shape. An absent or empty curve is a straight ramp, which is a modular scale —
+    // so a mode that says `bezier` with no curve generates a constant ratio between its ends.
+    curve: Array.isArray(sizes.curve) ? sizes.curve : [],
+    // Still read, for the `modular` alias: a config written before the curve editor carries a ratio and
+    // has to keep generating the numbers it always did.
     ratio: sizes.ratio,
     step: sizes.step,
     mod: sizes.mod,
@@ -737,7 +744,10 @@ function mergeRampExtras(values, extras) {
  */
 function rampSequenceFor(viewport, config, spec) {
   var opts = buildRampScaleOpts((config[spec.tokensKey] || []).length, viewport, config, spec);
-  if (!opts) return { opts: null, values: [], warnings: [] };
+  // `adjustments` too. Its absence here was a latent crash: the caller does
+  // `sequences[viewport].adjustments.forEach(...)` unconditionally, so any config that could not build
+  // options at all died on "Cannot read properties of undefined" instead of saying what was wrong.
+  if (!opts) return { opts: null, values: [], warnings: [], adjustments: [] };
   var built = scaleSequence(opts.model, opts);
   // **Round what we generate, not what was typed** — and only the models that were never rounded.
   // `roundTo` reached the endpoints model inside `generateScale` and the collision guard, and nothing
@@ -878,6 +888,27 @@ function generateRampVariables(config, spec, report) {
     });
   });
 
+  // **A model that generated nothing stops the run, rather than being filled in.**
+  //
+  // `rampValueAt` answers `opts.min` for a step the sequence does not have, and the monotonic guard below
+  // then walks those apart by the grid — so a scale the generator *refused* came out as a plausible-looking
+  // ladder with a `console.warn` nobody reads. A bezier mode makes that easy to reach: `max` is required
+  // and a mode switched over to it in the panel has none until someone types one, so the first thing the
+  // panel would have shown is six invented numbers.
+  //
+  // Thrown, because every caller already has a place to put it: both previews catch and print the message
+  // where the picture would be, and `runLinearRamp` reports it instead of writing.
+  for (var v = 0; v < viewportNames.length; v++) {
+    var seq = sequences[viewportNames[v]];
+    if (!seq.opts || seq.values.length >= tokens.length) continue;
+    var blocking = null;
+    for (var w = 0; w < seq.warnings.length; w++) {
+      if (seq.warnings[w].code !== 'scale-floor-held') { blocking = seq.warnings[w]; break; }
+    }
+    if (!blocking) continue;
+    throw new Error(viewportLabel(viewportNames[v]) + ': ' + blocking.message);
+  }
+
   var gridSize = getRampRoundGrid(config);
 
   tokens.forEach(function(tokenName, index) {
@@ -981,9 +1012,14 @@ function rampModelCaption(v, config) {
     var baseSize = typeof v.base === 'number' ? v.base : (v.base && v.base.size);
     parts.push('base ' + baseSize, 'step ' + v.step);
     if (model === 'metric') parts.push('mod ' + (v.mod === undefined ? 1 : v.mod));
-  } else if (model === 'modular') {
-    parts.push('base ' + (typeof v.base === 'number' ? v.base : (v.base && v.base.size)),
-      'ratio ' + v.ratio);
+  } else if (model === 'bezier' || model === 'modular') {
+    // **The same words the panel's own field prints.** This said `min 0, max null, linear` for a bezier
+    // scale — the endpoints branch, describing a model that has no endpoints — which is a caption
+    // confidently reporting numbers the run never used. `max null` was the tell nobody read.
+    parts.push('base ' + (typeof v.base === 'number' ? v.base : (v.base && v.base.size)));
+    if (v.ratio !== undefined && v.ratio !== null) parts.push('\u00d7' + v.ratio + ' per step');
+    else if (typeof v.max === 'number') parts.push('to ' + v.max);
+    if (Array.isArray(v.curve) && v.curve.length) parts.push('curved');
   } else if (model === 'explicit') {
     parts.push((v.values || []).length + ' values');
   } else {
@@ -1720,6 +1756,20 @@ function describeRampAdoption(fits, spec) {
 function rampModePayloadFor(recognised, tokenOrder) {
   var options = recognised.options || {};
   var payload = { model: recognised.model, min: options.min };
+
+  // **A bezier ramp needs `max` *and* the curve.** Both, or the manifest describes a different scale from
+  // the one that was recognised — which does not fail anywhere: it regenerates quietly, with different
+  // numbers, over tokens that are already bound. The adoption sweep in `tests/linear-ramp.test.js` caught
+  // exactly that when only `max` was carried.
+  if (recognised.model === 'bezier') {
+    var at = typeof options.baseIndex === 'number' ? options.baseIndex : 0;
+    payload.base = { level: tokenOrder[at], size: options.baseValue };
+    // **The ratio, not a max.** The top is derived from it, so recording a max instead would pin an end the
+    // model does not have — and the next regeneration would squeeze the scale into it rather than continue.
+    payload.ratio = options.ratio;
+    payload.curve = Array.isArray(options.curve) ? options.curve.slice() : [];
+    return payload;
+  }
 
   if (recognised.model === 'metric' || recognised.model === 'modular') {
     var index = typeof options.baseIndex === 'number' ? options.baseIndex : 0;
