@@ -29,7 +29,7 @@
 //
 // ```js
 // @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, registryViewportLabels, writeManifest, readManifest, writeRegistry, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, registryViewportLabels, writeManifest, readManifest, findFoundationSet, writeRegistry, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 // @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 // ```
 //
@@ -1586,7 +1586,9 @@ async function runLinearRamp(config, spec) {
 
   // Identity before names. A group renamed in the panel is a move of the tokens already there, not a
   // second set beside them — see `alignStampedTokens`.
-  var setId = readManifest(collection, spec.domain, groupName).id || '';
+  // Resolved through the stamps, not the record: a group renamed in the variable table has to come
+  // back as the same set, or the write below mints a second manifest for it.
+  var setId = (await findFoundationSet(collection, spec.domain, groupName)).id || '';
   var aligned = await alignStampedTokens(collection, spec.domain, groupName, names, setId);
   describeStampAlignment(aligned).forEach(function(line) { console.log(line); });
 
@@ -1596,6 +1598,7 @@ async function runLinearRamp(config, spec) {
   var manifest = null;
   try {
     manifest = writeManifest(collection, {
+      id: setId,
       domain: spec.domain,
       group: groupName,
       modes: viewportKeys,

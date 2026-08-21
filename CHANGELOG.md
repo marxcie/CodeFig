@@ -241,6 +241,30 @@ deleting variable modes they did not recognise.
 
 ### Fixed
 
+- **Renaming a variable group no longer loses the config behind it, or duplicates the tokens.** A
+  generated set was found by name, and the name was in three places at once: the manifest's storage key,
+  its group field, and its list of modes. So renaming a group — reorganising the variable table, which
+  is a normal thing to do to a design system — produced both halves of the same failure at once. The
+  panel found no config and offered its defaults over a set sitting right there, and the overview
+  reported every one of that set's tokens as missing. Running it again then wrote a *second* set beside
+  the first: new variables under the new name, the originals orphaned, and every binding in the file
+  still pointing at the orphans.
+
+  Each generated variable now carries a stamp saying which token of which set it is, so a set is found
+  by identity and a name is just a label — the same way a Figma binding survives a rename. What this
+  changes in practice:
+
+  - **Rename a group in Figma and reopen the panel**: your config comes back, at the new name.
+  - **Rename a group in the panel and run**: the tokens *move*. Same variables, same ids, same published
+    keys, so nothing bound to them breaks — instead of a duplicate set and a pile of orphans.
+  - **Rename a single token, or a mode**: the run finds it and no longer reports it missing. A token or
+    mode that is genuinely deleted is still reported, exactly as before.
+  - **Move half a set into another group** and the load says so, naming where the other half went —
+    something that was previously invisible outside the variable table.
+
+  Sets made before this keep working and are adopted on the next run; nothing is rewritten or deleted to
+  migrate them. Colors is unaffected, since it does not write variables yet.
+
 - **Pointing a panel at a collection and group now loads the tokens that are there**, whether or not a set
   was ever recorded. Only Grid read the file's variables when nothing was recorded; every other domain gave
   up, so opening Typography on a file holding four tokens showed the shipped ten. It reads the **names**

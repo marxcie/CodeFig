@@ -28,6 +28,7 @@ const PURE = [
   'foundationSetKey',
   'foundationSetIdFromKey',
   'foundationMintSetId',
+  'foundationIdNoise',
   'foundationWarning',
   'viewportLabel',
   'viewportKeyFromLabel',
@@ -41,6 +42,7 @@ const PURE = [
   'parseManifest',
   'serialiseManifest',
   'reconcileFoundation',
+  'deriveSetGroup',
   'readStampFrom',
   'findByStamp',
   'stampValue',
@@ -64,7 +66,7 @@ const {
   viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup,
   normaliseViewport, sortViewports, parseRegistry, serialiseRegistry, parseManifest,
   serialiseManifest, reconcileFoundation, foundationSetKey, findByStamp, stampValue,
-  foundationTokenKey, foundationSetIdFromKey, foundationMintSetId
+  foundationTokenKey, foundationSetIdFromKey, foundationMintSetId, deriveSetGroup
 } = lib;
 
 /** The three viewports every DSF script ships with today. */
@@ -148,9 +150,11 @@ test('a set key is addressed by a minted id, and a legacy key parses as one', ()
 });
 
 test('a minted set id is not the same twice', () => {
+  // In a loop the timestamp is constant, so this is purely the birthday bound on the random half —
+  // which is the case that matters, because one run records several sets in the same millisecond.
   const ids = new Set();
-  for (let i = 0; i < 200; i++) ids.add(foundationMintSetId());
-  assert.equal(ids.size, 200, 'two sets minted in the same millisecond must not collide');
+  for (let i = 0; i < 5000; i++) ids.add(foundationMintSetId());
+  assert.equal(ids.size, 5000, 'two sets minted in the same millisecond must not collide');
 });
 
 // ---------------------------------------------------------------------------
@@ -366,6 +370,123 @@ test('a registry viewport no collection materialises is kept and reported', () =
   assert.equal(result.viewports.length, 2);
   assert.deepEqual(byKey(result, 'desktop').materialisedIn, []);
   assert.ok(codes(result).includes('viewport-not-materialised'));
+});
+
+// ---------------------------------------------------------------------------
+// Identity — the group is derived, not read
+// ---------------------------------------------------------------------------
+
+function stampsOf(entries) {
+  return entries.map(([name, token, set]) => ({ name, domain: 'spacing', set: set || 'k9x', token }));
+}
+
+test('a set group is the name with the token taken off — the exact inverse of the stamp', () => {
+  const derived = deriveSetGroup(stampsOf([
+    ['Spacing/xs', 'xs'], ['Spacing/sm', 'sm'], ['Spacing/md', 'md']
+  ]), 'spacing', 'k9x');
+  assert.equal(derived.group, 'Spacing');
+  assert.equal(derived.total, 3);
+});
+
+test('a set moved to a new group derives the new one, with no help from the record', () => {
+  const derived = deriveSetGroup(stampsOf([['Space/xs', 'xs'], ['Space/md', 'md']]), 'spacing', 'k9x');
+  assert.equal(derived.group, 'Space');
+});
+
+test('deriving ignores another set of the same domain in the same collection', () => {
+  const derived = deriveSetGroup([
+    ...stampsOf([['Spacing A/xs', 'xs'], ['Spacing A/md', 'md']]),
+    ...stampsOf([['Spacing B/xs', 'xs', 'other'], ['Spacing B/md', 'md', 'other']])
+  ], 'spacing', 'other');
+  assert.equal(derived.group, 'Spacing B', 'the set id is what keeps the two apart');
+});
+
+test('nothing stamped derives nothing, rather than guessing a group', () => {
+  assert.equal(deriveSetGroup([], 'spacing', 'k9x'), null);
+  const radius = [{ name: 'Radius/sm', domain: 'radius', set: 'k9x', token: 'sm' }];
+  assert.equal(deriveSetGroup(radius, 'spacing', 'k9x'), null, 'another domain is not this set');
+});
+
+test('a group renamed in Figma is derived, reported as a drift, and not a warning', () => {
+  // The failure this replaces: the manifest still said `Spacing`, so every token came back missing and
+  // the panel found no config at all.
+  const result = reconcileFoundation({
+    registry: registry([MOBILE]),
+    modes: [modesOf('Responsive System', ['Mobile'])],
+    variables: [{
+      collection: 'Responsive System',
+      names: ['Space/xs', 'Space/sm'],
+      stamps: stampsOf([['Space/xs', 'xs'], ['Space/sm', 'sm']])
+    }],
+    manifests: [{
+      collection: 'Responsive System',
+      key: 'set:spacing:k9x',
+      manifest: { v: 1, id: 'k9x', domain: 'spacing', group: 'Spacing', modes: [], tokens: ['xs', 'sm'] }
+    }]
+  });
+  assert.equal(result.sets[0].group, 'Space', 'where the tokens are, not where the record says');
+  assert.equal(result.sets[0].recordedGroup, 'Spacing', 'the drift is visible without being a problem');
+  assert.deepEqual(codes(result), [], 'renaming a group is a normal thing to do');
+});
+
+test('a token whose leaf was renamed is found by stamp, not reported missing', () => {
+  const result = reconcileFoundation({
+    registry: registry([MOBILE]),
+    modes: [modesOf('Responsive System', ['Mobile'])],
+    variables: [{
+      collection: 'Responsive System',
+      names: ['Spacing/extra-small', 'Spacing/sm'],
+      stamps: stampsOf([['Spacing/extra-small', 'xs'], ['Spacing/sm', 'sm']])
+    }],
+    manifests: [{
+      collection: 'Responsive System',
+      key: 'set:spacing:k9x',
+      manifest: { v: 1, id: 'k9x', domain: 'spacing', group: 'Spacing', modes: [], tokens: ['xs', 'sm'] }
+    }]
+  });
+  assert.ok(!codes(result).includes('manifest-token-missing'), 'the stamp says it is still here');
+});
+
+test('a token actually deleted is still reported', () => {
+  const result = reconcileFoundation({
+    registry: registry([MOBILE]),
+    modes: [modesOf('Responsive System', ['Mobile'])],
+    variables: [{
+      collection: 'Responsive System',
+      names: ['Spacing/sm'],
+      stamps: stampsOf([['Spacing/sm', 'sm']])
+    }],
+    manifests: [{
+      collection: 'Responsive System',
+      key: 'set:spacing:k9x',
+      manifest: { v: 1, id: 'k9x', domain: 'spacing', group: 'Spacing', modes: [], tokens: ['xs', 'sm'] }
+    }]
+  });
+  const warning = result.warnings.find((w) => w.code === 'manifest-token-missing');
+  assert.ok(warning, 'gone is gone, and stamps do not paper over it');
+  assert.ok(warning.message.includes('xs'));
+  assert.ok(!warning.message.includes('sm'));
+});
+
+test('a set split across two groups says so, and names the smaller half', () => {
+  const result = reconcileFoundation({
+    registry: registry([MOBILE]),
+    modes: [modesOf('Responsive System', ['Mobile'])],
+    variables: [{
+      collection: 'Responsive System',
+      names: ['Spacing/xs', 'Spacing/sm', 'Legacy/md'],
+      stamps: stampsOf([['Spacing/xs', 'xs'], ['Spacing/sm', 'sm'], ['Legacy/md', 'md']])
+    }],
+    manifests: [{
+      collection: 'Responsive System',
+      key: 'set:spacing:k9x',
+      manifest: { v: 1, id: 'k9x', domain: 'spacing', group: 'Spacing', modes: [], tokens: ['xs', 'sm', 'md'] }
+    }]
+  });
+  const split = result.warnings.find((w) => w.code === 'set-split');
+  assert.ok(split, 'half a scale in one place and half in another is invisible until you go looking');
+  assert.equal(result.sets[0].group, 'Spacing', 'the majority wins');
+  assert.ok(split.message.includes('Legacy'));
 });
 
 test('a manifest token with no variable behind it is reported', () => {

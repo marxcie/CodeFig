@@ -59,7 +59,7 @@
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getCollectionVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, readManifest, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, findFoundationSet, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { bezierAt } from "@Bezier"
 @import { typeScaleTokens, typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleProgress, typeScaleLineHeights, typeScaleTrackings, typeScaleTable, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
@@ -720,7 +720,8 @@ async function createOrUpdateCollection(config) {
   // Identity before names, so a renamed group moves this set rather than duplicating it. Typography
   // writes three variables per token, and duplicating it means three orphans per token.
   var names = Object.keys(config.variables);
-  var setId = readManifest(collection, 'typography', groupName).id || '';
+  // Through the stamps, so a renamed group is the same set rather than a second one.
+  var setId = (await findFoundationSet(collection, 'typography', groupName)).id || '';
   var aligned = await alignStampedTokens(collection, 'typography', groupName, names, setId);
   describeStampAlignment(aligned).forEach(function(line) { console.log(line); });
 
@@ -742,6 +743,7 @@ async function createOrUpdateCollection(config) {
   function recordTypographySet() {
     try {
       var manifest = writeManifest(collection, {
+        id: setId,
         domain: 'typography',
         group: groupName,
         modes: modes,

@@ -29,7 +29,7 @@
 @import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables, applyModeIntents } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
-@import { gridPreviewHtml, gridSuggestionsHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest, readManifest, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { gridPreviewHtml, gridSuggestionsHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 
 // ========================================
 // GRID SYSTEM CONFIGURATION
@@ -272,7 +272,8 @@ async function createOrUpdateCollection(config) {
   // so a group renamed in the panel has to become a move of the variables already there before
   // anything is written, or it becomes a second grid beside the first.
   var names = Object.keys(variablesWithPrefix);
-  var setId = readManifest(collection, 'grid', group).id || '';
+  // Through the stamps, so a renamed group is the same set rather than a second one.
+  var setId = (await findFoundationSet(collection, 'grid', group)).id || '';
   var aligned = await alignStampedTokens(collection, 'grid', group, names, setId);
   describeStampAlignment(aligned).forEach(function (line) { console.log(line); });
 
@@ -391,6 +392,7 @@ createOrUpdateCollection(gridSystemConfig)
     try {
       var gridModes = (gridSystemConfig.modes || []).map(function (m) { return m.name; });
       manifest = writeManifest(result.collection, {
+        id: result.setId,
         domain: 'grid',
         group: resolveGroup(gridSystemConfig),
         modes: gridModes,

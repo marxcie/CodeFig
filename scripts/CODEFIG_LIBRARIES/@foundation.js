@@ -61,8 +61,8 @@
 // | Helpers | viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup |
 // | Registry shape | normaliseViewport, sortViewports, parseRegistry, serialiseRegistry |
 // | Manifest shape | parseManifest, serialiseManifest |
-// | Reconciliation | reconcileFoundation, describeFoundation |
-// | Figma | readFoundation, registryViewportLabels, writeRegistry, readManifest, writeManifest |
+// | Reconciliation | reconcileFoundation, describeFoundation, deriveSetGroup |
+// | Figma | readFoundation, registryViewportLabels, writeRegistry, readManifest, writeManifest, findFoundationSet |
 // | Modes | planFoundationModes, applyFoundationModes, foundationModeIds |
 // | Config | normaliseConfig, toDomainConfig, toPortableConfig, emptyPortableConfig, configDomainOf |
 // | Config text | serialisePortableConfig, parsePortableConfig, describeConfigTranslations |
@@ -123,10 +123,18 @@ function foundationSetIdFromKey(key) {
  * on an id by having both been the first thing somebody generated.
  */
 function foundationMintSetId() {
-  var stamp = Date.now().toString(36);
+  return Date.now().toString(36) + '-' + foundationIdNoise() + foundationIdNoise();
+}
+
+/**
+ * Four base-36 characters of randomness. Two of these, not one: a single chunk is 1.7M values, and a
+ * run that records several sets mints them all inside one millisecond — so the timestamp contributes
+ * nothing and the birthday bound is the whole of the guarantee.
+ */
+function foundationIdNoise() {
   var noise = Math.floor(Math.random() * 1679616).toString(36);
   while (noise.length < 4) noise = '0' + noise;
-  return stamp + '-' + noise;
+  return noise;
 }
 
 /**
@@ -364,6 +372,51 @@ function parseManifest(text) {
  *   warnings:  [{ code, message, ... }]
  * }
  */
+/**
+ * Where a set's tokens actually live, read off their stamps.
+ *
+ * A stamp's token key is the variable's name with the group taken off, so the group is the name with the
+ * token key taken off — the exact inverse, with no prefix guessing in it. That is what makes this an
+ * answer rather than a heuristic, and it is why the recorded group can be treated as a label.
+ *
+ * `stamps` is `[{ name, domain, set, token }]`. A set id on both sides narrows it to one set; without one
+ * — a stamp written before ids — domain alone has to do, which is exact whenever a collection holds one
+ * set per domain and is why the id was added.
+ *
+ * → `{ group, counts, total }`, or `null` when nothing is stamped. `counts` has more than one entry when
+ * somebody moved part of a set, which is a thing worth saying out loud.
+ */
+function deriveSetGroup(stamps, domain, setId) {
+  var counts = {};
+  var total = 0;
+  var order = [];
+
+  for (var i = 0; i < (stamps || []).length; i++) {
+    var stamp = stamps[i];
+    if (!stamp || stamp.domain !== String(domain || '')) continue;
+    if (setId && stamp.set && stamp.set !== String(setId)) continue;
+
+    var name = String(stamp.name == null ? '' : stamp.name);
+    var token = String(stamp.token == null ? '' : stamp.token);
+    if (!token || name.length < token.length) continue;
+    if (name.slice(name.length - token.length) !== token) continue;
+
+    var group = name.slice(0, name.length - token.length).replace(/\/+$/, '');
+    if (!Object.prototype.hasOwnProperty.call(counts, group)) order.push(group);
+    counts[group] = (counts[group] || 0) + 1;
+    total++;
+  }
+
+  if (total === 0) return null;
+
+  // The majority, with insertion order breaking a tie so two runs over one file agree.
+  var best = order[0];
+  for (var o = 1; o < order.length; o++) {
+    if (counts[order[o]] > counts[best]) best = order[o];
+  }
+  return { group: best, counts: counts, total: total };
+}
+
 function reconcileFoundation(sources) {
   var src = sources || {};
   var warnings = [];
@@ -541,9 +594,11 @@ function reconcileFoundation(sources) {
   var sets = [];
   var manifestEntries = src.manifests || [];
   var variableIndex = {};
+  var stampIndex = {};
   var variableLists = src.variables || [];
   for (i = 0; i < variableLists.length; i++) {
     variableIndex[variableLists[i].collection] = variableLists[i].names || [];
+    stampIndex[variableLists[i].collection] = variableLists[i].stamps || [];
   }
 
   for (i = 0; i < manifestEntries.length; i++) {
@@ -551,12 +606,45 @@ function reconcileFoundation(sources) {
     var manifest = record.manifest;
     if (!manifest) continue;
 
+    var setId = manifest.id || foundationSetIdFromKey(record.key);
+    var stamps = stampIndex[record.collection] || [];
+
+    // **The group is derived, not read.** The manifest's copy is a label from the last run; where the
+    // tokens are now is a question the stamps answer, and renaming a group is a thing people do.
+    var derived = deriveSetGroup(stamps, manifest.domain, setId);
+    var liveGroup = derived ? derived.group : manifest.group;
+    var stampedTokens = {};
+    for (var st = 0; st < stamps.length; st++) {
+      if (stamps[st].domain !== manifest.domain) continue;
+      if (setId && stamps[st].set && stamps[st].set !== setId) continue;
+      stampedTokens[stamps[st].token] = true;
+    }
+
+    // A set somebody split across two groups. Worth saying — half a scale in one place and half in
+    // another is not something the panel can show, and it is invisible in Figma until you go looking.
+    if (derived && Object.keys(derived.counts).length > 1) {
+      var elsewhere = [];
+      for (var g in derived.counts) {
+        if (g !== liveGroup) elsewhere.push((g || '(no group)') + ': ' + derived.counts[g]);
+      }
+      warnings.push(foundationWarning(
+        'set-split',
+        'The ' + manifest.domain + ' set in "' + record.collection + '" is spread across more than one group. Most of it is in "' +
+        (liveGroup || '(no group)') + '"; also ' + elsewhere.join(', ') + '.',
+        { collection: record.collection, domain: manifest.domain, groups: derived.counts }
+      ));
+    }
+
     var missing = [];
     var known = variableIndex[record.collection];
     if (known) {
-      var prefix = namePrefix(manifest.group);
+      var prefix = namePrefix(liveGroup);
       for (var t = 0; t < manifest.tokens.length; t++) {
-        if (known.indexOf(prefix + manifest.tokens[t]) === -1) missing.push(manifest.tokens[t]);
+        // Stamp first, name second. A token whose leaf somebody renamed is still here, and reporting it
+        // missing was a warning about a variable sitting in plain sight.
+        if (stampedTokens[manifest.tokens[t]]) continue;
+        if (known.indexOf(prefix + manifest.tokens[t]) !== -1) continue;
+        missing.push(manifest.tokens[t]);
       }
       if (missing.length > 0) {
         warnings.push(foundationWarning(
@@ -606,9 +694,12 @@ function reconcileFoundation(sources) {
     sets.push({
       collection: record.collection,
       key: record.key,
-      id: manifest.id || foundationSetIdFromKey(record.key),
+      id: setId,
       domain: manifest.domain,
-      group: manifest.group,
+      group: liveGroup,
+      // Only when it drifted, and it is not a warning: renaming a group is a normal thing to do, and
+      // the next run brings the record up to date on its own.
+      recordedGroup: liveGroup === manifest.group ? null : manifest.group,
       modes: manifest.modes,
       tokens: manifest.tokens,
       missing: missing,
@@ -741,10 +832,22 @@ async function readFoundation(options) {
     });
 
     var names = [];
+    var stamps = [];
     for (var v = 0; v < collection.variableIds.length; v++) {
       var variable = await figma.variables.getVariableByIdAsync(collection.variableIds[v]);
       if (!variable) continue;
       names.push(variable.name);
+      // The stamps come along with the names, because reconcile needs both to tell a token that moved
+      // from a token that is gone — and this is the only loop that resolves every variable.
+      var stamp = readStamp(variable);
+      if (stamp) {
+        stamps.push({
+          name: variable.name,
+          domain: stamp.domain,
+          set: stamp.set || '',
+          token: stamp.token
+        });
+      }
       if (isViewportWidthName(variable.name) && variable.resolvedType === 'FLOAT') {
         var byMode = {};
         for (var m2 = 0; m2 < collection.modes.length; m2++) {
@@ -754,7 +857,7 @@ async function readFoundation(options) {
         widths.push({ collection: collection.name, variable: variable.name, byMode: byMode });
       }
     }
-    variables.push({ collection: collection.name, names: names });
+    variables.push({ collection: collection.name, names: names, stamps: stamps });
 
     var keys = collection.getSharedPluginDataKeys(ns) || [];
     for (var k = 0; k < keys.length; k++) {
@@ -783,6 +886,72 @@ async function readFoundation(options) {
     collections: collections.map(function(c) { return c.name; }),
     hasRegistry: registryRead.registry !== null
   };
+}
+
+/**
+ * The set living at a group, asked of the variables rather than of the record.
+ *
+ * `readManifest` matches on the group a manifest *says* it has, which is a label from the last run. This
+ * asks the stamps where the tokens actually are, so a group somebody renamed in the variable table still
+ * resolves to its config instead of falling through to defaults.
+ *
+ * Order: live group (derived from stamps) → recorded group → nothing. The last is a real answer — a
+ * collection with no set at that address — not a failure.
+ *
+ * → `{ id, manifest, key, group, recordedGroup, collection }`; `manifest` is null when there is none.
+ */
+async function findFoundationSet(collection, domain, group) {
+  var answer = {
+    id: '', manifest: null, key: null,
+    group: group == null ? '' : String(group), recordedGroup: null, collection: collection || null
+  };
+  if (!collection || !domain) return answer;
+
+  var ns = foundationNamespace();
+  var wanted = answer.group;
+  var keys = collection.getSharedPluginDataKeys(ns) || [];
+
+  var records = [];
+  for (var k = 0; k < keys.length; k++) {
+    if (keys[k].indexOf('set:') !== 0) continue;
+    var read = parseManifest(collection.getSharedPluginData(ns, keys[k]));
+    if (!read.manifest || read.manifest.domain !== String(domain)) continue;
+    records.push({ key: keys[k], manifest: read.manifest, id: read.manifest.id || foundationSetIdFromKey(keys[k]) });
+  }
+  if (records.length === 0) return answer;
+
+  var stamps = [];
+  var all = await foundationVariablesOf(collection);
+  for (var v = 0; v < all.length; v++) {
+    var stamp = readStamp(all[v]);
+    if (!stamp) continue;
+    stamps.push({ name: all[v].name, domain: stamp.domain, set: stamp.set || '', token: stamp.token });
+  }
+
+  // Where each set's tokens are now. A set with nothing stamped has no live group and is matched on its
+  // record, which is what a set generated before stamps existed has to fall back to.
+  var fallback = null;
+  for (var r = 0; r < records.length; r++) {
+    var derived = deriveSetGroup(stamps, domain, records[r].id);
+    if (derived && derived.group === wanted) {
+      answer.id = records[r].id;
+      answer.manifest = records[r].manifest;
+      answer.key = records[r].key;
+      answer.recordedGroup = records[r].manifest.group === wanted ? null : records[r].manifest.group;
+      return answer;
+    }
+    // Only a set that is not living somewhere else can answer on its record alone: one whose tokens are
+    // demonstrably in another group has been renamed away from here, and claiming it would hand the
+    // panel a config for a set that moved out.
+    if (!fallback && !derived && records[r].manifest.group === wanted) fallback = records[r];
+  }
+
+  if (fallback) {
+    answer.id = fallback.id;
+    answer.manifest = fallback.manifest;
+    answer.key = fallback.key;
+  }
+  return answer;
 }
 
 /**
@@ -815,7 +984,10 @@ async function foundationAutoImport(collectionName, group, domain) {
   var collection = collections.filter(function(c) { return c.name === collectionName; })[0];
   if (!collection) return answer;
 
-  var read = readManifest(collection, domain, group == null ? '' : group);
+  // The resolver, not `readManifest`: a group renamed in the variable table has to load the config that
+  // belongs to it, which is the whole reason a panel opening on somebody's real collection is worth
+  // anything. Read-only, still — nothing here writes, so asking costs nothing.
+  var read = await findFoundationSet(collection, domain, group == null ? '' : group);
   if (!read.manifest) {
     // Nothing recorded. For Grid, read the variables instead — a set that predates manifests is the
     // common case, not the exotic one.
@@ -881,6 +1053,10 @@ async function foundationAutoImport(collectionName, group, domain) {
   answer.config = toDomainConfig(v1, domain);
   answer.tokens = read.manifest.tokens || [];
   answer.modes = read.manifest.modes || [];
+  answer.setId = read.id || '';
+  // Set when the record's group is behind the file's. Not a problem to report — the next run brings it
+  // up to date — but the panel is entitled to know it loaded a set that has moved.
+  answer.recordedGroup = read.recordedGroup;
   return answer;
 }
 

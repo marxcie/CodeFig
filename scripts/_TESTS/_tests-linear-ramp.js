@@ -16,7 +16,10 @@
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, foundationModeIds, writeRegistry, normaliseConfig, toDomainConfig, readStamp, foundationNamespace, foundationRegistryKey, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, foundationAutoImport, writeManifest, readManifest, findFoundationSet, foundationModeIds, writeRegistry, normaliseConfig, toDomainConfig, readStamp, foundationNamespace, foundationRegistryKey, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+// `foundationAutoImport` reaches the grid recognition path, which reaches this. Imports do not follow
+// calls across scripts, so the spec has to name it.
+@import { calculateColumnWidth } from "@Core Library"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { bezierAt } from "@Bezier"
@@ -389,6 +392,55 @@ testBegin('linear-ramp');
       var loaded = await readFoundation({ collections: [name] });
       var modeWarnings = loaded.warnings.filter(function (w) { return w.code === 'manifest-mode-missing'; });
       expect(modeWarnings).toHaveLength(0, 'a rename is not an absence');
+    } finally {
+      await removeCollection(name);
+      restoreRegistryRaw(before);
+    }
+  });
+
+  await itInTestFile('a group renamed in Figma still loads its config, and does not duplicate the record', async function () {
+    // The whole point of the three commits, end to end: rename the group in the variable table the way a
+    // person would, then open the panel on the new name. Before stamps this found nothing and offered
+    // defaults over a set sitting right there, while the overview reported every token missing.
+    var name = testPrefix() + '/ramp-regroup-figma';
+    var before = currentRegistryRaw();
+    try {
+      var first = await runLinearRamp(spacingConfigFor(name, 40), spacingRampSpec());
+      var id = first.manifest.manifest.id;
+      var idsBefore = await idsUnder(first.collection, 'Spacing');
+
+      // Renamed in Figma, not in the config: every variable's prefix changes, the manifest does not.
+      for (var i = 0; i < first.collection.variableIds.length; i++) {
+        var v = await figma.variables.getVariableByIdAsync(first.collection.variableIds[i]);
+        if (v && v.name.indexOf('Spacing/') === 0) v.name = 'Space/' + v.name.slice('Spacing/'.length);
+      }
+
+      var found = await foundationAutoImport(name, 'Space', 'spacing');
+      expect(found.source).toBe('recorded', 'the config came back, from the new address');
+      expect(found.tokens).toEqual(['xs', 'sm', 'md', 'lg']);
+      expect(found.recordedGroup).toBe('Spacing', 'and the panel can see the record is behind the file');
+
+      // Reconciliation agrees, and says nothing about it — a rename is not a fault.
+      var loaded = await readFoundation({ collections: [name] });
+      var mine = loaded.sets.filter(function (set) { return set.domain === 'spacing'; });
+      expect(mine).toHaveLength(1, 'one set, not one per name the group has had');
+      expect(mine[0].group).toBe('Space', 'derived from the stamps');
+      expect(loaded.warnings.filter(function (w) {
+        return w.code === 'manifest-token-missing' || w.code === 'set-split';
+      })).toHaveLength(0, 'nothing is missing and nothing is split');
+
+      // And the next run keeps the same set rather than minting a second.
+      var moved = spacingConfigFor(name, 40);
+      moved.group = 'Space';
+      moved.config.group = 'Space';
+      var second = await runLinearRamp(moved, spacingRampSpec());
+      expect(second.manifest.manifest.id).toBe(id, 'the same set');
+      expect(second.stats.created).toBe(0, 'nothing new was created');
+      var keys = second.collection.getSharedPluginDataKeys(foundationNamespace())
+        .filter(function (k) { return k.indexOf('set:spacing:') === 0; });
+      expect(keys).toHaveLength(1, 'and one manifest, not two');
+      expect((await idsUnder(second.collection, 'Space'))['lg']).toBe(idsBefore['lg'],
+        'same variable ids throughout, so no binding in the file ever broke');
     } finally {
       await removeCollection(name);
       restoreRegistryRaw(before);
