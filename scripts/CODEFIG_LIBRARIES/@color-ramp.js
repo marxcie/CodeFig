@@ -229,6 +229,40 @@ function colorsPct(value) {
 }
 
 /**
+ * **The curve a collection was already drawn with**, read back out of its own colours.
+ *
+ * A ramp in a file is a list of colours with no record of how it was made, so this was declared
+ * unrecoverable and a read landed on *Original* — the file's values, no curve, an editor with nothing in
+ * it to adjust. That was true of *naming* a curve: no preset comes close enough to claim. It is not true of
+ * *fitting* one. Measured against published sets, a three-anchor fit lands within **0.5 to 0.9** lightness
+ * points at its worst step:
+ *
+ * ```
+ * Tailwind zinc  0.86      Tailwind blue  0.52
+ * Tailwind slate 0.64      Radix gray     0.94
+ * ```
+ *
+ * against 4.0 to 6.8 for the closest named preset. So the honest answer changed: not *"these are the
+ * colours and no curve describes them"* but *"this curve is within a point of them everywhere"* — which is
+ * a shape you can take hold of and bend, and the comparison strip prints the remaining difference step by
+ * step rather than hiding it.
+ *
+ * `[]` when there is nothing to fit: fewer than three steps, an unreadable hex, or a flat run.
+ */
+function colorsFitCurve(hexes, oklch) {
+  if (!hexes || hexes.length < 3) return [];
+  var read = oklch ? oklchFromHex : oklchHslFromHex;
+  var ladder = [];
+  for (var i = 0; i < hexes.length; i++) {
+    var seen = read(hexes[i]);
+    if (!seen) return [];
+    ladder.push(seen.L);
+  }
+  var fit = bezierFitRamp(ladder);
+  return fit ? fit.curve : [];
+}
+
+/**
  * **One curve**, as coordinates the ladder understands.
  *
  * A ladder used to be described by a *Lower* curve (bright→middle) and an *Upper* one (middle→dark), each
@@ -343,6 +377,19 @@ function colorsPreviewHtml(config, domain, modeName) {
   // **An empty Steps field previews the placeholder list.** Frame 2065:4154 draws a full ramp with every
   // field on a placeholder, which is the honest thing: the panel is showing what it would do, and it can do
   // that before being told the step names.
+  // **Nothing until there is something real to draw.**
+  //
+  // Colors used to draw a full ramp over `colorsPlaceholderSteps()` — a picture of a collection nobody had
+  // chosen, in colours from the block's defaults. It reads as a result rather than as an invitation, and
+  // the first thing anyone did was try to work out which collection it was showing.
+  //
+  // **Both halves of the address, not just the collection.** Gating on the collection alone left the same
+  // invented ramp on screen the moment one was picked, because the placeholder steps filled in for the
+  // empty field. The tokens are what the ramp *is*; without them there is nothing to preview, and typing
+  // them is what brings the scale into being.
+  if (!config.collectionName) return '';
+  if (!colorsParseSteps(config.steps).steps.length) return '';
+
   var alignment = colorsAlignment(config);
   var out = [];
 

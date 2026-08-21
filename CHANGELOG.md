@@ -265,6 +265,21 @@ deleting variable modes they did not recognise.
   Sets made before this keep working and are adopted on the next run; nothing is rewritten or deleted to
   migrate them. Colors is unaffected, since it does not write variables yet.
 
+- **Loading a Typography config no longer turns the font weights into a text style per character.** A run
+  promotes the panel's `400, 600` into the map it names styles from, and that map is what the collection
+  records — so loading it back put `{ 400: 400, 600: 600 }` into a field that holds a comma list, where it
+  became a *string*, and the next run enumerated that string's characters: `Text-Tiny/0` through
+  `Text-Tiny/28`, under every token in the scale. The weights come back as the list they were written as.
+  A map that names its weights (`{ Regular: 400 }`) is a different statement and still comes back as one,
+  read-only in the form and editable in Configuration code — where before it silently degraded to text.
+
+- **A foundation script no longer opens on "New collection".** The picker cannot tell a shipped default
+  from a name somebody pasted, so a default of `Responsive System` in a file without that collection landed
+  on *New collection* with the name already filled in — the panel's first statement being that it was about
+  to create something. Typography, Spacing, Corner radius and Grid now ship no collection name, so the
+  field opens as the plain dropdown Colors already was: pick one of this file's collections, or ask for a
+  new one.
+
 - **Pointing a panel at a collection and group now loads the tokens that are there**, whether or not a set
   was ever recorded. Only Grid read the file's variables when nothing was recorded; every other domain gave
   up, so opening Typography on a file holding four tokens showed the shipped ten. It reads the **names**
@@ -432,6 +447,20 @@ deleting variable modes they did not recognise.
   curve on the page.
 
 ### Changed
+
+- **A read recognises the curve the collection was already drawn with.** Opening a colour set used to land
+  on *Original* — the file's values and an empty curve editor — because a ramp carries no record of how it
+  was made. That is true of naming a preset and false of fitting one: a fitted three-anchor curve lands
+  within about a lightness point of published sets (Tailwind zinc 0.86, slate 0.64, blue 0.52, Radix gray
+  0.94) against 4.0–6.8 for the closest named curve. The dropdown calls it **Estimated original**, and
+  selecting it again restores it after you have bent it elsewhere.
+
+- **Colors opens empty, and fills in as you answer it.** Nothing below *General* until a collection is
+  chosen, and no preview until the colour tokens are named — it used to draw a full ramp over a placeholder
+  list, which reads as a result rather than as an invitation. A new scale starts on **Linear** rather than
+  *Original*, which names nothing on a collection that has no ramp yet.
+
+- **Steps is now called Color tokens.**
 
 - **Colors has one curve, not two.** *Lower* and *Upper* are gone; a colour ramp is described by a single
   curve running bright to dark, and *Add middle point* is what bends the two halves differently. In **HSL**

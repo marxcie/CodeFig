@@ -588,6 +588,28 @@ That is the difference between view state and the kind of stored answer this cod
 
 ---
 
+## The colour tokens are not drawn on the curve editor
+
+**What it would be.** A dot per token on the curve chart, filled with the colour it stands for, placed at
+its real lightness — so the gap between a dot and the line *is* the recognition's fitting error — with the
+seed step ringed, and a hover tooltip carrying the name, hex and lightness. Four treatments were built and
+compared against the real fitting maths: `artifact/7436a54c-8d71-444e-8b6a-71d00cd40b82`.
+
+**Where it got to.** Márton picked **Dots with a seed ring**, with one correction: *"the dots are too
+large"*. The specimen draws them at radius 2.2 in the control's 100-unit viewBox — about a 14px dot at the
+real 320px size — and eleven of those crowd the line. He has further ideas and wants to come back to it, so
+it is parked rather than half-built.
+
+**What building it surfaced, and what has to be settled first.** The curve's middle anchor now sits *on a
+step* by construction — that is what the anchor means since the two curves were collapsed into one. So the
+anchor and a step dot land on the same point and draw over each other. They should be one mark, not two:
+the anchor should *become* that step's dot — colour fill, accent ring, slightly larger — which also makes
+dragging it read correctly, since dragging the anchor is choosing which step carries the middle colour.
+Deciding that is the first move whenever this is picked up, because it changes what the dots are rather
+than just how big they are.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.

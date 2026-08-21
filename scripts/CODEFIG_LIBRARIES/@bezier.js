@@ -517,6 +517,152 @@ function bezierJoin(lower, upper, mx, my) {
  * `middle` *lightness* while the curve stayed put, which is how the middle came to be stored in two places
  * that could disagree. The curve carries it, so there is one place to move it.
  */
+/**
+ * The worst distance between a curve and a set of points, which is the number a fit is judged on.
+ *
+ * **Worst, not average.** A ramp is looked at all at once: one step that sits wrong is visible next to its
+ * neighbours however well the other ten fit. Least-squares would trade that step away to improve nine that
+ * were already right.
+ */
+function bezierWorstError(curve, xs, ys) {
+  var worst = 0;
+  for (var i = 0; i < xs.length; i++) {
+    var d = Math.abs(bezierAt(curve, xs[i]) - ys[i]);
+    if (d > worst) worst = d;
+  }
+  return worst;
+}
+
+/**
+ * Is this curve monotone over the samples? A ladder that doubles back is not a ladder.
+ *
+ * Checked on a fixed grid rather than solved for: the fit only has to *reject* a shape, and a curve that
+ * reverses anywhere a ramp is read will reverse on 64 evenly spaced points.
+ */
+/**
+ * **Monotone by construction, in four comparisons.**
+ *
+ * For a cubic from (0,0) to (1,1) the derivative is
+ * `3[y1(1-t)^2 + 2(y2-y1)(1-t)t + (1-y2)t^2]`, so `0 <= y1 <= y2 <= 1` makes all three coefficients
+ * non-negative and the whole thing cannot turn back. The same holds of x, which keeps the curve a
+ * function of x rather than a loop.
+ *
+ * This is a *sufficient* condition, not a necessary one — some monotone curves fail it — and that is the
+ * trade it exists for. `bezierIsMonotone` costs 65 evaluations, each a Newton solve, and the fit asks the
+ * question once per trial: with the exact test a single ramp took **1.8 seconds**, which is not a thing
+ * that can run while a collection loads. The search is narrowed slightly and the answer arrives in
+ * milliseconds. The exact test still gates the finished curve.
+ */
+function bezierHandlesRise(quad) {
+  return quad[0] >= 0 && quad[0] <= quad[2] && quad[2] <= 1 &&
+         quad[1] >= 0 && quad[1] <= quad[3] && quad[3] <= 1;
+}
+
+function bezierIsMonotone(curve) {
+  var previous = -Infinity;
+  for (var i = 0; i <= 64; i++) {
+    var v = bezierAt(curve, i / 64);
+    if (v < previous - 1e-9) return false;
+    previous = v;
+  }
+  return true;
+}
+
+/**
+ * One cubic segment fitted to `(xs, ys)`, by coordinate descent from several starts.
+ *
+ * **Started from the presets, because real ramps look like them.** A hand-made ladder is usually somebody
+ * approximating an easing by eye, so the named curves are close to the answer and descending from them
+ * lands in the right basin. Starting from one place — or from random points, which a workflow cannot do
+ * reproducibly anyway — is how a fitter returns a plausible shape that is 10% out.
+ *
+ * The step halves until it stops paying, which is enough for a value that is drawn at a few hundred pixels
+ * and stored to six decimals.
+ */
+function bezierFitSegment(xs, ys) {
+  var starts = [[0.25, 0.1, 0.75, 0.9], [0.42, 0, 0.58, 1], [0.1, 0.5, 0.9, 0.5],
+                [0.6, 0.05, 0.4, 0.95], [0.33, 0.33, 0.67, 0.67]];
+  var best = null;
+  for (var s = 0; s < starts.length; s++) {
+    var c = starts[s].slice();
+    var err = bezierWorstError(bezierNormalise(c), xs, ys);
+    for (var step = 0.25; step > 2e-3; step *= 0.5) {
+      var moved = true;
+      while (moved) {
+        moved = false;
+        for (var k = 0; k < c.length; k++) {
+          for (var d = 0; d < 2; d++) {
+            var delta = d === 0 ? step : -step;
+            var trial = c.slice();
+            trial[k] = bezierClamp01(trial[k] + delta);
+            if (!bezierHandlesRise(trial)) continue;
+            var v = bezierWorstError(bezierNormalise(trial), xs, ys);
+            if (v < err - 1e-12) { c = trial; err = v; moved = true; }
+          }
+        }
+      }
+    }
+    if (!best || err < best.error) best = { curve: bezierNormalise(c), error: err };
+  }
+  return best;
+}
+
+/**
+ * **The curve an existing ramp was drawn with**, recovered from the ramp itself.
+ *
+ * `values` are read in order, lightest to darkest or smallest to largest — whatever the ladder's own
+ * direction is. They are normalised into the unit square against their own ends, so what comes back
+ * describes the *shape* and carries none of the range: the same curve fits a ramp from 98 to 4 and one
+ * from 0.98 to 0.04.
+ *
+ * → `{ curve, error, anchorIndex }`, or `null` for fewer than three values or a flat run. `error` is in
+ * normalised units — multiply by the span to read it in the ladder's own numbers.
+ *
+ * **Three anchors are found by putting the middle one *on a step*.** Every interior index is tried as the
+ * join, each half is fitted over its own range, and the halves are joined there. So the anchor lands on a
+ * real value rather than between two, which is also what the anchor means everywhere else now: the middle
+ * colour, and the step it sits on. A two-anchor fit is returned when it is no worse, because a curve with
+ * a middle point it does not need is a control with a handle that does nothing.
+ */
+function bezierFitRamp(values, maxAnchors) {
+  if (!values || values.length < 3) return null;
+  var last = values.length - 1;
+  var span = values[last] - values[0];
+  if (!(Math.abs(span) > 1e-9)) return null;
+
+  var xs = [], ys = [];
+  for (var i = 0; i <= last; i++) {
+    xs.push(i / last);
+    ys.push((values[i] - values[0]) / span);
+  }
+
+  var flat = bezierFitSegment(xs, ys);
+  var best = flat ? { curve: flat.curve, error: flat.error, anchorIndex: null } : null;
+  if (maxAnchors === 2) return best;
+
+  for (var k = 1; k < last; k++) {
+    // Each half over its own range, normalised into its own unit square — which is exactly the shape
+    // `bezierJoin` places back either side of the anchor.
+    var loX = [], loY = [], hiX = [], hiY = [];
+    var mx = xs[k], my = ys[k];
+    if (!(mx > 1e-6) || !(mx < 1 - 1e-6)) continue;
+    if (!(Math.abs(my) > 1e-9) || !(Math.abs(1 - my) > 1e-9)) continue;
+    for (var a = 0; a <= k; a++) { loX.push(xs[a] / mx); loY.push(ys[a] / my); }
+    for (var b = k; b <= last; b++) {
+      hiX.push((xs[b] - mx) / (1 - mx));
+      hiY.push((ys[b] - my) / (1 - my));
+    }
+    var lo = bezierFitSegment(loX, loY);
+    var hi = bezierFitSegment(hiX, hiY);
+    if (!lo || !hi) continue;
+    var joined = bezierJoin(lo.curve, hi.curve, mx, my);
+    if (!bezierIsMonotone(joined)) continue;
+    var error = bezierWorstError(joined, xs, ys);
+    if (!best || error < best.error - 1e-9) best = { curve: joined, error: error, anchorIndex: k };
+  }
+  return best;
+}
+
 function bezierThrough(curve, mx, my) {
   var x = bezierClamp01(mx);
   var y = bezierClamp01(my);

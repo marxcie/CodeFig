@@ -66,9 +66,9 @@
 // everything it reaches for has to be named here too. `npm run validate` makes that a build error rather
 // than a ReferenceError swallowed by a caller's try/catch.
 @import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
-@import { bezierAt, bezierNormalise, bezierFromEase, bezierWithMiddle, bezierWithoutMiddle, bezierParse, bezierFormat, bezierEaseName, bezierJoin, bezierSplit, bezierThrough } from "@Bezier"
+@import { bezierAt, bezierNormalise, bezierFromEase, bezierWithMiddle, bezierWithoutMiddle, bezierParse, bezierFormat, bezierEaseName, bezierJoin, bezierSplit, bezierThrough, bezierFitRamp } from "@Bezier"
 @import { oklchFromHex, oklchHslFromHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare, oklchDistance } from "@OKLCH"
-@import { colorsPlaceholderSteps, colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel, colorsCurve, colorsGenerateMode, colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip, colorsAlignment, colorsBannerHtml, colorsTolerance, colorsEscapeHtml, colorsPct } from "@Color Ramp"
+@import { colorsPlaceholderSteps, colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel, colorsCurve, colorsFitCurve, colorsGenerateMode, colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip, colorsAlignment, colorsBannerHtml, colorsTolerance, colorsEscapeHtml, colorsPct } from "@Color Ramp"
 
 // ========================================
 // CONFIG
@@ -83,9 +83,9 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   //
   // The collection's own modes. The chips are the mode list — a read fills them, and there is one mode block
   // below per chip, in chip order. Removing and renaming happen here, which is why a block carries neither.
-  // @collectionModes: Collection modes
+  // @collectionModes: Collection modes @showWhen: collectionName=* @showWhen: steps=*
   group: "", // @label: Group within collection @placeholder="eg.: Primitives/Neutrals"
-  steps: "", // @label: Steps @placeholder="Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950" @helper: Named lightest to darkest, and the only source for token placement below. The variables are <group>/<step>.
+  steps: "", // @label: Color tokens @placeholder="Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950" @helper: Named lightest to darkest, and the only source for token placement below. The variables are <group>/<step>.
   colorModel: "hsl", // @options: hsl:HSL|oklch:OKLCH @radio @label: Color model @helper: HSL keeps a curve per mode. OKLCH shares one lightness ladder across every mode, which is what makes them match in greyscale.
   // Each anchor keeps a hue for both models: OKLCH's is a perceptual angle, HSL's is where the
   // maximum channel sits, and on a near-neutral ramp the two disagree by more than 30°. Both are
@@ -93,26 +93,36 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 
   // --- @section
 
-  // # OKLCH settings @showWhen: colorModel=oklch
+  // # OKLCH settings @showWhen: colorModel=oklch @showWhen: collectionName=* @showWhen: steps=*
   // The same curve editor a mode has, at collection scope: the ladder is shared, so the curve belongs to
   // the collection rather than to one of its modes — **one curve for every mode**, which is what makes the
-  // modes match in greyscale. Original is the ramp already in the file: an empty curve, because there is
-  // no curve.
-  curve: [], // @curve @allowOriginal @label: Curve @showWhen: colorModel=oklch @helper: One curve, bright to dark. Drag a handle, pick a preset, or paste coordinates. Add middle point bends the two halves differently — which is what a real neutral ramp does — and that anchor is the middle colour's lightness and its step.
+  // modes match in greyscale.
+  //
+  // **Nothing below General until there are tokens.** Choosing a collection sets a read going — modes are
+  // fetched, blocks are added, the block is rewritten — and every one of those rebuilds the form. With the
+  // mode settings on screen that reads as flicker and a jumping layout, over a panel that cannot say
+  // anything useful yet: a collection with no token list has no ramp to show. Naming the tokens is the
+  // point at which there is something to draw, so it is the point at which the rest appears.
+  //
+  // **A new scale starts Linear, not Original.** *Original* means "the ramp already in the file", so on a
+  // collection that has no ramp yet it names nothing — an empty editor and a preview with no line in it.
+  // Linear is the honest starting point: an even ladder between the two ends, which is a thing you can see
+  // and then bend. A read replaces it with the curve fitted to what the file actually holds.
+  curve: [0.333333, 0.333333, 0.666667, 0.666667], // @curve @allowOriginal @label: Curve @showWhen: colorModel=oklch @showWhen: collectionName=* @showWhen: steps=* @helper: One curve, bright to dark. Drag a handle, pick a preset, or paste coordinates. Add middle point bends the two halves differently — which is what a real neutral ramp does — and that anchor is the middle colour's lightness and its step.
   // @preview
-  lightness: {}, // @group: bright:number=Bright|dark:number=Dark @label: Lightness @showWhen: colorModel=oklch @helper: 0 to 100. The two ends hold exactly; the curve fills everything between them.
+  lightness: {}, // @group: bright:number=Bright|dark:number=Dark @label: Lightness @showWhen: colorModel=oklch @showWhen: collectionName=* @showWhen: steps=* @helper: 0 to 100. The two ends hold exactly; the curve fills everything between them.
 
-  // # Mode settings
+  // # Mode settings @showWhen: collectionName=* @showWhen: steps=*
   modes: [
     {
       name: "",
-      curve: [],
+      curve: [0.333333, 0.333333, 0.666667, 0.666667],
       seed: { hex: "", placement: "", lock: false },
       bright: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 98 },
       middle: { hue: 0, hslHue: 0, chroma: 0, saturation: 0 },
       dark: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 4 }
     }
-  ], // @rows: name:text=Mode|curve:curve(original){colorModel=hsl}=Curve @helper: One curve, bright to dark. Drag a handle, pick a preset, or paste coordinates. Add middle point bends the two halves differently, and that anchor is the middle colour's lightness and its step.|#Seed{curve=curve}|seed:{hex:text@placeholder="eg. #71717A"=Seed color|placement:text@placeholder="Auto"=Token placement|lock:checkbox=Lock seed @helper: On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder.}{curve=curve}=Seed|#Palette|bright:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[curve=original]=Bright|middle:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation}[curve=original]=Middle|dark:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[curve=original]=Dark @disabledNote: Anchors take effect once you choose a curve.|@preview @blocks @label: Modes
+  ], // @rows: name:text=Mode|curve:curve(original){colorModel=hsl}=Curve @helper: One curve, bright to dark. Drag a handle, pick a preset, or paste coordinates. Add middle point bends the two halves differently, and that anchor is the middle colour's lightness and its step.|#Seed{curve=curve}|seed:{hex:text@placeholder="eg. #71717A"=Seed color|placement:text@placeholder="Auto"=Token placement|lock:checkbox=Lock seed @helper: On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder.}{curve=curve}=Seed|#Palette|bright:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[curve=original]=Bright|middle:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation}[curve=original]=Middle|dark:{hue:number{colorModel=oklch}@placeholder="eg. 264"=Hue|hslHue:number{colorModel=hsl}@placeholder="eg. 264"=Hue|chroma:number{colorModel=oklch}@placeholder="eg. 0.012"=Chroma|saturation:number{colorModel=hsl}@placeholder="eg. 12"=Saturation|lightness:number{colorModel=hsl}@placeholder="eg. 46"=Lightness}[curve=original]=Dark @disabledNote: Anchors take effect once you choose a curve.|@preview @blocks @label: Modes @showWhen: collectionName=* @showWhen: steps=*
 
   // @CONFIG_END
 };

@@ -2135,6 +2135,31 @@ function foundationClone(value) {
 }
 
 /**
+ * `{ "400": 400, "Semi Bold": "Semi Bold" }` → `[400, "Semi Bold"]`.
+ *
+ * The panel's Font weights field is a comma list, and the generator promotes that list into a map
+ * before it runs — so a map whose every key is its own value spelled out is a *list on its way home*,
+ * not something anybody wrote. Handing it back as an object put `{ 400: 400 }` into a text field,
+ * which came back out as a string and generated a text style per character.
+ *
+ * A map whose keys differ from its values is the legacy spelling — `{ Regular: 400 }`, a name for each
+ * weight — and stays a map, because that naming is the whole of what it says.
+ */
+function foundationFontWeightsForBlock(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return foundationClone(value);
+  var keys = Object.keys(value);
+  if (keys.length === 0) return foundationClone(value);
+  var list = [];
+  for (var i = 0; i < keys.length; i++) {
+    var entry = value[keys[i]];
+    if (typeof entry !== 'number' && typeof entry !== 'string') return foundationClone(value);
+    if (String(entry) !== keys[i]) return foundationClone(value);
+    list.push(entry);
+  }
+  return list;
+}
+
+/**
  * Normalise any config CodeFig has ever accepted into the v1 shape, and say what changed.
  *
  * Accepts: the current top-level shape, the legacy `structure.*` shape, the internal
@@ -2538,7 +2563,9 @@ function toDomainConfig(v1, domain, options) {
   if (config.defaultBaseLevel !== undefined) out.defaultBaseLevel = config.defaultBaseLevel;
   if (config.generateOverview !== undefined) out.generateOverview = config.generateOverview;
   if (config.styles !== undefined) out.styles = foundationClone(config.styles);
-  if (config.fontWeights !== undefined) out.fontWeights = foundationClone(config.fontWeights);
+  // As the block spells it — a list. This object is what a user pastes back into one, and the field
+  // that reads it holds a comma list.
+  if (config.fontWeights !== undefined) out.fontWeights = foundationFontWeightsForBlock(config.fontWeights);
   // Promoted on the way out as well as on the way in: an old manifest keeps `roundTo` inside
   // `scaling`, and that is where the reader has just stopped looking.
   if (config.roundTo !== undefined) out.roundTo = config.roundTo;
@@ -3365,9 +3392,10 @@ async function colorsRecognise(collectionName, group, modeName) {
     found: false, collection: collectionName || null, group: group == null ? '' : group,
     modeName: modeName || null, steps: [], existing: [], anchors: null, hue: null, chroma: null,
     config: null, skipped: [], aliased: [], duplicates: [], declined: null, notes: [],
-    // The curve cannot be recovered: an existing ramp is a list of colours with no record of how it was
-    // made, and a hand-made one may sit on no curve at all. Named rather than guessed.
-    missing: ['curve']
+    // Nothing is missing from a read any more. The curve used to be — an existing ramp carries no record of
+    // how it was made — but `colorsFitCurve` recovers one to within a lightness point, which is a shape you
+    // can bend rather than a claim about the file.
+    missing: []
   };
   if (!collectionName) return answer;
 
@@ -3481,8 +3509,41 @@ async function colorsRecognise(collectionName, group, modeName) {
   answer.existing = usable.map(function (u) { return oklchRgbToHex([u.rgb.r, u.rgb.g, u.rgb.b]); });
 
   var readings = usable.map(function (u) { return oklchFromRgb([u.rgb.r, u.rgb.g, u.rgb.b]); });
-  var mid = Math.floor((readings.length - 1) / 2);
   var last = readings.length - 1;
+
+  /**
+   * **The middle anchor goes where the colour is, not halfway along the list.**
+   *
+   * Lightness is fitted to every step, so it comes back within a point. Hue and chroma are not — they are
+   * rebuilt by interpolating three anchors, and *which* three decides how close that gets. Put the middle at
+   * `floor(last/2)` and a ramp whose chroma peaks later is reconstructed as a monotone fall from the middle
+   * to the dark end, which is not the shape it has: Tailwind blue peaks at 700 and came back **0.068** of
+   * chroma short at its most saturated step — a third less colourful, and the largest single error anywhere
+   * in a read.
+   *
+   * Anchoring on the peak instead lets the two segments describe a rise and then a fall, which is what a
+   * designed palette actually does. Measured worst-chroma error, auto middle → peak:
+   *
+   * ```
+   * blue 0.068 → 0.026    teal 0.063 → 0.036    red 0.025 → 0.022    zinc 0.004 → 0.005
+   * ```
+   *
+   * A neutral has no peak worth finding and lands wherever rounding puts it, which costs nothing because
+   * there is almost no chroma to get wrong. The tie goes to the earlier step, so the answer does not depend
+   * on iteration order, and the ends are excluded because an anchor *on* an end is not a middle.
+   */
+  var mid = Math.floor((readings.length - 1) / 2);
+  if (last >= 2) {
+    var peak = 1;
+    for (var pi = 2; pi < last; pi++) if (readings[pi].C > readings[peak].C) peak = pi;
+    // **Only when there is a peak worth finding.** On a near-grey the highest chroma is whichever step
+    // rounding favoured — this file's own neutrals sit around 0.004, where one 8-bit step moves the measured
+    // value by more than the differences between steps. Anchoring on that would make `midStep` depend on
+    // rounding, and it would buy nothing: with almost no chroma there is almost no chroma to get wrong
+    // (zinc measured 0.004 against 0.005 either way). Below the threshold the index midpoint stands, which
+    // is the documented rule and the one the sixteen-step neutral is pinned on.
+    if (readings[peak].C >= 0.02) mid = peak;
+  }
   answer.anchors = {
     bright: readings[0].L, middle: readings[mid].L, dark: readings[last].L
   };
@@ -3595,7 +3656,8 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   var answer = {
     source: 'none', config: null, collection: collectionName || null,
     group: group == null ? null : group, tokens: [], modes: [], existing: {},
-    recognition: { modes: {}, declined: null }, missing: ['curve']
+    // Nothing is missing: the curve is fitted to the ramp the file holds rather than declared unrecoverable.
+    recognition: { modes: {}, declined: null }, missing: []
   };
   if (!collectionName) return answer;
 
@@ -3684,10 +3746,11 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
       entry.curve = undefined;
     }
     if (colorModel === 'hsl') {
-      // **Original is the empty curve** — no points, no curve — which is the whole of how the editor spells
-      // it. There is no family or easing to carry alongside: a read fills the coordinates and nothing else,
-      // so there is nothing here that a dragged handle could later disagree with.
-      entry.curve = [];
+      // **HSL's ladder is the mode's, so the fit is too.** Each mode is read back into the curve that draws
+      // it; a read that cannot be fitted falls back to the empty curve, which is *Original* — the file's own
+      // colours, untouched. A read fills coordinates and nothing else, so there is nothing here that a
+      // dragged handle could later disagree with.
+      entry.curve = colorsFitCurve(seen.existing, false);
     }
     perMode.push(entry);
   }
@@ -3699,9 +3762,12 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   answer.tokens = perMode[0].steps.slice();
   answer.config = {
     steps: perMode[0].steps.join(', '),
-    // **OKLCH arrives on Original at collection scope.** The ladder is shared, so the claim "this is the ramp
-    // already in the file" is one the collection makes, not one each mode makes separately.
-    curve: colorModel === 'hsl' ? undefined : [],
+    // **OKLCH's curve is the collection's, so it is fitted once, from the mode that supplied the ladder.**
+    // The ladder is shared, so a claim about the shape of it is one the collection makes rather than one
+    // each mode makes separately — and `leadName` is the mode the anchors came from, so fitting anything
+    // else would describe a ladder nothing is generated from. An unfittable read gives `[]`, which is
+    // *Original*: the file's own colours, untouched.
+    curve: colorModel === 'hsl' ? undefined : colorsFitCurve(answer.existing[leadName], true),
     // **No middle.** The ladder's bend is the curve's own anchor now, so a middle lightness here would be a
     // second answer to a question the curve already answers — and the block has no field to show it in.
     lightness: {
