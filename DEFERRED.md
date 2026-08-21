@@ -610,6 +610,109 @@ than just how big they are.
 
 ---
 
+## Styles are still found by name, and have the rename problem variables just stopped having
+
+**What.** Variables now carry a stamp and a set id, so renaming a group moves a token set instead of
+duplicating it. **Styles were not part of that change.** `createOrUpdateTextStyles` matches on
+`style.name === styleName` (typography.js:827) and `createGridStyles` on `s.name === styleName`
+(grid.js:323). So renaming a text style, or renaming the group its name is built from, still produces the
+exact failure the variables were just cured of: the next run creates a second style beside the first and
+orphans everything bound to the original.
+
+**How it was found.** Writing the stamp passes for variables. Nothing surfaced it — the two paths simply
+were not in scope, and no test covers a renamed style.
+
+**Why it was left.** The three commits were already large, and styles are a different resolution path with
+its own publish semantics: a published *style* cannot be silently renamed under a subscribing file the way
+a variable can, so the "just rename it in place" answer wants thinking about rather than copying.
+
+**Fix.** `stampToken`/`readStamp` take any `PluginDataMixin`, which includes every style type, so the
+mechanism already works — `adoptRamp` stamps variables through the same call. The work is an
+`alignStampedStyles`/`stampGeneratedStyles` pair shaped like the variable ones, called around the two
+style-writing paths, plus a decision about what a run should do when the style it would rename is
+published and consumed. Until then, renaming a text style or a grid style is still a duplicating
+operation.
+
+---
+
+## The manifest's `modes` field means three different things depending on the domain
+
+**What.** `writeManifest`'s `modes` array is written with a different convention per generator:
+`@linear-ramp.js` records **viewport keys** (`mobile`), `typography.js` records **labels**
+(`viewportLabel(k)` → `Mobile`), and `grid.js` records **whatever the user typed into `modes[].name`**,
+which in the shipped default config is the placeholder `Value`. `reconcileFoundation` papers over the
+first two with a `viewportKeyFromLabel` comparison on both sides.
+
+**How it was found.** Adding `modeIds` — the helper had to accept keys *or* labels, which is the tell.
+
+**Why it was left.** It predates this work and fixing it means changing what three generators write, which
+is a migration of its own; and now that `modeIds` carries the identity, `modes` is decorative for
+reconciliation purposes, so the inconsistency has stopped causing warnings. It is a readability problem
+rather than a correctness one — until someone reads the field and believes it.
+
+**Fix.** Pick one (viewport keys, since that is what a portable config uses between files), convert the
+other two, and have `parseManifest` normalise anything older on the way in. Cheap once someone decides.
+
+---
+
+## Colors must bracket its write with the stamp passes when the write path lands
+
+**What.** Colors generates nothing yet — its run block says so explicitly — so it is the one Design System
+Foundations domain that does not stamp. When the write path is built it must do what the other four do:
+resolve the set through `findFoundationSet`, call `alignStampedTokens` **before** `processVariables`, write
+the manifest, then call `stampGeneratedTokens` with the id the manifest minted.
+
+**Why it is here rather than done.** There is no code to add it to.
+
+**Fix.** Copy the six lines from `runLinearRamp`. The ordering is the part that matters and the part that
+is easy to get wrong: align must precede the write, and stamping must follow the manifest, because the
+manifest is what mints the set id.
+
+---
+
+## Nothing catches a cross-script function passed by reference
+
+**What.** `@import` extraction follows *calls*. A function handed over as a value —
+`findByStamp(candidates, domain, token, foundationStampData)` — is never called in the extracted text, so
+it is never pulled in, and resolves to `undefined` inside the sandbox. `validateResolvedCalls` only
+inspects calls too, so the script **validates clean and fails in Figma**.
+
+**How it was found.** It happened: a named stamp getter passed to `findByStamp` took a full build, reload
+and spec run to surface as `'foundationStampData' is not defined`. Fixed by inlining the callback, and the
+rule is now in CLAUDE.md.
+
+**Why it was left.** A first attempt at detecting it — flag any identifier that names a known top-level
+function, is not declared locally, and never appears followed by `(` — produced 687 hits across the
+scripts, essentially all noise: it collides with ordinary words that happen to be function names somewhere
+(`set`, `run`, `at`, `one`, `op`, `walk`, `select`) and with identifiers in comments, strings and property
+positions. Per the *"measure before building a check"* habit below, a check at that signal-to-noise ratio
+is worse than none.
+
+**Fix.** Needs real parsing rather than a regex: walk the resolved source, collect identifiers in
+*argument position* that resolve to a known cross-script function name and are not themselves called
+anywhere in the file. Worth doing only if this bites a second time — one occurrence, caught by the
+existing spec suite in one cycle, does not yet justify a parser.
+
+---
+
+## A blocked rename and a split set are reported with no way to act on them
+
+**What.** Two new warnings have no follow-through. `stamp-name-taken` fires when the variable a stamp
+points at cannot be renamed to the configured name because something else already holds that name — both
+are named and neither is touched, which is correct but leaves the user to sort it out in the variable
+table. `set-split` fires when a set's tokens are spread across more than one group, and likewise only
+describes it.
+
+**Why it was left.** Both are genuinely ambiguous: which of two same-named variables the user meant, and
+whether a split was deliberate, are questions only a person can answer. Guessing would be worse than
+saying so — and per *"don't add config to fix user error"*, a setting is not the answer either.
+
+**Fix.** If these turn out to be common, the panel is the right place: show the conflict with the two
+variables named and let the user pick, rather than adding a resolution rule to the run. Wait for evidence
+that anyone hits them first.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.
