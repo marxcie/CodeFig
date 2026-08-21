@@ -3293,9 +3293,13 @@
         console.log('UI: Results array length:', data.results ? data.results.length : 'no results');
         
         const { title, results, type = 'info', grouping, showFilters = true, autoClose = false } = data;
-        
+        // A script can refuse the auto-open outright. The panel still fills, and the button still
+        // shows there is something in it — a result you have to go and look at is a different thing
+        // from no result. Only `false` counts, so every existing caller keeps the old behaviour.
+        const autoOpen = data.autoOpen !== false;
+
         // Auto-open the InfoPanel when results are received (only for errors, not for success)
-        if (!infoPanel.classList.contains('open') && !autoClose && type !== 'success') {
+        if (autoOpen && !infoPanel.classList.contains('open') && !autoClose && type !== 'success') {
           console.log('UI: Auto-opening InfoPanel for results');
           toggleInfoPanel();
         }
@@ -3570,9 +3574,13 @@
           
           infoContent.appendChild(groupContainer);
         });
-        
-        // Auto-open panel if not already open
-        if (!infoPanelOpen) {
+
+        // Auto-open panel if not already open — and the second place that decides it, which is why
+        // it asks the same question rather than carrying its own answer: a grouped result set used to
+        // open the panel unconditionally, so `autoOpen: false` would have held for a flat list and
+        // quietly not for a grouped one. Re-render on a filter change goes through here too, and
+        // must not open a panel the user closed.
+        if (!infoPanelOpen && !(window.currentInfoData && window.currentInfoData.autoOpen === false)) {
           toggleInfoPanel();
         }
       }

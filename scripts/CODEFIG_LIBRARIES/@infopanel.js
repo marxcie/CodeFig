@@ -8,7 +8,7 @@
 // ## Exported functions
 // | Category | Functions |
 // |----------|-----------|
-// | Display | displayResults(data) – data: { title, results, type, grouping, showFilters } |
+// | Display | displayResults(data) – data: { title, results, type, grouping, showFilters, autoOpen } |
 // | Result builders | createResult, createSelectableResult, createHtmlResult |
 // | Grouping | createGrouping, groupResults |
 // @DOC_END
@@ -25,6 +25,10 @@ var shared = true;
  * @param {string} data.grouping.default - Default grouping mode
  * @param {Function} data.grouping.getGroupKey - Function to extract group key from result
  * @param {Function} data.grouping.getGroupTitle - Function to format group title
+ * @param {boolean} data.autoOpen - `false` fills the panel without opening it. The panel still holds
+ *   the results, and the button still says they are there; it just does not take over the window on
+ *   its own. Default `true`, which keeps the panel's own rule: it opens for anything that is not a
+ *   plain success.
  */
 function displayResults(data) {
   // Check if we have a custom message handler (set by backend)
@@ -35,7 +39,8 @@ function displayResults(data) {
       results: data.results || [],
       severity: data.type || 'info',
       grouping: data.grouping || null,
-      showFilters: data.showFilters !== false // Default to true
+      showFilters: data.showFilters !== false, // Default to true
+      autoOpen: data.autoOpen !== false // Default to true
     });
     if (typeof window.codefigRunComplete === 'function') {
       window.codefigRunComplete();
@@ -49,7 +54,8 @@ function displayResults(data) {
         results: data.results || [],
         severity: data.type || 'info',
         grouping: data.grouping || null,
-        showFilters: data.showFilters !== false
+        showFilters: data.showFilters !== false,
+        autoOpen: data.autoOpen !== false
       });
     } catch (e) {
       console.log('InfoPanel: Could not send message to UI:', e.message);

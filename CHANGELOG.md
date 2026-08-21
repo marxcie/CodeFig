@@ -27,6 +27,12 @@ deleting variable modes they did not recognise.
 
 - **Change case** — recursively renames frame and group layers, component variant labels and values,
   and optionally instance names, in lower case, title case, or camelCase.
+- **Selection to variables takes a group.** A **Group within collection** field says once where the
+  variables go inside the collection, instead of every layer having to repeat it in its own name.
+  It is a prefix, so it composes with the slashes already in a layer name rather than replacing
+  them: group `bark` over a layer called `900` and no group over a layer called `bark/900` both
+  write `bark/900`, and group `primitives` over `bark/900` writes `primitives/bark/900`. Left empty,
+  nothing changes about how the script behaved before.
 - **A bezier curve editor, for curves you draw rather than curves you pick from a list.** Two anchors and
   two handles: drag them, nudge them a percent at a time with the arrow keys (ten with shift), choose a
   starting point from the preset list, or paste `cubic-bezier(0.37, 0, 0.63, 1)` into the field underneath.
@@ -241,6 +247,17 @@ deleting variable modes they did not recognise.
 
 ### Fixed
 
+- **"New mode" adds a mode; it no longer renames the one you had and writes through it.** A collection
+  that has been in the file for months, whose single mode nobody ever bothered to rename, is still
+  called *Mode 1* — and `getOrCreateMode` treated that name alone as proof the mode was a placeholder
+  Figma had just made. Choosing **New mode** and typing a name renamed it instead of adding one, so
+  every value in the only mode the collection had was overwritten by the run. Found on a colour
+  collection with sixteen variables in it: *New mode / Lime-2* came back as sixteen updated variables
+  and no new mode. The placeholder rename is still there, because a collection created seconds ago
+  should not be left with a stray *Mode 1* column beside the mode you named — but it now asks the
+  question that actually decides whether renaming is safe: **is there anything in this collection to
+  lose?** An empty collection cannot lose a value to a rename. A collection with variables in it gets
+  a real second mode. Affects **Selection to variables**, the only script that uses the mode picker.
 - **Renaming a variable group no longer loses the config behind it, or duplicates the tokens.** A
   generated set was found by name, and the name was in three places at once: the manifest's storage key,
   its group field, and its list of modes. So renaming a group — reorganising the variable table, which
@@ -447,6 +464,14 @@ deleting variable modes they did not recognise.
   curve on the page.
 
 ### Changed
+
+- **Selection to variables writes its results down without opening the panel over your file.** The Info
+  panel still holds the whole run — every variable, its value, and whether it was created or updated,
+  each row still clickable to select the layer — and the button still shows there is something in it.
+  It just stays where you left it. The notification is the outcome; a panel that takes over the window
+  to say the same thing in more words is the plugin talking over the work. Scripts can ask for this
+  with `autoOpen: false` on `displayResults`; the default is unchanged, so every other script still
+  opens the panel for anything that is not a plain success.
 
 - **A read recognises the curve the collection was already drawn with.** Opening a colour set used to land
   on *Original* — the file's values and an empty curve editor — because a ramp carries no record of how it

@@ -499,6 +499,7 @@ function getDefaultMode(collection) {
  * - **It creates, and creating can fail.** `addMode` throws when the file's per-collection mode
  *   budget is spent, and the number depends on the plan. That is re-thrown with the collection and
  *   the count, because "modes are limited" without either is a message you cannot act on.
+ * - **A placeholder mode is adopted; a mode with values in it never is.** See below.
  */
 function getOrCreateMode(collection, modeName) {
   if (!collection) return null;
@@ -513,10 +514,23 @@ function getOrCreateMode(collection, modeName) {
   // A collection Figma has just created carries one mode called "Mode 1" that nobody asked for.
   // Naming the first mode is a rename of that one, not a second mode beside it — otherwise choosing
   // "New mode" on a new collection leaves every collection with a stray empty column.
-  if (collection.modes.length === 1 && collection.modes[0].name === 'Mode 1' &&
-      typeof collection.renameMode === 'function') {
+  //
+  // **"Mode 1" is not enough to make it a placeholder.** A collection that has been in the file for
+  // months, filled with variables, whose one mode nobody ever bothered to rename is still called
+  // "Mode 1" — and renaming *that* is not a mode being added, it is the user's only mode being taken
+  // over and written through. `color - lime` had sixteen variables in a mode called "Mode 1";
+  // choosing **New mode / Lime-2** renamed it and overwrote every value, which is the opposite of
+  // what "new" says. So the question asked is the one that actually decides whether the rename is
+  // safe: **is there anything in here to disturb?** An empty collection cannot lose a value to a
+  // rename, whoever created it and whenever. A collection with variables gets a real second mode.
+  var placeholderMode =
+    collection.modes.length === 1 &&
+    collection.modes[0].name === 'Mode 1' &&
+    (collection.variableIds || []).length === 0 &&
+    typeof collection.renameMode === 'function';
+  if (placeholderMode) {
     collection.renameMode(collection.modes[0].modeId, wanted);
-    console.log('Renamed the default mode to: ' + wanted);
+    console.log('Renamed the placeholder mode to: ' + wanted);
     return collection.modes[0];
   }
 

@@ -12,8 +12,19 @@
 //
 // Changing the collection empties it, because the modes on offer are the new collection's.
 //
+// **New mode always means a mode beside the ones you have**, never a rename of one. The single
+// exception is a collection with no variables in it yet — there is nothing in it to lose, and its
+// untouched *Mode 1* is a placeholder Figma made rather than a mode you asked for.
+//
+// ## Group
+// A group inside the collection that every variable goes under. Left empty, they land at the
+// collection root. It is a *prefix*, so it composes with whatever the layer name already says —
+// `bark` + a layer called `350` and no group + a layer called `bark/350` both write `bark/350`.
+// One field when the layers are named uniformly, slashes in the layer names when they are not.
+//
 // ## Layer naming
-// The layer name is the variable path *inside* that collection; slashes are groups.
+// The layer name is the variable path *inside* that collection (after the group); slashes are
+// further groups.
 // - `bark/350` → group `bark`, variable `350`
 // - `primitives/bark/350` → group `primitives/bark`, variable `350`
 // - `350` → variable `350` at the collection root
@@ -25,7 +36,9 @@
 // | Number | Text | Parsed number from text content |
 // | String | Text | Text content |
 //
-// Results are listed in the **Info panel**. Click a row to select the layer.
+// Every variable the run touched is listed in the **Info panel** — its value, and whether it was
+// created or updated. Click a row to select the layer. The panel does **not** open by itself; open
+// it from its button when you want to read the run.
 //
 // **Not a search pattern.** The collection field is a picker — compared by exact name, not with the
 // `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
@@ -43,6 +56,9 @@ var targetCollection = ""; // @collection @label: Collection
 //
 // Which mode the values are written to. Empty means the collection's default mode.
 var targetMode = ""; // @mode: targetCollection @label: Mode
+//
+// A group inside the collection that every variable goes under. Empty means the collection root.
+var targetGroup = ""; // @label: Group within collection @placeholder="eg.: primitives/bark"
 //
 var variableType = "Color"; // @options: Color|Number|String
 // Color: solid fill on shapes. Number / String: text layers.
@@ -67,14 +83,25 @@ function normalizeLayerPath(name) {
   return s;
 }
 
+// `bark` → `bark/`, `/primitives/bark/` → `primitives/bark/`, nothing → nothing.
+function groupPrefix(group) {
+  var path = normalizeLayerPath(group);
+  return path ? path + "/" : "";
+}
+
 // The layer name is the variable path inside the chosen collection — nothing is peeled off the
 // front. The collection comes from the picker, which is the whole point of standardising on it:
 // one place says where variables go, and `bark/350` means the same thing whether that collection
 // already exists or is about to.
-function resolveVariableName(layerPath) {
+//
+// The group is a prefix on that path, not a replacement for it: naming the group in one field is
+// cleaner than repeating it in every layer name, but a layer named `bark/350` still means the same
+// thing, so the two compose rather than competing. A group of `bark` over a layer called `350` and
+// no group over a layer called `bark/350` both write `bark/350`.
+function resolveVariableName(layerPath, group) {
   var path = normalizeLayerPath(layerPath);
   if (!path) return { error: "Empty layer name" };
-  return { variableName: path };
+  return { variableName: groupPrefix(group) + path };
 }
 
 function hasSolidFill(node) {
@@ -165,6 +192,7 @@ function buildNotifyMessage(stats, collectionName, collectionCreated, modeName, 
 
   var resolvedType = figmaVariableType(typeof variableType !== "undefined" ? variableType : "Color");
   var collectionName = trimTarget(typeof targetCollection !== "undefined" ? targetCollection : "");
+  var groupName = trimTarget(typeof targetGroup !== "undefined" ? targetGroup : "");
 
   if (!collectionName) {
     figma.notify("Pick a collection, or choose New collection and type a name");
@@ -227,7 +255,7 @@ function buildNotifyMessage(stats, collectionName, collectionCreated, modeName, 
     if (i % 25 === 0) showProgress(i, total, "Creating variables");
 
     var node = nodes[i];
-    var resolved = resolveVariableName(node.name);
+    var resolved = resolveVariableName(node.name, groupName);
 
     if (resolved.error) {
       stats.skipped++;
@@ -278,10 +306,16 @@ function buildNotifyMessage(stats, collectionName, collectionCreated, modeName, 
   // reached by `postMessage` — so the whole call threw `Cannot unwrap function` before anything was
   // shown, and the run never signalled completion. The panel groups by `node` or `property` and by
   // nothing else; `severity` was never one of them, and every row shows its own severity anyway.
+  // **`autoOpen: false`.** The panel is where the run is written down — every variable, its value and
+  // whether it was created or updated — and it stays reachable from the button. It is not where you
+  // are sent. The notification is the outcome; opening a panel over the file to say the same thing in
+  // more words is the plugin talking over the work. The severity stays honest either way, so a run
+  // that skipped everything still reads as a warning when you go and look.
   displayResults({
     title: "Selection to variables",
     results: results,
     type: stats.skipped && !stats.created && !stats.updated ? "warning" : "success",
+    autoOpen: false,
   });
 
   figma.notify(summary, { timeout: summary.length > 80 ? 8000 : 5000 });

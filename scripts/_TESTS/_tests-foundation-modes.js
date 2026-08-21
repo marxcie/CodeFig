@@ -15,7 +15,7 @@
 // @DOC_END
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
-@import { planModes, setupModes, removeModes, processVariables, getVariable } from "@Variables"
+@import { planModes, setupModes, removeModes, processVariables, getVariable, getOrCreateMode } from "@Variables"
 
 /** A throwaway collection, named so cleanupTestArtifacts can always find it. */
 function scratchCollection(suffix) {
@@ -140,6 +140,47 @@ testBegin('foundation-modes');
       expect(stats.updated).toBe(1);
       expect(await readValue(collection, name, 'Desktop')).toBe(0);
       expect(await readValue(collection, name, 'Mobile')).toBe(8);
+    } finally {
+      try { collection.remove(); } catch (e) {}
+    }
+  });
+
+  await itInTestFile('getOrCreateMode adopts the placeholder mode of an empty collection', async function () {
+    // Choosing "New mode" on a collection that has just been created should not leave a stray
+    // "Mode 1" column beside the mode you named. Nothing can be lost here: there are no variables.
+    var collection = scratchCollection('-adopt');
+    try {
+      expect(modeNamesOf(collection)).toEqual(['Mode 1']);
+      var before = collection.modes[0].modeId;
+
+      var mode = getOrCreateMode(collection, 'Lime-2');
+
+      expect(mode.name).toBe('Lime-2');
+      expect(mode.modeId).toBe(before);
+      expect(modeNamesOf(collection)).toEqual(['Lime-2']);
+    } finally {
+      try { collection.remove(); } catch (e) {}
+    }
+  });
+
+  await itInTestFile('getOrCreateMode adds a mode beside a Mode 1 that holds variables', async function () {
+    // The bug: a collection that has been in the file for months, whose one mode nobody renamed, is
+    // still called "Mode 1". "New mode / Lime-2" renamed *that* and wrote through it — sixteen
+    // variables took the new values in the only mode they had. A real second mode is the answer, and
+    // the old mode's values have to still be there afterwards, which is what the last read proves.
+    var collection = scratchCollection('-occupied');
+    var name = testPrefix() + '/lime/900';
+    try {
+      var variables = {};
+      variables[name] = { type: 'FLOAT', values: { 'Mode 1': 8 } };
+      await processVariables(collection, variables, {}, ['Mode 1']);
+      expect(await readValue(collection, name, 'Mode 1')).toBe(8);
+
+      var mode = getOrCreateMode(collection, 'Lime-2');
+
+      expect(mode.name).toBe('Lime-2');
+      expect(modeNamesOf(collection)).toEqual(['Mode 1', 'Lime-2']);
+      expect(await readValue(collection, name, 'Mode 1')).toBe(8);
     } finally {
       try { collection.remove(); } catch (e) {}
     }
