@@ -83,7 +83,9 @@ test('a real missing import is still an error', () => {
 
   const broken = scripts.map((s) => (s === spacing
     ? Object.assign({}, s, {
-      code: s.code.replace(', expandTokenList, tokenListHasSeries } from "@Foundation"', ' } from "@Foundation"'),
+      // Just the two names, not the tail of the line: pinning the whole import list made this fixture
+      // fail every time a script gained an unrelated import.
+      code: s.code.replace(', expandTokenList, tokenListHasSeries', ''),
     })
     : s));
   assert.notEqual(broken.filter((s) => /spacing\.js$/.test(s.path))[0].code, spacing.code,

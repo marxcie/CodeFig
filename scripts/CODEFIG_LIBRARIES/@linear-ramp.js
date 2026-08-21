@@ -29,7 +29,7 @@
 //
 // ```js
 // @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, registryViewportLabels, writeManifest, writeRegistry, normaliseConfig } from "@Foundation"
+// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, registryViewportLabels, writeManifest, writeRegistry, normaliseConfig, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 // @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 // ```
 //
@@ -1582,7 +1582,17 @@ async function runLinearRamp(config, spec) {
 
   var runReport = {};
   var variables = generateRampVariables(data, spec, runReport);
+  var names = Object.keys(variables);
+
+  // Identity before names. A group renamed in the panel is a move of the tokens already there, not a
+  // second set beside them — see `alignStampedTokens`.
+  var aligned = await alignStampedTokens(collection, spec.domain, groupName, names);
+  describeStampAlignment(aligned).forEach(function(line) { console.log(line); });
+
   var stats = await processVariables(collection, variables, data, modes);
+
+  var stamped = await stampGeneratedTokens(collection, spec.domain, groupName, names);
+  stamped.warnings.forEach(function(w) { console.warn(w.message); });
 
   // Record the set. This is what makes the import button and `figma:run --from-file` work.
   var manifest = null;

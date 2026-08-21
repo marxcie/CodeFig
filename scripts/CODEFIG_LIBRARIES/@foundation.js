@@ -67,7 +67,7 @@
 // | Config | normaliseConfig, toDomainConfig, toPortableConfig, emptyPortableConfig, configDomainOf |
 // | Config text | serialisePortableConfig, parsePortableConfig, describeConfigTranslations |
 // | Config on canvas | writeConfigToTextLayer, readConfigFromTextLayer, findConfigTextLayers |
-// | Stamps | stampValue, readStampFrom, stampToken, readStamp, findByStamp |
+// | Stamps | stampValue, readStampFrom, stampToken, readStamp, findByStamp, alignStampedTokens, stampGeneratedTokens, describeStampAlignment |
 //
 // `requestClipboardCopy` and `createCopyResult` live in `@InfoPanel`, not here — putting the
 // clipboard plumbing in the results library is what lets a script use it without depending on
@@ -1263,7 +1263,14 @@ function applyFoundationModes(foundation, collection, viewportKeys) {
 // STAMPS
 //
 // Identity for a generated token, so a rename updates in place instead of duplicating.
-// Nothing writes these yet — each generator starts stamping when it is rewritten.
+//
+// A name is a label; the stamp is the identity. That is how Figma's own bindings survive a rename, and
+// it is the only reason a set stays one set after somebody reorganises the variable table — which they
+// will, because reorganising the variable table is a normal thing to do to a design system.
+//
+// A run brackets its write with the two passes below: `alignStampedTokens` first, so identity is
+// resolved before anything is matched by name, and `stampGeneratedTokens` after, so the next run can do
+// the same. `adoptRamp` stamps as it fits, for the same reason.
 // ============================================================================
 
 function stampValue(domain, tokenKey, rev) {
@@ -1314,6 +1321,164 @@ function findByStamp(candidates, domain, tokenKey, getData, exactName) {
     if (exactName != null && matches[j].name === exactName) return matches[j];
   }
   return matches[0];
+}
+
+/**
+ * Every local variable in a collection, resolved.
+ *
+ * Both stamp passes need the objects rather than the ids, and `getVariableByIdAsync` is the only way
+ * from one to the other.
+ */
+async function foundationVariablesOf(collection) {
+  var out = [];
+  var ids = (collection && collection.variableIds) || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    if (variable) out.push(variable);
+  }
+  return out;
+}
+
+/**
+ * The token key a stamp carries for a variable in a set: its name with the group prefix taken off.
+ *
+ * The prefix is the mutable half — it is precisely what changes when someone renames a group — so it is
+ * the half identity must not depend on. What is left is the slot: `xs` for a ramp, `Text-Large/font-size`
+ * for typography, and the same string whichever group the set is sitting in this week.
+ */
+function foundationTokenKey(group, name) {
+  var prefix = namePrefix(group);
+  var full = String(name == null ? '' : name);
+  return prefix && full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full;
+}
+
+/**
+ * Bring a set's existing variables to the names a run is about to write, matched by stamp.
+ *
+ * **Runs before the write, and the ordering is the whole point.** It is the same rule Grid already
+ * applies to modes one level up: `processVariables` matches on names, so a set whose group was renamed
+ * would read as one set gone and one arrived — eight new variables, eight orphans, and every binding in
+ * the file still pointing at the orphans. Resolving identity first makes it eight renames instead, and a
+ * rename keeps the id and the published key.
+ *
+ * Only stamp matches move. A variable found by name is already where it belongs, and a variable with no
+ * stamp is not ours to move.
+ *
+ * → `{ renamed: [{ from, to, token }], warnings: [] }`
+ */
+async function alignStampedTokens(collection, domain, group, names) {
+  var report = { renamed: [], warnings: [] };
+  if (!collection || !domain || !names || names.length === 0) return report;
+
+  var candidates = await foundationVariablesOf(collection);
+  if (candidates.length === 0) return report;
+
+  var occupants = {};
+  for (var c = 0; c < candidates.length; c++) occupants[candidates[c].name] = candidates[c];
+
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i];
+    var token = foundationTokenKey(group, name);
+    // Inline, not a named helper passed by reference: `@import` extraction follows *calls*, and a
+    // function handed over as a value is never called in this text — so a named getter here resolved
+    // to `undefined` in the sandbox while validating clean, because `validateResolvedCalls` only sees
+    // calls too.
+    var match = findByStamp(candidates, domain, token, function (target) {
+      return target.getSharedPluginData(foundationNamespace(), 'stamp');
+    }, name);
+    if (!match || match.name === name) continue;
+
+    if (match.remote) {
+      report.warnings.push(foundationWarning(
+        'stamp-remote',
+        'The ' + domain + ' token "' + token + '" is stamped on "' + match.name + '", a library variable this file cannot rename.',
+        { collection: collection.name, domain: domain, token: token, stamped: match.name, wanted: name }
+      ));
+      continue;
+    }
+
+    // Something else is already sitting at the target name. Which of the two the user meant is not a
+    // decision this function gets to make, so both are named and neither is touched; the write that
+    // follows updates whichever holds the name.
+    var occupant = occupants[name];
+    if (occupant && occupant !== match) {
+      report.warnings.push(foundationWarning(
+        'stamp-name-taken',
+        'The ' + domain + ' token "' + token + '" is stamped on "' + match.name + '", but "' + name +
+        '" already exists in "' + collection.name + '". Both were left alone.',
+        { collection: collection.name, domain: domain, token: token, stamped: match.name, wanted: name }
+      ));
+      continue;
+    }
+
+    var from = match.name;
+    try {
+      match.name = name;
+    } catch (e) {
+      report.warnings.push(foundationWarning(
+        'stamp-rename-failed',
+        'Could not rename "' + from + '" to "' + name + '": ' + (e && e.message ? e.message : e),
+        { collection: collection.name, from: from, to: name }
+      ));
+      continue;
+    }
+    delete occupants[from];
+    occupants[name] = match;
+    report.renamed.push({ from: from, to: name, token: token });
+  }
+
+  return report;
+}
+
+/**
+ * Stamp what a run just wrote, so the next run finds it by identity rather than by name.
+ *
+ * Runs after the write, and reads the collection back rather than trusting the names it was given: a
+ * name that is not there afterwards was skipped by `processVariables` for a type or scope mismatch, and
+ * stamping a variable this run did not write would claim a token the set does not own.
+ *
+ * → `{ stamped: n, warnings: [] }`
+ */
+async function stampGeneratedTokens(collection, domain, group, names) {
+  var report = { stamped: 0, warnings: [] };
+  if (!collection || !domain || !names || names.length === 0) return report;
+
+  var byName = {};
+  var all = await foundationVariablesOf(collection);
+  for (var i = 0; i < all.length; i++) byName[all[i].name] = all[i];
+
+  for (var n = 0; n < names.length; n++) {
+    var variable = byName[names[n]];
+    if (!variable || variable.remote) continue;
+    try {
+      stampToken(variable, domain, foundationTokenKey(group, names[n]));
+      report.stamped++;
+    } catch (e) {
+      report.warnings.push(foundationWarning(
+        'stamp-failed',
+        'Could not stamp "' + names[n] + '": ' + (e && e.message ? e.message : e),
+        { collection: collection.name, name: names[n] }
+      ));
+    }
+  }
+  return report;
+}
+
+/**
+ * What the align pass moved, for the run summary. Silent when it moved nothing, which is the ordinary
+ * case — a rename only happens when someone actually renamed something.
+ */
+function describeStampAlignment(report) {
+  var lines = [];
+  if (!report) return lines;
+  if (report.renamed && report.renamed.length > 0) {
+    lines.push('Moved ' + report.renamed.length + ' existing variable(s) in place, so their ids and every binding to them survive:');
+    report.renamed.forEach(function (move) {
+      lines.push('  ' + move.from + ' → ' + move.to);
+    });
+  }
+  (report.warnings || []).forEach(function (w) { lines.push(w.message); });
+  return lines;
 }
 
 // ============================================================================

@@ -41,7 +41,8 @@ const PURE = [
   'reconcileFoundation',
   'readStampFrom',
   'findByStamp',
-  'stampValue'
+  'stampValue',
+  'foundationTokenKey'
 ];
 
 function loadFoundation() {
@@ -60,7 +61,8 @@ const lib = loadFoundation();
 const {
   viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup,
   normaliseViewport, sortViewports, parseRegistry, serialiseRegistry, parseManifest,
-  serialiseManifest, reconcileFoundation, foundationSetKey, findByStamp, stampValue
+  serialiseManifest, reconcileFoundation, foundationSetKey, findByStamp, stampValue,
+  foundationTokenKey
 } = lib;
 
 /** The three viewports every DSF script ships with today. */
@@ -467,6 +469,17 @@ test('reconciling does not mutate what it was given', () => {
 // ---------------------------------------------------------------------------
 // Stamps — primitives only; nothing applies them yet
 // ---------------------------------------------------------------------------
+
+test('a token key is the name without its group, so the group can change under it', () => {
+  // The half a user renames is the half identity must not depend on.
+  assert.equal(foundationTokenKey('Spacing', 'Spacing/xs'), 'xs');
+  assert.equal(foundationTokenKey('Space', 'Space/xs'), 'xs', 'same slot, renamed group');
+  assert.equal(foundationTokenKey('Typography', 'Typography/Text-Large/font-size'), 'Text-Large/font-size',
+    'typography writes three per token; the leaf is part of the slot');
+  assert.equal(foundationTokenKey('', 'xs'), 'xs', 'no group is a real address, not a missing one');
+  assert.equal(foundationTokenKey('Spacing', 'Other/xs'), 'Other/xs',
+    'a name outside the group is left whole rather than half-trimmed');
+});
 
 test('a stamp survives a rename, which a name match cannot', () => {
   const stamped = { name: 'Spacing/extra-small', pluginData: stampValue('spacing', 'xs') };

@@ -16,7 +16,7 @@
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, writeRegistry, normaliseConfig, toDomainConfig, foundationNamespace, foundationRegistryKey, expandTokenList, tokenListHasSeries } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, writeRegistry, normaliseConfig, toDomainConfig, readStamp, foundationNamespace, foundationRegistryKey, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { bezierAt } from "@Bezier"
@@ -73,6 +73,26 @@ async function readGroup(collection, group) {
       per[collection.modes[m].name] = v.valuesByMode[collection.modes[m].modeId];
     }
     out[v.name] = per;
+  }
+  return out;
+}
+
+/** One variable by exact name, or null. */
+async function variableNamed(collection, name) {
+  for (var i = 0; i < collection.variableIds.length; i++) {
+    var v = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+    if (v && v.name === name) return v;
+  }
+  return null;
+}
+
+/** `{ tokenLeaf: variableId }` for a group — ids, because a name match cannot tell a move from a copy. */
+async function idsUnder(collection, group) {
+  var out = {};
+  for (var i = 0; i < collection.variableIds.length; i++) {
+    var v = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+    if (!v || v.name.indexOf(group + '/') !== 0) continue;
+    out[v.name.slice(group.length + 1)] = v.id;
   }
   return out;
 }
@@ -287,6 +307,58 @@ testBegin('linear-ramp');
       await removeCollection(name);
       var again = await runLinearRamp({ collectionName: name, group: 'Spacing', config: imported }, spacingRampSpec());
       expect(await readGroup(again.collection, 'Spacing')).toEqual(firstValues);
+    } finally {
+      await removeCollection(name);
+      restoreRegistryRaw(before);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Identity — stamps, and what a rename does
+  // -------------------------------------------------------------------------
+
+  await itInTestFile('a run stamps what it wrote, and a second run finds it by stamp', async function () {
+    var name = testPrefix() + '/ramp-stamp';
+    var before = currentRegistryRaw();
+    try {
+      var result = await runLinearRamp(spacingConfigFor(name, 40), spacingRampSpec());
+      var xs = await variableNamed(result.collection, 'Spacing/xs');
+      expect(readStamp(xs).token).toBe('xs', 'the slot, not the full name');
+      expect(readStamp(xs).domain).toBe('spacing');
+
+      // Renamed by hand in the variable table, the way a person would.
+      xs.name = 'Spacing/extra-small';
+      var again = await runLinearRamp(spacingConfigFor(name, 40), spacingRampSpec());
+      expect(again.stats.created).toBe(0, 'nothing new — the rename was recognised, not duplicated');
+      var found = await variableNamed(again.collection, 'Spacing/xs');
+      expect(found.id).toBe(xs.id, 'the same variable, moved back to the configured name');
+    } finally {
+      await removeCollection(name);
+      restoreRegistryRaw(before);
+    }
+  });
+
+  await itInTestFile('a group renamed in the config moves the set instead of duplicating it', async function () {
+    // The failure this exists to prevent: eight new variables, eight orphans, and every binding in the
+    // file still pointing at the orphans. Ids are what the assertion turns on — a name match would pass
+    // against a freshly created duplicate.
+    var name = testPrefix() + '/ramp-regroup';
+    var before = currentRegistryRaw();
+    try {
+      var first = await runLinearRamp(spacingConfigFor(name, 40), spacingRampSpec());
+      var idsBefore = await idsUnder(first.collection, 'Spacing');
+      expect(Object.keys(idsBefore)).toHaveLength(4);
+
+      var moved = spacingConfigFor(name, 40);
+      moved.group = 'Space';
+      moved.config.group = 'Space';
+      var second = await runLinearRamp(moved, spacingRampSpec());
+
+      expect(second.stats.created).toBe(0, 'a move, not a second set');
+      var idsAfter = await idsUnder(second.collection, 'Space');
+      expect(Object.keys(idsAfter)).toHaveLength(4);
+      expect(Object.keys(await idsUnder(second.collection, 'Spacing'))).toHaveLength(0, 'no orphans left behind');
+      expect(idsAfter['lg']).toBe(idsBefore['lg'], 'same variable id, so every binding to it survives');
     } finally {
       await removeCollection(name);
       restoreRegistryRaw(before);

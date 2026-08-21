@@ -29,7 +29,7 @@
 @import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables, applyModeIntents } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
-@import { gridPreviewHtml, gridSuggestionsHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest } from "@Foundation"
+@import { gridPreviewHtml, gridSuggestionsHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 
 // ========================================
 // GRID SYSTEM CONFIGURATION
@@ -267,8 +267,18 @@ async function createOrUpdateCollection(config) {
   for (var key in variables) {
     variablesWithPrefix[prefix + key] = variables[key];
   }
-  
+
+  // The same rule the mode intents above follow, one level down: `processVariables` matches on names,
+  // so a group renamed in the panel has to become a move of the variables already there before
+  // anything is written, or it becomes a second grid beside the first.
+  var names = Object.keys(variablesWithPrefix);
+  var aligned = await alignStampedTokens(collection, 'grid', group, names);
+  describeStampAlignment(aligned).forEach(function (line) { console.log(line); });
+
   var stats = await processVariables(collection, variablesWithPrefix, innerConfig, modes);
+
+  var stamped = await stampGeneratedTokens(collection, 'grid', group, names);
+  stamped.warnings.forEach(function (w) { console.warn(w.message); });
 
 
   console.log('=== GRID SYSTEM SUMMARY ===');

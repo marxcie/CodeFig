@@ -59,7 +59,7 @@
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getCollectionVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, normaliseConfig } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, normaliseConfig, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { bezierAt } from "@Bezier"
 @import { typeScaleTokens, typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleProgress, typeScaleLineHeights, typeScaleTrackings, typeScaleTable, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
@@ -717,8 +717,17 @@ async function createOrUpdateCollection(config) {
   var collectionVariables = await getCollectionVariables(collection);
   await logConflictingTypographyWeightVariables(collection, config, collectionVariables);
 
+  // Identity before names, so a renamed group moves this set rather than duplicating it. Typography
+  // writes three variables per token, and duplicating it means three orphans per token.
+  var names = Object.keys(config.variables);
+  var aligned = await alignStampedTokens(collection, 'typography', groupName, names);
+  describeStampAlignment(aligned).forEach(function(line) { console.log(line); });
+
   var stats = await processVariables(collection, config.variables, config.config, modes);
-  
+
+  var stamped = await stampGeneratedTokens(collection, 'typography', groupName, names);
+  stamped.warnings.forEach(function(w) { console.warn(w.message); });
+
   var styleStats = {created: 0, updated: 0};
 
   /**
