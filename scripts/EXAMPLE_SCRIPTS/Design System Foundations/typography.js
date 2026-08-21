@@ -59,7 +59,7 @@
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getCollectionVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, normaliseConfig, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, readManifest, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { bezierAt } from "@Bezier"
 @import { typeScaleTokens, typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleProgress, typeScaleLineHeights, typeScaleTrackings, typeScaleTable, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
@@ -720,13 +720,11 @@ async function createOrUpdateCollection(config) {
   // Identity before names, so a renamed group moves this set rather than duplicating it. Typography
   // writes three variables per token, and duplicating it means three orphans per token.
   var names = Object.keys(config.variables);
-  var aligned = await alignStampedTokens(collection, 'typography', groupName, names);
+  var setId = readManifest(collection, 'typography', groupName).id || '';
+  var aligned = await alignStampedTokens(collection, 'typography', groupName, names, setId);
   describeStampAlignment(aligned).forEach(function(line) { console.log(line); });
 
   var stats = await processVariables(collection, config.variables, config.config, modes);
-
-  var stamped = await stampGeneratedTokens(collection, 'typography', groupName, names);
-  stamped.warnings.forEach(function(w) { console.warn(w.message); });
 
   var styleStats = {created: 0, updated: 0};
 
@@ -747,6 +745,7 @@ async function createOrUpdateCollection(config) {
         domain: 'typography',
         group: groupName,
         modes: modes,
+        modeIds: foundationModeIds(collection, modes),
         tokens: typeScaleTokens(config),
         config: normaliseConfig(config).config.domains.typography
       });
@@ -764,8 +763,14 @@ async function createOrUpdateCollection(config) {
     }
   }
 
-  function finishTypographySummary(styleStats) {
-    recordTypographySet();
+  async function finishTypographySummary(styleStats) {
+    var manifest = recordTypographySet();
+    // After the manifest: it mints the set id, and the stamps have to carry the same one.
+    var stamped = await stampGeneratedTokens(
+      collection, 'typography', groupName, names,
+      (manifest && manifest.manifest ? manifest.manifest.id : setId)
+    );
+    stamped.warnings.forEach(function(w) { console.warn(w.message); });
     console.log('=== TYPOGRAPHY SYSTEM SUMMARY ===');
     console.log('Collection: ' + collectionName);
     console.log('Variables created: ' + stats.created);

@@ -29,7 +29,7 @@
 //
 // ```js
 // @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, registryViewportLabels, writeManifest, writeRegistry, normaliseConfig, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, registryViewportLabels, writeManifest, readManifest, writeRegistry, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 // @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 // ```
 //
@@ -1586,13 +1586,11 @@ async function runLinearRamp(config, spec) {
 
   // Identity before names. A group renamed in the panel is a move of the tokens already there, not a
   // second set beside them — see `alignStampedTokens`.
-  var aligned = await alignStampedTokens(collection, spec.domain, groupName, names);
+  var setId = readManifest(collection, spec.domain, groupName).id || '';
+  var aligned = await alignStampedTokens(collection, spec.domain, groupName, names, setId);
   describeStampAlignment(aligned).forEach(function(line) { console.log(line); });
 
   var stats = await processVariables(collection, variables, data, modes);
-
-  var stamped = await stampGeneratedTokens(collection, spec.domain, groupName, names);
-  stamped.warnings.forEach(function(w) { console.warn(w.message); });
 
   // Record the set. This is what makes the import button and `figma:run --from-file` work.
   var manifest = null;
@@ -1601,6 +1599,7 @@ async function runLinearRamp(config, spec) {
       domain: spec.domain,
       group: groupName,
       modes: viewportKeys,
+      modeIds: foundationModeIds(collection, viewportKeys),
       tokens: (data[spec.tokensKey] || []).slice(),
       config: rampManifestSlice(data, spec)
     });
@@ -1612,6 +1611,14 @@ async function runLinearRamp(config, spec) {
   } catch (e) {
     console.warn('Variables were written. The set could not be recorded: ' + (e && e.message ? e.message : e));
   }
+
+  // After the manifest, because the manifest is what mints the set id — the stamps have to carry the
+  // same one or two sets in a collection cannot be told apart.
+  var stamped = await stampGeneratedTokens(
+    collection, spec.domain, groupName, names,
+    (manifest && manifest.manifest ? manifest.manifest.id : setId)
+  );
+  stamped.warnings.forEach(function(w) { console.warn(w.message); });
 
   var undeclared = describeUndeclaredModes(
     spec,
@@ -1984,10 +1991,12 @@ async function adoptRamp(collection, group, spec, options) {
   if (gate.message) result.warnings.push(gate.message);
   if (!gate.allowed) return result;
 
+  var modeKeys = collection.modes.map(function(mode) { return viewportKeyFromLabel(mode.name); });
   var manifest = writeManifest(collection, {
     domain: spec.domain,
     group: group,
-    modes: collection.modes.map(function(mode) { return viewportKeyFromLabel(mode.name); }),
+    modes: modeKeys,
+    modeIds: foundationModeIds(collection, modeKeys),
     tokens: tokenOrder,
     config: result.slice
   });
@@ -1997,7 +2006,8 @@ async function adoptRamp(collection, group, spec, options) {
   if (manifest.ok) {
     for (var t = 0; t < read.tokens.length; t++) {
       try {
-        stampToken(read.tokens[t].variable, spec.domain, read.tokens[t].name);
+        stampToken(read.tokens[t].variable, spec.domain, read.tokens[t].name, 1,
+          (manifest.manifest ? manifest.manifest.id : ''));
         result.stamped++;
       } catch (e) {
         result.warnings.push('Could not stamp ' + read.tokens[t].variable.name + ': ' + (e && e.message ? e.message : e));

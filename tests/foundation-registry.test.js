@@ -26,6 +26,8 @@ const PURE = [
   'foundationNamespace',
   'foundationRegistryKey',
   'foundationSetKey',
+  'foundationSetIdFromKey',
+  'foundationMintSetId',
   'foundationWarning',
   'viewportLabel',
   'viewportKeyFromLabel',
@@ -62,7 +64,7 @@ const {
   viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup,
   normaliseViewport, sortViewports, parseRegistry, serialiseRegistry, parseManifest,
   serialiseManifest, reconcileFoundation, foundationSetKey, findByStamp, stampValue,
-  foundationTokenKey
+  foundationTokenKey, foundationSetIdFromKey, foundationMintSetId
 } = lib;
 
 /** The three viewports every DSF script ships with today. */
@@ -131,10 +133,24 @@ test('resolveGroup reads all three config layers, and an empty group is a choice
   assert.equal(resolveGroup({}), '');
 });
 
-test('a set key is unique per domain and group inside one collection', () => {
-  assert.equal(foundationSetKey('spacing', 'Spacing'), 'set:spacing:Spacing');
-  assert.notEqual(foundationSetKey('spacing', 'Spacing A'), foundationSetKey('spacing', 'Spacing B'));
+test('a set key is addressed by a minted id, and a legacy key parses as one', () => {
+  assert.equal(foundationSetKey('spacing', 'abc123'), 'set:spacing:abc123');
+  assert.notEqual(foundationSetKey('spacing', 'a'), foundationSetKey('spacing', 'b'));
   assert.equal(foundationSetKey('spacing', ''), 'set:spacing:');
+
+  // A manifest written before ids was keyed by its group, and that key becomes its id — which is the
+  // whole of the migration.
+  assert.equal(foundationSetIdFromKey('set:spacing:Spacing'), 'Spacing');
+  assert.equal(foundationSetIdFromKey('set:spacing:'), '');
+  assert.equal(foundationSetIdFromKey('registry'), '', 'not a set key at all');
+  assert.equal(foundationSetIdFromKey('set:grid:Foundations/Layout'), 'Foundations/Layout',
+    'a group with a slash in it is still one id');
+});
+
+test('a minted set id is not the same twice', () => {
+  const ids = new Set();
+  for (let i = 0; i < 200; i++) ids.add(foundationMintSetId());
+  assert.equal(ids.size, 200, 'two sets minted in the same millisecond must not collide');
 });
 
 // ---------------------------------------------------------------------------
@@ -177,12 +193,20 @@ test('garbage in pluginData parses to null and warns, and never throws', () => {
 });
 
 test('a manifest round-trips and a broken one is reported, not thrown', () => {
-  const set = { domain: 'spacing', group: 'Spacing', modes: ['mobile'], tokens: ['xs'], config: { roundTo: 2 } };
+  const set = {
+    id: 'k9x-01ab', domain: 'spacing', group: 'Spacing', modes: ['mobile'],
+    modeIds: { mobile: '1:0' }, tokens: ['xs'], config: { roundTo: 2 }
+  };
   const parsed = parseManifest(serialiseManifest(set));
+  assert.equal(parsed.manifest.id, 'k9x-01ab', 'the address survives the round trip');
+  assert.deepEqual(parsed.manifest.modeIds, { mobile: '1:0' });
   assert.equal(parsed.manifest.domain, 'spacing');
   assert.deepEqual(parsed.manifest.tokens, ['xs']);
   assert.deepEqual(parsed.manifest.config, { roundTo: 2 });
   assert.ok(parsed.manifest.updated, 'stamped so a human can see how old it is');
+  const old = parseManifest(JSON.stringify({ v: 1, domain: 'spacing', group: 'Spacing', modes: ['mobile'], tokens: ['xs'] }));
+  assert.equal(old.manifest.id, '', 'a manifest written before ids reads clean');
+  assert.deepEqual(old.manifest.modeIds, {}, 'and carries no mode ids rather than undefined');
   assert.deepEqual(parseManifest('{{').warnings.map((w) => w.code), ['manifest-unreadable']);
   assert.equal(parseManifest('').manifest, null);
 });
@@ -372,6 +396,58 @@ test('a manifest mode the collection does not have is reported', () => {
   const warning = result.warnings.find((w) => w.code === 'manifest-mode-missing');
   assert.ok(warning);
   assert.ok(warning.message.includes('wide'));
+});
+
+test('a mode renamed in Figma is still the mode the manifest recorded', () => {
+  // Without the ids this reported `manifest-mode-missing` — a warning about something nobody broke,
+  // fired every time somebody renamed Mobile to Handset.
+  const modes = modesOf('Responsive System', ['Handset']);
+  const result = reconcileFoundation({
+    registry: registry([{ key: 'handset', label: 'Handset', width: 375 }]),
+    modes: [modes],
+    manifests: [{
+      collection: 'Responsive System',
+      key: 'set:spacing:k9x-01ab',
+      manifest: {
+        v: 1, id: 'k9x-01ab', domain: 'spacing', group: 'Spacing',
+        modes: ['mobile'], modeIds: { mobile: modes.modes[0].modeId }, tokens: []
+      }
+    }]
+  });
+  assert.ok(!codes(result).includes('manifest-mode-missing'), 'the id matched, so nothing is missing');
+  assert.equal(result.sets[0].id, 'k9x-01ab');
+});
+
+test('a mode genuinely gone is still reported, ids or no ids', () => {
+  const result = reconcileFoundation({
+    registry: registry([MOBILE]),
+    modes: [modesOf('Responsive System', ['Mobile'])],
+    manifests: [{
+      collection: 'Responsive System',
+      key: 'set:spacing:k9x-01ab',
+      manifest: {
+        v: 1, id: 'k9x-01ab', domain: 'spacing', group: 'Spacing',
+        modes: ['mobile', 'wide'], modeIds: { mobile: 'Responsive System:m0', wide: 'gone:9' }, tokens: []
+      }
+    }]
+  });
+  const warning = result.warnings.find((w) => w.code === 'manifest-mode-missing');
+  assert.ok(warning, 'an id that matches nothing is a real absence');
+  assert.ok(warning.message.includes('wide'));
+  assert.ok(!warning.message.includes('mobile'), 'and only the one that is actually gone');
+});
+
+test('a set with a legacy key takes that key as its id', () => {
+  const result = reconcileFoundation({
+    registry: registry([MOBILE]),
+    modes: [modesOf('Responsive System', ['Mobile'])],
+    manifests: [{
+      collection: 'Responsive System',
+      key: 'set:spacing:Spacing',
+      manifest: { v: 1, domain: 'spacing', group: 'Spacing', modes: [], tokens: [] }
+    }]
+  });
+  assert.equal(result.sets[0].id, 'Spacing', 'it was already unique; from here it is opaque');
 });
 
 test('the manifest is never believed over the file', () => {

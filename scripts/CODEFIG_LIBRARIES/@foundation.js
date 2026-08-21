@@ -57,13 +57,13 @@
 // ## Exported functions
 // | Category | Functions |
 // |----------|-----------|
-// | Storage keys | foundationNamespace, foundationRegistryKey, foundationSetKey, foundationEntrySizeLimit |
+// | Storage keys | foundationNamespace, foundationRegistryKey, foundationSetKey, foundationSetIdFromKey, foundationMintSetId, foundationEntrySizeLimit |
 // | Helpers | viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup |
 // | Registry shape | normaliseViewport, sortViewports, parseRegistry, serialiseRegistry |
 // | Manifest shape | parseManifest, serialiseManifest |
 // | Reconciliation | reconcileFoundation, describeFoundation |
 // | Figma | readFoundation, registryViewportLabels, writeRegistry, readManifest, writeManifest |
-// | Modes | planFoundationModes, applyFoundationModes |
+// | Modes | planFoundationModes, applyFoundationModes, foundationModeIds |
 // | Config | normaliseConfig, toDomainConfig, toPortableConfig, emptyPortableConfig, configDomainOf |
 // | Config text | serialisePortableConfig, parsePortableConfig, describeConfigTranslations |
 // | Config on canvas | writeConfigToTextLayer, readConfigFromTextLayer, findConfigTextLayers |
@@ -89,9 +89,44 @@ function foundationRegistryKey() {
   return 'registry';
 }
 
-/** One manifest per (domain, group) inside a collection, so parallel sets never collide. */
-function foundationSetKey(domain, group) {
-  return 'set:' + String(domain || '') + ':' + String(group == null ? '' : group);
+/**
+ * One manifest per set inside a collection, so parallel sets never collide.
+ *
+ * **The second half is an id, not a group.** It used to be the group name, which meant renaming a group
+ * filed the record under a key nothing looked for: the panel found no config and offered defaults over a
+ * set sitting right there, while `readFoundation` still enumerated the orphan and reported every one of
+ * its tokens missing. A minted id cannot go stale, because there is nothing about it a person would want
+ * to change.
+ *
+ * A manifest written before ids keeps its key, and that key becomes its id — it was already unique per
+ * (domain, group), and from here on it is opaque. So the migration is nothing: no rewrite, no deletion,
+ * no window where a set exists under two keys.
+ */
+function foundationSetKey(domain, setId) {
+  return 'set:' + String(domain || '') + ':' + String(setId == null ? '' : setId);
+}
+
+/** The id half of a set key, or `''` for anything that is not one. */
+function foundationSetIdFromKey(key) {
+  var text = String(key == null ? '' : key);
+  if (text.indexOf('set:') !== 0) return '';
+  var rest = text.slice(4);
+  var cut = rest.indexOf(':');
+  return cut === -1 ? '' : rest.slice(cut + 1);
+}
+
+/**
+ * A new set id. Minted once, at the first run that records a set, and never again — every later run
+ * reads it back off the manifest.
+ *
+ * Time plus randomness rather than a counter: two files, or two collections in one file, must not agree
+ * on an id by having both been the first thing somebody generated.
+ */
+function foundationMintSetId() {
+  var stamp = Date.now().toString(36);
+  var noise = Math.floor(Math.random() * 1679616).toString(36);
+  while (noise.length < 4) noise = '0' + noise;
+  return stamp + '-' + noise;
 }
 
 /**
@@ -262,9 +297,13 @@ function serialiseManifest(set) {
   return JSON.stringify({
     v: 1,
     updated: new Date().toISOString(),
+    id: s.id == null ? '' : String(s.id),
     domain: String(s.domain || ''),
     group: s.group == null ? '' : String(s.group),
     modes: Array.isArray(s.modes) ? s.modes.slice() : [],
+    // `{ viewportKey: modeId }`. The names in `modes` are what a person reads and what a pasted config
+    // carries between files; the ids are what survives someone renaming a mode in this one.
+    modeIds: s.modeIds && typeof s.modeIds === 'object' ? s.modeIds : {},
     tokens: Array.isArray(s.tokens) ? s.tokens.slice() : [],
     config: s.config && typeof s.config === 'object' ? s.config : {}
   });
@@ -290,9 +329,13 @@ function parseManifest(text) {
     manifest: {
       v: typeof parsed.v === 'number' ? parsed.v : 1,
       updated: typeof parsed.updated === 'string' ? parsed.updated : '',
+      id: parsed.id == null ? '' : String(parsed.id),
       domain: String(parsed.domain || ''),
       group: parsed.group == null ? '' : String(parsed.group),
       modes: Array.isArray(parsed.modes) ? parsed.modes : [],
+      modeIds: parsed.modeIds && typeof parsed.modeIds === 'object' && !Array.isArray(parsed.modeIds)
+        ? parsed.modeIds
+        : {},
       tokens: Array.isArray(parsed.tokens) ? parsed.tokens : [],
       config: parsed.config && typeof parsed.config === 'object' ? parsed.config : {}
     },
@@ -527,17 +570,27 @@ function reconcileFoundation(sources) {
     var collectionModes = [];
     for (var ms = 0; ms < modeSets.length; ms++) {
       if (modeSets[ms].collection === record.collection) {
-        collectionModes = (modeSets[ms].modes || []).map(function(mode) { return mode.name; });
+        collectionModes = (modeSets[ms].modes || []);
       }
     }
+    var recordedIds = manifest.modeIds || {};
     var missingModes = [];
     for (var mm = 0; mm < manifest.modes.length; mm++) {
       var wantedKey = String(manifest.modes[mm]);
+      var recordedId = recordedIds[wantedKey];
       var present = false;
       for (var cm = 0; cm < collectionModes.length; cm++) {
-        if (collectionModes[cm].toLowerCase() === wantedKey.toLowerCase() ||
-            viewportKeyFromLabel(collectionModes[cm]) === viewportKeyFromLabel(wantedKey)) {
-          present = true;
+        // The id first. A mode renamed in Figma is the same mode, and matching on its name reports it
+        // missing — which is a warning about something nobody broke.
+        if (recordedId && collectionModes[cm].modeId === recordedId) { present = true; break; }
+      }
+      if (!present) {
+        for (var cn = 0; cn < collectionModes.length; cn++) {
+          var modeName = collectionModes[cn].name;
+          if (modeName.toLowerCase() === wantedKey.toLowerCase() ||
+              viewportKeyFromLabel(modeName) === viewportKeyFromLabel(wantedKey)) {
+            present = true;
+          }
         }
       }
       if (!present) missingModes.push(wantedKey);
@@ -553,6 +606,7 @@ function reconcileFoundation(sources) {
     sets.push({
       collection: record.collection,
       key: record.key,
+      id: manifest.id || foundationSetIdFromKey(record.key),
       domain: manifest.domain,
       group: manifest.group,
       modes: manifest.modes,
@@ -1174,8 +1228,47 @@ function writeRegistry(viewports) {
   return { ok: true, warnings: [], bytes: text.length, viewports: parseRegistry(text).registry.viewports };
 }
 
+/**
+ * The manifest for a domain at a group, by the group the record itself names.
+ *
+ * **Scans rather than addresses.** The key is a minted id now, so it cannot be computed from the group;
+ * and a legacy key is the group, so it can. Trying the legacy key first keeps a set made before ids
+ * exactly one read away, and the scan picks up everything else.
+ *
+ * Sync, and by *recorded* group — this is the cache read. `findFoundationSet` is the one that asks the
+ * variables where the set actually lives, and it costs a document read to do it.
+ *
+ * → `{ manifest, warnings, key, id }`
+ */
 function readManifest(collection, domain, group) {
-  return parseManifest(collection.getSharedPluginData(foundationNamespace(), foundationSetKey(domain, group)));
+  var ns = foundationNamespace();
+  var wanted = group == null ? '' : String(group);
+
+  var legacyKey = foundationSetKey(domain, wanted);
+  var legacy = parseManifest(collection.getSharedPluginData(ns, legacyKey));
+  if (legacy.manifest) {
+    legacy.key = legacyKey;
+    legacy.id = legacy.manifest.id || foundationSetIdFromKey(legacyKey);
+    return legacy;
+  }
+
+  var keys = collection.getSharedPluginDataKeys(ns) || [];
+  var warnings = [];
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i].indexOf('set:') !== 0) continue;
+    var read = parseManifest(collection.getSharedPluginData(ns, keys[i]));
+    warnings = warnings.concat(read.warnings);
+    if (!read.manifest) continue;
+    if (read.manifest.domain !== String(domain || '')) continue;
+    if (read.manifest.group !== wanted) continue;
+    return {
+      manifest: read.manifest,
+      warnings: warnings,
+      key: keys[i],
+      id: read.manifest.id || foundationSetIdFromKey(keys[i])
+    };
+  }
+  return { manifest: null, warnings: warnings, key: null, id: '' };
 }
 
 /**
@@ -1184,12 +1277,18 @@ function readManifest(collection, domain, group) {
  */
 function writeManifest(collection, set) {
   var s = set || {};
-  var key = foundationSetKey(s.domain, s.group);
-  var existing = parseManifest(collection.getSharedPluginData(foundationNamespace(), key)).manifest || {};
+  // The set already at this address, whatever it is keyed by. Its id is kept — minting a second one
+  // would file the same set twice and `readFoundation` would report it as two.
+  var found = readManifest(collection, s.domain, s.group == null ? '' : s.group);
+  var existing = found.manifest || {};
+  var id = s.id || existing.id || found.id || foundationMintSetId();
+  var key = found.key || foundationSetKey(s.domain, id);
   var merged = {
+    id: id,
     domain: s.domain != null ? s.domain : existing.domain,
     group: s.group != null ? s.group : existing.group,
     modes: s.modes != null ? s.modes : existing.modes,
+    modeIds: s.modeIds != null ? s.modeIds : existing.modeIds,
     tokens: s.tokens != null ? s.tokens : existing.tokens,
     // Normalised on the way in, so a manifest can never hold a shape the reader would refuse —
     // and so a run's derived fields (spacingSizes and friends) never reach the file at all.
@@ -1218,6 +1317,31 @@ function viewportLabelsFor(foundation, viewportKeys) {
     }
     return viewportLabel(key);
   });
+}
+
+/**
+ * `{ viewportKey: modeId }` for the modes a run wrote.
+ *
+ * A mode's identity is its `modeId` — the registry says so already, and it is why a mode renamed in
+ * Figma used to be reported from both ends as one mode gone and one arrived. Recording the ids beside
+ * the names means a manifest can tell a renamed mode from a missing one.
+ *
+ * Takes viewport keys or mode labels, because the domains disagree about which they record.
+ */
+function foundationModeIds(collection, viewportKeys) {
+  var out = {};
+  var modes = (collection && collection.modes) || [];
+  (viewportKeys || []).forEach(function (key) {
+    var label = viewportLabel(key);
+    for (var i = 0; i < modes.length; i++) {
+      if (modes[i].name === label || modes[i].name === key ||
+          viewportKeyFromLabel(modes[i].name) === viewportKeyFromLabel(key)) {
+        out[key] = modes[i].modeId;
+        return;
+      }
+    }
+  });
+  return out;
 }
 
 /** Plan only. Requires `planModes` from @Variables. */
@@ -1273,10 +1397,16 @@ function applyFoundationModes(foundation, collection, viewportKeys) {
 // the same. `adoptRamp` stamps as it fits, for the same reason.
 // ============================================================================
 
-function stampValue(domain, tokenKey, rev) {
+/**
+ * `set` is what tells two sets of the same domain in one collection apart — "Spacing A" and "Spacing B"
+ * under one roof. Absent on a stamp written before ids, and then domain and token are all there is,
+ * which is exact for the one-set case and the reason the field is optional rather than required.
+ */
+function stampValue(domain, tokenKey, rev, setId) {
   return JSON.stringify({
     owner: 'dsf',
     domain: String(domain || ''),
+    set: setId == null ? '' : String(setId),
     token: String(tokenKey || ''),
     rev: typeof rev === 'number' ? rev : 1
   });
@@ -1296,8 +1426,8 @@ function readStampFrom(text) {
 }
 
 /** Variable, VariableCollection and every style are all PluginDataMixin. */
-function stampToken(target, domain, tokenKey, rev) {
-  target.setSharedPluginData(foundationNamespace(), 'stamp', stampValue(domain, tokenKey, rev));
+function stampToken(target, domain, tokenKey, rev, setId) {
+  target.setSharedPluginData(foundationNamespace(), 'stamp', stampValue(domain, tokenKey, rev, setId));
 }
 
 function readStamp(target) {
@@ -1366,7 +1496,7 @@ function foundationTokenKey(group, name) {
  *
  * → `{ renamed: [{ from, to, token }], warnings: [] }`
  */
-async function alignStampedTokens(collection, domain, group, names) {
+async function alignStampedTokens(collection, domain, group, names, setId) {
   var report = { renamed: [], warnings: [] };
   if (!collection || !domain || !names || names.length === 0) return report;
 
@@ -1384,7 +1514,14 @@ async function alignStampedTokens(collection, domain, group, names) {
     // to `undefined` in the sandbox while validating clean, because `validateResolvedCalls` only sees
     // calls too.
     var match = findByStamp(candidates, domain, token, function (target) {
-      return target.getSharedPluginData(foundationNamespace(), 'stamp');
+      var raw = target.getSharedPluginData(foundationNamespace(), 'stamp');
+      // A set id on both sides has to agree. Without it every spacing token called `md` in the
+      // collection is a candidate, and two sets under one roof would trade variables.
+      if (setId) {
+        var stamp = readStampFrom(raw);
+        if (stamp && stamp.set && stamp.set !== String(setId)) return '';
+      }
+      return raw;
     }, name);
     if (!match || match.name === name) continue;
 
@@ -1439,7 +1576,7 @@ async function alignStampedTokens(collection, domain, group, names) {
  *
  * → `{ stamped: n, warnings: [] }`
  */
-async function stampGeneratedTokens(collection, domain, group, names) {
+async function stampGeneratedTokens(collection, domain, group, names, setId) {
   var report = { stamped: 0, warnings: [] };
   if (!collection || !domain || !names || names.length === 0) return report;
 
@@ -1451,7 +1588,7 @@ async function stampGeneratedTokens(collection, domain, group, names) {
     var variable = byName[names[n]];
     if (!variable || variable.remote) continue;
     try {
-      stampToken(variable, domain, foundationTokenKey(group, names[n]));
+      stampToken(variable, domain, foundationTokenKey(group, names[n]), 1, setId);
       report.stamped++;
     } catch (e) {
       report.warnings.push(foundationWarning(

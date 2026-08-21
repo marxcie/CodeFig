@@ -40,7 +40,7 @@
 // This script is another route, not a replacement for that one.
 // @DOC_END
 
-@import { readFoundation, toPortableConfig, toDomainConfig, formatConfigBlock, foundationDomainScriptName, serialisePortableConfig, parsePortableConfig, normaliseConfig, describeConfigTranslations, describeFoundation, writeConfigToTextLayer, readConfigFromTextLayer, writeRegistry, writeManifest, stampToken, namePrefix, viewportKeyFromLabel } from "@Foundation"
+@import { readFoundation, toPortableConfig, toDomainConfig, formatConfigBlock, foundationDomainScriptName, serialisePortableConfig, parsePortableConfig, normaliseConfig, describeConfigTranslations, describeFoundation, writeConfigToTextLayer, readConfigFromTextLayer, writeRegistry, writeManifest, foundationModeIds, stampToken, namePrefix, viewportKeyFromLabel } from "@Foundation"
 @import { spacingRampSpec, radiusRampSpec, adoptRamp } from "@Linear Ramp"
 @import { scaleSequence, recogniseScale, resolveModularRatio } from "@Scale Models"
 @import { bezierAt } from "@Bezier"

@@ -29,7 +29,7 @@
 @import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables, applyModeIntents } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
-@import { gridPreviewHtml, gridSuggestionsHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { gridPreviewHtml, gridSuggestionsHtml, viewportLabel, namePrefix, resolveCollectionName, resolveGroup, normaliseConfig, writeManifest, readManifest, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 
 // ========================================
 // GRID SYSTEM CONFIGURATION
@@ -272,13 +272,11 @@ async function createOrUpdateCollection(config) {
   // so a group renamed in the panel has to become a move of the variables already there before
   // anything is written, or it becomes a second grid beside the first.
   var names = Object.keys(variablesWithPrefix);
-  var aligned = await alignStampedTokens(collection, 'grid', group, names);
+  var setId = readManifest(collection, 'grid', group).id || '';
+  var aligned = await alignStampedTokens(collection, 'grid', group, names, setId);
   describeStampAlignment(aligned).forEach(function (line) { console.log(line); });
 
   var stats = await processVariables(collection, variablesWithPrefix, innerConfig, modes);
-
-  var stamped = await stampGeneratedTokens(collection, 'grid', group, names);
-  stamped.warnings.forEach(function (w) { console.warn(w.message); });
 
 
   console.log('=== GRID SYSTEM SUMMARY ===');
@@ -289,7 +287,9 @@ async function createOrUpdateCollection(config) {
   
   return {
     collection: collection,
-    stats: stats
+    stats: stats,
+    names: names,
+    setId: setId
   };
 }
 
@@ -378,7 +378,7 @@ createOrUpdateCollection(gridSystemConfig)
       return { previewStats: previewStats, result: result, gridStyleStats: gridStyleStats, gridOut: gridOut };
     });
   })
-  .then(function (done) {
+  .then(async function (done) {
     var previewStats = done.previewStats;
     var result = done.result;
     var gridStyleStats = done.gridStyleStats;
@@ -389,10 +389,12 @@ createOrUpdateCollection(gridSystemConfig)
     // the run: the variables and the grid style are real whether or not the record of them is.
     var manifest = null;
     try {
+      var gridModes = (gridSystemConfig.modes || []).map(function (m) { return m.name; });
       manifest = writeManifest(result.collection, {
         domain: 'grid',
         group: resolveGroup(gridSystemConfig),
-        modes: (gridSystemConfig.modes || []).map(function (m) { return m.name; }),
+        modes: gridModes,
+        modeIds: foundationModeIds(result.collection, gridModes),
         tokens: [],
         config: normaliseConfig(gridSystemConfig).config.domains.grid
       });
@@ -405,6 +407,14 @@ createOrUpdateCollection(gridSystemConfig)
     } catch (e) {
       console.warn('Variables were written. The set could not be recorded: ' + (e && e.message ? e.message : e));
     }
+
+    // After the manifest: it is what mints the set id, and a stamp without one cannot tell two grids
+    // in a collection apart.
+    var stamped = await stampGeneratedTokens(
+      result.collection, 'grid', resolveGroup(gridSystemConfig), result.names,
+      (manifest && manifest.manifest ? manifest.manifest.id : result.setId)
+    );
+    stamped.warnings.forEach(function (w) { console.warn(w.message); });
 
     var msg = 'Grid System: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' vars updated';
     if (gridStyleStats.created > 0 || gridStyleStats.updated > 0) {

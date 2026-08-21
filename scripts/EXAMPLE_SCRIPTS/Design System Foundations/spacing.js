@@ -39,7 +39,7 @@
 
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, normaliseConfig, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, readManifest, normaliseConfig, foundationModeIds, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { displayResults, createResult } from "@InfoPanel"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"

@@ -16,7 +16,7 @@
 
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, cleanupTestArtifacts } from "@Test Harness"
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, writeRegistry, normaliseConfig, toDomainConfig, readStamp, foundationNamespace, foundationRegistryKey, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, readFoundation, writeManifest, readManifest, foundationModeIds, writeRegistry, normaliseConfig, toDomainConfig, readStamp, foundationNamespace, foundationRegistryKey, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
 @import { scaleSequence, resolveModularRatio } from "@Scale Models"
 @import { bezierAt } from "@Bezier"
@@ -359,6 +359,36 @@ testBegin('linear-ramp');
       expect(Object.keys(idsAfter)).toHaveLength(4);
       expect(Object.keys(await idsUnder(second.collection, 'Spacing'))).toHaveLength(0, 'no orphans left behind');
       expect(idsAfter['lg']).toBe(idsBefore['lg'], 'same variable id, so every binding to it survives');
+    } finally {
+      await removeCollection(name);
+      restoreRegistryRaw(before);
+    }
+  });
+
+  await itInTestFile('a set keeps one id across runs, and a renamed mode stays the same mode', async function () {
+    var name = testPrefix() + '/ramp-setid';
+    var before = currentRegistryRaw();
+    try {
+      var first = await runLinearRamp(spacingConfigFor(name, 40), spacingRampSpec());
+      var id = first.manifest.manifest.id;
+      expect(!!id).toBe(true, 'a set is minted an id the first time it is recorded');
+      expect(readStamp(await variableNamed(first.collection, 'Spacing/md')).set).toBe(id,
+        'and the stamps carry it, so two sets in a collection cannot be confused');
+
+      // Renamed in the variable table, the way a person would.
+      var mode = first.collection.modes[0];
+      first.collection.renameMode(mode.modeId, 'Handset');
+
+      var second = await runLinearRamp(spacingConfigFor(name, 40), spacingRampSpec());
+      expect(second.manifest.manifest.id).toBe(id, 'the same set, not a second one');
+
+      var keys = second.collection.getSharedPluginDataKeys(foundationNamespace())
+        .filter(function (k) { return k.indexOf('set:spacing:') === 0; });
+      expect(keys).toHaveLength(1, 'one manifest, not one per name the group has ever had');
+
+      var loaded = await readFoundation({ collections: [name] });
+      var modeWarnings = loaded.warnings.filter(function (w) { return w.code === 'manifest-mode-missing'; });
+      expect(modeWarnings).toHaveLength(0, 'a rename is not an absence');
     } finally {
       await removeCollection(name);
       restoreRegistryRaw(before);
