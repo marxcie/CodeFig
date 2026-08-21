@@ -383,7 +383,7 @@
       // shape, and two builders for one shape is how they drift.
       cw.appendChild(buildRowGroup(field, v && typeof v === "object" ? v : {}, "cfg-" + n + "-" + idx));
     } else if (t === "curve") {
-      var curveWrap = buildCurveControl(field, v);
+      var curveWrap = buildCurveControl(field, v, undefined, n);
       curveWrap.setAttribute("data-curve-field", n);
       cw.appendChild(curveWrap);
     } else if (t === "collection") {
@@ -541,6 +541,10 @@
     if (r.type === "chips") {
       var chipsWrap = document.createElement("div");
       chipsWrap.className = "config-ui-row config-ui-row--field config-ui-row--chips";
+      var crules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+      if (crules && crules.length) {
+        chipsWrap.setAttribute("data-show-when-rules", JSON.stringify(crules));
+      }
       var chipsField = document.createElement("div");
       chipsField.className = "config-ui-field config-ui-field--chips";
       var chipsRow = document.createElement("div");
@@ -1438,6 +1442,32 @@
    *
    * `original` for the empty array, a preset's name when the numbers are exactly one, `custom` otherwise.
    */
+  /**
+   * **The curve recognition fitted to what the file already holds**, per curve field, or `null`.
+   *
+   * Published by the host rather than derived here, and that split is the point: the estimate is a pure
+   * function of the collection's own colours, which the *host* holds (they ride the auto-import payload) and
+   * the renderer never sees. So this is not a stored answer to a question the form could ask — it is data
+   * the form does not have.
+   *
+   * Keyed by the field's name, and for a `@rows` cell by `field[index].cell`, because HSL fits one curve
+   * per mode and they are all called `curve`.
+   */
+  var curveBaselines = {};
+  function setCurveBaselines(map) {
+    curveBaselines = map || {};
+  }
+  function curveBaselineFor(key) {
+    var held = key ? curveBaselines[key] : null;
+    return held && held.length ? held : null;
+  }
+  /** Two curves are the same curve when their stored coordinates are. Six decimals, as written. */
+  function sameCurve(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 5e-6) return false;
+    return true;
+  }
+
   function curveLabelFor(points) {
     var B = curveLib();
     if (!points || !points.length) return "original";
@@ -1448,7 +1478,7 @@
     return found.type + "|" + found.ease;
   }
 
-  function buildCurvePresetSelect(allowOriginal) {
+  function buildCurvePresetSelect(allowOriginal, estimated) {
     var sel = document.createElement("select");
     sel.className = "config-ui-curve__preset";
     function add(value, text, into) {
@@ -1458,6 +1488,10 @@
       (into || sel).appendChild(o);
     }
     if (allowOriginal) add("original", "Original");
+    // **Only when there is one.** *Estimated original* names the curve fitted to the ramp already in the
+    // file, so on a collection with no ramp it would name nothing — and an option that cannot mean anything
+    // is worse than a missing one.
+    if (estimated) add("estimated", "Estimated original");
     add("custom", "Custom");
     add("linear|none", "Linear");
     for (var f = 1; f < CURVE_PRESET_FAMILIES.length; f++) {
@@ -1539,7 +1573,7 @@
    * conversion runs through `toView`/`fromView` rather than being written out at each use. Getting one of
    * those backwards draws a curve that is right until you drag it.
    */
-  function buildCurveControl(field, value, growthSeed) {
+  function buildCurveControl(field, value, growthSeed, baselineKey) {
     var B = curveLib();
     var allowOriginal = !!field.allowOriginal;
     // The sibling cell holding the growth ratio, named by `curve(growth:<key>)`. Looked up **lazily**, at
@@ -1595,7 +1629,8 @@
     // from the other end, and two controls for one state is one too many — *Linear* already means "no
     // shape", so selecting it hides the handles and selecting anything else reveals them. Nothing has to
     // remember whether you clicked, because the curve says.
-    var preset = buildCurvePresetSelect(allowOriginal);
+    var estimate = curveBaselineFor(baselineKey);
+    var preset = buildCurvePresetSelect(allowOriginal, estimate);
     head.appendChild(preset);
     var toggle = document.createElement("button");
     toggle.type = "button";
@@ -1789,7 +1824,11 @@
     function setPoints(next, opts) {
       var pts = curveValueOf(next);
       wrap.setAttribute("data-curve-value", JSON.stringify(pts));
-      var label = curveLabelFor(effectivePoints(pts));
+      // **`Estimated original` is looked up, not remembered.** It wins over `Custom` when the coordinates
+      // *are* the fit — and over a preset name too, because a fit that happens to land on Linear is still
+      // the estimate and saying `Linear` would lose where it came from. Change a handle and the numbers stop
+      // matching, so the caption falls through to `Custom` on its own. Nothing stored, nothing to clear.
+      var label = (estimate && sameCurve(pts, estimate)) ? "estimated" : curveLabelFor(effectivePoints(pts));
       // The dropdown *reads* the curve. Selecting an option it does not contain leaves a `<select>` blank,
       // so *Custom* is a real option rather than a placeholder.
       preset.value = label === "original" && !allowOriginal ? "custom" : label;
@@ -1825,6 +1864,9 @@
     preset.addEventListener("change", function () {
       var choice = preset.value;
       if (choice === "original") return setPoints([]);
+      // Selecting it puts the estimate back. It is the file's own shape, so this is the way back after an
+      // edit — the values survive because they are re-derived from the collection, not held by the control.
+      if (choice === "estimated") return setPoints(estimate ? estimate.slice() : []);
       if (choice === "custom") {
         // **Custom on a straight line is still a shape.** Storing the straight coordinates is what gives it
         // handles to drag — picking *Custom* and getting nothing to grab was a choice that did nothing.
@@ -2086,6 +2128,23 @@
    * handler ever saw it, and typing a growth was impossible. A control manages its own edits; this is for
    * telling it that something *else* moved.
    */
+  /**
+   * Does a condition's value list accept what a control currently reads?
+   *
+   * **`*` means "anything, as long as it is something".** Every other value is an exact match, which is
+   * right for a radio or a select but cannot express *"once a collection has been chosen"* — the name is
+   * whatever the file calls it. Colours needs that to keep the panel empty below General until the address
+   * is real, rather than drawing a placeholder ramp for a collection nobody has picked.
+   *
+   * One function, because the same question is asked in four places — field rows, headings, row cells and
+   * the disabled state — and a vocabulary that means different things in each is worse than none.
+   */
+  function conditionAccepts(values, current) {
+    if (!values || !values.length) return true;
+    if (values.indexOf("*") !== -1) return String(current == null ? "" : current) !== "";
+    return values.indexOf(current) !== -1;
+  }
+
   function refreshCurveControls(root, except) {
     if (!root || typeof root.querySelectorAll !== "function") return;
     root.querySelectorAll("[data-curve-value]").forEach(function (wrap) {
@@ -2315,7 +2374,10 @@
             // **The whole row, for a curve that owns two keys.** A growth curve holds the shape *and* the
             // growth, and the growth lives under a name of its own in the config so the block stays
             // readable — so the control has to be handed the row to find its starting value.
-            row
+            row,
+            // The path the host publishes its fitted curves under, which is the only thing that tells one
+            // mode's curve from another's.
+            field.name + "[" + index + "]." + column.key
           ));
           // A column can carry its own `@helper:` now. `.config-ui-field-note` is `grid-column: 2`, so in
           // a `--stacked` cell — which is a 3fr/7fr grid — it lands under the control it explains rather
@@ -2512,7 +2574,14 @@
     return wrap;
   }
 
-  function buildRowCell(column, value, groupName, keyPrefix, row) {
+  /**
+   * `baselineKey` is **not** `fieldKey`. A row cell's key is bare — `curve`, with no prefix — because the
+   * flat sweep in `getValues` must not mistake a cell for a top-level field. That makes it useless for
+   * addressing one row's curve among several: in HSL every mode has a curve and all of them are called
+   * `curve`, and the collection's OKLCH curve is called `curve` too. So the caller that knows which row
+   * this is says so separately.
+   */
+  function buildRowCell(column, value, groupName, keyPrefix, row, baselineKey) {
     var fieldKey = (keyPrefix || "") + column.key;
     if (column.type === "group") return buildRowGroup(column, value, groupName);
     /**
@@ -2540,7 +2609,10 @@
       // The same editor at cell scope. It carries `data-row-field` and **not** `data-curve-field`, for the
       // reason every other row control does: the flat sweep in `getValues` collects by the second, and a
       // mode's `lower` must never become a top-level `lower`.
-      var cellCurve = buildCurveControl(column, value, row && column.growth ? row[column.growth] : undefined);
+      // Keyed by the cell's own path, because HSL fits one curve per mode and every one of them is
+      // called `curve`.
+      var cellCurve = buildCurveControl(column, value,
+        row && column.growth ? row[column.growth] : undefined, baselineKey);
       cellCurve.setAttribute("data-row-field", fieldKey);
       return cellCurve;
     }
@@ -2936,7 +3008,7 @@
             var rules = JSON.parse(rs);
             for (var i = 0; i < rules.length; i++) {
               var cur = conditionValueOf(rules[i].field);
-              if (rules[i].values.indexOf(cur) === -1) return false;
+              if (!conditionAccepts(rules[i].values, cur)) return false;
             }
             return true;
           } catch (e) {
@@ -3028,7 +3100,7 @@
             // one place that was not, and it is the path a mode's condition takes when it names a setting
             // above the whole table.
             var reading = found ? showWhenValueStr(seen) : conditionValueOf(field);
-            if (rules[i].values.indexOf(reading) === -1) show = false;
+            if (!conditionAccepts(rules[i].values, reading)) show = false;
           }
           el.style.display = show ? "" : "none";
         });
@@ -3061,7 +3133,7 @@
             }
             // Same reader as the `{…}` branch above, for the same reason.
             var offReading = found ? showWhenValueStr(seen) : conditionValueOf(field);
-            if (rules[i].values.indexOf(offReading) === -1) off = false;
+            if (!conditionAccepts(rules[i].values, offReading)) off = false;
           }
           el.classList.toggle("is-disabled", off);
           el.querySelectorAll("input, select, textarea").forEach(function (control) {
@@ -3185,7 +3257,11 @@
       applyVisibility();
       if (!e.codefigLive) refreshCurveControls(container, e.target);
       refreshModePickers();
-      onChange(getValues(), e.codefigLive ? { live: true } : null);
+      // **`live` and `committed` are different questions.** `live` says a drag is in flight, so the config
+      // editor's text can wait. `committed` says the control has *settled* — a `change` fires when a text
+      // field is left or Enter is pressed, and when a select is chosen, where `input` fires on every
+      // keystroke. Anything that acts on a value rather than recording it wants the second one.
+      onChange(getValues(), { live: !!e.codefigLive, committed: e.type === "change" });
     }
     /**
      * **Named, so they can be taken off again.**
@@ -3247,6 +3323,7 @@
     // Published so a test can assemble a form and then tell the curves to look at it — which is the only
     // way to exercise a control whose picture depends on a cell it does not own.
     refreshCurveControls: refreshCurveControls,
+    setCurveBaselines: setCurveBaselines,
     // Published for the same reason `collectRows` is: the curve editor's redraw replaces every element it
     // owns, which is exactly the kind of thing that reads correctly and loses its drag handler in practice.
     buildCurveControl: buildCurveControl,

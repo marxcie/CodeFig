@@ -1337,7 +1337,7 @@
         appearance: none;
         -webkit-appearance: none;
         padding-right: 28px;
-        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-position: right 10px center;
         background-size: 10px 6px;
@@ -2168,16 +2168,22 @@
       }
 
       .config-ui-chip-remove,
+      /* **The same grey as the header's icons** (`.icon-btn`, #666), not body text at 55%. Inheriting the
+         text colour and fading it landed near #7c7c7e — lighter than every other affordance on the panel,
+         which read as disabled rather than quiet. Its own colour, so it cannot drift with the text again. */
       .config-ui-chip-add {
         border: none;
         background: none;
         padding: 0 2px;
         font: inherit;
         font-size: var(--font-size-body);
-        color: inherit;
-        opacity: 0.55;
+        color: #666;
         cursor: pointer;
         line-height: 1;
+      }
+
+      .config-ui-chip-add:hover {
+        color: #333;
       }
 
       .config-ui-chip-remove:hover,
@@ -3394,17 +3400,29 @@
         gap: var(--space-sm);
       }
 
+      /* **The custom chevron, like every other select.** This one kept the *native* arrow — it has its own
+         class for its width and padding, and never picked up `appearance: none` with it. A native arrow
+         cannot be recoloured from CSS at all, which is why darkening the shared chevron left this one
+         looking lighter and slightly different-shaped than the pickers beside it. Same SVG, same #666 as
+         the header icons. */
       .config-ui-curve__preset {
         flex: 1 1 auto;
         min-width: 0;
         height: 28px;
-        padding: 0 var(--space-sm);
+        padding: 0 28px 0 var(--space-sm);
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
         background: var(--input-bg);
         color: var(--text-primary);
         font-family: var(--font-family-base);
         font-size: var(--font-size-body);
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 10px 6px;
       }
 
       .config-ui-curve__toggle {

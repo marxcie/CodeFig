@@ -190,6 +190,23 @@
         continue;
       }
 
+      // **A bare *numeric* key.** `{ 400: 400 }` is legal JS and not legal JSON, and it is exactly what
+      // Typography's font weights look like — so the whole value failed to parse and degraded to the
+      // string `"{ 400: 400, 600: 600 }"`. The panel then showed that string in a text field, collected
+      // it, wrote it back into the block as a quoted string, and the run enumerated its *characters*:
+      // a text style per index, 0 to 28. A key position is the only place a number can appear here
+      // without a `:` before it, so reading it as a key is unambiguous.
+      if (expectKey && (/[0-9]/.test(ch) || (ch === "-" && /[0-9]/.test(next)))) {
+        var numKey = ch === "-" ? "-" : "";
+        if (ch === "-") i++;
+        while (i < text.length && /[0-9.]/.test(text.charAt(i))) {
+          numKey += text.charAt(i);
+          i++;
+        }
+        out += JSON.stringify(numKey);
+        continue;
+      }
+
       out += ch;
       i++;
     }
@@ -783,9 +800,24 @@
 
         var chipsMatch = c.match(/^@collectionModes\s*:\s*(.*)$/);
         if (chipsMatch) {
+          // **The chips take conditions too.** They are the one control in *General* that fills itself from
+          // the file, so they are the one that has something to say before an address is complete — and
+          // saying it is what made choosing a collection look like a flicker of mode names.
+          var cRest = chipsMatch[1] || "";
+          var cSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|*]+)/g;
+          var cSwAll = [];
+          var cSwm;
+          while ((cSwm = cSwRe.exec(cRest)) !== null) {
+            cSwAll.push({
+              field: cSwm[1],
+              values: cSwm[2].split("|").map(function (v) { return v.trim(); }).filter(Boolean)
+            });
+          }
           rows.push({
             type: "chips",
-            label: (chipsMatch[1] || "Collection modes").trim(),
+            showWhenRules: cSwAll.length ? cSwAll : undefined,
+            label: (cRest.replace(/\s*@showWhen:\s*\w+\s*=\s*[\w|*]+/g, "").trim() ||
+                    "Collection modes"),
             // Where the per-mode values live, so the control can seed itself before a collection has
             // been chosen — which is the whole of the layout pass.
             from: "modes",
@@ -799,7 +831,7 @@
         if (hm) {
           var lvl = hm[1].length;
           var hrest = (hm[2] || "").replace(/^=\s*|\s*=$/g, "").trim();
-          var hSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|]+)/g;
+          var hSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|*]+)/g;
           var hSwAll = [];
           var hm2;
           while ((hm2 = hSwRe.exec(hrest)) !== null) {
@@ -813,7 +845,7 @@
                 .filter(Boolean),
             });
           }
-          var htext = hrest.replace(/\s+@showWhen:\s*\w+\s*=\s*[\w|]+/g, "").trim();
+          var htext = hrest.replace(/\s+@showWhen:\s*\w+\s*=\s*[\w|*]+/g, "").trim();
           rows.push({
             type: "heading",
             level: lvl,
@@ -834,7 +866,7 @@
           i++;
           continue;
         }
-        var pSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|]+)/g;
+        var pSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|*]+)/g;
         var pSwAll = [];
         var psm;
         while ((psm = pSwRe.exec(c)) !== null) {
@@ -848,7 +880,7 @@
               .filter(Boolean),
           });
         }
-        var ptext = c.replace(/\s+@showWhen:\s*\w+\s*=\s*[\w|]+/g, "").trim();
+        var ptext = c.replace(/\s+@showWhen:\s*\w+\s*=\s*[\w|*]+/g, "").trim();
         var hasShowWhen = pSwAll.length > 0;
         if (hasShowWhen || lastWasBlank || !rows.length || rows[rows.length - 1].type !== "paragraph") {
           rows.push({
@@ -1093,7 +1125,7 @@
             f.optionSource = optsVal;
           }
         }
-        var swRe = /@showWhen:\s*(\w+)\s*=\s*([\w|]+)/g;
+        var swRe = /@showWhen:\s*(\w+)\s*=\s*([\w|*]+)/g;
         var swAll = [];
         var swm;
         while ((swm = swRe.exec(tip)) !== null) {

@@ -119,7 +119,7 @@ test('a form is only written back over the block it was projected from', () => {
     'the projection marker is recorded before the form is built from that text');
 });
 
-test('an address change clears the panel before it reads', () => {
+test('an address change leaves no trace of the previous one', () => {
   // Symptom 3. Pointing the panel at a different collection fired a read, the read returned `source: "none"`,
   // and the previous collection's modes, curves, anchors and steps stayed on screen — the difference between
   // "this collection has no ramp" and "here is someone else's ramp", with the panel saying the second.
@@ -127,20 +127,33 @@ test('an address change clears the panel before it reads', () => {
   assert.notEqual(start, -1);
   const body = ui.slice(start, ui.indexOf('\n      function ', start + 10));
 
-  const reset = body.indexOf('resetConfigForAddress(collection, group)');
-  assert.notEqual(reset, -1, 'an address change no longer resets the panel');
-  assert.match(body, /if \(!detectOnly\) resetConfigForAddress/,
-    'the group-detection probe now resets too — it asks about the address the panel is already on');
+  // **The defaults are prepared before the read and applied when it answers.** They used to be *written*
+  // before the read, which reached the same end state by two writes — and because pristine clears the token
+  // list, the first one collapsed every section gated on it and the second expanded them again. That was
+  // the layout jump. What has to hold is the end state, not the route.
+  const prep = body.indexOf('pristineConfigForAddress(collection, group)');
+  assert.notEqual(prep, -1, 'an address change no longer prepares defaults for the new address');
+  assert.match(body, /pendingPristine = detectOnly \? null : pristineConfigForAddress/,
+    'the group-detection probe must not reset — it asks about the address the panel is already on');
 
-  // Ordering is the whole rule: a read that finds nothing must leave an empty panel.
   const asks = body.indexOf('runSilentSnippet');
-  assert.ok(reset < asks, 'the reset happens after the read, so a read that finds nothing leaves stale values');
+  assert.ok(prep < asks, 'the defaults must be prepared from the block as it stands before the read');
 
   // Defaults come from the script as opened, not from the block on screen — which by then holds the
   // previous collection's values, so resetting to it would clear nothing.
-  const fn = ui.slice(ui.indexOf('function resetConfigForAddress('),
-    ui.indexOf('\n      function requestAutoImport('));
+  const fn = ui.slice(ui.indexOf('function pristineConfigForAddress('),
+    ui.indexOf('\n      /** The collection the last real read was for'));
   assert.match(fn, /extractConfigSection\(originalCode/,
-    'the reset no longer reads the script as it was opened');
-  assert.match(fn, /collectionName: collection/, 'the address is not carried through the reset');
+    'the defaults no longer come from the script as it was opened');
+  assert.match(fn, /collectionName: collection/, 'the address is not carried through');
+  assert.doesNotMatch(fn, /writeConfigBlockText/,
+    'preparing the defaults must not write — that is the second rebuild this removed');
+
+  // And the rule itself: a read that finds nothing leaves an empty panel rather than the last one's values.
+  const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
+  assert.match(apply, /writeConfigBlockText\(pendingPristine/,
+    'a read that finds nothing no longer clears the panel');
+  assert.match(apply, /var base = pendingPristine \|\| currentConfigBlock\(\)/,
+    'a read that finds something must fill onto the defaults, or the previous address survives in every ' +
+    'key the payload does not mention');
 });

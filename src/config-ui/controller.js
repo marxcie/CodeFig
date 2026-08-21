@@ -16,6 +16,9 @@
     var attached = null;
 
     function render(s) {
+      // The host's fitted curves, published before anything is built — `buildCurveControl` reads them while
+      // it constructs each preset dropdown, so they have to be in place first.
+      if (R.setCurveBaselines) R.setCurveBaselines((opts && opts.curveBaselines) || {});
       schema = s;
       if (attached && attached.detach) attached.detach();
       R.buildForm(schema, container);

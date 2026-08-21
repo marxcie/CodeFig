@@ -543,8 +543,18 @@ test('the fill and the ordering are one write, not two', () => {
   const orderAt = apply.indexOf('orderedModesInBlock(filled.text)');
   const writeAt = apply.indexOf('writeConfigBlockText(ordered.text');
   assert.ok(orderAt > 0 && writeAt > orderAt, 'ordered before writing, in that order');
-  assert.equal((apply.match(/writeConfigBlockText\(/g) || []).length, 1,
-    'and exactly one write, so nothing can land between them');
+  assert.equal((apply.match(/writeConfigBlockText\(ordered\.text/g) || []).length, 1,
+    'and exactly one write on the found path, so nothing can land between them');
+
+  // **The other write is the empty-panel one, on the branch that returns before any of this.** A read that
+  // finds nothing applies the prepared defaults instead of a fill; the two are mutually exclusive, so a
+  // single run still writes once. Counting writes in the whole function would forbid that second branch
+  // existing at all, which is not what this test is protecting.
+  const writes = apply.match(/writeConfigBlockText\([^,]+,\s*'([^']+)'/g) || [];
+  assert.equal(writes.length, 2, 'expected the fill write and the nothing-found write, and nothing else');
+  const missWrite = apply.indexOf('writeConfigBlockText(pendingPristine');
+  assert.ok(missWrite !== -1, 'a read that finds nothing no longer applies the prepared defaults');
+  assert.ok(missWrite < orderAt, 'the nothing-found write must sit on the branch that returns before the fill');
 
   // The load path that brings no config of its own still orders what is already there.
   assert.match(ui, /function orderConfigModesToFile\(\)[\s\S]{0,220}orderedModesInBlock\(currentConfigBlock\(\)\)/);

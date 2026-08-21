@@ -783,13 +783,28 @@
             configUIContainer.innerHTML = '';
             configUIInstance = window.CodeFigConfigUI.render(schema, {
               container: configUIContainer,
+              curveBaselines: _curveBaselines,
               onChange: function (values, opts) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
                 // thing that asks. Every other edit is an answer, not a question.
-                var addressChanged = !configLastAddress ||
+                //
+                // **Asked when the field settles, not while it is being typed into.** Group is a text
+                // field, and reading it per keystroke means `color / moss` is looked up as `m`, then `mo`,
+                // then `mos` — none of which exist, so the panel reports a miss and rewrites itself under
+                // the cursor three times before the word is finished. A 350ms debounce does not help: any
+                // pause mid-word outlasts it. `change` fires when the field is left or Enter is pressed,
+                // which is the moment the user has actually named something.
+                //
+                // `configLastAddress` moves on the same beat. Recording the address on every keystroke
+                // while acting only on commit would mean the commit always found the address unchanged —
+                // the trigger would never fire at all.
+                var committed = !!(opts && opts.committed) && !(opts && opts.live);
+                var addressChanged = committed && (!configLastAddress ||
                   values.collectionName !== configLastAddress.collectionName ||
-                  values.group !== configLastAddress.group;
-                configLastAddress = { collectionName: values.collectionName, group: values.group };
+                  values.group !== configLastAddress.group);
+                if (committed) {
+                  configLastAddress = { collectionName: values.collectionName, group: values.group };
+                }
                 // **A live edit is held, not written.** `syncUIToCode` replaces the whole config editor
                 // document and then re-merges it into the script source — two CodeMirror `setValue` calls,
                 // which is far too much to run per frame of a drag. Nothing reads that text until the
@@ -1242,6 +1257,19 @@
         initConfigUI(block || '');
         // Recorded *after* the build, so it names the text the controls on screen actually came from.
         configProjectedFrom = block || '';
+
+        // **Put the strip back in the same frame the form came back in.**
+        //
+        // The preview's slots are *inside* the form — every Colors mode block carries its own — so a
+        // rebuild empties them, and the picture only returns when the next debounced run finishes 400ms
+        // later. That gap is the flicker: the ramp appears, the form is rebuilt under it, the ramp vanishes,
+        // and it comes back a beat later. Márton, watching a collection load: *"mode names and chart appears
+        // and disappears in milliseconds"*.
+        //
+        // The last render is already held for exactly this kind of question, so redrawing it costs nothing
+        // and nothing can be stale: a *newer* run overwrites this the moment it lands, and if the config
+        // changed, the run that changed it is already scheduled.
+        if (_previewLastHtml) renderConfigPreview(_previewLastHtml);
         if (configUIInstance) {
           var projected = configUIInstance.getValues();
           configLastAddress = { collectionName: projected.collectionName, group: projected.group };
@@ -2182,6 +2210,25 @@
           ? fileColorValues.byMode : null;
       }
 
+      /**
+       * The curves recognition fitted, keyed the way the renderer addresses its curve controls.
+       *
+       * Cleared and rebuilt on every read, so a collection with no ramp leaves nothing behind for the next
+       * one to offer — an *Estimated original* describing the previous collection would be worse than none.
+       */
+      let _curveBaselines = {};
+      function rememberCurveBaselines(config) {
+        _curveBaselines = {};
+        if (!config) return;
+        if (Array.isArray(config.curve) && config.curve.length) _curveBaselines.curve = config.curve.slice();
+        // `modes[0].curve` — the path `buildRowsControl` builds its cell keys from.
+        (Array.isArray(config.modes) ? config.modes : []).forEach(function (mode, i) {
+          if (mode && Array.isArray(mode.curve) && mode.curve.length) {
+            _curveBaselines['modes[' + i + '].curve'] = mode.curve.slice();
+          }
+        });
+      }
+
       function rememberFileColors(collection, group, byMode) {
         fileColorValues = {
           address: fileColorsAddress(collection, group),
@@ -2462,26 +2509,42 @@
        * address change per keystroke, and rebuilding the form under the caret on each of them would make the
        * field impossible to type into.
        */
-      function resetConfigForAddress(collection, group) {
+      /**
+       * The pristine block for an address — **computed, not written**.
+       *
+       * It used to write immediately, before the read went out, so that a read finding nothing left an empty
+       * panel. The end state was right and the route to it was two writes: pristine, then the fill. Two
+       * writes are two form rebuilds, and because pristine clears the token list, the first one *collapses*
+       * every section gated on it and the second expands them again. That is the layout jump.
+       *
+       * So the text is prepared here and applied once, when the answer arrives — filled onto if there is
+       * something to fill, written bare if there is not. Same end state, one rebuild, no collapse.
+       */
+      function pristineConfigForAddress(collection, group) {
         var api = window.CodeFigConfigUI;
-        if (!api || !originalCode || !parsedSections) return false;
+        if (!api || !originalCode || !parsedSections) return null;
         var pristine = '';
         try {
           pristine = extractConfigSection(originalCode, !!parsedSections.hasUIConfig) || '';
         } catch (e) {
           return false;
         }
-        if (!pristine) return false;
+        if (!pristine) return null;
         var filled = api.fillConfigBlock(pristine, {
           collectionName: collection,
           group: group == null ? '' : group
         });
-        if (!filled || !filled.text) return false;
-        // Already at defaults for this address — the first collection anyone picks, or a retry.
-        if (filled.text.trim() === currentConfigBlock().trim()) return false;
-        writeConfigBlockText(filled.text, 'address-reset');
-        return true;
+        if (!filled || !filled.text) return null;
+        // Already at defaults for this address — the first collection anyone picks, or a retry. Nothing to
+        // apply, so the caller keeps whatever is on screen.
+        if (filled.text.trim() === currentConfigBlock().trim()) return null;
+        return filled.text;
       }
+
+      /** The collection the last real read was for, so a change of collection can drop a stale group. */
+      var lastReadCollection = null;
+      /** The pristine block for the address being read, applied when the answer lands. */
+      var pendingPristine = null;
 
       function requestAutoImport(attempt, detectOnly) {
         autoImportTimer = null;
@@ -2497,10 +2560,29 @@
         var domain = configPreviewDomain();
         if (!domain) return;
 
+        // **A group belongs to the collection it was typed for.** Point the panel somewhere else and the
+        // old group name is a path into a collection that no longer applies: it reads nothing, and the panel
+        // reports a miss for an address nobody asked about.
+        //
+        // Cleared *here* rather than on the change itself, because this is already the one place that
+        // rewrites the block for a new address — doing it in `onChange` cost a second write and a second
+        // form rebuild, outside the debounce this function exists to sit inside.
+        if (!detectOnly && collection !== lastReadCollection) group = '';
+        if (!detectOnly) lastReadCollection = collection;
+
+        // **A real read answers the group probe too, so it does not run a second one.**
+        //
+        // `scheduleGroupDetection` fires on every form render and, on a pristine block, asks for a *full*
+        // import — which for one collection selection is the whole cycle twice: reset, fill, rebuild, reset,
+        // fill, rebuild. It already dedupes by address, so the fix is for the ordinary load to claim the
+        // address it is about to read. (Claiming it here rather than on the way out because the probe is
+        // scheduled by the form rebuild this read causes, which happens before any result arrives.)
+        if (!detectOnly) detectedFor[collection + '\u0000' + (group == null ? '' : group)] = true;
+
         // Before the read, never after: a read that finds nothing has to leave an empty panel. `detectOnly`
         // is the group-detection probe, which asks a question about an address the panel is already on and
         // must not throw away what is there.
-        if (!detectOnly) resetConfigForAddress(collection, group);
+        pendingPristine = detectOnly ? null : pristineConfigForAddress(collection, group);
 
         var seq = ++autoImportSeq;
         lastAutoImport = { at: new Date().toLocaleTimeString(), requested: true, refused: false,
@@ -2967,6 +3049,12 @@
           //
           // Both sentences, in that order: the settings were not read, *and* here is what the modes did. One
           // without the other is a half-answer, and the half that goes missing is whichever was written last.
+          // Nothing to fill, so the prepared defaults *are* the result — this is the write that used to
+          // happen before the read went out.
+          if (pendingPristine) {
+            writeConfigBlockText(pendingPristine, 'address-reset');
+            pendingPristine = null;
+          }
           var missNote = nothingReadNote(found);
           var addedNote = insertedModesNote(onMiss.added, onMiss.dropped);
           setAutoImportNote(
@@ -2980,9 +3068,24 @@
         // instruction — and the note that said "clear them to load it" told someone to do something
         // the panel gave them no way to do.
 
+        // **The estimate, kept before the block is written over.** Recognition fits a curve to the ramp
+        // the file already holds, and those coordinates arrive here inside `found.config` — the collection's
+        // in OKLCH, one per mode in HSL. The form needs them so its preset dropdown can offer *Estimated
+        // original*, and it cannot re-derive them: the fit is a function of the collection's colours, which
+        // live out here and not in the renderer.
+        //
+        // Read from the payload rather than recomputed, so the option can never describe a different curve
+        // from the one the block was filled with.
+        rememberCurveBaselines(found.config);
+
         var fill = window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock;
         if (!fill) return;
-        var filled = fill(currentConfigBlock(), found.config);
+        // **Onto the prepared defaults, not onto what is on screen.** Filling over the previous address's
+        // block leaves behind every key the payload does not mention; that is what the pre-read reset was
+        // for, and doing it here means one write instead of two.
+        var base = pendingPristine || currentConfigBlock();
+        pendingPristine = null;
+        var filled = fill(base, found.config);
         // One write: the fill's text, already in the collection's mode order. A second write that
         // re-read the block is what raced with this one.
         var ordered = orderedModesInBlock(filled.text);
