@@ -71,6 +71,13 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **`easeInOut` presets are one curve, not two halves joined at a middle point.** Two segments meant a
+  *middle anchor*, and a colour channel travels through its middle anchor value — so choosing
+  *Sine · easeInOut* for a saturation ramp routed it through a middle of 83 while its ends were 100 and 90.
+  A preset named for smoothness put a corner in. They are single cubics now, fitted to the easing function
+  they name: `sine` is 0.0002 out, the worst (`circ`, `exponential`) 0.033, and `quad` and `cubic` stop
+  being exact — that is the price. **`outin` is unchanged**, because no single cubic comes within 0.04 of
+  it and several are 0.15 out.
 - **The anchor boxes no longer vanish when you let go of a handle.** Each channel declares two curves —
   one per colour model — and both were bound to the same group cell, because a group holds both models'
   parts. Releasing a drag refreshes every curve *except* the one being dragged, so the hidden twin was the

@@ -39,7 +39,9 @@ function build(field, value) {
 
 test("it opens on the curve it was given, in either shape", () => {
   assert.deepEqual(build({}, [0.37, 0, 0.63, 1]).points(), [0.37, 0, 0.63, 1]);
-  assert.equal(build({}, B.bezierFromEase("sine", "inout", 1)).points().length, 10);
+  // `outin` rather than `inout`: `inout` is one cubic now, because two segments meant a middle anchor and
+  // a colour channel travels through its middle anchor value. `outin` is still genuinely two.
+  assert.equal(build({}, B.bezierFromEase("sine", "outin", 1)).points().length, 10);
   assert.deepEqual(build({ allowOriginal: true }, []).points(), []);
   // Junk in the config is an empty curve, not a crash and not a guess.
   assert.deepEqual(build({ allowOriginal: true }, [1, 2, 3]).points(), []);
@@ -74,7 +76,7 @@ test("the draggable points are the handles plus the middle anchor", () => {
 
   // Three-point: four handles and the middle anchor, which is five things to drag. Only the middle anchor
   // is marked as one, so the two kinds of point are told apart by class rather than by counting.
-  const three = build({}, B.bezierFromEase("quad", "inout", 1));
+  const three = build({}, B.bezierFromEase("quad", "outin", 1));
   assert.equal(three.handles().length, 5);
   const anchors = three.handles().filter((h) => h.classList.contains("config-ui-curve__handle--anchor"));
   assert.equal(anchors.length, 1);
@@ -86,10 +88,10 @@ test("the draggable points are the handles plus the middle anchor", () => {
 
 test("choosing a preset writes its coordinates", () => {
   const c = build({}, []);
-  c.preset.value = "sine|inout";
+  c.preset.value = "sine|outin";
   c.preset.dispatch("change");
-  assert.deepEqual(c.points(), B.bezierFromEase("sine", "inout", 1));
-  assert.equal(c.points().length, 10, "inout is a three-point curve");
+  assert.deepEqual(c.points(), B.bezierFromEase("sine", "outin", 1));
+  assert.equal(c.points().length, 10, "outin is still a three-point curve");
 });
 
 test("the dropdown reads the curve back, and says Custom once it is not a preset", () => {

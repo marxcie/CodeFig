@@ -353,6 +353,48 @@ function bezierEaseTable() {
   };
 }
 
+/**
+ * **The `easeInOut` of each family, as one cubic.**
+ *
+ * It used to be built — the in-curve over the first half, the out-curve over the second — which is what the
+ * name says and which stored it as *two segments joined by a middle anchor*. That is a storage detail and
+ * it leaked: a colour channel travels through its middle anchor value when its curve has a middle point,
+ * so `Sine · easeInOut` on a saturation ramp routed it through a middle of 83 while its ends were 100 and
+ * 90. A preset named for smoothness put a corner in, twice, and the heuristic that would have let both
+ * coexist — "an anchor at dead centre is not a real corner" — is wrong for any ramp whose peak lands on the
+ * exact middle step. Amber's does.
+ *
+ * So the geometry is made honest: ten numbers now means a corner somebody put there, with no exception to
+ * remember.
+ *
+ * **Fitted, not hand-picked.** Least squares against `applyEase` on 65 samples, so a change to
+ * `bezierEaseTable` can be carried through by re-running the fit rather than by taste. Minimax — what
+ * `bezierFitSegment` uses — sits on a plateau here: reaching `0.36 / 0.64` from `0.42 / 0.58` needs both
+ * handles to move at once while either alone makes the far side worse, and eight families collapsed into
+ * three identical curves when it was tried.
+ *
+ * The cost, measured: `sine` is 0.0002 out, `goldenRatio` and `quad` under 0.004, `circ` and `exponential`
+ * the worst at 0.036. **`quad` and `cubic` stop being exact**, which they were as two segments, and that is
+ * the price of the trade.
+ *
+ * **`outin` is not here, because a single cubic cannot do it.** Out-then-in is steep at both ends and flat
+ * in the middle; the best cubic is 0.04 out on `sine` and 0.15 on `exponential`, which is not an
+ * approximation, it is a different curve. It stays two-segment and keeps its middle anchor.
+ */
+function bezierEaseInOutTable() {
+  return {
+    linear: [1 / 3, 1 / 3, 2 / 3, 2 / 3],
+    sine: [0.3644, 0, 0.6356, 1],
+    quad: [0.4759, 0.0352, 0.5249, 0.9659],
+    cubic: [0.654, 0, 0.346, 1],
+    quart: [0.7682, 0, 0.2318, 1],
+    quint: [0.8389, 0, 0.1611, 1],
+    circ: [0.8737, 0.1276, 0.1263, 0.8724],
+    exponential: [0.8986, 0, 0.1014, 1],
+    goldenRatio: [0.5124, 0.0153, 0.4876, 0.9847]
+  };
+}
+
 /** The same curve run backwards: `easeOut(t) = 1 - easeIn(1 - t)` is a 180° rotation about the centre. */
 function bezierReflect(quad) {
   return [1 - quad[2], 1 - quad[3], 1 - quad[0], 1 - quad[1]];
@@ -389,11 +431,14 @@ function bezierFromEase(type, ease, amount) {
     if (e === 'in') out = base;
     else if (e === 'out') out = bezierReflect(base);
     else {
-      var first = e === 'inout' ? base : bezierReflect(base);
-      var second = e === 'inout' ? bezierReflect(base) : base;
-      var lo = bezierPlace(first, 0, 0, 0.5, 0.5);
-      var hi = bezierPlace(second, 0.5, 0.5, 1, 1);
-      out = [lo[0], lo[1], lo[2], lo[3], 0.5, 0.5, hi[0], hi[1], hi[2], hi[3]];
+      if (e === 'inout') {
+        out = (bezierEaseInOutTable()[t] || bezierEaseInOutTable().linear).slice();
+      } else {
+        // `outin` stays two segments: no single cubic is within 0.04 of it, and several are 0.15 out.
+        var lo = bezierPlace(bezierReflect(base), 0, 0, 0.5, 0.5);
+        var hi = bezierPlace(base, 0.5, 0.5, 1, 1);
+        out = [lo[0], lo[1], lo[2], lo[3], 0.5, 0.5, hi[0], hi[1], hi[2], hi[3]];
+      }
     }
   }
   return bezierNormalise(bezierBlendToLinear(out, a));

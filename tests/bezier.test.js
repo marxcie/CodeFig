@@ -41,27 +41,48 @@ const EASES = ["in", "out", "inout", "outin"];
 
 // The bounds from the table in `bezierEaseTable`'s comment. Written out rather than computed so that a
 // fitted number drifting is a test failure with a name on it, which is the only reason the table is pinned.
+/**
+ * How far a preset may sit from the easing function it names.
+ *
+ * **`inout` has its own, looser row.** It used to be built as two segments — the in-curve then the
+ * out-curve — which is exact for `quad` and `cubic` and close for the rest. It is one cubic now, because
+ * two segments meant a *middle anchor*, and a colour channel travels through its middle anchor value: a
+ * preset named for smoothness put a corner in a saturation ramp. Making the geometry honest costs
+ * fidelity, and this is the bill: 0.0002 on `sine`, 0.036 at worst on `circ` and `exponential`, and the
+ * exactness of `quad` and `cubic` gone.
+ *
+ * `outin` keeps both segments and its old accuracy, because no single cubic is within 0.04 of it and
+ * several are 0.15 out — that is not an approximation, it is a different curve.
+ */
 const BOUND = {
   linear: 1e-6, quad: 1e-6, cubic: 1e-6,
   circ: 0.0006, sine: 0.0021, goldenRatio: 0.0023,
   quart: 0.0040, quint: 0.0077, exponential: 0.0099,
+};
+const INOUT_BOUND = {
+  linear: 1e-6, sine: 0.0003, goldenRatio: 0.0040, quad: 0.0040, cubic: 0.0095,
+  quart: 0.0210, circ: 0.0265, quint: 0.0310, exponential: 0.0330,
 };
 
 test("every preset stays within the error its doc block claims", () => {
   for (const type of FAMILIES) {
     for (const ease of EASES) {
       const err = B.bezierEaseError(type, ease, 1);
+      const bound = ease === "inout" ? INOUT_BOUND[type] : BOUND[type];
       assert.ok(
-        err <= BOUND[type] + 1e-9,
-        `${type}/${ease} is ${err.toFixed(6)} out, past the documented ${BOUND[type]}`
+        err <= bound + 1e-9,
+        `${type}/${ease} is ${err.toFixed(6)} out, past the documented ${bound}`
       );
     }
   }
 });
 
 test("linear, quad and cubic are the exact ones — they are cubics already", () => {
+  // **Except `inout`, which is no longer two segments.** `0.5 x ease(2t)` is exactly a cubic when the
+  // family is; one cubic across the whole range is not. That exactness was worth less than a preset that
+  // does not silently corner a colour ramp.
   for (const type of ["linear", "quad", "cubic"]) {
-    for (const ease of EASES) {
+    for (const ease of EASES.filter((e) => e !== "inout" || type === "linear")) {
       assert.ok(B.bezierEaseError(type, ease, 1) < 1e-6, `${type}/${ease} should be exact`);
     }
   }
@@ -70,7 +91,8 @@ test("linear, quad and cubic are the exact ones — they are cubics already", ()
 test("inout and outin come back as three-point curves, the rest as two", () => {
   for (const type of FAMILIES) {
     for (const ease of EASES) {
-      const want = type !== "linear" && (ease === "inout" || ease === "outin") ? 10 : 4;
+      // `inout` is one cubic now; only `outin` still needs two segments.
+      const want = type !== "linear" && ease === "outin" ? 10 : 4;
       assert.equal(B.bezierFromEase(type, ease, 1).length, want, `${type}/${ease}`);
     }
   }
@@ -79,7 +101,8 @@ test("inout and outin come back as three-point curves, the rest as two", () => {
 test("amount blends to linear exactly, because the x handles do not move", () => {
   for (const amount of [0, 0.25, 0.5, 0.75, 1]) {
     for (const type of ["linear", "quad", "cubic"]) {
-      assert.ok(B.bezierEaseError(type, "inout", amount) < 1e-6, `${type} at amount ${amount}`);
+      // `outin`, because `inout` is a fitted cubic now and carries its own small error at every amount.
+      assert.ok(B.bezierEaseError(type, "outin", amount) < 1e-6, `${type} at amount ${amount}`);
     }
   }
   // Amount 0 is the straight ramp whatever the family.

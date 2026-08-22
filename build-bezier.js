@@ -27,6 +27,7 @@ const EXPORTS = [
   'bezierEaseName',
   'bezierEaseNames',
   'bezierEaseTable',
+  'bezierEaseInOutTable',
   'bezierParse',
   'bezierFormat'
 ];
