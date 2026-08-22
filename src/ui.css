@@ -3587,6 +3587,13 @@
          closed still has to be read or switching tabs would blank the two you cannot see. */
       .config-ui-rows-tabpanel[data-shown="false"] { display: none; }
 
+      /* The plot stops short of the row's right edge by the zoom and range columns, so the swatch strip
+         reserves the same width — the strip and the chart are the same steps seen two ways and have to
+         share an edge. Scoped to a charted row: a `@rows` block with no chart has nothing to line up with. */
+      .config-ui-rows-item[data-rows-charted="true"] .config-ui-rows-preview {
+        padding-right: calc(var(--curve-col-w) * 2 + var(--curve-col-gap) * 2);
+      }
+
       .config-ui-curve__chartline {
         display: flex;
         align-items: stretch;

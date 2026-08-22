@@ -222,3 +222,42 @@ test('switching channel is not an edit', () => {
   form.container.querySelector('[data-rows-tab="Saturation"]').dispatch('click', { bubbles: true });
   assert.equal(form.values(), null, 'switching a channel reported a change');
 });
+
+test('a mode block has only its channel tabs, and the strip is the mode\'s not a channel\'s', () => {
+  /**
+   * Three bugs Márton found in one screenshot, all from the same page of the renderer.
+   *
+   * The channel bar was declared `var tabBar`, which is also the name of the **rows** tab bar a few
+   * hundred lines up in the same function. `var` is function-scoped, so the inner declaration shadowed the
+   * outer one, and the code that appends a row's own name button — `if (tabBar)` — found the channel bar
+   * instead of the null it expected. Result: a fourth tab reading "Lime-2" that did nothing when clicked.
+   *
+   * The strip fell into whichever tab was declared last, so it appeared under Lightness and vanished on
+   * Hue and Saturation. It shows the colours the *mode* generates; those do not change with which channel
+   * you are looking at.
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var modes = [{ name: "Lime-2", hue: 264, light: 50, curve: [0.4, 0, 0.7, 0.55], ' +
+      'bright: { lightness: 2 }, dark: { lightness: 96 } }]; // @rows: name:text=Mode|#>Hue|' +
+      'hue:number=Hue|#>Lightness|' +
+      'curve:curve(ends:bright.lightness..dark.lightness, range:0..100)=Lightness curve|' +
+      'bright:{lightness:number=Bright}=B|dark:{lightness:number=Dark}=D|@preview @blocks @label: Modes',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = P.parse(source);
+  const container = document.createElement('div');
+  R.buildForm(schema, container);
+  const rowEl = container.querySelector('.config-ui-rows-item');
+
+  assert.deepEqual(rowEl.querySelectorAll('[data-rows-tab]').map((b) => b.textContent),
+    ['Hue', 'Lightness'], 'the channel bar picked up something that is not a channel');
+  assert.equal(rowEl.querySelectorAll('.config-ui-rows-tab').length, 0,
+    'a row-level tab button leaked into a block, where the title already names the mode');
+
+  const slot = rowEl.querySelectorAll('[data-preview-slot]')[0];
+  assert.equal(slot.parentNode, rowEl, 'the strip is inside a channel tab, so two channels cannot see it');
+
+  // And the row says it has a chart, so the strip can reserve the width the plot gives up to its columns.
+  assert.equal(rowEl.getAttribute('data-rows-charted'), 'true');
+});

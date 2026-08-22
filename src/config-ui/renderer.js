@@ -3036,24 +3036,24 @@
          * cells do not know they are in a tab, which is what keeps `collectRows` reading all of them
          * whether their panel is showing or not.
          */
-        var tabBar = null;
+        var channelBar = null;
         var tabPanel = null;
         var tabNames = [];
         function placeIn() { return tabPanel || rowEl; }
 
         (field.columns || []).forEach(function (column) {
           if (column.type === "tab") {
-            if (!tabBar) {
-              tabBar = document.createElement("div");
-              tabBar.className = "config-ui-rows-channels";
-              rowEl.appendChild(tabBar);
+            if (!channelBar) {
+              channelBar = document.createElement("div");
+              channelBar.className = "config-ui-rows-channels";
+              rowEl.appendChild(channelBar);
             }
             var tabButton = document.createElement("button");
             tabButton.type = "button";
             tabButton.className = "config-ui-rows-channel";
             tabButton.setAttribute("data-rows-tab", column.text);
             tabButton.textContent = column.text;
-            tabBar.appendChild(tabButton);
+            channelBar.appendChild(tabButton);
             tabPanel = document.createElement("div");
             tabPanel.className = "config-ui-rows-tabpanel";
             tabPanel.setAttribute("data-rows-tabpanel", column.text);
@@ -3069,7 +3069,7 @@
           // renderer marks where it goes and never computes what is in it, because computing it needs a run.
           if (column.type === "preview") {
             var slot = document.createElement("div");
-            slot.className = "config-ui-row-preview";
+            slot.className = "config-ui-rows-preview";
             slot.setAttribute("data-preview-slot", "true");
             // **Keyed by index, not by name.** `rowLabel` falls back to "Row 1" for an unnamed entry while the
             // preview knows that mode as `""`, so the two sides disagreed the moment the shipped default became
@@ -3077,7 +3077,13 @@
             // the entry is called. The name rides along for diagnosis only.
             slot.setAttribute("data-preview-row", String(index));
             slot.setAttribute("data-preview-name", rowLabel(row, index));
-            placeIn().appendChild(slot);
+            /**
+             * **The strip is the mode's, never a channel's.** It shows the colours the mode generates, and
+             * those do not change with which channel you happen to be looking at. Left to fall into the
+             * current tab it landed in whichever one was declared last — so it appeared under Lightness and
+             * vanished on Hue and Saturation, which is how Márton found it.
+             */
+            rowEl.appendChild(slot);
             return;
           }
           if (column.type === "heading") {
@@ -3221,6 +3227,13 @@
         if (tabNames.length) {
           showRowTab(rowEl, tabNames[tabNames.length - 1]);
         }
+        // **A charted row is narrower than it looks.** The plot stops short of the row's right edge by the
+        // two columns beside it, so anything meant to line up with the *chart* — the strip of swatches most
+        // of all, which is the same steps seen a second way — has to reserve the same width. Márton spotted
+        // the ramp and the chart not sharing an edge.
+        if ((field.columns || []).some(function (c) { return c.type === "curve" && c.ends; })) {
+          rowEl.setAttribute("data-rows-charted", "true");
+        }
         body.appendChild(rowEl);
 
         if (tabBar) {
@@ -3259,7 +3272,7 @@
           // renderer marks where it goes and never computes what is in it, because computing it needs a run.
           if (column.type === "preview") {
             var slot = document.createElement("div");
-            slot.className = "config-ui-row-preview";
+            slot.className = "config-ui-rows-preview";
             slot.setAttribute("data-preview-slot", "true");
             // **Keyed by index, not by name.** `rowLabel` falls back to "Row 1" for an unnamed entry while the
             // preview knows that mode as `""`, so the two sides disagreed the moment the shipped default became
