@@ -1462,7 +1462,7 @@
    * How far in and out the zoom goes, as a multiple of the view a channel opens on. Logarithmic between the
    * two, so dragging the marker feels the same at either end of its travel.
    */
-  var CURVE_ZOOM_MIN = 0.2, CURVE_ZOOM_MAX = 20;
+  var CURVE_ZOOM_MIN = 1, CURVE_ZOOM_MAX = 200;
 
   /**
    * **The tokens' own colours**, per curve field — the same seam as `curveBaselines`, and for the same
@@ -1854,7 +1854,13 @@
     function axis() {
       if (!field.ends) return null;
       var from = endValue("from"), to = endValue("to");
-      if (from === null || to === null || from === to) return null;
+      /**
+       * **Equal ends are a channel, not an absence of one.** This used to bail when they matched, which
+       * killed the axis outright — no ticks, no zoom, no colour bar, no draggable ends. Lime's saturation
+       * is `100 … 83 … 100`: both ends pinned and all the movement in the middle, which is a perfectly
+       * ordinary shape and made the whole Saturation tab look unimplemented.
+       */
+      if (from === null || to === null) return null;
       var limit = field.range || { lo: Math.min(from, to), hi: Math.max(from, to) };
       return { from: from, to: to, lo: limit.lo, hi: limit.hi };
     }
@@ -1944,17 +1950,20 @@
         var lo = parseFloat(pair[0], 10), hi = parseFloat(pair[1], 10);
         if (isFinite(lo) && isFinite(hi) && hi > lo && !rampIsOffscreen(a, lo, hi)) return { lo: lo, hi: hi };
       }
-      var low = Math.min(a.from, a.to), high = Math.max(a.from, a.to);
-      var air = (high - low) * 0.1 || 1;
+      /**
+       * **All three anchors, not just the two ends.** A channel whose ends match has its whole shape in the
+       * middle, and a window derived from the ends alone is a line with nothing above or below it.
+       */
+      var seen = [a.from, a.to];
+      var mid = field.ends.mid ? endValue("mid") : null;
+      if (mid !== null) seen.push(mid);
+      var low = Math.min.apply(null, seen), high = Math.max.apply(null, seen);
+      // A tenth of the span for air, and a fortieth of the channel when there is no span at all.
+      var air = (high - low) * 0.1 || (a.hi - a.lo) / 40 || 1;
       var opened = { lo: Math.max(a.lo, low - air), hi: Math.min(a.hi, high + air) };
       // **Latched the first time it is asked for.** Derived every draw, it followed the ends — so dragging
       // one rescaled the axis under your finger. Written down once, it stays where the user left it.
       wrap.setAttribute("data-curve-view", opened.lo + "," + opened.hi);
-      // **And what that span *was*.** Zoom is reported as a multiple of the view the channel opened on, so
-      // the opening span is a second fact — "how wide we started" against "how wide we are now". Derived
-      // from the ends instead, it moved every time an end moved, and the zoom marker followed the curve
-      // again by a different route.
-      wrap.setAttribute("data-curve-open", String(opened.hi - opened.lo));
       return opened;
     }
 
@@ -1994,9 +2003,16 @@
       return { lo: Math.min(one, two), hi: Math.max(one, two) };
     }
 
-    /** A curve's own 0..1 and the channel's value are the same fact in two units. */
+    /**
+     * A curve's own 0..1 and the channel's value are the same fact in two units — unless the two ends are
+     * the same value, and then the curve has no span to be a fraction of. Everything lands on the one
+     * value, and `valueToUnit` answers 0 rather than dividing by zero and drawing at infinity.
+     */
     function unitToValue(a, u) { return a.from + (a.to - a.from) * u; }
-    function valueToUnit(a, v) { return (v - a.from) / (a.to - a.from); }
+    function valueToUnit(a, v) {
+      var span = a.to - a.from;
+      return Math.abs(span) < 1e-9 ? 0 : (v - a.from) / span;
+    }
 
     function toView(x, y) {
       var a = axis();
@@ -2110,13 +2126,24 @@
      * track with nowhere to go. Against the ramp, 1 always means "the view you were given" whatever the
      * channel is, and the marker always starts in the same place on every tab.
      */
-    function axisBaseSpan(a) {
-      var held = parseFloat(wrap.getAttribute("data-curve-open"), 10);
-      if (isFinite(held) && held > 0) return held;
-      var lo = Math.min(a.from, a.to), hi = Math.max(a.from, a.to);
-      return Math.max(1e-6, (hi - lo) * 1.2 || 1);
+    /**
+     * **Zoom is how much of the channel is on screen**, so 1 means all of it and the marker sits at the
+     * bottom of its track.
+     *
+     * It was a multiple of the view the channel *opened* on, which read as half-zoomed while the chart was
+     * showing 0 to 100 — Márton: *"it's the current scale, why not the zoom at 100%?"*. Measuring against
+     * the channel also means the ends cannot move it, which was the original complaint: the channel's
+     * limits are fixed by `@range` and nothing on the chart can change them.
+     *
+     * A hue ramp that travels twelve degrees of three hundred and sixty therefore opens at about 28x, with
+     * the marker high. That is not a glitch — it is zoomed in, because the alternative is a flat line at
+     * the bottom of an empty chart.
+     */
+    function axisBaseSpan(a) { return Math.max(1e-6, a.hi - a.lo); }
+    function zoomOf(a) {
+      var w = axisView(a);
+      return Math.min(CURVE_ZOOM_MAX, Math.max(1, axisBaseSpan(a) / Math.max(1e-9, w.hi - w.lo)));
     }
-    function zoomOf(a) { var w = axisView(a); return axisBaseSpan(a) / (w.hi - w.lo); }
     function zoomFraction(z) {
       var f = Math.log(z / CURVE_ZOOM_MIN) / Math.log(CURVE_ZOOM_MAX / CURVE_ZOOM_MIN);
       return Math.min(1, Math.max(0, f));

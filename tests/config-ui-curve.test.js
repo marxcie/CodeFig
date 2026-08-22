@@ -932,3 +932,49 @@ test('a token per step, in its own colour, with a ring on the seed', () => {
   assert.equal(axisForm().container.querySelectorAll('.config-ui-curve__token').length, 0,
     'dots drawn with no colours published would be invented');
 });
+
+test('a channel whose ends match still has an axis', () => {
+  /**
+   * **Lime's saturation is `100 … 83 … 100`.** Both ends pinned and all the movement in the middle, which
+   * is an ordinary shape for a ramp that stays vivid at both extremes. `axis()` bailed when the two ends
+   * were equal, and took everything with it: no ticks, no zoom, no colour bar, no draggable ends. The whole
+   * Saturation tab looked unimplemented.
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var a = { bright: 100, middle: 83.2, dark: 100 }; ' +
+      '// @group: bright:number=Start|middle:number=Middle|dark:number=End @label: Ends',
+    'var sc = [0.4, 0.3, 0.6, 0.7]; // @curve @ends: a.bright..a.middle..a.dark @range: 0..100 @label: S',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  assert.equal(container.querySelectorAll('[data-curve-end]').length, 2, 'no draggable ends');
+  const ticks = container.querySelectorAll('.config-ui-curve__tick').map((t) => t.textContent);
+  assert.ok(ticks.length >= 2, 'no value labels, so no axis');
+  // The window opens on all three anchors, so the middle is inside it rather than off the bottom.
+  const values = ticks.map((t) => parseFloat(t, 10));
+  assert.ok(Math.min.apply(null, values) < 90, 'the window ignored the middle: ' + ticks.join(' '));
+});
+
+test('zoom reads as how much of the channel is on screen', () => {
+  // Márton: *"it's the current scale, why not the zoom at 100%?"* — it was reported as a multiple of the
+  // view the channel opened on, so a chart showing 0 to 100 of a 0..100 channel sat half way up its track.
+  const form = axisForm();  // ends 98 and 4 of a 0..100 channel: effectively everything
+  const mark = form.container.querySelector('.config-ui-curve__zoom-mark');
+  assert.ok(parseFloat(mark.style.top, 10) > 90,
+    'a chart showing the whole channel should read as fully zoomed out, not ' + mark.style.top);
+
+  // And the ends cannot move it, because the channel's limits come from `@range` and nothing on the chart
+  // can change them.
+  const before = mark.style.top;
+  const svg = form.wrap.querySelector('.config-ui-curve__canvas');
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  svg.dispatch('pointerdown', { target: form.ends()[1], clientX: 100, clientY: 100, pointerId: 1 });
+  svg.dispatch('pointermove', { clientX: 100, clientY: 30, pointerId: 1 });
+  svg.dispatch('pointerup', { clientX: 100, clientY: 30, pointerId: 1 });
+  assert.equal(mark.style.top, before, 'dragging an end moved the zoom');
+});

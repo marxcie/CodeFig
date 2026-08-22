@@ -71,6 +71,13 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **A colour channel whose two ends match now has a chart.** Lime's saturation is `100 … 83 … 100` —
+  both ends pinned, all the movement in the middle — and the axis bailed on the equal ends, taking the
+  ticks, the zoom, the colour bar and the draggable ends with it. The whole Saturation tab looked
+  unimplemented. The window now opens on all three anchors, not two.
+- **The zoom reads as how much of the channel is on screen**, so a chart showing all of it sits at the
+  bottom of its track instead of half way up. It was reported as a multiple of the view the channel opened
+  on, which meant a full-range chart claimed to be half zoomed in.
 - **Colors: an OKLCH collection's lightness ladder is now averaged across its modes** instead of
   taken from whichever one was read first. The ladder is shared — that is what makes the modes match
   in greyscale — so one mode used to get a ladder fitted to itself and the rest got someone else's.
