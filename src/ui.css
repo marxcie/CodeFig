@@ -3704,6 +3704,24 @@
         opacity: 0.6;
       }
 
+      /* One per token, in its own colour, on the line it lands on. Small: a dot that competes with a
+         handle for the eye makes the thing you can drag harder to find. */
+      .config-ui-curve__token {
+        stroke: rgba(0, 0, 0, 0.25);
+        stroke-width: 1;
+        pointer-events: none;
+        vector-effect: non-scaling-stroke;
+      }
+
+      /* The seed is a step like any other; the ring says which one without moving it. */
+      .config-ui-curve__seed-ring {
+        fill: none;
+        stroke: var(--active-bg);
+        stroke-width: 1.5;
+        pointer-events: none;
+        vector-effect: non-scaling-stroke;
+      }
+
       /* The channel across the window. A picture, never an input. */
       .config-ui-curve__range {
         flex: 0 0 var(--curve-col-w);

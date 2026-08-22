@@ -1481,9 +1481,20 @@
   function setCurveRamps(map) {
     curveRamps = map || {};
   }
-  function curveRampHexes(key) {
+  /**
+   * → `{ hexes, seed }` for a curve, or `null`.
+   *
+   * `seed` is the index of the step the seed colour sits on, or `-1`. It rides along with the colours
+   * because it is the same question — *what does this collection actually contain* — and the host is the
+   * only place that can answer either.
+   */
+  function curveRampOf(key) {
     var held = key ? curveRamps[key] : null;
-    return Array.isArray(held) && held.length > 1 ? held : null;
+    if (Array.isArray(held)) return held.length > 1 ? { hexes: held, seed: -1 } : null;
+    if (held && Array.isArray(held.hexes) && held.hexes.length > 1) {
+      return { hexes: held.hexes, seed: typeof held.seed === "number" ? held.seed : -1 };
+    }
+    return null;
   }
   function curveBaselineFor(key) {
     var held = key ? curveBaselines[key] : null;
@@ -2169,8 +2180,9 @@
      * token's.
      */
     function rangeStops(a) {
-      var hexes = curveRampHexes(baselineKey);
-      if (!hexes) return null;
+      var ramp = curveRampOf(baselineKey);
+      if (!ramp) return null;
+      var hexes = ramp.hexes;
       var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
       // Positioned in drawn units, like everything else on the axis, or an inverted chart would show its
       // colours the right way up beside a ramp drawn upside down.
@@ -2304,6 +2316,35 @@
       var grips = ax ? curveSvgEl("g", { "clip-path": "url(#" + clipId + "-grip)" }) : svg;
       if (ax) svg.appendChild(ramp);
       ramp.appendChild(curveSvgEl("path", { "class": "config-ui-curve__path", d: d }));
+
+      /**
+       * **A dot per token, in its own colour, on the line it lands on.**
+       *
+       * The chart's whole job is *where does each step end up*, and until now it answered that with a
+       * smooth line and left you to interpolate. The dots are the answer. They are drawn from the same
+       * published colours the bar beside the chart uses, so a step cannot be shown at one value here and
+       * another there.
+       *
+       * Small on purpose: Márton deferred these once for being too large, and a dot that competes with a
+       * handle for the eye makes the thing you can drag harder to find, not easier.
+       */
+      var tokens = ax ? curveRampOf(baselineKey) : null;
+      if (tokens) {
+        var lastToken = tokens.hexes.length - 1;
+        for (var t = 0; t <= lastToken; t++) {
+          var tx = lastToken ? t / lastToken : 0;
+          var spot = toView(tx, (B ? B.bezierAt(pts, tx) : tx) * lift);
+          if (t === tokens.seed) {
+            // The seed is a step like any other; the ring says which one without moving it.
+            ramp.appendChild(curveSvgEl("circle", {
+              "class": "config-ui-curve__seed-ring", cx: spot.x, cy: spot.y, r: 5.5
+            }));
+          }
+          ramp.appendChild(curveSvgEl("circle", {
+            "class": "config-ui-curve__token", cx: spot.x, cy: spot.y, r: 2.5, fill: tokens.hexes[t]
+          }));
+        }
+      }
 
       var handles = showShape ? handlesOf(pts) : [];
       handles.forEach(function (h) {

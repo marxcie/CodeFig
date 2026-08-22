@@ -43,6 +43,10 @@ a plain statement of the new default.
   the plot, grips to the plot plus their radius so one on the boundary sits *on* the frame, and a drag
   stops at the window's edge instead of pushing the curve out of sight. Curves without `@ends` — the scale
   editors in Spacing, Radius and Typography — are unchanged.
+- **Every step is a dot on the curve, in its own colour, with a ring on the seed.** Drawn from the same
+  published colours as the bar beside the chart, so a step cannot appear at one value in one place and a
+  different one in the other. Small deliberately — a dot that competes with a handle makes the thing you
+  can drag harder to find.
 - **The Lightness chart is drawn as darkness** — 0 at the bottom is white, 100 at the top is black — so a
   ramp climbs left to right the way its swatches darken. Display only: the config still holds lightness, a
   drag still writes lightness, and a run still generates from it. Hue, chroma and saturation plot as

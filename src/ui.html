@@ -2254,13 +2254,39 @@
         if (!config || !byMode) return;
         var names = Array.isArray(config.modes)
           ? config.modes.map(function (m) { return m && m.name; }) : [];
+        // Which step the seed sits on. A named placement is what the config says; otherwise it is the
+        // step whose colour matches the seed hex, and `-1` when neither is true — an unringed chart is the
+        // honest drawing of a collection with no seed in it.
+        var steps = Array.isArray(config.tokens) ? config.tokens : [];
+        function seedIndexFor(mode, hexes) {
+          var placement = mode && mode.seed && mode.seed.placement;
+          if (placement) {
+            var named = steps.indexOf(String(placement).trim());
+            if (named !== -1) return named;
+          }
+          var want = (mode && mode.seed && mode.seed.hex ? String(mode.seed.hex) : '')
+            .trim().replace(/^#/, '').toUpperCase();
+          if (!want) return -1;
+          for (var h = 0; h < hexes.length; h++) {
+            if (String(hexes[h]).replace(/^#/, '').toUpperCase() === want) return h;
+          }
+          return -1;
+        }
+        // Every curve in a mode's block draws the same tokens, because they are the same colours seen
+        // through a different channel. Keyed per cell so each control can find its own.
+        var cells = ['curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve'];
         names.forEach(function (name, i) {
           var hexes = name && byMode[name];
-          if (Array.isArray(hexes) && hexes.length > 1) _curveRamps['modes[' + i + '].curve'] = hexes.slice();
+          if (!Array.isArray(hexes) || hexes.length < 2) return;
+          var entry = { hexes: hexes.slice(), seed: seedIndexFor(config.modes[i], hexes) };
+          cells.forEach(function (cell) { _curveRamps['modes[' + i + '].' + cell] = entry; });
         });
         for (var n = 0; n < names.length; n++) {
           var lead = names[n] && byMode[names[n]];
-          if (Array.isArray(lead) && lead.length > 1) { _curveRamps.curve = lead.slice(); break; }
+          if (Array.isArray(lead) && lead.length > 1) {
+            _curveRamps.curve = { hexes: lead.slice(), seed: seedIndexFor(config.modes[n], lead) };
+            break;
+          }
         }
       }
 

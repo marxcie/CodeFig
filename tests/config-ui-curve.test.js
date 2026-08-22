@@ -902,3 +902,33 @@ test('@invert draws the axis counting down, and changes nothing that is stored',
   const wrote = parseFloat(flipped.container.querySelector('[data-row-field="ladder.bright"]').value, 10);
   assert.ok(wrote < 5, 'dragging to the top of a darkness axis should store a low lightness, got ' + wrote);
 });
+
+test('a token per step, in its own colour, with a ring on the seed', () => {
+  /**
+   * **The chart's job is where each step lands, and the line only implied it.** The dots are the answer,
+   * drawn from the same published colours the bar beside the chart uses — so a step cannot be shown at one
+   * value here and a different one there.
+   *
+   * Small on purpose. Márton deferred these once for being too large: a dot that competes with a handle
+   * makes the thing you can drag harder to find, not easier.
+   */
+  const hexes = ['#FAFAFA', '#D0CFD6', '#A3A1AF', '#69677A', '#2B2A32', '#0A090B'];
+  renderer.setCurveRamps({ lc: { hexes: hexes, seed: 2 } });
+  const form = axisForm();
+
+  const dots = form.container.querySelectorAll('.config-ui-curve__token');
+  assert.equal(dots.length, hexes.length, 'one dot per token');
+  assert.deepEqual(dots.map((d) => d.getAttribute('fill')), hexes, 'a dot is not its own colour');
+  assert.equal(form.container.querySelectorAll('.config-ui-curve__seed-ring').length, 1);
+
+  // Clipped with the ramp, not with the grips: a dot outside the window is outside the chart, and unlike a
+  // handle there is nothing to reach for on the boundary.
+  dots.forEach((d) => {
+    const clip = d.parentNode.getAttribute('clip-path');
+    assert.ok(clip && clip.indexOf('-grip') === -1, 'a token dot escaped the plot');
+  });
+
+  renderer.setCurveRamps({});
+  assert.equal(axisForm().container.querySelectorAll('.config-ui-curve__token').length, 0,
+    'dots drawn with no colours published would be invented');
+});
