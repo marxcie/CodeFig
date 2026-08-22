@@ -332,6 +332,29 @@
        * the engine and every file already read, to move a minus sign.
        */
       if (part === "invert") { column.invert = true; return; }
+      /**
+       * `ramp:<css colour>` — what the bar beside the chart is a picture of.
+       *
+       * A template in the channel's **own** colour space, with `$` where the axis value goes and `~key`
+       * for a sibling field's value:
+       *
+       *     ramp:hsl($ 100% 50%)                              a hue wheel
+       *     ramp:hsl(~bright.hslHue $% 50%)                   that hue, losing its saturation
+       *     ramp:hsl(~bright.hslHue ~bright.saturation% $%)   that colour, going dark
+       *
+       * The browser mixes it, so **no colour maths lives in the UI** — which matters, because the only
+       * other way to draw this bar is a second copy of `@oklch.js` beside the one the sandbox runs, and
+       * `build-bezier.js` exists precisely so that does not happen for the curve maths.
+       *
+       * It replaced a bar drawn from the collection's *token* colours. That is a lightness ramp, so it
+       * looked right on the Lightness tab and showed a light-to-dark green sweep on Hue and Saturation —
+       * where the honest answer is a hue wheel and a saturation fade. It also could not follow a drag,
+       * because the tokens are the file's and the drag has not been run yet.
+       *
+       * Space-separated CSS on purpose: `curve(...)` splits its settings on commas.
+       */
+      var ramp = part.match(/^ramp:(.+)$/);
+      if (ramp) { column.ramp = ramp[1].trim(); return; }
       var growth = part.match(/^growth:([A-Za-z0-9_$]+)$/);
       if (growth) { column.growth = growth[1]; return; }
       /**
@@ -361,6 +384,7 @@
     var parts = [];
     if (c.allowOriginal) parts.push("original");
     if (c.invert) parts.push("invert");
+    if (c.ramp) parts.push("ramp:" + c.ramp);
     if (c.growth) parts.push("growth:" + c.growth);
     if (c.ends) {
       parts.push("ends:" + c.ends.from + (c.ends.mid ? ".." + c.ends.mid : "") + ".." + c.ends.to);
@@ -658,7 +682,10 @@
       // *Original* is not a curve — it is Colors saying "leave the steps this file already has". It reaches
       // the config as an **empty array**, which is the honest spelling: no points, no curve. Only the scripts
       // that have something to fall back to ask for it.
-      var curveMatch = typeText.match(/^curve(?:\(([^)]*)\))?$/);
+      // **Greedy to the last `)`, not the first.** A `ramp:` template is CSS and brings its own brackets —
+      // `hsl($ 100% 50%)` — and stopping at the first one made the whole `curve(...)` fail to match, so the
+      // column silently fell back to a plain text field. Nothing said so; the chart just was not there.
+      var curveMatch = typeText.match(/^curve(?:\((.*)\))?$/);
       if (curveMatch) {
         column.type = "curve";
         var curveMode = (curveMatch[1] || "").trim();
@@ -1170,6 +1197,8 @@
           if (f_curveSpec.ends) f.ends = f_curveSpec.ends;
           if (f_curveSpec.range) f.range = f_curveSpec.range;
           if (/@invert\b/.test(tip)) f.invert = true;
+          var f_ramp = tip.match(/@ramp:\s*([^@]+)/);
+          if (f_ramp) f.ramp = f_ramp[1].trim();
         }
         if (inputType === "mode") {
           // `null` for a bare `@mode`, and it stays null: resolution happens against the rendered
@@ -1199,7 +1228,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|ends|range|invert|helper)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|ends|range|invert|ramp|helper)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -1406,6 +1435,7 @@
           }
           if (r.range) parts.push("@range: " + r.range.lo + ".." + r.range.hi);
           if (r.invert) parts.push("@invert");
+          if (r.ramp) parts.push("@ramp: " + r.ramp);
         }
         if (r.inputType === "mode") {
           parts.push("@mode" + (r.collectionField ? ": " + r.collectionField : ""));

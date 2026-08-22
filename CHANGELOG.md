@@ -71,6 +71,11 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **The bar beside each chart shows that channel, not the tokens.** It was drawn from the collection's
+  token colours — a lightness ramp — so it looked right on Lightness and showed a light-to-dark sweep on
+  Hue and Saturation, and it could not follow a drag because those colours are the file's. Each curve now
+  carries a CSS colour template: a hue wheel, a saturation fade, a lightness fade, mixed by the browser
+  and re-read on every redraw.
 - **A colour channel whose two ends match now has a chart.** Lime's saturation is `100 … 83 … 100` —
   both ends pinned, all the movement in the middle — and the axis bailed on the equal ends, taking the
   ticks, the zoom, the colour bar and the draggable ends with it. The whole Saturation tab looked

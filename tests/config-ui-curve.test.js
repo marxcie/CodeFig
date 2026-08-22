@@ -978,3 +978,42 @@ test('zoom reads as how much of the channel is on screen', () => {
   svg.dispatch('pointerup', { clientX: 100, clientY: 30, pointerId: 1 });
   assert.equal(mark.style.top, before, 'dragging an end moved the zoom');
 });
+
+test('@ramp paints the bar in the channel\'s own colours, and follows the fields it names', () => {
+  /**
+   * **The bar was the collection's token colours**, which is a lightness ramp. So it looked right on the
+   * Lightness tab and showed a light-to-dark sweep on Hue and Saturation — Márton twice: *"it doesn't show
+   * a hue range"*, *"same for saturation, it's still a lightness scale"*. It also could not follow a drag,
+   * because the tokens are the file's and the drag has not been run yet.
+   *
+   * A CSS template instead: `$` is the axis value, `~key` a sibling field. The browser mixes it, so no
+   * colour maths lives in the UI — the alternative being a second copy of `@oklch.js` beside the one the
+   * sandbox runs.
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var a = { bright: 10, dark: 350, sat: 80 }; ' +
+      '// @group: bright:number=Start|dark:number=End|sat:number=Sat @label: Ends',
+    'var hc = [0.4, 0.2, 0.6, 0.8]; // @curve @ends: a.bright..a.dark @range: 0..360 ' +
+      '@ramp: hsl($ ~a.sat% 50%) @label: Hue',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  const fill = container.querySelector('.config-ui-curve__range-fill');
+  assert.equal(fill.getAttribute('data-shown'), 'true');
+  const stops = fill.style.background;
+  assert.ok(/hsl\(/.test(stops), 'the bar is not in the channel\'s colour space: ' + stops.slice(0, 80));
+  assert.ok(stops.indexOf('80%') !== -1, '`~a.sat` did not resolve to the sibling field');
+  assert.ok(stops.indexOf('$') === -1 && stops.indexOf('~') === -1, 'a placeholder survived: ' + stops);
+
+  // It reads the sibling on every draw, which is what makes it follow an edit rather than go stale.
+  const sat = container.querySelector('[data-row-field="a.sat"]');
+  sat.value = '25';
+  sat.dispatch('change', { bubbles: true });
+  assert.ok(container.querySelector('.config-ui-curve__range-fill').style.background.indexOf('25%') !== -1,
+    'the bar did not follow the field it names');
+});

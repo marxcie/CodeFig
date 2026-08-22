@@ -1916,15 +1916,7 @@
      * bound to, and the axis silently never appeared.
      */
     function endCell(which) {
-      var key = field.ends && field.ends[which];
-      if (!key) return null;
-      var scope = typeof wrap.closest === "function" ? wrap.closest(".config-ui-rows-item") : null;
-      if (!scope) {
-        scope = wrap;
-        while (scope.parentNode && scope.parentNode.nodeType === 1) scope = scope.parentNode;
-      }
-      return typeof scope.querySelector === "function"
-        ? scope.querySelector('[data-row-field="' + key + '"]') : null;
+      return cellNamed(field.ends && field.ends[which]);
     }
     function endValue(which) {
       var cell = endCell(which);
@@ -2206,7 +2198,53 @@
      * clamped, so the colour at the edge is the one the ramp actually has there instead of the nearest
      * token's.
      */
+    /**
+     * **The bar is a picture of the channel**, built from `@ramp` — a CSS colour with `$` where the axis
+     * value goes and `~key` for a sibling field.
+     *
+     * Sampled at eleven points across the window and handed to the browser, which does the mixing. So no
+     * colour maths lives here: the only other way to draw a hue wheel is a second copy of `@oklch.js`
+     * beside the one the sandbox runs, and `build-bezier.js` exists so that does not happen.
+     *
+     * Read fresh every draw, siblings and all, which is what makes it follow a drag. The version before
+     * this used the collection's *token* colours — a lightness ramp, so it looked right on Lightness and
+     * showed a light-to-dark sweep on Hue and Saturation, and could not follow a drag at all because the
+     * tokens are the file's and the drag has not been run yet.
+     */
+    function templateStops(a) {
+      if (!field.ramp) return null;
+      var w = shownView(a), span = w.hi - w.lo;
+      if (!(span > 0)) return null;
+      var out = [];
+      for (var i = 0; i <= 10; i++) {
+        var at = i / 10;
+        // Top of the bar is the window's high value, as it is on the plot beside it.
+        var value = w.hi - at * span;
+        var colour = field.ramp.replace(/~([A-Za-z0-9_$.]+)/g, function (all, key) {
+          var cell = cellNamed(key);
+          var held = cell ? parseFloat(cell.value, 10) : NaN;
+          return isFinite(held) ? String(Math.round(held * 100) / 100) : "0";
+        }).replace(/\$/g, String(Math.round(shown(a, value) * 1000) / 1000));
+        out.push(colour + " " + Math.round(at * 1000) / 10 + "%");
+      }
+      return out;
+    }
+
+    /** Any cell in this control's scope, by key — the same lookup the two ends use. */
+    function cellNamed(key) {
+      if (!key) return null;
+      var scope = typeof wrap.closest === "function" ? wrap.closest(".config-ui-rows-item") : null;
+      if (!scope) {
+        scope = wrap;
+        while (scope.parentNode && scope.parentNode.nodeType === 1) scope = scope.parentNode;
+      }
+      return typeof scope.querySelector === "function"
+        ? scope.querySelector('[data-row-field="' + key + '"]') : null;
+    }
+
     function rangeStops(a) {
+      var fromTemplate = templateStops(a);
+      if (fromTemplate) return fromTemplate;
       var ramp = curveRampOf(baselineKey);
       if (!ramp) return null;
       var hexes = ramp.hexes;
