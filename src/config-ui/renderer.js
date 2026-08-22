@@ -2725,6 +2725,25 @@
     });
   }
 
+  /**
+   * Show one of a row's tabs and hide the rest.
+   *
+   * The open tab is written on the row rather than held in a closure, so `attachListeners` can switch it
+   * with a delegated click and a redraw can read back which one was showing. Panels are hidden with an
+   * attribute rather than removed: `collectRows` sweeps every cell in the row, and a channel whose tab is
+   * closed must still be read — otherwise switching tabs would blank the two you cannot see.
+   */
+  function showRowTab(rowEl, name) {
+    if (!rowEl || !name) return;
+    rowEl.setAttribute("data-rows-tab-open", name);
+    rowEl.querySelectorAll("[data-rows-tabpanel]").forEach(function (panel) {
+      panel.setAttribute("data-shown", panel.getAttribute("data-rows-tabpanel") === name ? "true" : "false");
+    });
+    rowEl.querySelectorAll("[data-rows-tab]").forEach(function (button) {
+      button.setAttribute("aria-selected", button.getAttribute("data-rows-tab") === name ? "true" : "false");
+    });
+  }
+
   function buildRowsControl(field, rows) {
     var wrap = document.createElement("div");
     // Three displays, one control. `--blocks` shows every row in full, one under the next, each titled —
@@ -2840,7 +2859,39 @@
           rowEl.appendChild(title);
         }
 
+        /**
+         * **A tab is a section you can only see one of**, so it is built out of the same pieces.
+         *
+         * `#>Hue` opens a panel; everything after it lands in that panel instead of in the row, until the
+         * next `#>`. The bar is created once, at the first one. Nothing else in the loop changes — the
+         * cells do not know they are in a tab, which is what keeps `collectRows` reading all of them
+         * whether their panel is showing or not.
+         */
+        var tabBar = null;
+        var tabPanel = null;
+        var tabNames = [];
+        function placeIn() { return tabPanel || rowEl; }
+
         (field.columns || []).forEach(function (column) {
+          if (column.type === "tab") {
+            if (!tabBar) {
+              tabBar = document.createElement("div");
+              tabBar.className = "config-ui-rows-channels";
+              rowEl.appendChild(tabBar);
+            }
+            var tabButton = document.createElement("button");
+            tabButton.type = "button";
+            tabButton.className = "config-ui-rows-channel";
+            tabButton.setAttribute("data-rows-tab", column.text);
+            tabButton.textContent = column.text;
+            tabBar.appendChild(tabButton);
+            tabPanel = document.createElement("div");
+            tabPanel.className = "config-ui-rows-tabpanel";
+            tabPanel.setAttribute("data-rows-tabpanel", column.text);
+            rowEl.appendChild(tabPanel);
+            tabNames.push(column.text);
+            return;
+          }
           // `#Seed` among the columns: the same `h2.config-ui-heading` the form builds from a `// ## Heading`
           // line, so the size ladder is the form's rather than a second one invented here. It groups *rows*,
           // where a nested column groups *cells* — two jobs, and this is the one that already had a
@@ -2857,7 +2908,7 @@
             // the entry is called. The name rides along for diagnosis only.
             slot.setAttribute("data-preview-row", String(index));
             slot.setAttribute("data-preview-name", rowLabel(row, index));
-            rowEl.appendChild(slot);
+            placeIn().appendChild(slot);
             return;
           }
           if (column.type === "heading") {
@@ -2868,7 +2919,7 @@
             if (column.showWhen) {
               sub.setAttribute("data-row-show-when", JSON.stringify(column.showWhen));
             }
-            rowEl.appendChild(sub);
+            placeIn().appendChild(sub);
             return;
           }
           // Under `@tabs` the row's `name` **is** the tab, so it is not also a field. Renaming happens
@@ -2955,7 +3006,7 @@
           // than under the row, which is where a sibling of the cell would put it. That is the shape the
           // Colors prototype used by hand, and closing this gap is what lets the shipped block carry the
           // *Lock seed* copy instead of the mockup carrying it.
-          rowEl.appendChild(cell);
+          placeIn().appendChild(cell);
         });
 
         // No Remove under `@tabs`: the chips above manage the modes, and two places to remove one is one too
@@ -2986,6 +3037,20 @@
         // end of a block that is now several hundred pixels tall.
         var titleRow = field.blocks ? rowEl.querySelector(".config-ui-rows-item-title") : null;
         if (titleRow) titleRow.appendChild(remove); else rowEl.appendChild(remove);
+      }
+        /**
+         * **Which tab is open** — the last one declared.
+         *
+         * A genuine piece of user state: nothing else in the form records which channel you were looking
+         * at, so unlike the panel's other display decisions it cannot be re-derived. It lives on the row,
+         * so two mode blocks can be open on different channels.
+         *
+         * The last rather than the first, because Márton's bar reads Hue, Saturation, Lightness and the
+         * frame that shows the panel at rest has Lightness selected — a ramp is mostly about its lightness,
+         * and the other two are adjustments to it.
+         */
+        if (tabNames.length) {
+          showRowTab(rowEl, tabNames[tabNames.length - 1]);
         }
         body.appendChild(rowEl);
 
@@ -3784,6 +3849,23 @@
         }
       });
     }
+
+    /**
+     * **Switching a channel tab is not a config change.** It moves nothing and writes nothing — which is
+     * why it is handled here rather than through `handleControlEvent`, and why it does not call `onChange`.
+     * A rebuild of the form would lose it, and that is correct: a rebuild is a new form.
+     */
+    container.addEventListener("click", function (evt) {
+      var button = evt.target && typeof evt.target.closest === "function"
+        ? evt.target.closest("[data-rows-tab]") : null;
+      if (!button) return;
+      var rowEl = button.closest("[data-row-index]");
+      if (!rowEl) return;
+      showRowTab(rowEl, button.getAttribute("data-rows-tab"));
+      // The chart in the tab that just appeared has been sized 0x0 all along, so it has never measured
+      // itself. Everything else in there is laid out by CSS and needs no telling.
+      refreshCurveControls(rowEl);
+    });
 
     applyVisibility();
     refreshCurveControls(container);

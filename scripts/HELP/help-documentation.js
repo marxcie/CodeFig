@@ -233,6 +233,7 @@
 // | `@curve` | the bezier curve editor, on an **array**. Four numbers is one segment, ten is two, `[]` is none |
 // | `@curve @allowOriginal` | the same, with *Original* — the empty curve — offered in its preset list |
 // | `@curve @ends: a..b @range: lo..hi` | the same on a **value axis**: real numbers up the side, draggable ends that write `a` and `b`, and a zoom rail |
+// | `#>Hue` inside `@rows` | a **channel tab**: a section of a row you can only see one of. Closed tabs are hidden, never dropped |
 // | `key:curve=Label` inside `@rows` | the same editor as one column of a row. `key:curve(original)` to offer *Original* |
 // | `key:curve(growth:other)` | the **open-ended** editor: log axis, a handle for the growth, written to the config as `other` |
 // | `key:{…}=Label` inside `@rows` | the same group, nested as one column of a row |

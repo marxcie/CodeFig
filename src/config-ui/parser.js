@@ -442,6 +442,25 @@
         continue;
       }
 
+      /**
+       * **`#>Hue` — a heading that is a tab.**
+       *
+       * The same one branch `#Seed` already is, with one character's difference in meaning: a section
+       * heading separates the columns after it from the ones before, a tab heading does that *and* hides
+       * every other tab's columns. Márton's Colors frames put Hue, Saturation and Lightness over one chart,
+       * and each is a curve plus that channel's three anchors — the split is exactly where a heading would
+       * already go.
+       *
+       * Reusing the heading rather than adding a tab container is deliberate, and it is the same call as
+       * `#Seed`: the row loop already knows where a section starts, and a tab is a section you can only see
+       * one of.
+       */
+      var tabInColumns = text.match(/^#>\s*(.+)$/);
+      if (tabInColumns) {
+        columns.push({ type: "tab", text: tabInColumns[1].trim() });
+        continue;
+      }
+
       var headingInColumns = text.match(/^(#+)\s*(.+)$/);
       if (headingInColumns) {
         // A heading may carry a condition, the same `{…}` a column does. *Seed* is drawn only once a curve is
@@ -1381,6 +1400,7 @@
               return new Array(Math.max(1, (c.level || 2) - 1) + 1).join("#") + c.text + hw;
             }
             if (c.type === "preview") return "@preview";
+            if (c.type === "tab") return "#>" + c.text;
             var spec = c.type;
             if (c.type === "curve") {
               var curveSpec = curveSpecText(c);

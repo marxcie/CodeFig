@@ -162,3 +162,63 @@ test('a group key repeated across columns merges rather than the last one winnin
     { name: 'Granite', bright: { hue: 271, chroma: 0.012, lightness: 98 } },
   ], 'a channel that is not the last column lost its anchor');
 });
+
+/**
+ * **Channel tabs: `#>Hue` in a `@rows` spec.**
+ *
+ * A tab is a section you can only see one of, so it is built from the pieces `#Seed` already uses rather
+ * than from a tab container of its own. The failure worth guarding is not the switching — it is that a
+ * channel whose tab is closed must still be *read*. Panels are hidden, never removed, because
+ * `collectRows` sweeps the whole row: drop them and switching from Lightness to Hue would blank the two
+ * channels you cannot see, silently, on the next keystroke.
+ */
+const CHANNELS = [
+  '// @UI_CONFIG_START',
+  'var modes = [{ name: "Granite", hue: 264, sat: 12, light: 50 }]; ' +
+    '// @rows: name:text=Mode|#>Hue|hue:number=Hue|#>Saturation|sat:number=Saturation' +
+    '|#>Lightness|light:number=Lightness @blocks @label: Modes',
+  '// @UI_CONFIG_END',
+].join('\n');
+
+function channelForm() {
+  const schema = P.parse(CHANNELS);
+  const container = document.createElement('div');
+  R.buildForm(schema, container);
+  let seen = null;
+  R.attachListeners(container, schema, (values) => { seen = values; });
+  return {
+    container,
+    values: () => seen,
+    open: () => container.querySelectorAll('[data-rows-tabpanel]')
+      .filter((p) => p.getAttribute('data-shown') === 'true')
+      .map((p) => p.getAttribute('data-rows-tabpanel')),
+  };
+}
+
+test('a row opens on its last channel and shows exactly one', () => {
+  const form = channelForm();
+  assert.deepEqual(form.open(), ['Lightness'],
+    'the bar reads Hue, Saturation, Lightness and the panel at rest shows the last of them');
+
+  form.container.querySelector('[data-rows-tab="Hue"]').dispatch('click', { bubbles: true });
+  assert.deepEqual(form.open(), ['Hue']);
+});
+
+test('a channel whose tab is closed is still read', () => {
+  const form = channelForm();
+  // Lightness is open, so Hue and Saturation are both hidden. Editing the hidden Hue must land.
+  const hue = form.container.querySelector('[data-row-field="hue"]');
+  hue.value = '271';
+  hue.dispatch('change', { bubbles: true });
+  assert.deepEqual(form.values().modes, [
+    { name: 'Granite', hue: 271, sat: 12, light: 50 },
+  ], 'a closed channel lost its value');
+});
+
+test('switching channel is not an edit', () => {
+  // It moves nothing and writes nothing, so it must not reach `onChange` — a config rewrite on every tab
+  // click would put the panel in the undo history for looking at something.
+  const form = channelForm();
+  form.container.querySelector('[data-rows-tab="Saturation"]').dispatch('click', { bubbles: true });
+  assert.equal(form.values(), null, 'switching a channel reported a change');
+});

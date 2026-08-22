@@ -3553,6 +3553,40 @@
          row or a drag cursor on it would restyle the scale editors in Spacing, Radius and
          Typography, which have no axis and nothing to zoom. */
 
+      /* --- channel tabs inside a row ------------------------------------------------------------
+         `#>Hue` in a `@rows` spec. A section you can only see one of, so it is styled as one: the
+         panel is a plain block and the bar is the only new furniture. */
+
+      .config-ui-rows-channels {
+        display: flex;
+        gap: 22px;
+        border-bottom: 1px solid var(--border-light, #eee);
+        margin: 18px 0 16px;
+      }
+
+      .config-ui-rows-channel {
+        padding: 8px 0 10px;
+        margin-bottom: -1px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: none;
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-family: var(--font-family-base);
+        font-size: var(--font-size-body);
+      }
+
+      .config-ui-rows-channel:hover { color: var(--text-primary); }
+
+      .config-ui-rows-channel[aria-selected="true"] {
+        color: var(--active-bg);
+        border-bottom-color: var(--active-bg);
+      }
+
+      /* Hidden, never removed: `collectRows` reads every cell in the row, and a channel whose tab is
+         closed still has to be read or switching tabs would blank the two you cannot see. */
+      .config-ui-rows-tabpanel[data-shown="false"] { display: none; }
+
       .config-ui-curve__chartline {
         display: flex;
         align-items: stretch;
