@@ -3674,6 +3674,36 @@
 
       .config-ui-curve__zoom-mark:focus { outline: none; border-right-color: var(--active-bg); }
 
+      /* **Bright, Middle, Dark — left, centre, right, under the chart.**
+
+         The two ends are cells the row declares and the control moves here, so they arrive with the
+         `.config-ui-rows-cell` styling already on them; the middle is the control's own. The right
+         padding reserves the two columns beside the plot, so all three line up with the *chart* rather
+         than with the row — otherwise Dark sits 52px past the chart's right edge. */
+      .config-ui-curve__anchors {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        margin-top: 12px;
+        padding-right: calc(var(--curve-col-w) * 2 + var(--curve-col-gap) * 2);
+      }
+
+      .config-ui-curve__anchors .config-ui-curve__anchor--middle { justify-self: center; }
+      .config-ui-curve__anchors .config-ui-curve__anchor--end { justify-self: end; }
+
+      /* A cell that has been adopted is no longer in the row's own flow, so its width comes from the
+         input rather than from the cell. */
+      .config-ui-curve__anchors .config-ui-curve__anchor {
+        display: block;
+        width: auto;
+      }
+
+      .config-ui-curve__anchors .config-ui-input--number { width: 96px; }
+
+      .config-ui-curve__anchors .config-ui-input:disabled {
+        color: var(--text-secondary);
+        opacity: 0.6;
+      }
+
       /* The channel across the window. A picture, never an input. */
       .config-ui-curve__range {
         flex: 0 0 var(--curve-col-w);

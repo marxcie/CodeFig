@@ -1782,6 +1782,40 @@
       return b;
     }
 
+    /**
+     * **The three anchor boxes, under the chart, left / centre / right.**
+     *
+     * The two ends are *adopted*, not rebuilt. They are ordinary cells the row already declares, so they
+     * already carry a caption, a key, and a place in `collectRows`; building a second pair here would be
+     * two controls for one value, which is the mistake this panel has already made twice. So the control
+     * moves the cells it is bound to into position. Moving them inside the row is invisible to the
+     * collector, which finds cells with `querySelector` and does not care where they sit.
+     *
+     * The middle box is the control's own, because there is no field behind it. It **is** the curve's
+     * middle handle, read in the channel's units: type in it and the handle moves, drag the handle and it
+     * follows. One fact, two ways to reach it — which is the answer Márton gave when asked whether the
+     * middle should come back as a value of its own.
+     */
+    var anchorRow = null;
+    var middleBox = null;
+    if (field.ends) {
+      anchorRow = document.createElement("div");
+      anchorRow.className = "config-ui-curve__anchors";
+      var middleCell = document.createElement("label");
+      middleCell.className = "config-ui-curve__anchor config-ui-curve__anchor--middle";
+      var middleCap = document.createElement("span");
+      middleCap.className = "config-ui-rows-cell-label";
+      middleCap.textContent = "Middle";
+      middleBox = document.createElement("input");
+      middleBox.type = "text";
+      middleBox.className = "config-ui-input config-ui-input--number";
+      middleBox.setAttribute("data-curve-middle", "true");
+      middleCell.appendChild(middleCap);
+      middleCell.appendChild(middleBox);
+      anchorRow.appendChild(middleCell);
+      wrap.appendChild(anchorRow);
+    }
+
     var text = document.createElement("input");
     text.type = "text";
     text.className = "config-ui-curve__text";
@@ -1807,6 +1841,31 @@
       if (from === null || to === null || from === to) return null;
       var limit = field.range || { lo: Math.min(from, to), hi: Math.max(from, to) };
       return { from: from, to: to, lo: limit.lo, hi: limit.hi };
+    }
+
+    /**
+     * Pull the two end cells under the chart, once, and keep them in order: bright, middle, dark.
+     *
+     * Idempotent by construction — a cell already in the anchor row is left alone — because this runs on
+     * every draw, and the alternative is a flag recording whether it has happened: a stored answer to a
+     * question the DOM can be asked.
+     */
+    function adoptEnds() {
+      if (!anchorRow) return;
+      var from = endCell("from"), to = endCell("to");
+      var fromCell = from && typeof from.closest === "function"
+        ? (from.closest(".config-ui-rows-cell") || from) : from;
+      var toCell = to && typeof to.closest === "function"
+        ? (to.closest(".config-ui-rows-cell") || to) : to;
+      if (fromCell && fromCell.parentNode !== anchorRow) {
+        fromCell.setAttribute("class", fromCell.getAttribute("class") + " config-ui-curve__anchor");
+        anchorRow.insertBefore(fromCell, anchorRow.firstChild);
+      }
+      if (toCell && toCell.parentNode !== anchorRow) {
+        toCell.setAttribute("class", toCell.getAttribute("class") +
+          " config-ui-curve__anchor config-ui-curve__anchor--end");
+        anchorRow.appendChild(toCell);
+      }
     }
 
     /**
@@ -2039,6 +2098,22 @@
       var stepOut = wrap.querySelector('[data-curve-zoom="out"]');
       if (stepIn) stepIn.disabled = z >= CURVE_ZOOM_MAX * 0.999;
       if (stepOut) stepOut.disabled = z <= CURVE_ZOOM_MIN * 1.001;
+      /**
+       * **The middle box reads the curve's anchor**, in the channel's units.
+       *
+       * Disabled with an em dash when the curve has no middle point, because then there is nothing for it
+       * to be a view of — showing a number there would invent one. Left alone while it has focus: this runs
+       * on every draw, and rewriting a field mid-keystroke is how a control becomes impossible to type in.
+       */
+      if (middleBox) {
+        var held = curveValueOf(wrap.getAttribute("data-curve-value"));
+        var hasMiddle = held.length === 10;
+        middleBox.disabled = !hasMiddle;
+        if (typeof document === "undefined" || document.activeElement !== middleBox) {
+          middleBox.value = hasMiddle
+            ? String(Math.round(unitToValue(a, held[5]) * 10) / 10) : "\u2014";
+        }
+      }
       if (rangeFill) {
         var stops = rangeStops(a);
         rangeFill.style.background = stops
@@ -2081,6 +2156,7 @@
     }
 
     function draw() {
+      adoptEnds();
       placeColumns();
       while (svg.firstChild) svg.removeChild(svg.firstChild);
       while (tickLayer.firstChild) tickLayer.removeChild(tickLayer.firstChild);
@@ -2557,6 +2633,21 @@
     }
     svg.addEventListener("pointerup", endDrag);
     svg.addEventListener("pointercancel", endDrag);
+
+    // Typing in the middle box moves the anchor. The other direction is in `draw`, so the two cannot get
+    // out of step: there is one value and both of these are views of it.
+    if (middleBox) {
+      middleBox.addEventListener("input", function () {
+        var a = axis();
+        if (!a || a.to === a.from) return;
+        var typed = parseFloat(String(middleBox.value).replace(/[^\d.\-]/g, ""), 10);
+        if (!isFinite(typed)) return;
+        var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
+        if (pts.length !== 10) return;
+        pts[5] = Math.min(1, Math.max(0, valueToUnit(a, typed)));
+        setPoints(pts, { keepText: true });
+      });
+    }
 
     /**
      * **The marker is the zoom, and it is the only thing that is.**

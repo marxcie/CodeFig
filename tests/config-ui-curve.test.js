@@ -762,3 +762,60 @@ test("a curve with no published colours has no bar rather than an empty one", ()
   assert.equal(
     form.container.querySelector(".config-ui-curve__range-fill").getAttribute("data-shown"), "false");
 });
+
+/** A curve with its two ends declared as real cells, the way the Colors block declares them. */
+function anchoredForm() {
+  const withMiddle = B.bezierWithMiddle([0.42, 0.16, 0.68, 0.52]);
+  const source = [
+    '// @UI_CONFIG_START',
+    'var modes = [{ name: "G", bright: { lightness: 2 }, dark: { lightness: 96 }, curve: ' +
+      JSON.stringify(withMiddle) + ' }]; // @rows: name:text=Mode|#>Lightness|' +
+      'curve:curve(ends:bright.lightness..dark.lightness, range:0..100)=Lightness curve|' +
+      'bright:{lightness:number=Bright}=Bright|dark:{lightness:number=Dark}=Dark @blocks @label: Modes',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+  return {
+    container,
+    wrap: container.querySelector('.config-ui-curve'),
+    row: container.querySelector('.config-ui-curve__anchors'),
+    middle: container.querySelector('[data-curve-middle]'),
+    points: () => JSON.parse(container.querySelector('.config-ui-curve').getAttribute('data-curve-value')),
+  };
+}
+
+test('the two end cells move under the chart, in order, and stay the same cells', () => {
+  // **Adopted, not rebuilt.** They are cells the row declares, with a caption and a key and a place in
+  // `collectRows` — a second pair built by the curve would be two controls for one value, which is the
+  // mistake this panel has already made twice.
+  const form = anchoredForm();
+  assert.deepEqual(
+    form.row.querySelectorAll('input').map((i) => i.getAttribute('data-row-field') || '(middle)'),
+    ['bright.lightness', '(middle)', 'dark.lightness']);
+
+  // Still findable by the collector, which is the whole reason moving them is safe.
+  assert.ok(form.container.querySelector('[data-row-field="bright.lightness"]'));
+});
+
+test('the middle box is the curve\'s middle handle, in the channel\'s units', () => {
+  const form = anchoredForm();
+  // Reads it: the anchor sits at unit 0.34 of the span 2..96.
+  assert.equal(form.middle.value, '34');
+
+  // Writes it, and the value lands exactly where it was typed rather than near it.
+  form.middle.value = '60';
+  form.middle.dispatch('input', { bubbles: true });
+  const at = form.points()[5];
+  assert.ok(Math.abs((2 + (96 - 2) * at) - 60) < 0.05, 'typing 60 put the anchor at ' + (2 + 94 * at));
+});
+
+test('with no middle point the box has nothing to be a view of, and says so', () => {
+  const form = anchoredForm();
+  form.wrap.querySelector('.config-ui-curve__toggle').dispatch('click', { bubbles: true });
+  assert.equal(form.points().length, 4, 'the middle point was not removed');
+  assert.equal(form.middle.disabled, true);
+  assert.equal(form.middle.value, '—', 'a number here would be one the curve does not hold');
+});

@@ -21,6 +21,14 @@ a plain statement of the new default.
 
 ### Added
 
+- **Channel tabs in a `@rows` block.** `#>Hue` starts a tab where `#Hue` starts a section — the columns
+  after it are shown only when that tab is open. Closed tabs are hidden rather than dropped, so every
+  channel is still read; switching one is not an edit and does not touch the config.
+- **The three anchor boxes sit under the chart**, left, centre and right. The two ends are the row's own
+  cells, moved into place rather than rebuilt, so they keep their captions and their keys. The **Middle**
+  box is the curve's middle handle read in the channel's units — type in it and the handle moves, drag the
+  handle and it follows — and it is disabled with an em dash when the curve has no middle point, because
+  then there is nothing for it to be a view of.
 - **A curve can be drawn on a real axis.** `@ends: a..b` names the two fields a curve runs between and
   `@range: lo..hi` the limits of the quantity, and together they turn the plot's y axis from a unit
   square into the thing being edited — labelled at round values, with the dashed guide joining the two

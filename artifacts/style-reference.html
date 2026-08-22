@@ -1202,11 +1202,9 @@
                 <span class="config-ui-rows-group" data-group-field="ladder">
                   <label class="config-ui-rows-group-part">
                     <span class="config-ui-rows-group-label">Bright</span>
-                    <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.bright" value="98">
                   </label>
                   <label class="config-ui-rows-group-part">
                     <span class="config-ui-rows-group-label">Dark</span>
-                    <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.dark" value="19">
                   </label>
                 </span>
               </div>
@@ -1326,6 +1324,14 @@
                     <div class="config-ui-curve__range">
                       <div class="config-ui-curve__range-fill" data-shown="false"></div>
                     </div>
+                  </div>
+                  <div class="config-ui-curve__anchors">
+                    <input type="number" class="config-ui-input config-ui-input--number config-ui-curve__anchor" data-row-field="ladder.bright" value="98">
+                    <label class="config-ui-curve__anchor config-ui-curve__anchor--middle">
+                      <span class="config-ui-rows-cell-label">Middle</span>
+                      <input type="text" class="config-ui-input config-ui-input--number" data-curve-middle="true" disabled value="—">
+                    </label>
+                    <input type="number" class="config-ui-input config-ui-input--number config-ui-curve__anchor config-ui-curve__anchor--end" data-row-field="ladder.dark" value="19">
                   </div>
                   <input type="text" class="config-ui-curve__text" spellcheck="false" placeholder="cubic-bezier(0.37, 0, 0.63, 1)" value="cubic-bezier(0.4, 0, 0.7, 0.55)">
                 </div>
