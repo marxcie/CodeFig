@@ -3143,6 +3143,17 @@
           // has to line up with the *fields* rather than with the middle of the pair — centred, it floats
           // between the caption and the input and reads as belonging to neither.
           if (column.type === "group") cell.className += " config-ui-rows-cell--group";
+          /**
+           * **A charted curve is the width of the block, not the width of a field.**
+           *
+           * Every other control in a stacked cell sits in the right-hand column of a label/control grid,
+           * which is right for a dropdown and wrong for a chart: it left the plot 268px wide and indented
+           * 292px, above a swatch strip running the full 944. The same eleven steps, drawn twice, to two
+           * different widths. The cell says so and the stylesheet lets the chart out of the column.
+           */
+          if (column.type === "curve" && column.ends) {
+            cell.className += " config-ui-rows-cell--charted";
+          }
           // A column can depend on another column **in the same row**: a modular scale needs a ratio,
           // a metric one needs a step, and showing both leaves half of every tab inert. The condition
           // travels on the cell, and is evaluated against that row's own values rather than the form's

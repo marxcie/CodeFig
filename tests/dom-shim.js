@@ -234,12 +234,20 @@ class Element {
   // --- queries
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
   querySelectorAll(sel) {
-    const parts = parseSelector(sel);
+    // **A selector list, because the renderer writes them.** `applyConditions` disables a cell with
+    // `input, select, textarea`, so without this the shim throws on any block using `@disabledWhen` — which
+    // is every Colors mode. Each compound is matched independently and the union is returned, in document
+    // order, which is what the real thing does.
+    // `:scope > x` — children only, not descendants. The renderer uses it to find a note it owns rather
+    // than one belonging to a nested control, which is a distinction a descendant sweep cannot make.
+    const direct = /^:scope\s*>\s*/.test(String(sel).trim());
+    const groups = String(sel).replace(/^:scope\s*>\s*/, '').split(',')
+      .map((one) => parseSelector(one.trim()));
     const out = [];
     const walk = (el) => {
       el.children.forEach((child) => {
-        if (matches(child, parts)) out.push(child);
-        walk(child);
+        if (groups.some((parts) => matches(child, parts))) out.push(child);
+        if (!direct) walk(child);
       });
     };
     walk(this);
@@ -256,10 +264,10 @@ class Element {
     return false;
   }
   closest(sel) {
-    const parts = parseSelector(sel);
+    const groups = String(sel).split(',').map((one) => parseSelector(one.trim()));
     let el = this;
     while (el && el.nodeType === 1) {
-      if (matches(el, parts)) return el;
+      if (groups.some((parts) => matches(el, parts))) return el;
       el = el.parentNode;
     }
     return null;

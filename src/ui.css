@@ -3594,6 +3594,29 @@
         padding-right: calc(var(--curve-col-w) * 2 + var(--curve-col-gap) * 2);
       }
 
+      /* **A charted curve spans the block.** The label and the preset row keep the two-column layout
+         every other cell uses — the label on the left, the controls beside it — and the chart, the anchors
+         and the coordinate field break out to the full width underneath. `display: contents` on the
+         control is what lets its parts be placed individually: the wrapper is a flex column everywhere
+         else, and here its children need to be grid items of the cell instead. */
+      .config-ui-rows-cell--charted > .config-ui-curve {
+        display: contents;
+      }
+
+      .config-ui-rows-cell--charted > .config-ui-curve > .config-ui-curve__head {
+        grid-column: 2;
+      }
+
+      .config-ui-rows-cell--charted > .config-ui-curve > .config-ui-curve__chartline,
+      .config-ui-rows-cell--charted > .config-ui-curve > .config-ui-curve__anchors,
+      .config-ui-rows-cell--charted > .config-ui-curve > .config-ui-curve__text {
+        grid-column: 1 / -1;
+      }
+
+      /* The label belongs with the preset row, not centred against the whole stack. */
+      .config-ui-rows-cell--charted { align-items: start; }
+      .config-ui-rows-cell--charted > .config-ui-rows-cell-label { padding-top: 7px; }
+
       .config-ui-curve__chartline {
         display: flex;
         align-items: stretch;
@@ -3705,6 +3728,12 @@
       }
 
       .config-ui-curve__anchors .config-ui-input--number { width: 96px; }
+
+      /* **One label per box.** An adopted cell arrives with its own label *and* the caption on the part
+         inside it — "Bright" over "Bright", "Dark" over "Dark". The caption is the one worth keeping: it
+         says *Saturation start* where the cell says only *Bright*. The control's own middle box has no
+         outer label to hide, so the rule keys on the cell class the adopted ones carry. */
+      .config-ui-curve__anchors > .config-ui-rows-cell > .config-ui-rows-cell-label { display: none; }
 
       .config-ui-curve__anchors .config-ui-input:disabled {
         color: var(--text-secondary);
