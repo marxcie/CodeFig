@@ -126,3 +126,39 @@ test('a select reports its selected option, which is what the condition reads', 
   assert.equal(select.children[0].selected, true, 'and assigning moves the selection');
   assert.equal(select.children[1].selected, false);
 });
+
+test('a group key repeated across columns merges rather than the last one winning', () => {
+  /**
+   * **Load-bearing for the channel tabs.** Márton's design splits a mode into Hue, Saturation and
+   * Lightness, and each tab wants its own slice of the same three anchors — `bright.hue` under Hue,
+   * `bright.chroma` under Saturation, `bright.lightness` under Lightness. That means `bright` appears as a
+   * group column three times in one row.
+   *
+   * The obvious failure is the last column winning and the other two channels' anchors being dropped on
+   * every keystroke — silently, because the form still shows them. It does not happen: `collectRows` seeds
+   * each group from what the row already holds, so the three accumulate. Pinned here because the tabs are
+   * about to depend on it and nothing else says so.
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var modes = [',
+    '  { name: "Granite", bright: { hue: 264, chroma: 0.012, lightness: 98 } }',
+    '];  // @rows: name:text=Mode|bright:{hue:number=Hue}=Hue|' +
+      'bright:{chroma:number=Chroma}=Chroma|bright:{lightness:number=Lightness}=Lightness @blocks',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+
+  const schema = P.parse(source);
+  const container = document.createElement('div');
+  R.buildForm(schema, container);
+  let seen = null;
+  R.attachListeners(container, schema, (values) => { seen = values; });
+
+  const hue = container.querySelector('[data-row-field="bright.hue"]');
+  hue.value = '271';
+  hue.dispatch('change', { bubbles: true });
+
+  assert.deepEqual(seen.modes, [
+    { name: 'Granite', bright: { hue: 271, chroma: 0.012, lightness: 98 } },
+  ], 'a channel that is not the last column lost its anchor');
+});
