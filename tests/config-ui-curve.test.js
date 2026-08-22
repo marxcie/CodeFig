@@ -1017,3 +1017,29 @@ test('@ramp paints the bar in the channel\'s own colours, and follows the fields
   assert.ok(container.querySelector('.config-ui-curve__range-fill').style.background.indexOf('25%') !== -1,
     'the bar did not follow the field it names');
 });
+
+test('an adopted middle is disabled when the curve has no middle point', () => {
+  // The engine stopped consulting it, so the panel stops offering it. An editable box holding a number
+  // nothing reads is how a bump at the middle of a smooth ramp went unexplained for a week.
+  const source = [
+    '// @UI_CONFIG_START',
+    'var modes = [{ name: "G", bright: { chroma: 0.02 }, middle: { chroma: 0.25 }, ' +
+      'dark: { chroma: 0.05 }, cc: [0.4, 0.2, 0.6, 0.8] }]; // @rows: name:text=Mode|#>Saturation|' +
+      'cc:curve(ends:bright.chroma..middle.chroma..dark.chroma, range:0..0.4)=Chroma curve|' +
+      'bright:{chroma:number=Start}=B|middle:{chroma:number=Middle}=M|dark:{chroma:number=End}=D @blocks',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  const mid = container.querySelector('[data-row-field="middle.chroma"]');
+  assert.equal(mid.disabled, true, 'a one-segment curve does not travel through a middle');
+  assert.equal(mid.value, '0.25', 'and it keeps its value, so it comes back intact');
+
+  // Give the curve a middle point and the box is live again.
+  container.querySelector('.config-ui-curve__toggle').dispatch('click', { bubbles: true });
+  assert.equal(container.querySelector('.config-ui-curve').getAttribute('data-curve-value').split(',').length, 10);
+  assert.equal(container.querySelector('[data-row-field="middle.chroma"]').disabled, false);
+});

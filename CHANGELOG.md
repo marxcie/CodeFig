@@ -71,6 +71,11 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **A colour channel bends at its middle anchor only if its curve has a middle point.** The two were
+  independent, and the ramp resolved the contradiction in favour of the anchor — so removing the middle
+  point from a saturation curve left a corner the curve could not possibly draw. On lime that was a dive
+  to 83 and back in a ramp running 100 to 90. The curve decides now, and the Middle box is greyed when it
+  is not consulted, keeping its value for when the middle point comes back.
 - **The bar beside each chart shows that channel, not the tokens.** It was drawn from the collection's
   token colours — a lightness ramp — so it looked right on Lightness and showed a light-to-dark sweep on
   Hue and Saturation, and it could not follow a drag because those colours are the file's. Each curve now

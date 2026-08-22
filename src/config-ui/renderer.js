@@ -1880,6 +1880,9 @@
       var toCell = to && typeof to.closest === "function"
         ? (to.closest(".config-ui-rows-cell") || to) : to;
       // The middle, when the channel has a real one, sits between them and is adopted the same way.
+      // **Disabled when the curve has no middle point**, because then the engine does not consult it: a
+      // one-segment curve runs end to end. An editable box holding a number nothing reads is how the bump
+      // at the middle went unexplained — the value was still there and still looked authoritative.
       if (field.ends.mid) {
         var midEl = endCell("mid");
         var midCell = midEl && typeof midEl.closest === "function"
@@ -2170,9 +2173,20 @@
        * to be a view of — showing a number there would invent one. Left alone while it has focus: this runs
        * on every draw, and rewriting a field mid-keystroke is how a control becomes impossible to type in.
        */
+      var stored = curveValueOf(wrap.getAttribute("data-curve-value"));
+      var curveHasMiddle = stored.length === 10;
+      // An adopted middle is greyed rather than hidden: it keeps its value, and it comes back the moment
+      // the curve grows a middle point again.
+      var midCell = field.ends.mid ? endCell("mid") : null;
+      if (midCell) {
+        midCell.disabled = !curveHasMiddle;
+        var midWrap = typeof midCell.closest === "function"
+          ? midCell.closest(".config-ui-curve__anchor") : null;
+        if (midWrap) midWrap.setAttribute("data-shown", curveHasMiddle ? "true" : "false");
+      }
       if (middleBox) {
-        var held = curveValueOf(wrap.getAttribute("data-curve-value"));
-        var hasMiddle = held.length === 10;
+        var held = stored;
+        var hasMiddle = curveHasMiddle;
         middleBox.disabled = !hasMiddle;
         if (typeof document === "undefined" || document.activeElement !== middleBox) {
           middleBox.value = hasMiddle

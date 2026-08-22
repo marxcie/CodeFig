@@ -531,6 +531,39 @@ function oklchRamp(spec) {
   var gm = oklchEaseAt(ramCurve, last === 0 ? 1 : middle / last);
 
   /**
+   * **A channel bends at its middle anchor only if its curve has a middle point.**
+   *
+   * The two used to be independent, and that is a contradiction the ramp resolved in favour of the anchor.
+   * Remove the middle point from a saturation curve and the curve becomes one monotone segment between its
+   * ends — which for `100 … 90` *cannot reach* a middle of 83 — and the ramp dived to 83 anyway and came
+   * back up. Márton: *"all curves smooth, no middle points, yet there is a huge bump at middle"*.
+   *
+   * So the curve decides. A three-anchor curve travels bright → middle → dark and the anchor is a real
+   * corner; a one-segment curve travels bright → dark and the middle anchor is not consulted, which is what
+   * "no middle point" has to mean if the words are to be worth anything. The panel disables the box to
+   * match, so the number that stops counting also stops being editable.
+   *
+   * This is the *"a name is a label; the stamp is the identity"* rule in another coat: of two values that
+   * describe one fact, exactly one may be authoritative, and here it is the curve.
+   */
+  /** A resolved curve's own coordinates, or `[]` for one named rather than given. */
+  function oklchPointsOf(curve) {
+    return (curve && Array.isArray(curve.points)) ? curve.points : [];
+  }
+  function oklchChannelSpan(index, hasMiddle) {
+    if (hasMiddle) return oklchSegmentAt(index, middle, last);
+    return { from: 'bright', to: 'dark', t: last === 0 ? 1 : index / last };
+  }
+  /** Progress within a channel's own span — renormalised per half only when there are halves. */
+  function oklchChannelAt(curve, index, hasMiddle, atMiddle) {
+    var g = oklchEaseAt(curve, last === 0 ? 1 : index / last);
+    if (!hasMiddle) return oklchClamp01(g);
+    return oklchClamp01(index <= middle
+      ? (atMiddle > 1e-9 ? g / atMiddle : 1)
+      : (atMiddle < 1 - 1e-9 ? (g - atMiddle) / (1 - atMiddle) : 1));
+  }
+
+  /**
    * **Chroma may run on a schedule of its own.**
    *
    * Without one it borrows the lightness curve's, which is what the ramp has always done — and what makes a
@@ -556,30 +589,29 @@ function oklchRamp(spec) {
    * saturation into a cliff at the bright end and left the middle of a ramp duller than the file. S is
    * already the fraction of the colour a lightness can hold; there is nothing to convert.
    */
+  /**
+   * Which channels have a corner at the middle, decided once.
+   *
+   * **No curve is not the same as a smooth one.** A channel with no curve of its own has said nothing about
+   * its shape, so it keeps the three anchors it has always had — measured, dropping the middle there costs
+   * every set in the library its accuracy, because a read leaves chroma empty precisely when the ramp is
+   * too flat to fit and the three anchors are all it has. An *explicit* one-segment curve is different: it
+   * is a statement that the channel runs smoothly from one end to the other, and it cannot pass through a
+   * middle outside its ends however much the anchor insists.
+   */
+  // `oklchCurveOf` hands back `{ id, points, amount }`, so the coordinates are `.points` — reading `.length`
+  // off the wrapper is `undefined`, which is not 10, which quietly took the middle away from *every*
+  // channel that had a curve. The whole library went over the accuracy limit and the benchmark said so.
+  var hueHasMiddle = hueCurve ? oklchPointsOf(hueCurve).length === 10 : true;
+  var chromaHasMiddle = chromaCurve ? oklchPointsOf(chromaCurve).length === 10 : true;
+
   for (var i = 0; i < steps.length; i++) {
-    var seg = oklchSegmentAt(i, middle, last);
-    var g = oklchEaseAt(ramCurve, last === 0 ? 1 : i / last);
-    var u = seg.from === 'bright'
-      ? (gm > 1e-9 ? g / gm : 1)
-      : (gm < 1 - 1e-9 ? (g - gm) / (1 - gm) : 1);
-    u = oklchClamp01(u);
-    // Hue stays on the lightness schedule: measured, it is 1.8-6.2 degrees out across chromatic sets and
-    // pure noise on neutrals, so a curve of its own would be fitting rounding.
-    var uh = u;
-    if (hueCurve) {
-      var hg = oklchEaseAt(hueCurve, last === 0 ? 1 : i / last);
-      uh = oklchClamp01(seg.from === 'bright'
-        ? (hgm > 1e-9 ? hg / hgm : 1)
-        : (hgm < 1 - 1e-9 ? (hg - hgm) / (1 - hgm) : 1));
-    }
-    var H = oklchLerpHue(spec.hue[seg.from], spec.hue[seg.to], uh);
-    var uc = u;
-    if (chromaCurve) {
-      var cg = oklchEaseAt(chromaCurve, last === 0 ? 1 : i / last);
-      uc = oklchClamp01(seg.from === 'bright'
-        ? (cgm > 1e-9 ? cg / cgm : 1)
-        : (cgm < 1 - 1e-9 ? (cg - cgm) / (1 - cgm) : 1));
-    }
+    var hueSeg = oklchChannelSpan(i, hueHasMiddle);
+    var chromaSeg = oklchChannelSpan(i, chromaHasMiddle);
+    var uh = oklchChannelAt(hueCurve || ramCurve, i, hueHasMiddle, hueCurve ? hgm : gm);
+    var H = oklchLerpHue(spec.hue[hueSeg.from], spec.hue[hueSeg.to], uh);
+    var uc = oklchChannelAt(chromaCurve || ramCurve, i, chromaHasMiddle, chromaCurve ? cgm : gm);
+    var seg = chromaSeg;
     var L = spec.ladder[i].L;
     var C, fit, thinned = false;
     if (oklch) {

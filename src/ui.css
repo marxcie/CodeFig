@@ -3735,6 +3735,10 @@
          outer label to hide, so the rule keys on the cell class the adopted ones carry. */
       .config-ui-curve__anchors > .config-ui-rows-cell > .config-ui-rows-cell-label { display: none; }
 
+      /* A middle the curve does not consult is dimmed, not removed: it keeps its value and comes back
+         the moment the curve grows a middle point again. */
+      .config-ui-curve__anchor[data-shown="false"] { opacity: 0.45; }
+
       .config-ui-curve__anchors .config-ui-input:disabled {
         color: var(--text-secondary);
         opacity: 0.6;
