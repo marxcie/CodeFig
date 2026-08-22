@@ -41,6 +41,10 @@ a plain statement of the new default.
   the plot, grips to the plot plus their radius so one on the boundary sits *on* the frame, and a drag
   stops at the window's edge instead of pushing the curve out of sight. Curves without `@ends` — the scale
   editors in Spacing, Radius and Typography — are unchanged.
+- **Colors' Mode settings are three channel tabs over one chart** — Hue, Saturation and Lightness — with
+  Seed color above them, because a seed belongs to the mode rather than to a channel. Each tab holds that
+  channel's curve and its two ends, and every curve is now on a real axis: hue in degrees, chroma 0 to 0.4,
+  saturation and lightness as percentages. The five stacked curve editors are gone.
 - **Colors' lightness curves are drawn on that axis.** The OKLCH collection ladder reads against its
   Bright and Dark, and each HSL mode's curve against its own — so the chart says what lightness a step
   lands on rather than how far the shape sits from straight, and the ends are draggable. Chroma, hue
