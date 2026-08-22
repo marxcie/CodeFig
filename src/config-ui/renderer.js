@@ -1573,6 +1573,8 @@
    * conversion runs through `toView`/`fromView` rather than being written out at each use. Getting one of
    * those backwards draws a curve that is right until you drag it.
    */
+  var CURVE_CLIP_SEQ = 0;
+
   function buildCurveControl(field, value, growthSeed, baselineKey) {
     var B = curveLib();
     var allowOriginal = !!field.allowOriginal;
@@ -1643,6 +1645,9 @@
     // everything around it and read as misaligned. Handles at the corners hang outside instead, which is
     // what `overflow: visible` on the canvas is for and what every other cubic-bezier editor looks like.
     var SIZE = 100;
+    // One id per control, because a document holds several curves and a clip path is addressed by id.
+    CURVE_CLIP_SEQ += 1;
+    var clipId = "config-ui-curve-clip-" + CURVE_CLIP_SEQ;
     // The canvas sits in a positioned box so the empty-state caption can be **HTML over the top** rather
     // than `<text>` inside. SVG text scales with the viewBox — 9 units in a 120-unit box drawn 320px wide
     // is 24px on screen — so a size set in the stylesheet was not the size that appeared. Nothing else in
@@ -1673,35 +1678,21 @@
     plot.appendChild(tickLayer);
 
     /**
-     * **The zoom rail**, and only when there is an axis to zoom.
+     * **No zoom control here yet, on purpose.**
      *
-     * A shape editor's y is the unit square — there is nothing outside it to scroll to, and a rail beside it
-     * would be a control with one position. An axis has a channel behind it: the plot shows the slice you are
-     * working in, the rail shows where that slice sits in the whole of it, and the two grips resize it.
+     * There was one: a rail beside the plot with a window and two grips. It was wrong twice over. Taking
+     * hold of the window to move it landed on a grip and resized instead — the default window fills nearly
+     * the whole rail, so its edges are exactly where you reach for it. And the design it stood in for does
+     * something else entirely: a bar showing the *channel's own colours* down the side of the chart, with
+     * the zoom on that bar rather than beside it.
+     *
+     * So the axis stays and the rail goes, rather than being polished into something about to be replaced.
+     * The view is still a window — `axisView` derives it from the two ends — there is simply nothing that
+     * moves it yet, and a control that only pans a window already showing everything is not one.
      */
     var rail = null;
     var railWindow = null;
-    if (field.ends) {
-      var line = document.createElement("div");
-      line.className = "config-ui-curve__chartline";
-      wrap.appendChild(line);
-      line.appendChild(plot);
-      rail = document.createElement("div");
-      rail.className = "config-ui-curve__rail";
-      railWindow = document.createElement("div");
-      railWindow.className = "config-ui-curve__rail-window";
-      railWindow.setAttribute("data-curve-rail", "pan");
-      ["top", "bottom"].forEach(function (edge) {
-        var grip = document.createElement("div");
-        grip.className = "config-ui-curve__rail-grip config-ui-curve__rail-grip--" + edge;
-        grip.setAttribute("data-curve-rail", edge);
-        railWindow.appendChild(grip);
-      });
-      rail.appendChild(railWindow);
-      line.appendChild(rail);
-    } else {
-      wrap.appendChild(plot);
-    }
+    wrap.appendChild(plot);
 
     var text = document.createElement("input");
     text.type = "text";
@@ -1904,6 +1895,20 @@
         "class": "config-ui-curve__plot", x: 0, y: 0, width: SIZE, height: SIZE
       }));
       var ax = axis();
+      /**
+       * **A windowed axis has a curve that leaves the box, and the box has to cut it off.**
+       *
+       * The canvas is `overflow: visible` so handles can hang off the corners, which is right and is what
+       * every cubic-bezier editor looks like. On a unit square nothing else ever left the box. On an axis
+       * the plot is a *slice*, so the parts of the ramp outside that slice were drawn outside the plot —
+       * over the coordinate field, over the next curve down the form, over whatever happened to be there.
+       * Clipping the line and leaving the handles unclipped is the only combination that gets both right.
+       */
+      if (ax) {
+        var clip = curveSvgEl("clipPath", { id: clipId });
+        clip.appendChild(curveSvgEl("rect", { x: 0, y: 0, width: SIZE, height: SIZE }));
+        svg.appendChild(clip);
+      }
       // Quarter lines, and the diagonal the curve is a departure from. Reading a curve is reading how far
       // it sits from straight, so the straight one is on the page rather than imagined.
       [25, 50, 75].forEach(function (at) {
@@ -1967,7 +1972,9 @@
         var pt = toView(x, (B ? B.bezierAt(pts, x) : x) * lift);
         d += (i === 0 ? "M" : "L") + pt.x.toFixed(2) + " " + pt.y.toFixed(2);
       }
-      svg.appendChild(curveSvgEl("path", { "class": "config-ui-curve__path", d: d }));
+      var pathEl = curveSvgEl("path", { "class": "config-ui-curve__path", d: d });
+      if (ax) pathEl.setAttribute("clip-path", "url(#" + clipId + ")");
+      svg.appendChild(pathEl);
 
       var handles = showShape ? handlesOf(pts) : [];
       handles.forEach(function (h) {
@@ -2307,84 +2314,6 @@
     svg.addEventListener("pointerup", endDrag);
     svg.addEventListener("pointercancel", endDrag);
 
-    /**
-     * **The rail: pan the window, or resize it from either edge.**
-     *
-     * Zoom is a viewport, so it is held on the wrapper rather than derived — there is nothing else in the
-     * form that knows where you scrolled to. It is also the one piece of this control that never touches the
-     * config: zooming in on a ramp changes nothing about the ramp.
-     *
-     * The window has a floor of a hundredth of the channel. Without one a grip dragged past its opposite
-     * edge inverts the window, and an inverted window draws the ramp upside down — a state you can reach by
-     * accident and cannot see how to leave.
-     */
-    if (rail) {
-      var railDrag = null;
-      var railStart = null;
-      function railValueAt(evt) {
-        var box = rail.getBoundingClientRect();
-        var a = axis();
-        if (!box.height || !a) return null;
-        var frac = 1 - (evt.clientY - box.top) / box.height;
-        return a.lo + Math.min(1, Math.max(0, frac)) * (a.hi - a.lo);
-      }
-      rail.addEventListener("pointerdown", function (evt) {
-        var a = axis();
-        if (!a) return;
-        var target = evt.target;
-        var role = target && typeof target.getAttribute === "function"
-          ? target.getAttribute("data-curve-rail") : null;
-        var w = axisView(a);
-        if (!role) {
-          // A click on bare rail centres the window there, which is how you get back to a ramp you have
-          // scrolled away from without dragging across the whole thing.
-          var mid = railValueAt(evt);
-          if (mid === null) return;
-          var half = (w.hi - w.lo) / 2;
-          setView(a, mid - half, mid + half);
-          role = "pan";
-        }
-        railDrag = role;
-        railStart = { at: railValueAt(evt), lo: axisView(a).lo, hi: axisView(a).hi };
-        if (rail.setPointerCapture) rail.setPointerCapture(evt.pointerId);
-        evt.preventDefault();
-      });
-      rail.addEventListener("pointermove", function (evt) {
-        if (!railDrag || !railStart) return;
-        var a = axis();
-        if (!a) return;
-        var now = railValueAt(evt);
-        if (now === null || railStart.at === null) return;
-        var moved = now - railStart.at;
-        var floor = (a.hi - a.lo) / 100;
-        if (railDrag === "pan") {
-          setView(a, railStart.lo + moved, railStart.hi + moved);
-        } else if (railDrag === "top") {
-          setView(a, railStart.lo, Math.max(railStart.lo + floor, railStart.hi + moved));
-        } else {
-          setView(a, Math.min(railStart.hi - floor, railStart.lo + moved), railStart.hi);
-        }
-      });
-      function railEnd(evt) {
-        if (!railDrag) return;
-        railDrag = null;
-        railStart = null;
-        if (rail.releasePointerCapture && evt.pointerId != null) {
-          try { rail.releasePointerCapture(evt.pointerId); } catch (err) { /* already gone */ }
-        }
-      }
-      rail.addEventListener("pointerup", railEnd);
-      rail.addEventListener("pointercancel", railEnd);
-    }
-
-    /** The window, clamped inside the channel and never narrower than a hundredth of it. Then redraw. */
-    function setView(a, lo, hi) {
-      var floor = (a.hi - a.lo) / 100;
-      var span = Math.max(floor, Math.min(a.hi - a.lo, hi - lo));
-      var low = Math.min(a.hi - span, Math.max(a.lo, lo));
-      wrap.setAttribute("data-curve-view", low + "," + (low + span));
-      draw();
-    }
 
     // Arrow keys on a focused handle: 1% a press, 10% with shift. The canvas is a few hundred pixels wide,
     // so a coordinate cannot otherwise be set exactly — which is the whole of "precise" in this control.

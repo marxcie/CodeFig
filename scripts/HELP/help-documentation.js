@@ -379,9 +379,10 @@ var maybeCurve = []; // @curve @allowOriginal @label: Curve or original @helper:
 // two **square** handles are those ends — drag one and it types into its own field, because that is where
 // the value lives. The round handles still only bend the shape between them.
 //
-// The strip on the right is the **zoom**. The window is the slice the plot is showing; drag it to pan, drag
-// either edge to resize, click the bare rail to jump. It changes nothing about the ramp — it is where you
-// are looking, which is why it is the one part of this control that never reaches the config.
+// The plot shows a **window** on the channel — the two ends with a little air, rather than the whole of it —
+// and the ramp is clipped to it, because the parts outside the window are outside the box. There is no zoom
+// control yet: the one that belongs here shows the channel's own colours down the side of the chart, and it
+// arrives with that chart rather than beside this one.
 var ladder = { bright: 98, dark: 19 }; // @group: bright:number=Bright|dark:number=Dark @label: Ends
 var ladderCurve = [0.4, 0, 0.7, 0.55]; // @curve @ends: ladder.bright..ladder.dark @range: 0..100 @label: Lightness @helper: Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.
 //

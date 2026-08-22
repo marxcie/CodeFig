@@ -3550,19 +3550,6 @@
          either would restyle the scale editors in Spacing, Radius and Typography, which have no
          axis and nothing to zoom. */
 
-      .config-ui-curve__chartline {
-        display: flex;
-        align-items: stretch;
-        gap: 8px;
-        margin: 7px 0;
-      }
-
-      /* The plot's own margin is on the row now, or the two would stack. */
-      .config-ui-curve__chartline .config-ui-curve__plot-wrap {
-        flex: 1 1 auto;
-        min-width: 0;
-        margin: 0;
-      }
 
       /* HTML over the plot, not `<text>` inside it — the canvas stretches by a different factor in each
          direction, so anything drawn in it is the wrong size and the wrong shape. */
@@ -3597,52 +3584,6 @@
         stroke: var(--text-primary);
       }
 
-      .config-ui-curve__rail {
-        position: relative;
-        flex: 0 0 22px;
-        width: 22px;
-        border: 1px solid var(--border-color);
-        border-radius: 3px;
-        background: var(--input-bg);
-        cursor: pointer;
-        touch-action: none;
-        overflow: hidden;
-      }
-
-      .config-ui-curve__rail[data-shown="false"] {
-        visibility: hidden;
-      }
-
-      .config-ui-curve__rail-window {
-        position: absolute;
-        left: 0;
-        right: 0;
-        cursor: grab;
-        box-shadow: inset 0 0 0 2px var(--active-bg);
-        background: rgba(13, 153, 255, 0.12);
-      }
-
-      .config-ui-curve__rail-grip {
-        position: absolute;
-        left: 0;
-        right: 0;
-        height: 10px;
-        cursor: ns-resize;
-      }
-
-      .config-ui-curve__rail-grip::after {
-        content: '';
-        position: absolute;
-        left: 3px;
-        right: 3px;
-        top: 4px;
-        height: 2px;
-        border-radius: 1px;
-        background: var(--active-bg);
-      }
-
-      .config-ui-curve__rail-grip--top { top: -1px; }
-      .config-ui-curve__rail-grip--bottom { bottom: -1px; }
 
       .config-ui-curve__empty-note {
         position: absolute;

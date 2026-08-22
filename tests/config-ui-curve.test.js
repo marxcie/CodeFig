@@ -590,7 +590,6 @@ function axisForm(curve) {
     dark: container.querySelector('[data-row-field="ladder.dark"]'),
     ticks: () => container.querySelectorAll(".config-ui-curve__tick").map((t) => t.textContent),
     ends: () => container.querySelectorAll("[data-curve-end]"),
-    railWindow: () => container.querySelector(".config-ui-curve__rail-window"),
   };
 }
 
@@ -607,7 +606,6 @@ test("without @ends there is no axis, no ticks and no rail", () => {
   // changes, which is the thing most easily broken by adding a mode to a shared control.
   const plain = build({}, [0.4, 0, 0.7, 0.55]);
   assert.equal(plain.wrap.querySelectorAll(".config-ui-curve__tick").length, 0);
-  assert.equal(plain.wrap.querySelectorAll(".config-ui-curve__rail").length, 0);
   assert.equal(plain.wrap.querySelectorAll("[data-curve-end]").length, 0);
 });
 
@@ -653,21 +651,22 @@ test("the curve's own shape is untouched by moving an end", () => {
   assert.equal(form.wrap.getAttribute("data-curve-value"), before);
 });
 
-test("the zoom rail is a viewport and never reaches the config", () => {
+
+test("the curve is clipped to its plot, and the handles are not", () => {
+  // **A window is a slice, so the ramp runs off both ends of it.** Unclipped, the line was drawn over the
+  // coordinate field and over the next curve down the form — `overflow: visible` is there so handles can
+  // sit on the corners, and it let the whole line out with them.
   const form = axisForm();
-  const before = form.wrap.getAttribute("data-curve-value");
-  const rail = form.container.querySelector(".config-ui-curve__rail");
-  rail.getBoundingClientRect = () => ({ left: 0, top: 0, width: 22, height: 100 });
+  const path = form.container.querySelector(".config-ui-curve__path");
+  assert.ok(/^url\(#config-ui-curve-clip-\d+\)$/.test(path.getAttribute("clip-path")),
+    "the drawn ramp is not clipped to the plot");
+  assert.equal(form.container.querySelectorAll("clipPath").length, 1);
+  form.ends().forEach((end) => {
+    assert.equal(end.getAttribute("clip-path"), null, "an end on the boundary must stay visible");
+  });
 
-  // The whole channel is 0..100 and the default window is 11.1..100, so it starts at 88.9% of the rail.
-  assert.equal(form.railWindow().style.height, "88.9%");
-
-  // Drag the bottom grip up: a narrower window, more ticks, same curve.
-  const grip = form.container.querySelector(".config-ui-curve__rail-grip--bottom");
-  rail.dispatch("pointerdown", { target: grip, clientY: 89, pointerId: 2 });
-  rail.dispatch("pointermove", { clientY: 60, pointerId: 2 });
-  rail.dispatch("pointerup", { clientY: 60, pointerId: 2 });
-
-  assert.ok(parseFloat(form.railWindow().style.height, 10) < 88.9, "the window should have narrowed");
-  assert.equal(form.wrap.getAttribute("data-curve-value"), before, "zooming is not an edit");
+  // A shape editor has no window, so nothing can leave the box and nothing needs cutting off.
+  const plain = build({}, [0.4, 0, 0.7, 0.55]);
+  assert.equal(plain.wrap.querySelectorAll("clipPath").length, 0);
+  assert.equal(plain.wrap.querySelector(".config-ui-curve__path").getAttribute("clip-path"), null);
 });
