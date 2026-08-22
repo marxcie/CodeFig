@@ -588,39 +588,35 @@ That is the difference between view state and the kind of stored answer this cod
 
 ---
 
-## OKLCH chroma could be a fraction of the gamut ceiling
+## OKLCH chroma as a fraction of the gamut ceiling — tried twice, rejected
 
-**The idea, from colorizr.** Instead of interpolating absolute chroma between three anchors, carry the
-*fraction of what sRGB holds* at each step's own lightness and hue, and convert back. HSL already works this
-way — saturation is that fraction by definition — and switching HSL to carry it directly was a large win.
+**The idea, from colorizr.** Instead of interpolating absolute chroma between the anchors, carry the
+*fraction of what sRGB holds* at each step's own lightness and hue, and convert back. HSL already works
+this way — saturation is that fraction by definition — and switching HSL to carry it directly was a large
+win, which is what made this look promising for OKLCH too.
 
-**Measured for OKLCH, and it is a wash on error.** Worst 8-bit channel against the file, real pipeline:
+**Measured before the anchor fix: a wash.** Level on error, but it removed clipping entirely (lime 10
+clipped steps to 0). Left open on that basis.
+
+**Measured again after: much worse.** Worst 8-bit channel across the seventeen real sets, absolute against
+gamut-relative with the curve fitted in fraction space:
 
 ```
-              absolute      gamut, curve fitted     gamut, curve fitted
-                            in absolute space       in fraction space
-your lime     36 (10 clipped)        44                    35
-blue                16                41                    19
-teal                26                51                    16
-amber         43 (7 clipped)          44                    43
-zinc                 5                 6                     6
+lime  11 → 96      grass  6 → 16      pine  3 → 13      moss 4 → 10
+coral  8 → 24      sky    8 → 16      sage  4 →  8      neutrals unchanged
 ```
 
-Two things that matters for. First, the middle column is a trap: fitting the chroma curve in absolute space
-and applying it in fraction space is a units mismatch, and it makes everything *worse* — the same class of
-bug that was making HSL dull. Any attempt at this has to fit the curve in the space it is used in.
+Worst of all: **11 against 96**. It still removes every clipped step, and that is not worth nine times the
+error.
 
-Second, at equal error the gamut version **stops clipping entirely** — lime went from 10 clipped steps to 0,
-amber from 7 to 0. A clipped step is one the panel cannot adjust: it is pinned to the gamut boundary and
-moving the anchor does nothing. That is worth something the error figure does not show.
+**Why it reversed.** The first measurement was taken while the anchor step was wrong, so absolute chroma
+was carrying a large error of its own and there was little to lose. With the anchor searched and the chroma
+curve fitted, absolute chroma is accurate to 0.006–0.011 — and the fraction model then *adds* error,
+because the ceiling depends on hue and the hue at each step is itself interpolated.
 
-**Why it is not in.** Level on error is not a good enough reason to add a second interpolation space, and
-the HSL fix landed the win that was actually visible. Worth revisiting if clipping turns out to matter in
-use, or alongside colorizr's other idea — a *lock step*, the single named place the input colour is
-preserved exactly, which is what the reverted peak-anchoring got wrong by having two.
-
-`oklchMaxChroma(L, H)` is three lines when it is needed: `oklchToHex(L, 9, H).chroma` returns the ceiling,
-because fitting a colour already bisects for it. Six microseconds.
+**The lesson, more than the result.** An idea measured against a broken baseline measures the breakage.
+Both runs are in `scratchpad/gamut.js`; re-run it if the surrounding model changes again, but do not
+re-open it on the strength of the clipping figure alone.
 
 ---
 
