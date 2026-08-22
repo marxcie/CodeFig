@@ -7,6 +7,7 @@
     "validate": "node validate-scripts.js",
     "validate:soft": "node validate-scripts.js || true",
     "test": "node --test \"tests/**/*.test.js\"",
+    "bench:colors": "node benchmarks/colour-reads.js",
     "build:style-reference": "node build-style-reference.js",
     "build:production": "npm run validate && tsc && node build-scripts.js",
     "build:dev": "npm run validate:soft && tsc && node build-scripts.js --dev",
