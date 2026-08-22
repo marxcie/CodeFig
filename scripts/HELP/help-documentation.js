@@ -379,10 +379,16 @@ var maybeCurve = []; // @curve @allowOriginal @label: Curve or original @helper:
 // two **square** handles are those ends — drag one and it types into its own field, because that is where
 // the value lives. The round handles still only bend the shape between them.
 //
-// The plot shows a **window** on the channel — the two ends with a little air, rather than the whole of it —
-// and the ramp is clipped to it, because the parts outside the window are outside the box. There is no zoom
-// control yet: the one that belongs here shows the channel's own colours down the side of the chart, and it
-// arrives with that chart rather than beside this one.
+// The plot shows a **window** on the channel — the two ends with a little air — and two columns sit beside
+// it. The **triangle** is the zoom: drag it up to close in, down to pull back, or step it with the buttons
+// above and below. The bar to its right is the channel's own colours across that window, and it is a
+// picture: it takes no input at all. Neither column moves when you drag the curve, because where you are
+// looking is not a property of the ramp — and to follow a ramp that runs off the top or bottom, drag the
+// empty chart vertically.
+//
+// The ramp is clipped to the plot; the grips are clipped to the plot **plus their own radius**, so one on
+// the boundary sits *on* the frame rather than being sliced in half by it. A drag stops at the edge of the
+// window rather than pushing the curve out of sight.
 var ladder = { bright: 98, dark: 19 }; // @group: bright:number=Bright|dark:number=Dark @label: Ends
 var ladderCurve = [0.4, 0, 0.7, 0.55]; // @curve @ends: ladder.bright..ladder.dark @range: 0..100 @label: Lightness @helper: Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.
 //

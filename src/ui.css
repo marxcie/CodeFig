@@ -102,6 +102,10 @@
         /* Border radius */
         --radius-sm: 3px;
         --radius-md: 6px;
+        /* The columns beside a charted curve, and the gap before each. Anything that has to line
+           up with the *plot* rather than with the row reserves `2 x (w + gap)` on its right. */
+        --curve-col-w: 18px;
+        --curve-col-gap: 8px;
         --radius-lg: 12px;
         --radius-full: 9999px;
 
@@ -3544,6 +3548,112 @@
         margin: 7px 0;
       }
 
+      /* --- the chart row: plot, zoom, range ----------------------------------------------------
+         Own classes throughout. `.config-ui-curve__plot-wrap` is every curve's plot box, so a flex
+         row or a drag cursor on it would restyle the scale editors in Spacing, Radius and
+         Typography, which have no axis and nothing to zoom. */
+
+      .config-ui-curve__chartline {
+        display: flex;
+        align-items: stretch;
+        gap: var(--curve-col-gap);
+        margin: 7px 0;
+      }
+
+      /* The plot's own margin lives on the row now, or the two would stack. A charted curve is also
+         wider than it is tall — the whole point of the layout — so it is shorter than a scale's. */
+      .config-ui-curve__chartline .config-ui-curve__plot-wrap {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 190px;
+        margin: 0;
+      }
+
+      /* **The zoom is a slider, not a strip on the gradient.** Plus, a track, minus — and the marker
+         on the track is the only thing in this control that changes the window. */
+      .config-ui-curve__zoom {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 0 0 var(--curve-col-w);
+        width: var(--curve-col-w);
+      }
+
+      .config-ui-curve__zoom-step {
+        flex: 0 0 16px;
+        width: var(--curve-col-w);
+        padding: 0;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-family: var(--font-family-base);
+        font-size: 14px;
+        line-height: 16px;
+      }
+
+      .config-ui-curve__zoom-step:hover { color: var(--text-primary); }
+      .config-ui-curve__zoom-step:disabled { opacity: 0.25; cursor: default; }
+
+      .config-ui-curve__zoom-track {
+        position: relative;
+        flex: 1 1 auto;
+        width: var(--curve-col-w);
+        min-height: 0;
+        margin: 3px 0;
+      }
+
+      .config-ui-curve__zoom-line {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        margin-left: -0.5px;
+        background: var(--border-color);
+      }
+
+      /* Apex on the left, pointing at the chart, because the chart is what it scales. `border-right`
+         is what makes a left-pointing triangle; `border-left` makes the mirror, which points away. */
+      .config-ui-curve__zoom-mark {
+        position: absolute;
+        left: 1px;
+        width: 0;
+        height: 0;
+        margin-top: -5px;
+        cursor: ns-resize;
+        touch-action: none;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-right: 8px solid var(--text-primary);
+      }
+
+      /* A 10px triangle is a hard target. The hit area is invisible and three times the size. */
+      .config-ui-curve__zoom-mark::after {
+        content: '';
+        position: absolute;
+        left: -7px;
+        top: -8px;
+        width: 26px;
+        height: 21px;
+      }
+
+      .config-ui-curve__zoom-mark:focus { outline: none; border-right-color: var(--active-bg); }
+
+      /* The channel across the window. A picture, never an input. */
+      .config-ui-curve__range {
+        flex: 0 0 var(--curve-col-w);
+        width: var(--curve-col-w);
+      }
+
+      .config-ui-curve__range-fill {
+        height: 100%;
+        border-radius: 3px;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+      }
+
+      .config-ui-curve__range-fill[data-shown="false"] { visibility: hidden; }
+
       /* --- the value axis: a curve bound to two ends, with a rail to zoom it -------------------
          Its own classes throughout. `.config-ui-curve__plot-wrap` is every curve's plot box and
          `.config-ui-curve__end` is every curve's fixed dot; putting a flex row or a drag cursor on
@@ -3570,7 +3680,9 @@
         line-height: 1.2;
       }
 
-      /* Square, because it moves the palette rather than the shape. Round is the shape handle. */
+      /* Filled, where a shape handle is hollow: these two move the palette, the others bend the curve
+         between them. Same circle, opposite fill — a different silhouette would read as a different
+         control rather than a different job. */
       .config-ui-curve__axis-end {
         fill: var(--active-bg);
         stroke: var(--input-bg);

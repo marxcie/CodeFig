@@ -1457,6 +1457,32 @@
   function setCurveBaselines(map) {
     curveBaselines = map || {};
   }
+
+  /**
+   * How far in and out the zoom goes, as a multiple of the view a channel opens on. Logarithmic between the
+   * two, so dragging the marker feels the same at either end of its travel.
+   */
+  var CURVE_ZOOM_MIN = 0.2, CURVE_ZOOM_MAX = 20;
+
+  /**
+   * **The colours down the side of a chart**, per curve field — the same seam as `curveBaselines`, and for
+   * the same reason.
+   *
+   * What colour a lightness *is* depends on the hue and the saturation beside it, and those live in other
+   * fields of other rows. The renderer knows the number; only the host knows what it looks like. So it
+   * publishes a function per key, and the column asks it for the window it is currently showing.
+   */
+  var curveRamps = {};
+  function setCurveRamps(map) {
+    curveRamps = map || {};
+  }
+  /** `[css-colour position, ...]` for a gradient, or `null` when nothing has been published for this key. */
+  function curveRampFor(key, window) {
+    var make = key ? curveRamps[key] : null;
+    if (typeof make !== "function") return null;
+    var stops = make(window);
+    return stops && stops.length ? stops : null;
+  }
   function curveBaselineFor(key) {
     var held = key ? curveBaselines[key] : null;
     return held && held.length ? held : null;
@@ -1644,7 +1670,24 @@
     // above and the coordinate field below — inset by a tenth, the grey box floated 27px narrower than
     // everything around it and read as misaligned. Handles at the corners hang outside instead, which is
     // what `overflow: visible` on the canvas is for and what every other cubic-bezier editor looks like.
+    /**
+     * **The plot is measured, not a unit square stretched to fit it.**
+     *
+     * A `100 x 100` viewBox with `preserveAspectRatio: none` is the obvious thing, and it is wrong the
+     * moment the chart is not square: at four-to-one every handle draws as an ellipse and every glyph the
+     * wrong shape. Measuring means one unit is one pixel, so a 5px grip is 5px and the geometry below reads
+     * in the units it is written in.
+     *
+     * `SIZE` stays as the fallback for the first draw, which happens before the wrapper is in the tree and
+     * therefore before it has a size.
+     */
     var SIZE = 100;
+    var W = SIZE, H = SIZE;
+    function measurePlot() {
+      var box = typeof svg.getBoundingClientRect === "function" ? svg.getBoundingClientRect() : null;
+      if (box && box.width > 1 && box.height > 1) { W = box.width; H = box.height; }
+      svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    }
     // One id per control, because a document holds several curves and a clip path is addressed by id.
     CURVE_CLIP_SEQ += 1;
     var clipId = "config-ui-curve-clip-" + CURVE_CLIP_SEQ;
@@ -1678,21 +1721,64 @@
     plot.appendChild(tickLayer);
 
     /**
-     * **No zoom control here yet, on purpose.**
+     * **The zoom, and the channel's own colours, as two columns beside the plot.**
      *
-     * There was one: a rail beside the plot with a window and two grips. It was wrong twice over. Taking
-     * hold of the window to move it landed on a grip and resized instead — the default window fills nearly
-     * the whole rail, so its edges are exactly where you reach for it. And the design it stood in for does
-     * something else entirely: a bar showing the *channel's own colours* down the side of the chart, with
-     * the zoom on that bar rather than beside it.
+     * They were one strip with the buttons sitting on the gradient, which said they were one control — and
+     * the version before that derived the window from the two ends, so touching the curve moved the zoom.
+     * They are three separate facts and they are now three separate things: the ends belong to the palette,
+     * the window belongs to the view, and the gradient is a picture of neither.
      *
-     * So the axis stays and the rail goes, rather than being polished into something about to be replaced.
-     * The view is still a window — `axisView` derives it from the two ends — there is simply nothing that
-     * moves it yet, and a control that only pans a window already showing everything is not one.
+     * The gradient takes no input at all. `setCurveRamps` supplies its stops, because what colour a value
+     * *is* depends on the other two channels and only the host knows those.
      */
-    var rail = null;
-    var railWindow = null;
-    wrap.appendChild(plot);
+    var zoomMark = null;
+    var zoomTrack = null;
+    var rangeFill = null;
+    if (field.ends) {
+      var line = document.createElement("div");
+      line.className = "config-ui-curve__chartline";
+      wrap.appendChild(line);
+      line.appendChild(plot);
+
+      var zoomCol = document.createElement("div");
+      zoomCol.className = "config-ui-curve__zoom";
+      var zoomIn = curveZoomButton("in", "+", "Zoom in");
+      zoomTrack = document.createElement("div");
+      zoomTrack.className = "config-ui-curve__zoom-track";
+      var zoomLine = document.createElement("i");
+      zoomLine.className = "config-ui-curve__zoom-line";
+      zoomMark = document.createElement("div");
+      zoomMark.className = "config-ui-curve__zoom-mark";
+      zoomMark.setAttribute("role", "slider");
+      zoomMark.setAttribute("tabindex", "0");
+      zoomMark.setAttribute("aria-label", "Zoom");
+      zoomTrack.appendChild(zoomLine);
+      zoomTrack.appendChild(zoomMark);
+      zoomCol.appendChild(zoomIn);
+      zoomCol.appendChild(zoomTrack);
+      zoomCol.appendChild(curveZoomButton("out", "\u2212", "Zoom out"));
+      line.appendChild(zoomCol);
+
+      var rangeCol = document.createElement("div");
+      rangeCol.className = "config-ui-curve__range";
+      rangeFill = document.createElement("div");
+      rangeFill.className = "config-ui-curve__range-fill";
+      rangeCol.appendChild(rangeFill);
+      line.appendChild(rangeCol);
+    } else {
+      wrap.appendChild(plot);
+    }
+
+    function curveZoomButton(which, glyph, label) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "config-ui-curve__zoom-step";
+      b.setAttribute("data-curve-zoom", which);
+      b.setAttribute("title", label);
+      b.setAttribute("aria-label", label);
+      b.textContent = glyph;
+      return b;
+    }
 
     var text = document.createElement("input");
     text.type = "text";
@@ -1756,20 +1842,51 @@
     /**
      * **The window on the axis** — what slice of the channel the plot is showing.
      *
-     * Not derived, because it is nobody's data: it is where the user has scrolled to, and there is no other
-     * record of that. It defaults to the two ends with a tenth of their span for air, which is the view that
-     * fills the plot with the thing being edited, and the rail is how you get from there to the whole channel.
+     * **Its own state, not derived from the ends.** It used to be computed from them, which meant dragging
+     * an end rescaled the axis under your finger — the chart zoomed while you were trying to set a value.
+     * The ends and the window are two facts: one is the palette, the other is where you are looking at it
+     * from. Opened once on the ends with a tenth of their span for air, and after that only the zoom moves
+     * it. It is also the one part of this control that never reaches the config: where you are looking is
+     * not a property of the ramp.
      */
     function axisView(a) {
       var held = wrap.getAttribute("data-curve-view");
       if (held) {
         var pair = held.split(",");
         var lo = parseFloat(pair[0], 10), hi = parseFloat(pair[1], 10);
-        if (isFinite(lo) && isFinite(hi) && hi > lo) return { lo: lo, hi: hi };
+        if (isFinite(lo) && isFinite(hi) && hi > lo && !rampIsOffscreen(a, lo, hi)) return { lo: lo, hi: hi };
       }
       var low = Math.min(a.from, a.to), high = Math.max(a.from, a.to);
       var air = (high - low) * 0.1 || 1;
-      return { lo: Math.max(a.lo, low - air), hi: Math.min(a.hi, high + air) };
+      var opened = { lo: Math.max(a.lo, low - air), hi: Math.min(a.hi, high + air) };
+      // **Latched the first time it is asked for.** Derived every draw, it followed the ends — so dragging
+      // one rescaled the axis under your finger. Written down once, it stays where the user left it.
+      wrap.setAttribute("data-curve-view", opened.lo + "," + opened.hi);
+      // **And what that span *was*.** Zoom is reported as a multiple of the view the channel opened on, so
+      // the opening span is a second fact — "how wide we started" against "how wide we are now". Derived
+      // from the ends instead, it moved every time an end moved, and the zoom marker followed the curve
+      // again by a different route.
+      wrap.setAttribute("data-curve-open", String(opened.hi - opened.lo));
+      return opened;
+    }
+
+    /**
+     * Is *none* of the ramp inside this window?
+     *
+     * The one case where a latched window has to be reopened. A drag cannot cause it — `valueFromView`
+     * clamps to the window, so an end can never be pushed out of view. A *read* can: recognition refills
+     * both ends from the file, and if the new ramp is nowhere near the old window the chart comes up empty
+     * with nothing on screen explaining why.
+     *
+     * Three samples rather than the two ends, because zooming in on the middle legitimately puts both ends
+     * outside — and that view must survive.
+     */
+    function rampIsOffscreen(a, lo, hi) {
+      var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
+      var at = [0, 0.5, 1].map(function (x) {
+        return unitToValue(a, B ? B.bezierAt(pts, x) : x);
+      });
+      return at.every(function (v) { return v > hi; }) || at.every(function (v) { return v < lo; });
     }
 
     /** A curve's own 0..1 and the channel's value are the same fact in two units. */
@@ -1778,15 +1895,14 @@
 
     function toView(x, y) {
       var a = axis();
-      if (!a) return { x: x * SIZE, y: (1 - y) * SIZE };
+      if (!a) return { x: x * W, y: (1 - y) * H };
       var w = axisView(a);
-      return { x: x * SIZE, y: (1 - (unitToValue(a, y) - w.lo) / (w.hi - w.lo)) * SIZE };
+      return { x: x * W, y: (1 - (unitToValue(a, y) - w.lo) / (w.hi - w.lo)) * H };
     }
     function fromView(vx, vy) {
       var a = axis();
-      if (!a) return { x: vx / SIZE, y: 1 - vy / SIZE };
-      var w = axisView(a);
-      return { x: vx / SIZE, y: valueToUnit(a, w.lo + (1 - vy / SIZE) * (w.hi - w.lo)) };
+      if (!a) return { x: vx / W, y: 1 - vy / H };
+      return { x: vx / W, y: valueToUnit(a, valueFromView(vy)) };
     }
     /**
      * **Write one end back into its field**, clamped to the channel and rounded the way somebody would type it.
@@ -1810,12 +1926,17 @@
       }
     }
 
-    /** Where the pointer is in the channel's own units, for the two ends and the rail. */
+    /**
+     * Where the pointer is in the channel's own units.
+     *
+     * **Clamped to the window, not only to the channel.** Without that you can hold the pointer past the top
+     * edge and keep pushing the value up, and the ramp walks out of the chart while you watch it happen.
+     */
     function valueFromView(vy) {
       var a = axis();
       if (!a) return null;
       var w = axisView(a);
-      return w.lo + (1 - vy / SIZE) * (w.hi - w.lo);
+      return Math.min(w.hi, Math.max(w.lo, w.lo + (1 - vy / H) * (w.hi - w.lo)));
     }
 
     /** The draggable things, as `{ x, y, index }` — `index` is where the pair lives in the flat array. */
@@ -1857,11 +1978,16 @@
       return curveValueOf(wrap.getAttribute("data-curve-value")).length > 0;
     }
 
-    /** One end of the axis: a square you can drag, labelled by the value the field beside it holds. */
-    function drawEnd(which, at, value) {
-      svg.appendChild(curveSvgEl("rect", {
-        "class": "config-ui-curve__axis-end",
-        x: at.x - 3.2, y: at.y - 3.2, width: 6.4, height: 6.4,
+    /**
+     * One end of the axis: a filled circle you can drag, reading the field it is bound to.
+     *
+     * **Filled where a shape handle is hollow**, rather than square where a shape handle is round. Both say
+     * "these two are a different kind of thing from those three", and filled-versus-hollow is the one
+     * Márton drew — a square beside circles reads as a different control rather than a different role.
+     */
+    function drawEnd(into, which, at, value) {
+      into.appendChild(curveSvgEl("circle", {
+        "class": "config-ui-curve__axis-end", cx: at.x, cy: at.y, r: 5,
         "data-curve-end": which,
         tabindex: 0,
         role: "slider",
@@ -1869,21 +1995,58 @@
       }));
     }
 
-    /** The rail's window, in the rail's own top-to-bottom percentages. Drawn from the view, never stored twice. */
-    function placeRailWindow() {
-      if (!rail || !railWindow) return;
+    /**
+     * **Zoom is measured against the ramp, not against the channel.**
+     *
+     * Against the channel it is nonsense on hue: a neutral travels twelve degrees out of three hundred and
+     * sixty, so the opening view is already thirty times in and the marker starts pinned to the top of its
+     * track with nowhere to go. Against the ramp, 1 always means "the view you were given" whatever the
+     * channel is, and the marker always starts in the same place on every tab.
+     */
+    function axisBaseSpan(a) {
+      var held = parseFloat(wrap.getAttribute("data-curve-open"), 10);
+      if (isFinite(held) && held > 0) return held;
+      var lo = Math.min(a.from, a.to), hi = Math.max(a.from, a.to);
+      return Math.max(1e-6, (hi - lo) * 1.2 || 1);
+    }
+    function zoomOf(a) { var w = axisView(a); return axisBaseSpan(a) / (w.hi - w.lo); }
+    function zoomFraction(z) {
+      var f = Math.log(z / CURVE_ZOOM_MIN) / Math.log(CURVE_ZOOM_MAX / CURVE_ZOOM_MIN);
+      return Math.min(1, Math.max(0, f));
+    }
+    /** Re-window at a given tightness about the centre, kept inside the channel. Then redraw. */
+    function setZoom(z) {
       var a = axis();
-      if (!a || a.hi === a.lo) { rail.setAttribute("data-shown", "false"); return; }
-      rail.setAttribute("data-shown", "true");
-      var w = axisView(a);
-      var top = (1 - (w.hi - a.lo) / (a.hi - a.lo)) * 100;
-      var bottom = (1 - (w.lo - a.lo) / (a.hi - a.lo)) * 100;
-      railWindow.style.top = Math.max(0, top) + "%";
-      railWindow.style.height = Math.max(4, Math.min(100, bottom - top)) + "%";
+      if (!a) return;
+      var f = Math.min(CURVE_ZOOM_MAX, Math.max(CURVE_ZOOM_MIN, z));
+      var span = Math.min(a.hi - a.lo, axisBaseSpan(a) / f);
+      var w = axisView(a), mid = (w.lo + w.hi) / 2;
+      var lo = Math.min(a.hi - span, Math.max(a.lo, mid - span / 2));
+      wrap.setAttribute("data-curve-view", lo + "," + (lo + span));
+      draw();
+    }
+
+    /** The marker reads the zoom; the gradient reads the window. Both derived, every draw. */
+    function placeColumns() {
+      var a = axis();
+      if (!a || !zoomMark) return;
+      var z = zoomOf(a);
+      zoomMark.style.top = ((1 - zoomFraction(z)) * 100) + "%";
+      zoomMark.setAttribute("aria-valuenow", String(Math.round(z * 100) / 100));
+      var stepIn = wrap.querySelector('[data-curve-zoom="in"]');
+      var stepOut = wrap.querySelector('[data-curve-zoom="out"]');
+      if (stepIn) stepIn.disabled = z >= CURVE_ZOOM_MAX * 0.999;
+      if (stepOut) stepOut.disabled = z <= CURVE_ZOOM_MIN * 1.001;
+      if (rangeFill) {
+        var stops = curveRampFor(baselineKey, axisView(a));
+        rangeFill.style.background = stops
+          ? "linear-gradient(to bottom, " + stops.join(", ") + ")" : "";
+        rangeFill.setAttribute("data-shown", stops ? "true" : "false");
+      }
     }
 
     function draw() {
-      placeRailWindow();
+      placeColumns();
       while (svg.firstChild) svg.removeChild(svg.firstChild);
       while (tickLayer.firstChild) tickLayer.removeChild(tickLayer.firstChild);
       var stored = curveValueOf(wrap.getAttribute("data-curve-value"));
@@ -1891,8 +2054,9 @@
       var empty = !pts.length;
 
       svg.setAttribute("class", "config-ui-curve__canvas" + (empty ? " config-ui-curve__canvas--empty" : ""));
+      measurePlot();
       svg.appendChild(curveSvgEl("rect", {
-        "class": "config-ui-curve__plot", x: 0, y: 0, width: SIZE, height: SIZE
+        "class": "config-ui-curve__plot", x: 0, y: 0, width: W, height: H
       }));
       var ax = axis();
       /**
@@ -1906,22 +2070,32 @@
        */
       if (ax) {
         var clip = curveSvgEl("clipPath", { id: clipId });
-        clip.appendChild(curveSvgEl("rect", { x: 0, y: 0, width: SIZE, height: SIZE }));
+        clip.appendChild(curveSvgEl("rect", { x: 0, y: 0, width: W, height: H }));
         svg.appendChild(clip);
+        /**
+         * **A grip sits *on* the frame, not inside it.** Clipped tight, an end on the boundary was sliced in
+         * half and read as broken. Clipped to the frame plus a grip's radius it straddles the edge, and
+         * anything genuinely outside the window is still cut off long before it reaches the row below.
+         */
+        var padClip = curveSvgEl("clipPath", { id: clipId + "-grip" });
+        padClip.appendChild(curveSvgEl("rect", { x: -8, y: -8, width: W + 16, height: H + 16 }));
+        svg.appendChild(padClip);
       }
       // Quarter lines, and the diagonal the curve is a departure from. Reading a curve is reading how far
       // it sits from straight, so the straight one is on the page rather than imagined.
       [25, 50, 75].forEach(function (at) {
-        svg.appendChild(curveSvgEl("line", { "class": "config-ui-curve__grid", x1: at, y1: 0, x2: at, y2: SIZE }));
+        svg.appendChild(curveSvgEl("line", {
+          "class": "config-ui-curve__grid", x1: at / 100 * W, y1: 0, x2: at / 100 * W, y2: H }));
         if (!ax) {
-          svg.appendChild(curveSvgEl("line", { "class": "config-ui-curve__grid", x1: 0, y1: at, x2: SIZE, y2: at }));
+          svg.appendChild(curveSvgEl("line", {
+            "class": "config-ui-curve__grid", x1: 0, y1: at / 100 * H, x2: W, y2: at / 100 * H }));
         }
       });
       // **The diagonal is the straight *curve*, not the diagonal of the box.** With an axis it runs from
       // the bright end to the dark end, which is where they actually sit in the window — off the top or
       // bottom edge when you have zoomed in past them, which is correct and is the point of zooming.
-      var straightFrom = ax ? toView(0, 0) : { x: 0, y: SIZE };
-      var straightTo = ax ? toView(1, 1) : { x: SIZE, y: 0 };
+      var straightFrom = ax ? toView(0, 0) : { x: 0, y: H };
+      var straightTo = ax ? toView(1, 1) : { x: W, y: 0 };
       svg.appendChild(curveSvgEl("line", {
         "class": "config-ui-curve__diagonal",
         x1: straightFrom.x, y1: straightFrom.y, x2: straightTo.x, y2: straightTo.y
@@ -1943,13 +2117,13 @@
         }
         var decimals = Math.max(0, -Math.floor(Math.log(tick) / Math.LN10 + 1e-9));
         for (var v = Math.ceil(w.lo / tick) * tick; v <= w.hi + tick * 1e-6; v += tick) {
-          var vy = (1 - (v - w.lo) / span) * SIZE;
+          var vy = (1 - (v - w.lo) / span) * H;
           svg.appendChild(curveSvgEl("line", {
-            "class": "config-ui-curve__grid", x1: 0, y1: vy, x2: SIZE, y2: vy
+            "class": "config-ui-curve__grid", x1: 0, y1: vy, x2: W, y2: vy
           }));
           var label = document.createElement("span");
           label.className = "config-ui-curve__tick";
-          label.style.top = (vy / SIZE) * 100 + "%";
+          label.style.top = (vy / H) * 100 + "%";
           label.textContent = (Math.abs(v) < tick * 1e-6 ? 0 : v).toFixed(decimals);
           tickLayer.appendChild(label);
         }
@@ -1972,9 +2146,16 @@
         var pt = toView(x, (B ? B.bezierAt(pts, x) : x) * lift);
         d += (i === 0 ? "M" : "L") + pt.x.toFixed(2) + " " + pt.y.toFixed(2);
       }
-      var pathEl = curveSvgEl("path", { "class": "config-ui-curve__path", d: d });
-      if (ax) pathEl.setAttribute("clip-path", "url(#" + clipId + ")");
-      svg.appendChild(pathEl);
+      /**
+       * **Two groups on an axis, not one clipped path.** Clipping only the line left the tethers and the
+       * grips free, and once the window is tight they are far outside the plot — so the chart threw thin
+       * diagonals across the panel and dropped handles onto whatever was below it. The *ramp* is clipped to
+       * the frame; the *grips* to the frame plus their own radius, so one on the boundary is whole.
+       */
+      var ramp = ax ? curveSvgEl("g", { "clip-path": "url(#" + clipId + ")" }) : svg;
+      var grips = ax ? curveSvgEl("g", { "clip-path": "url(#" + clipId + "-grip)" }) : svg;
+      if (ax) svg.appendChild(ramp);
+      ramp.appendChild(curveSvgEl("path", { "class": "config-ui-curve__path", d: d }));
 
       var handles = showShape ? handlesOf(pts) : [];
       handles.forEach(function (h) {
@@ -1982,7 +2163,7 @@
         var at = toView(h.x, h.y * lift);
         if (to && !h.anchor) {
           var from = toView(to.x, to.y * lift);
-          svg.appendChild(curveSvgEl("line", {
+          ramp.appendChild(curveSvgEl("line", {
             "class": "config-ui-curve__tether", x1: from.x, y1: from.y, x2: at.x, y2: at.y
           }));
         }
@@ -1991,12 +2172,14 @@
       // not be a scale curve, so there is nothing to offer here.
       // The origin is always fixed. The far end is the **growth handle** in growth mode — dragging it is how
       // you set the ratio — and a fixed anchor in the bounded one.
+      // Grips last, so one sitting on top of another is still the one you grab.
+      if (ax) svg.appendChild(grips);
       var originAt = toView(0, 0);
       if (ax) {
         // **Square, not round — and they move the palette, not the curve.** The three round handles bend the
         // shape *between* the ends; these two say where the ends are, which is a different fact living in a
         // different field. Same shape as the number input below, so the two read as one control.
-        drawEnd("from", originAt, ax.from);
+        drawEnd(grips, "from", originAt, ax.from);
       } else {
         svg.appendChild(curveSvgEl("circle", {
           "class": "config-ui-curve__end", cx: originAt.x, cy: originAt.y, r: 3
@@ -2004,7 +2187,7 @@
       }
       var farAt = toView(1, growthKey ? lift : 1);
       if (ax) {
-        drawEnd("to", farAt, ax.to);
+        drawEnd(grips, "to", farAt, ax.to);
       } else if (growthKey) {
         svg.appendChild(curveSvgEl("circle", {
           "class": "config-ui-curve__handle config-ui-curve__handle--growth",
@@ -2023,14 +2206,14 @@
         var at = toView(h.x, h.y * lift);
         var dot = curveSvgEl("circle", {
           "class": "config-ui-curve__handle" + (h.anchor ? " config-ui-curve__handle--anchor" : ""),
-          cx: at.x, cy: at.y, r: h.anchor ? 4.5 : 4,
+          cx: at.x, cy: at.y, r: h.anchor ? 5 : 4.5,
           "data-curve-index": h.index,
           tabindex: 0,
           role: "slider",
           "aria-label": (h.anchor ? "Middle anchor" : "Handle " + (h.index / 2 + 1)) +
             " at " + h.x.toFixed(2) + ", " + h.y.toFixed(2)
         });
-        svg.appendChild(dot);
+        (ax ? grips : svg).appendChild(dot);
       });
     }
 
@@ -2205,8 +2388,8 @@
     function pointAt(evt) {
       var box = svg.getBoundingClientRect();
       if (!box.width || !box.height) return null;
-      var vx = ((evt.clientX - box.left) / box.width) * SIZE;
-      var vy = ((evt.clientY - box.top) / box.height) * SIZE;
+      var vx = ((evt.clientX - box.left) / box.width) * W;
+      var vy = ((evt.clientY - box.top) / box.height) * H;
       var at = fromView(vx, vy);
       // The same position in the channel's own units, for whichever of the two things is being dragged.
       at.value = valueFromView(vy);
@@ -2214,6 +2397,7 @@
     }
     var draggingGrowth = false;
     var draggingEnd = null;
+    var panning = null;
     svg.addEventListener("pointerdown", function (evt) {
       var target = evt.target;
       if (!target || typeof target.getAttribute !== "function") return;
@@ -2223,8 +2407,16 @@
         draggingGrowth = true;
       } else {
         var dot = target.getAttribute("data-curve-index");
-        if (dot === null) return;
-        dragging = parseInt(dot, 10);
+        if (dot === null) {
+          // **Empty chart with an axis: scroll it.** A tight window has ramp above or below it, and this is
+          // how you follow it. It slides the window and never resizes it, so a pan cannot become a zoom.
+          var a0 = axis();
+          if (!a0) return;
+          var w0 = axisView(a0);
+          panning = { y: evt.clientY, lo: w0.lo, span: w0.hi - w0.lo };
+        } else {
+          dragging = parseInt(dot, 10);
+        }
       }
       if (svg.setPointerCapture) svg.setPointerCapture(evt.pointerId);
       // **`preventDefault` stops focus moving, so move it deliberately.**
@@ -2280,6 +2472,16 @@
       setPoints(pts, { live: true });
     }
     svg.addEventListener("pointermove", function (evt) {
+      if (panning) {
+        var a = axis();
+        var box = svg.getBoundingClientRect();
+        if (!a || !box.height) return;
+        var moved = (evt.clientY - panning.y) * (panning.span / box.height);
+        var lo = Math.min(a.hi - panning.span, Math.max(a.lo, panning.lo + moved));
+        wrap.setAttribute("data-curve-view", lo + "," + (lo + panning.span));
+        draw();
+        return;
+      }
       if (dragging === null && !draggingGrowth && !draggingEnd) return;
       var at = pointAt(evt);
       if (!at) return;
@@ -2295,6 +2497,13 @@
       });
     });
     function endDrag(evt) {
+      if (panning) {
+        panning = null;
+        if (svg.releasePointerCapture && evt.pointerId != null) {
+          try { svg.releasePointerCapture(evt.pointerId); } catch (err) { /* already gone */ }
+        }
+        return;
+      }
       if (dragging === null && !draggingGrowth && !draggingEnd) return;
       // Land the last position the pointer reached before the frame that would have drawn it, or letting go
       // mid-flick loses up to a frame of movement.
@@ -2313,6 +2522,56 @@
     }
     svg.addEventListener("pointerup", endDrag);
     svg.addEventListener("pointercancel", endDrag);
+
+    /**
+     * **The marker is the zoom, and it is the only thing that is.**
+     *
+     * Not the gradient beside it, which takes no input, and not the curve — dragging an end or a handle
+     * cannot change where you are looking from. Bottom of the track is pulled all the way back, top is as
+     * close as it goes.
+     */
+    if (zoomMark && zoomTrack) {
+      var zoomDragging = false;
+      zoomMark.addEventListener("pointerdown", function (evt) {
+        zoomDragging = true;
+        if (zoomMark.setPointerCapture) zoomMark.setPointerCapture(evt.pointerId);
+        if (zoomMark.focus) zoomMark.focus();
+        evt.preventDefault();
+        evt.stopPropagation();
+      });
+      zoomMark.addEventListener("pointermove", function (evt) {
+        if (!zoomDragging) return;
+        var box = zoomTrack.getBoundingClientRect();
+        if (!box.height) return;
+        var f = 1 - Math.min(1, Math.max(0, (evt.clientY - box.top) / box.height));
+        setZoom(CURVE_ZOOM_MIN * Math.pow(CURVE_ZOOM_MAX / CURVE_ZOOM_MIN, f));
+      });
+      function zoomRelease(evt) {
+        if (!zoomDragging) return;
+        zoomDragging = false;
+        if (zoomMark.releasePointerCapture && evt.pointerId != null) {
+          try { zoomMark.releasePointerCapture(evt.pointerId); } catch (err) { /* already gone */ }
+        }
+      }
+      zoomMark.addEventListener("pointerup", zoomRelease);
+      zoomMark.addEventListener("pointercancel", zoomRelease);
+      zoomMark.addEventListener("keydown", function (evt) {
+        var a = axis();
+        if (!a) return;
+        if (evt.key === "ArrowUp") setZoom(zoomOf(a) * 1.3);
+        else if (evt.key === "ArrowDown") setZoom(zoomOf(a) / 1.3);
+        else return;
+        evt.preventDefault();
+      });
+      wrap.addEventListener("click", function (evt) {
+        var step = evt.target && typeof evt.target.closest === "function"
+          ? evt.target.closest("[data-curve-zoom]") : null;
+        if (!step) return;
+        var a = axis();
+        if (!a) return;
+        setZoom(step.getAttribute("data-curve-zoom") === "in" ? zoomOf(a) * 1.6 : zoomOf(a) / 1.6);
+      });
+    }
 
 
     // Arrow keys on a focused handle: 1% a press, 10% with shift. The canvas is a few hundred pixels wide,
@@ -2368,6 +2627,32 @@
     });
 
     setPoints(points, { quiet: true });
+
+    /**
+     * **Redraw when the plot's size changes, because the geometry is in pixels now.**
+     *
+     * The first draw happens before the wrapper is in the tree, so it measures nothing and falls back to a
+     * stretched unit square. The refresh after `attachListeners` usually fixes that — but a curve inside a
+     * hidden `@showWhen` block has no size then either, and nothing redraws it when the block appears. The
+     * result is a chart drawn at 100x100 and stretched to 268x190, which is the ellipse bug back again in
+     * the one place hardest to notice.
+     *
+     * Guarded, because the DOM shim the tests and the style reference run against has no `ResizeObserver`
+     * and must not acquire one by accident.
+     */
+    if (field.ends && typeof ResizeObserver === "function") {
+      var lastW = 0, lastH = 0;
+      var watch = new ResizeObserver(function (entries) {
+        var box = entries[0] && entries[0].contentRect;
+        if (!box || box.width < 2 || box.height < 2) return;
+        if (Math.abs(box.width - lastW) < 1 && Math.abs(box.height - lastH) < 1) return;
+        lastW = box.width;
+        lastH = box.height;
+        draw();
+      });
+      watch.observe(plot);
+    }
+
     return wrap;
   }
 
@@ -3575,6 +3860,7 @@
     // way to exercise a control whose picture depends on a cell it does not own.
     refreshCurveControls: refreshCurveControls,
     setCurveBaselines: setCurveBaselines,
+    setCurveRamps: setCurveRamps,
     // Published for the same reason `collectRows` is: the curve editor's redraw replaces every element it
     // owns, which is exactly the kind of thing that reads correctly and loses its drag handler in practice.
     buildCurveControl: buildCurveControl,

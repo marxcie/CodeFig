@@ -978,8 +978,8 @@
                       <line class="config-ui-curve__tether" x1="100" y1="0" x2="63" y2="0"></line>
                       <circle class="config-ui-curve__end" cx="0" cy="100" r="3"></circle>
                       <circle class="config-ui-curve__end" cx="100" cy="0" r="3"></circle>
-                      <circle class="config-ui-curve__handle" cx="37" cy="100" r="4" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.37, 0.00"></circle>
-                      <circle class="config-ui-curve__handle" cx="63" cy="0" r="4" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.63, 1.00"></circle>
+                      <circle class="config-ui-curve__handle" cx="37" cy="100" r="4.5" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.37, 0.00"></circle>
+                      <circle class="config-ui-curve__handle" cx="63" cy="0" r="4.5" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.63, 1.00"></circle>
                     </svg>
                     <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
                     <div class="config-ui-curve__ticks"></div>
@@ -1074,11 +1074,11 @@
                       <line class="config-ui-curve__tether" x1="100" y1="0" x2="83" y2="0"></line>
                       <circle class="config-ui-curve__end" cx="0" cy="100" r="3"></circle>
                       <circle class="config-ui-curve__end" cx="100" cy="0" r="3"></circle>
-                      <circle class="config-ui-curve__handle" cx="17" cy="100" r="4" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.17, 0.00"></circle>
-                      <circle class="config-ui-curve__handle" cx="33" cy="77" r="4" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.33, 0.23"></circle>
-                      <circle class="config-ui-curve__handle config-ui-curve__handle--anchor" cx="50" cy="50" r="4.5" data-curve-index="4" tabindex="0" role="slider" aria-label="Middle anchor at 0.50, 0.50"></circle>
-                      <circle class="config-ui-curve__handle" cx="67" cy="23" r="4" data-curve-index="6" tabindex="0" role="slider" aria-label="Handle 4 at 0.67, 0.77"></circle>
-                      <circle class="config-ui-curve__handle" cx="83" cy="0" r="4" data-curve-index="8" tabindex="0" role="slider" aria-label="Handle 5 at 0.83, 1.00"></circle>
+                      <circle class="config-ui-curve__handle" cx="17" cy="100" r="4.5" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.17, 0.00"></circle>
+                      <circle class="config-ui-curve__handle" cx="33" cy="77" r="4.5" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.33, 0.23"></circle>
+                      <circle class="config-ui-curve__handle config-ui-curve__handle--anchor" cx="50" cy="50" r="5" data-curve-index="4" tabindex="0" role="slider" aria-label="Middle anchor at 0.50, 0.50"></circle>
+                      <circle class="config-ui-curve__handle" cx="67" cy="23" r="4.5" data-curve-index="6" tabindex="0" role="slider" aria-label="Handle 4 at 0.67, 0.77"></circle>
+                      <circle class="config-ui-curve__handle" cx="83" cy="0" r="4.5" data-curve-index="8" tabindex="0" role="slider" aria-label="Handle 5 at 0.83, 1.00"></circle>
                     </svg>
                     <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
                     <div class="config-ui-curve__ticks"></div>
@@ -1192,10 +1192,16 @@
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="67"></div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="68">
           <div class="docs-rendered">
-            The plot shows a <strong>window</strong> on the channel — the two ends with a little air, rather than the whole of it —<br>and the ramp is clipped to it, because the parts outside the window are outside the box. There is no zoom<br>control yet: the one that belongs here shows the channel's own colours down the side of the chart, and it<br>arrives with that chart rather than beside this one.
+            The plot shows a <strong>window</strong> on the channel — the two ends with a little air — and two columns sit beside<br>it. The <strong>triangle</strong> is the zoom: drag it up to close in, down to pull back, or step it with the buttons<br>above and below. The bar to its right is the channel's own colours across that window, and it is a<br>picture: it takes no input at all. Neither column moves when you drag the curve, because where you are<br>looking is not a property of the ramp — and to follow a ramp that runs off the top or bottom, drag the<br>empty chart vertically.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="69">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="69"></div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="70">
+          <div class="docs-rendered">
+            The ramp is clipped to the plot; the grips are clipped to the plot <strong>plus their own radius</strong>, so one on<br>the boundary sits <em>on</em> the frame rather than being sliced in half by it. A drag stops at the edge of the<br>window rather than pushing the curve out of sight.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--field" data-row-index="71">
           <div class="config-ui-field config-ui-field--group">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladder-21">Ends</label>
@@ -1214,7 +1220,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="70">
+        <div class="config-ui-row config-ui-row--field" data-row-index="72">
           <div class="config-ui-field config-ui-field--curve">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladderCurve-22">
@@ -1222,7 +1228,7 @@
                 <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.">i</button>
               </label>
               <div class="config-ui-field__control">
-                <div class="config-ui-curve" data-curve-value="[0.4,0,0.7,0.55]" data-curve-field="ladderCurve">
+                <div class="config-ui-curve" data-curve-value="[0.4,0,0.7,0.55]" data-curve-field="ladderCurve" data-curve-view="11.1,100" data-curve-open="88.9">
                   <div class="config-ui-curve__head">
                     <select class="config-ui-curve__preset" value="custom">
                       <option value="custom" selected>Custom</option>
@@ -1278,34 +1284,54 @@
                     </select>
                     <button type="button" class="config-ui-curve__toggle">Add middle point</button>
                   </div>
-                  <div class="config-ui-curve__plot-wrap">
-                    <svg class="config-ui-curve__canvas" viewBox="0 0 100 100" preserveAspectRatio="none">
-                      <rect class="config-ui-curve__plot" x="0" y="0" width="100" height="100"></rect>
-                      <clippath id="config-ui-curve-clip-4">
-                        <rect x="0" y="0" width="100" height="100"></rect>
-                      </clippath>
-                      <line class="config-ui-curve__grid" x1="25" y1="0" x2="25" y2="100"></line>
-                      <line class="config-ui-curve__grid" x1="50" y1="0" x2="50" y2="100"></line>
-                      <line class="config-ui-curve__grid" x1="75" y1="0" x2="75" y2="100"></line>
-                      <line class="config-ui-curve__diagonal" x1="0" y1="2.249718785151855" x2="100" y2="91.11361079865017"></line>
-                      <line class="config-ui-curve__grid" x1="0" y1="84.3644544431946" x2="100" y2="84.3644544431946"></line>
-                      <line class="config-ui-curve__grid" x1="0" y1="56.2429696287964" x2="100" y2="56.2429696287964"></line>
-                      <line class="config-ui-curve__grid" x1="0" y1="28.1214848143982" x2="100" y2="28.1214848143982"></line>
-                      <line class="config-ui-curve__grid" x1="0" y1="0" x2="100" y2="0"></line>
-                      <path class="config-ui-curve__path" d="M0.00 2.25L1.25 2.27L2.50 2.31L3.75 2.39L5.00 2.51L6.25 2.65L7.50 2.83L8.75 3.03L10.00 3.28L11.25 3.55L12.50 3.86L13.75 4.19L15.00 4.57L16.25 4.97L17.50 5.40L18.75 5.87L20.00 6.37L21.25 6.91L22.50 7.47L23.75 8.07L25.00 8.70L26.25 9.37L27.50 10.06L28.75 10.79L30.00 11.55L31.25 12.34L32.50 13.16L33.75 14.01L35.00 14.90L36.25 15.81L37.50 16.76L38.75 17.73L40.00 18.74L41.25 19.77L42.50 20.84L43.75 21.93L45.00 23.06L46.25 24.21L47.50 25.39L48.75 26.59L50.00 27.83L51.25 29.09L52.50 30.37L53.75 31.69L55.00 33.02L56.25 34.38L57.50 35.77L58.75 37.18L60.00 38.61L61.25 40.06L62.50 41.53L63.75 43.03L65.00 44.54L66.25 46.07L67.50 47.62L68.75 49.19L70.00 50.77L71.25 52.37L72.50 53.99L73.75 55.61L75.00 57.25L76.25 58.90L77.50 60.57L78.75 62.24L80.00 63.92L81.25 65.61L82.50 67.30L83.75 69.00L85.00 70.71L86.25 72.42L87.50 74.13L88.75 75.84L90.00 77.55L91.25 79.26L92.50 80.97L93.75 82.68L95.00 84.38L96.25 86.07L97.50 87.76L98.75 89.44L100.00 91.11" clip-path="url(#config-ui-curve-clip-4)"></path>
-                      <line class="config-ui-curve__tether" x1="0" y1="2.249718785151855" x2="40" y2="2.249718785151855"></line>
-                      <line class="config-ui-curve__tether" x1="100" y1="91.11361079865017" x2="70" y2="51.12485939257594"></line>
-                      <rect class="config-ui-curve__axis-end" x="-3.2" y="-0.950281214848145" width="6.4" height="6.4" data-curve-end="from" tabindex="0" role="slider" aria-label="Bright end, 98"></rect>
-                      <rect class="config-ui-curve__axis-end" x="96.8" y="87.91361079865017" width="6.4" height="6.4" data-curve-end="to" tabindex="0" role="slider" aria-label="Dark end, 19"></rect>
-                      <circle class="config-ui-curve__handle" cx="40" cy="2.249718785151855" r="4" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.40, 0.00"></circle>
-                      <circle class="config-ui-curve__handle" cx="70" cy="51.12485939257594" r="4" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.70, 0.55"></circle>
-                    </svg>
-                    <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
-                    <div class="config-ui-curve__ticks">
-                      <span class="config-ui-curve__tick" style="top: 84.3644544431946%">25</span>
-                      <span class="config-ui-curve__tick" style="top: 56.2429696287964%">50</span>
-                      <span class="config-ui-curve__tick" style="top: 28.1214848143982%">75</span>
-                      <span class="config-ui-curve__tick" style="top: 0%">100</span>
+                  <div class="config-ui-curve__chartline">
+                    <div class="config-ui-curve__plot-wrap">
+                      <svg class="config-ui-curve__canvas" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <rect class="config-ui-curve__plot" x="0" y="0" width="100" height="100"></rect>
+                        <clippath id="config-ui-curve-clip-4">
+                          <rect x="0" y="0" width="100" height="100"></rect>
+                        </clippath>
+                        <clippath id="config-ui-curve-clip-4-grip">
+                          <rect x="-8" y="-8" width="116" height="116"></rect>
+                        </clippath>
+                        <line class="config-ui-curve__grid" x1="25" y1="0" x2="25" y2="100"></line>
+                        <line class="config-ui-curve__grid" x1="50" y1="0" x2="50" y2="100"></line>
+                        <line class="config-ui-curve__grid" x1="75" y1="0" x2="75" y2="100"></line>
+                        <line class="config-ui-curve__diagonal" x1="0" y1="2.249718785151855" x2="100" y2="91.11361079865017"></line>
+                        <line class="config-ui-curve__grid" x1="0" y1="84.3644544431946" x2="100" y2="84.3644544431946"></line>
+                        <line class="config-ui-curve__grid" x1="0" y1="56.2429696287964" x2="100" y2="56.2429696287964"></line>
+                        <line class="config-ui-curve__grid" x1="0" y1="28.1214848143982" x2="100" y2="28.1214848143982"></line>
+                        <line class="config-ui-curve__grid" x1="0" y1="0" x2="100" y2="0"></line>
+                        <g clip-path="url(#config-ui-curve-clip-4)">
+                          <path class="config-ui-curve__path" d="M0.00 2.25L1.25 2.27L2.50 2.31L3.75 2.39L5.00 2.51L6.25 2.65L7.50 2.83L8.75 3.03L10.00 3.28L11.25 3.55L12.50 3.86L13.75 4.19L15.00 4.57L16.25 4.97L17.50 5.40L18.75 5.87L20.00 6.37L21.25 6.91L22.50 7.47L23.75 8.07L25.00 8.70L26.25 9.37L27.50 10.06L28.75 10.79L30.00 11.55L31.25 12.34L32.50 13.16L33.75 14.01L35.00 14.90L36.25 15.81L37.50 16.76L38.75 17.73L40.00 18.74L41.25 19.77L42.50 20.84L43.75 21.93L45.00 23.06L46.25 24.21L47.50 25.39L48.75 26.59L50.00 27.83L51.25 29.09L52.50 30.37L53.75 31.69L55.00 33.02L56.25 34.38L57.50 35.77L58.75 37.18L60.00 38.61L61.25 40.06L62.50 41.53L63.75 43.03L65.00 44.54L66.25 46.07L67.50 47.62L68.75 49.19L70.00 50.77L71.25 52.37L72.50 53.99L73.75 55.61L75.00 57.25L76.25 58.90L77.50 60.57L78.75 62.24L80.00 63.92L81.25 65.61L82.50 67.30L83.75 69.00L85.00 70.71L86.25 72.42L87.50 74.13L88.75 75.84L90.00 77.55L91.25 79.26L92.50 80.97L93.75 82.68L95.00 84.38L96.25 86.07L97.50 87.76L98.75 89.44L100.00 91.11"></path>
+                          <line class="config-ui-curve__tether" x1="0" y1="2.249718785151855" x2="40" y2="2.249718785151855"></line>
+                          <line class="config-ui-curve__tether" x1="100" y1="91.11361079865017" x2="70" y2="51.12485939257594"></line>
+                        </g>
+                        <g clip-path="url(#config-ui-curve-clip-4-grip)">
+                          <circle class="config-ui-curve__axis-end" cx="0" cy="2.249718785151855" r="5" data-curve-end="from" tabindex="0" role="slider" aria-label="Bright end, 98"></circle>
+                          <circle class="config-ui-curve__axis-end" cx="100" cy="91.11361079865017" r="5" data-curve-end="to" tabindex="0" role="slider" aria-label="Dark end, 19"></circle>
+                          <circle class="config-ui-curve__handle" cx="40" cy="2.249718785151855" r="4.5" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.40, 0.00"></circle>
+                          <circle class="config-ui-curve__handle" cx="70" cy="51.12485939257594" r="4.5" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.70, 0.55"></circle>
+                        </g>
+                      </svg>
+                      <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
+                      <div class="config-ui-curve__ticks">
+                        <span class="config-ui-curve__tick" style="top: 84.3644544431946%">25</span>
+                        <span class="config-ui-curve__tick" style="top: 56.2429696287964%">50</span>
+                        <span class="config-ui-curve__tick" style="top: 28.1214848143982%">75</span>
+                        <span class="config-ui-curve__tick" style="top: 0%">100</span>
+                      </div>
+                    </div>
+                    <div class="config-ui-curve__zoom">
+                      <button type="button" class="config-ui-curve__zoom-step" data-curve-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+                      <div class="config-ui-curve__zoom-track">
+                        <i class="config-ui-curve__zoom-line"></i>
+                        <div class="config-ui-curve__zoom-mark" role="slider" tabindex="0" aria-label="Zoom" aria-valuenow="1" style="top: 65.05149978319906%"></div>
+                      </div>
+                      <button type="button" class="config-ui-curve__zoom-step" data-curve-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
+                    </div>
+                    <div class="config-ui-curve__range">
+                      <div class="config-ui-curve__range-fill" data-shown="false"></div>
                     </div>
                   </div>
                   <input type="text" class="config-ui-curve__text" spellcheck="false" placeholder="cubic-bezier(0.37, 0, 0.63, 1)" value="cubic-bezier(0.4, 0, 0.7, 0.55)">
@@ -1314,28 +1340,28 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="71"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="72">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="73"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="74">
           <h1 class="config-ui-heading">A scale with no far end</h1>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="73">
-          <div class="docs-rendered">
-            <code>curve(growth:ratio)</code> inside <code>@rows</code> — the <strong>open-ended</strong> editor, for a scale whose largest value nobody<br>knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the<br>growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last<br>token the line carries on faintly, because it does — adding a token extends the scale rather than<br>squeezing what is already generated into the same range.
-          </div>
-        </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="74"></div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="75">
           <div class="docs-rendered">
-            <strong>The dropdown is the shape control.</strong> <em>Linear</em> means no shape and draws no handles; anything else<br>reveals them, for when the growth should vary across the scale — tighter at the small end, looser at the<br>top. The field underneath carries the whole scale, growth and shape together, so copying it out and<br>pasting it back reproduces it.
+            <code>curve(growth:ratio)</code> inside <code>@rows</code> — the <strong>open-ended</strong> editor, for a scale whose largest value nobody<br>knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the<br>growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last<br>token the line carries on faintly, because it does — adding a token extends the scale rather than<br>squeezing what is already generated into the same range.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="76"></div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="77">
           <div class="docs-rendered">
+            <strong>The dropdown is the shape control.</strong> <em>Linear</em> means no shape and draws no handles; anything else<br>reveals them, for when the growth should vary across the scale — tighter at the small end, looser at the<br>top. The field underneath carries the whole scale, growth and shape together, so copying it out and<br>pasting it back reproduces it.
+          </div>
+        </div>
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="78"></div>
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="79">
+          <div class="docs-rendered">
             The growth has <strong>no field of its own</strong>: one idea, one control. It is still written to the config under<br>the name after the colon, so the block reads <code>ratio: 1.5</code> beside <code>curve: []</code>.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="78">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="80">
           <div class="config-ui-field config-ui-field--rows">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -1430,11 +1456,11 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="79"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="80">
+        <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="81"></div>
+        <div class="config-ui-row config-ui-row--heading" data-row-index="82">
           <h1 class="config-ui-heading">What the form cannot hold</h1>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="81">
+        <div class="config-ui-row config-ui-row--field" data-row-index="83">
           <div class="config-ui-field config-ui-field--unsupported">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-nested-24">
@@ -1451,7 +1477,7 @@
             </div>
           </div>
         </div>
-        <div data-row-index="82"></div>
+        <div data-row-index="84"></div>
       </div>
       </div>
     </div>

@@ -25,9 +25,13 @@ a plain statement of the new default.
   `@range: lo..hi` the limits of the quantity, and together they turn the plot's y axis from a unit
   square into the thing being edited — labelled at round values, with the dashed guide joining the two
   ends rather than the corners of the box. The ends become **square** handles you can drag, and dragging
-  one types into its own field; the round handles still only bend the shape between them. The plot shows a
-  window on the channel and the ramp is clipped to it. Curves without `@ends` — the scale editors in
-  Spacing, Radius and Typography — are unchanged.
+  one types into its own field, drawn **filled** where a shape handle is hollow. Two columns sit beside the
+  plot: a **zoom** — a triangle you drag, with step buttons above and below — and a bar showing the
+  channel's own colours across the window, which takes no input. Neither moves when you drag the curve;
+  drag the empty chart vertically to follow a ramp that runs off the top or bottom. The ramp is clipped to
+  the plot, grips to the plot plus their radius so one on the boundary sits *on* the frame, and a drag
+  stops at the window's edge instead of pushing the curve out of sight. Curves without `@ends` — the scale
+  editors in Spacing, Radius and Typography — are unchanged.
 - **Colors' lightness curves are drawn on that axis.** The OKLCH collection ladder reads against its
   Bright and Dark, and each HSL mode's curve against its own — so the chart says what lightness a step
   lands on rather than how far the shape sits from straight, and the ends are draggable. Chroma, hue

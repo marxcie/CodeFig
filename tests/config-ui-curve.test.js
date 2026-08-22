@@ -593,6 +593,57 @@ function axisForm(curve) {
   };
 }
 
+test("the plot is measured in pixels, so a handle is round and not an ellipse", () => {
+  // A 100x100 viewBox stretched with `preserveAspectRatio: none` draws every circle as an ellipse the
+  // moment the chart is not square — and this one is roughly four to one on purpose. The shim reports no
+  // size, so what is pinned here is that the geometry *reads* the measurement rather than assuming 100.
+  const form = axisForm();
+  const svg = form.wrap.querySelector(".config-ui-curve__canvas");
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 200 });
+  form.wrap.dispatchEvent(new Event("config-ui-curve-refresh"));
+  assert.equal(svg.getAttribute("viewBox"), "0 0 400 200");
+
+  // The far end is at x = the measured width, not at 100.
+  const to = form.container.querySelector('[data-curve-end="to"]');
+  assert.equal(Math.round(+to.getAttribute("cx")), 400);
+});
+
+test("the zoom is a column of its own, and the curve cannot move it", () => {
+  const form = axisForm();
+  const mark = form.container.querySelector(".config-ui-curve__zoom-mark");
+  assert.ok(mark, "no zoom marker");
+  assert.ok(form.container.querySelector(".config-ui-curve__range"), "no range column");
+  const before = mark.style.top;
+
+  // Drag the dark end a long way. The window must not follow it.
+  const svg = form.wrap.querySelector(".config-ui-curve__canvas");
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  svg.dispatch("pointerdown", { target: form.ends()[1], clientX: 100, clientY: 100, pointerId: 1 });
+  svg.dispatch("pointermove", { clientX: 100, clientY: 20, pointerId: 1 });
+  svg.dispatch("pointerup", { clientX: 100, clientY: 20, pointerId: 1 });
+  assert.equal(mark.style.top, before, "dragging an end moved the zoom");
+
+  // The buttons do move it, and they are the only other thing that does.
+  form.container.querySelector('[data-curve-zoom="in"]').dispatch("click", { bubbles: true });
+  assert.notEqual(mark.style.top, before, "the zoom button did nothing");
+  assert.equal(form.wrap.getAttribute("data-curve-value"), form.wrap.getAttribute("data-curve-value"));
+});
+
+test("a drag stops at the edge of the window instead of pushing the ramp out of it", () => {
+  // Holding the pointer past the top edge used to keep raising the value, and the curve walked out of the
+  // chart. The clamp is to the *window*, not only to the channel.
+  const form = axisForm();
+  const svg = form.wrap.querySelector(".config-ui-curve__canvas");
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  svg.dispatch("pointerdown", { target: form.ends()[1], clientX: 100, clientY: 50, pointerId: 1 });
+  svg.dispatch("pointermove", { clientX: 100, clientY: -900, pointerId: 1 });
+  svg.dispatch("pointerup", { clientX: 100, clientY: -900, pointerId: 1 });
+
+  const to = form.container.querySelector('[data-curve-end="to"]');
+  const cy = +to.getAttribute("cy");
+  assert.ok(cy >= -1 && cy <= 101, "the end left the plot, at cy " + cy);
+});
+
 test("@ends turns the y axis into the quantity, labelled at round values", () => {
   const form = axisForm();
   // The window defaults to the two ends with a tenth of their span for air, clamped to the channel — so
@@ -657,16 +708,24 @@ test("the curve is clipped to its plot, and the handles are not", () => {
   // coordinate field and over the next curve down the form — `overflow: visible` is there so handles can
   // sit on the corners, and it let the whole line out with them.
   const form = axisForm();
-  const path = form.container.querySelector(".config-ui-curve__path");
-  assert.ok(/^url\(#config-ui-curve-clip-\d+\)$/.test(path.getAttribute("clip-path")),
-    "the drawn ramp is not clipped to the plot");
-  assert.equal(form.container.querySelectorAll("clipPath").length, 1);
+  const groups = form.container.querySelectorAll("g");
+  const clips = groups.map((g) => g.getAttribute("clip-path"));
+  assert.equal(clips.length, 2, "the ramp and the grips are two groups, clipped differently");
+  assert.ok(/^url\(#config-ui-curve-clip-\d+\)$/.test(clips[0]), "the ramp is not clipped to the plot");
+  assert.ok(/^url\(#config-ui-curve-clip-\d+-grip\)$/.test(clips[1]),
+    "the grips are not clipped to the padded frame");
+
+  // The ramp is inside the tight group; the grips inside the padded one, so an end on the boundary is whole.
+  assert.ok(groups[0].querySelector(".config-ui-curve__path"), "the ramp is not in the clipped group");
+  assert.equal(form.ends().length, 2);
   form.ends().forEach((end) => {
-    assert.equal(end.getAttribute("clip-path"), null, "an end on the boundary must stay visible");
+    assert.ok(groups[1].contains(end), "an end on the boundary must be in the padded group, not the tight one");
   });
+  assert.equal(form.container.querySelectorAll("clipPath").length, 2);
 
   // A shape editor has no window, so nothing can leave the box and nothing needs cutting off.
   const plain = build({}, [0.4, 0, 0.7, 0.55]);
   assert.equal(plain.wrap.querySelectorAll("clipPath").length, 0);
+  assert.equal(plain.wrap.querySelectorAll("g").length, 0);
   assert.equal(plain.wrap.querySelector(".config-ui-curve__path").getAttribute("clip-path"), null);
 });
