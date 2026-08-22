@@ -261,12 +261,29 @@ function colorsBestAnchor(hexes, steps) {
    * library that lands on the same answer as refitting all fourteen, for a fifth of the refitting.
    */
   var bare = { chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [] };
+
+  // **At most twenty candidates.** Each one generates the whole ramp twice, so trying every step is
+  // quadratic and a 64-step scale would spend seconds here. A ramp is smooth, so sampling the range and
+  // refining around the winner finds the same step. Sixteen steps or fewer take stride 1 and the exact
+  // path they took before.
+  var interior = hexes.length - 3;
+  var stride = Math.max(1, Math.ceil(interior / 20));
   var ranked = [];
-  for (var k = 2; k < hexes.length - 1; k++) {
+  var seen = {};
+  function rank(k) {
+    if (k < 2 || k > hexes.length - 2 || seen[k]) return;
+    seen[k] = true;
     ranked.push({ index: k, score: Math.max(colorsAnchorMiss(hexes, steps, k, true, shared, bare),
                                             colorsAnchorMiss(hexes, steps, k, false, shared, bare)) });
   }
+  for (var k = 2; k < hexes.length - 1; k += stride) rank(k);
+  rank(hexes.length - 2);
   ranked.sort(function (a, b) { return a.score - b.score; });
+  if (stride > 1 && ranked.length) {
+    var around = ranked[0].index;
+    for (var n = around - stride + 1; n <= around + stride - 1; n++) rank(n);
+    ranked.sort(function (a, b) { return a.score - b.score; });
+  }
 
   var best = fallback, bestScore = Infinity;
   var finalists = Math.min(5, ranked.length);
@@ -335,7 +352,8 @@ function colorsAnchorMiss(hexes, steps, mid, oklch, shared, fits) {
  * and the surprising-looking one.
  */
 function colorsMidIndex(steps) {
-  return Math.floor((steps.length - 1) / 2);
+  // Never negative: an empty list has no middle, and -1 is not an index anything can use.
+  return Math.max(0, Math.floor(((steps ? steps.length : 0) - 1) / 2));
 }
 
 /** A mode's three anchors for one channel. `chroma` in OKLCH, saturation 0..1 in HSL. */

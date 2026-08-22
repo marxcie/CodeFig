@@ -644,13 +644,32 @@ function bezierFitRamp(values, maxAnchors) {
   var best = flat ? { curve: flat.curve, error: flat.error, anchorIndex: null } : null;
   if (maxAnchors === 2) return best;
 
-  for (var k = 1; k < last; k++) {
+  /**
+   * **At most sixteen anchor positions tried, then refined around the winner.**
+   *
+   * Every candidate costs two half-fits and every half-fit's error is measured over the whole ramp, so
+   * trying all of them is quadratic: a 40-step scale spent 1.9 seconds here against 0.15 for an 11-step
+   * one. A ramp is a smooth thing, so the best anchor is not hiding between two adjacent steps — sampling
+   * the range and then walking the neighbourhood of the winner finds the same one.
+   *
+   * When there are sixteen or fewer interior steps the stride is 1 and the refinement adds nothing, so
+   * every real scale in the library takes exactly the path it took before.
+   */
+  var stride = Math.max(1, Math.ceil((last - 1) / 16));
+  var coarse = [];
+  for (var c = 1; c < last; c += stride) coarse.push(c);
+  if (coarse[coarse.length - 1] !== last - 1 && last - 1 >= 1) coarse.push(last - 1);
+
+  var tried = {};
+  function consider(k) {
+    if (k < 1 || k > last - 1 || tried[k]) return;
+    tried[k] = true;
     // Each half over its own range, normalised into its own unit square — which is exactly the shape
     // `bezierJoin` places back either side of the anchor.
     var loX = [], loY = [], hiX = [], hiY = [];
     var mx = xs[k], my = ys[k];
-    if (!(mx > 1e-6) || !(mx < 1 - 1e-6)) continue;
-    if (!(Math.abs(my) > 1e-9) || !(Math.abs(1 - my) > 1e-9)) continue;
+    if (!(mx > 1e-6) || !(mx < 1 - 1e-6)) return;
+    if (!(Math.abs(my) > 1e-9) || !(Math.abs(1 - my) > 1e-9)) return;
     for (var a = 0; a <= k; a++) { loX.push(xs[a] / mx); loY.push(ys[a] / my); }
     for (var b = k; b <= last; b++) {
       hiX.push((xs[b] - mx) / (1 - mx));
@@ -658,11 +677,16 @@ function bezierFitRamp(values, maxAnchors) {
     }
     var lo = bezierFitSegment(loX, loY);
     var hi = bezierFitSegment(hiX, hiY);
-    if (!lo || !hi) continue;
+    if (!lo || !hi) return;
     var joined = bezierJoin(lo.curve, hi.curve, mx, my);
-    if (!bezierIsMonotone(joined)) continue;
+    if (!bezierIsMonotone(joined)) return;
     var error = bezierWorstError(joined, xs, ys);
     if (!best || error < best.error - 1e-9) best = { curve: joined, error: error, anchorIndex: k };
+  }
+
+  for (var ci = 0; ci < coarse.length; ci++) consider(coarse[ci]);
+  if (stride > 1 && best && best.anchorIndex !== null) {
+    for (var r = best.anchorIndex - stride + 1; r <= best.anchorIndex + stride - 1; r++) consider(r);
   }
   return best;
 }
