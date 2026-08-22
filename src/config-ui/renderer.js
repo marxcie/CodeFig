@@ -1874,6 +1874,23 @@
      */
     function adoptEnds() {
       if (!anchorRow) return;
+      /**
+       * **A control that is not on screen does not take the cells.**
+       *
+       * Colours declare two curves per channel — one for OKLCH, one for HSL — and `@showWhen` hides
+       * whichever model is not selected. Both are bound to the *same* group cell, because a group holds
+       * both parts: `bright:{chroma … |saturation …}` is one cell whether you are reading the chroma out of
+       * it or the saturation. So `closest(".config-ui-rows-cell")` hands the two curves the same element,
+       * and whichever draws last keeps it.
+       *
+       * That is usually the visible one, and then it works — which is why this only *tended* to happen.
+       * Releasing a drag is the case that loses: `refreshCurveControls` redraws every curve **except the
+       * one being edited**, so the only control that redraws is the hidden twin, and it walks off with the
+       * anchor boxes. The fields were there while dragging and gone on release, exactly as reported.
+       */
+      // Asked of the **plot**, not the wrapper: a charted curve's wrapper is `display: contents`, which
+      // generates no box at all, so asking it whether it is on screen answers "no" for every one of them.
+      if (typeof plot.getClientRects === "function" && !plot.getClientRects().length) return;
       var from = endCell("from"), to = endCell("to");
       var fromCell = from && typeof from.closest === "function"
         ? (from.closest(".config-ui-rows-cell") || from) : from;

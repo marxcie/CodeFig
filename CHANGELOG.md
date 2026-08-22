@@ -71,6 +71,10 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **The anchor boxes no longer vanish when you let go of a handle.** Each channel declares two curves —
+  one per colour model — and both were bound to the same group cell, because a group holds both models'
+  parts. Releasing a drag refreshes every curve *except* the one being dragged, so the hidden twin was the
+  only one to redraw, and it took the boxes into a panel nobody can see.
 - **A colour channel bends at its middle anchor only if its curve has a middle point.** The two were
   independent, and the ramp resolved the contradiction in favour of the anchor — so removing the middle
   point from a saturation curve left a corner the curve could not possibly draw. On lime that was a dive

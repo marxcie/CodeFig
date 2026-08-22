@@ -106,7 +106,17 @@ function build(wanted, overrides) {
     '<script>' + read('src/config-ui/parser.js') + '<\/script>',
     '<script>' + read('src/config-ui/renderer.js') + '<\/script>',
     '<script>',
-    '  var schema = ConfigUIParser.parse(' + JSON.stringify(block) + ');',
+    // Kept on `window` so a rebuild can be driven from the console — which is how the panel behaves on a
+    // committed edit, and the only way to see a bug that only appears after one.
+    '  window.__block = ' + JSON.stringify(block) + ';',
+    '  window.__rebuild = function () {',
+    '    var again = ConfigUIParser.parse(window.__block);',
+    '    var host = document.getElementById("panel");',
+    '    host.innerHTML = "";',
+    '    ConfigUIRenderer.buildForm(again, host);',
+    '    ConfigUIRenderer.attachListeners(host, again, function () {});',
+    '  };',
+    '  var schema = ConfigUIParser.parse(window.__block);',
     '  var host = document.getElementById("panel");',
     '  ConfigUIRenderer.buildForm(schema, host);',
     '  ConfigUIRenderer.attachListeners(host, schema, function () {});',

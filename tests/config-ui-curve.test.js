@@ -1043,3 +1043,54 @@ test('an adopted middle is disabled when the curve has no middle point', () => {
   assert.equal(container.querySelector('.config-ui-curve').getAttribute('data-curve-value').split(',').length, 10);
   assert.equal(container.querySelector('[data-row-field="middle.chroma"]').disabled, false);
 });
+
+test('a hidden curve does not walk off with the anchor boxes', () => {
+  /**
+   * **Márton: the fields are there while dragging and gone when you let go.**
+   *
+   * Colours declare two curves per channel — one for OKLCH, one for HSL — and `@showWhen` hides whichever
+   * model is not selected. Both bind to the *same* group cell, because a group holds both parts:
+   * `bright:{chroma …|saturation …}` is one cell whether you read the chroma or the saturation out of it.
+   * So `closest(".config-ui-rows-cell")` hands the two curves the same element and the last to draw keeps
+   * it.
+   *
+   * Usually that is the visible one, which is why it only *tended* to happen. Releasing a drag is the case
+   * that loses: `refreshCurveControls` redraws every curve **except the one being edited**, so the only
+   * control that redraws is the hidden twin — and it takes the boxes with it into a panel nobody can see.
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var model = "hsl"; // @options: hsl:HSL|oklch:OKLCH @radio @label: Model',
+    'var modes = [{ name: "G", cc: [0.4, 0.2, 0.6, 0.8], sc: [0.4, 0.2, 0.6, 0.8], ' +
+      'bright: { chroma: 0.02, saturation: 80 }, dark: { chroma: 0.05, saturation: 90 } }]; ' +
+      '// @rows: name:text=Mode|cc:curve(ends:bright.chroma..dark.chroma, range:0..0.4)' +
+      '{model=oklch}=Chroma|sc:curve(ends:bright.saturation..dark.saturation, range:0..100)' +
+      '{model=hsl}=Saturation|bright:{chroma:number{model=oklch}=C start|saturation:number{model=hsl}' +
+      '=S start}=Bright|dark:{chroma:number{model=oklch}=C end|saturation:number{model=hsl}=S end}=Dark @blocks',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  // One cell, two claimants — the thing that makes this possible at all.
+  const shared = container.querySelector('[data-row-field="bright.chroma"]').closest('.config-ui-rows-cell');
+  assert.equal(container.querySelector('[data-row-field="bright.saturation"]')
+    .closest('.config-ui-rows-cell'), shared, 'the two models share one cell, or this test proves nothing');
+
+  const curves = container.querySelectorAll('[data-curve-value]');
+  // The shim has no layout, so stand in for "off screen" the way the browser reports it.
+  curves.forEach(function (w) {
+    var plot = w.querySelector('.config-ui-curve__plot-wrap');
+    var shown = !!w.querySelector('[data-row-field="sc"], .config-ui-curve') && w === curves[1];
+    plot.getClientRects = function () { return shown ? [{ width: 400, height: 190 }] : []; };
+  });
+
+  // Release the visible curve: everything *else* refreshes.
+  curves.forEach(function (w) { if (w !== curves[1]) w.dispatchEvent(new Event('config-ui-curve-refresh')); });
+
+  const anchors = shared.closest('.config-ui-curve__anchors');
+  assert.ok(!anchors || anchors.closest('[data-curve-value]') === curves[1],
+    'the hidden curve adopted the shared cell, so the boxes vanished with it');
+});
