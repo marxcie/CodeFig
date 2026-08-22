@@ -232,6 +232,7 @@
 // | `@group: key:type=Label\|…` | an **object** as one labelled row of captioned parts |
 // | `@curve` | the bezier curve editor, on an **array**. Four numbers is one segment, ten is two, `[]` is none |
 // | `@curve @allowOriginal` | the same, with *Original* — the empty curve — offered in its preset list |
+// | `@curve @ends: a..b @range: lo..hi` | the same on a **value axis**: real numbers up the side, draggable ends that write `a` and `b`, and a zoom rail |
 // | `key:curve=Label` inside `@rows` | the same editor as one column of a row. `key:curve(original)` to offer *Original* |
 // | `key:curve(growth:other)` | the **open-ended** editor: log axis, a handle for the growth, written to the config as `other` |
 // | `key:{…}=Label` inside `@rows` | the same group, nested as one column of a row |
@@ -370,6 +371,19 @@ var twoSegment = [0.17, 0, 0.33, 0.23, 0.5, 0.5, 0.67, 0.77, 0.83, 1]; // @curve
 // `@allowOriginal` adds *Original* to the preset list — the empty curve, for a script that has something
 // to fall back on. Colors uses it to mean "leave the steps this file already has".
 var maybeCurve = []; // @curve @allowOriginal @label: Curve or original @helper: Shown empty. Pick a preset to give it points.
+//
+// # A curve on a real axis
+// `@ends:` names the two fields the curve runs **between**, and `@range:` the limits of the quantity
+// itself. Together they turn the y axis from a unit square into the thing being edited: the labels are
+// percentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the
+// two **square** handles are those ends — drag one and it types into its own field, because that is where
+// the value lives. The round handles still only bend the shape between them.
+//
+// The strip on the right is the **zoom**. The window is the slice the plot is showing; drag it to pan, drag
+// either edge to resize, click the bare rail to jump. It changes nothing about the ramp — it is where you
+// are looking, which is why it is the one part of this control that never reaches the config.
+var ladder = { bright: 98, dark: 19 }; // @group: bright:number=Bright|dark:number=Dark @label: Ends
+var ladderCurve = [0.4, 0, 0.7, 0.55]; // @curve @ends: ladder.bright..ladder.dark @range: 0..100 @label: Lightness @helper: Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.
 //
 // # A scale with no far end
 // `curve(growth:ratio)` inside `@rows` — the **open-ended** editor, for a scale whose largest value nobody

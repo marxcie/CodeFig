@@ -19,6 +19,17 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Added
+
+- **A curve can be drawn on a real axis.** `@ends: a..b` names the two fields a curve runs between and
+  `@range: lo..hi` the limits of the quantity, and together they turn the plot's y axis from a unit
+  square into the thing being edited — labelled at round values, with the dashed guide joining the two
+  ends rather than the corners of the box. The ends become **square** handles you can drag, and dragging
+  one types into its own field; the round handles still only bend the shape between them. A strip beside
+  the plot zooms the axis: drag the window to pan, either edge to resize, the bare rail to jump. Zooming
+  never touches the config. Curves without `@ends` — the scale editors in Spacing, Radius and
+  Typography — are unchanged.
+
 ### Fixed
 
 - **Colors: an OKLCH collection's lightness ladder is now averaged across its modes** instead of

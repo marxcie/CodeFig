@@ -69,6 +69,13 @@ function renderControls() {
   const container = document.createElement('div');
   renderer.buildForm(schema, container);
 
+  // **`attachListeners` is part of rendering, not part of interacting.** It ends with the sweep that tells
+  // every curve to re-read the form around it, and a curve bound to an axis has nothing to draw until that
+  // happens — `buildCurveControl` runs before its wrapper is in the tree, so the fields it reads its ends
+  // from are not findable yet. Without this the page showed that control as a bare plot and the reference
+  // would have been quietly wrong about the one thing it exists to be right about.
+  renderer.attachListeners(container, schema, function () {});
+
   // The collection picker is filled by a backend round trip in the plugin, so a static page would
   // show an empty select. Filling it with a plausible list is what makes it a specimen of the
   // control rather than of a loading state.

@@ -343,6 +343,16 @@ function serialize(node, indent) {
     else if (v === false || v === null) return;
     else attrs.push(k + '="' + escapeAttr(v) + '"');
   });
+  // **`el.style.x = y` is part of the rendering, so it has to survive serialisation.** The shim held a plain
+  // object and dropped it, which made the style reference quietly wrong in both directions: a curve's zoom
+  // window is positioned entirely through `style` and came out a zero-height sliver, and the growth toggle
+  // sets `display: none` and appeared anyway. Neither shows up as an error — the page just disagrees with
+  // the plugin, which is the one thing it exists not to do.
+  const styleText = Object.keys(node.style)
+    .filter((k) => node.style[k] !== '' && node.style[k] != null)
+    .map((k) => k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase()) + ': ' + node.style[k])
+    .join('; ');
+  if (styleText && !node._attrs.has('style')) attrs.push('style="' + escapeAttr(styleText) + '"');
   const open = '<' + node.tagName + (attrs.length ? ' ' + attrs.join(' ') : '') + '>';
   if (VOID_TAGS.has(node.tagName)) return pad + open;
 

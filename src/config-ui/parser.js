@@ -299,6 +299,52 @@
   }
 
   /**
+   * **What a `curve(...)` spec says**, applied onto the column. One reader, because the same three settings
+   * arrive two ways — `curve(ends:a..b)` on a row column and `@ends: a..b` on a field — and two readers of
+   * one vocabulary is how a setting comes to mean something slightly different depending on where it is
+   * written.
+   *
+   *   `original`        offer *Original*, the empty curve. Colours only: it means "leave the steps this
+   *                     file already has", which a scale has no equivalent of.
+   *   `growth:<key>`    the **open-ended** editor. The plot's y axis is logarithmic, so a constant ratio is
+   *                     a straight line and its slope is the growth; one handle drags that slope and the
+   *                     value is written out under `<key>`. Spacing, radius and typography do not know
+   *                     their largest value, and pinning one would mean adding a token re-subdivides the
+   *                     range and moves every value below it.
+   *   `ends:<a>..<b>`   the two fields holding the values the curve runs **between**. With them the y axis
+   *                     stops being 0..1 and starts being the quantity — 98% down to 19% — so the ends are
+   *                     draggable and dragging one edits that field. Without them a curve is a shape and
+   *                     the axis has nothing to be.
+   *   `range:<lo>..<hi>` the channel's own limits, for the zoom rail to be zoomed *out* to. You cannot be
+   *                     112% dark, and the axis has to know that before it can offer to show you 112.
+   */
+  function applyCurveSpec(column, spec) {
+    (spec || "").split(",").forEach(function (piece) {
+      var part = piece.trim();
+      if (!part) return;
+      if (part === "original") { column.allowOriginal = true; return; }
+      var growth = part.match(/^growth:([A-Za-z0-9_$]+)$/);
+      if (growth) { column.growth = growth[1]; return; }
+      var ends = part.match(/^ends:([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)$/);
+      if (ends) { column.ends = { from: ends[1], to: ends[2] }; return; }
+      var range = part.match(/^range:(-?[0-9.]+)\.\.(-?[0-9.]+)$/);
+      if (range) {
+        var lo = parseFloat(range[1], 10), hi = parseFloat(range[2], 10);
+        if (isFinite(lo) && isFinite(hi) && hi > lo) column.range = { lo: lo, hi: hi };
+      }
+    });
+  }
+
+  /** The spec text a column round-trips back to. Empty when it has nothing to say. */
+  function curveSpecText(c) {
+    var parts = [];
+    if (c.allowOriginal) parts.push("original");
+    if (c.growth) parts.push("growth:" + c.growth);
+    if (c.ends) parts.push("ends:" + c.ends.from + ".." + c.ends.to);
+    if (c.range) parts.push("range:" + c.range.lo + ".." + c.range.hi);
+    return parts.join(", ");
+  }
+  /**
    * `1.2:1.2 Minor third|1.25:1.25 Major third` — an option's value, then the words for it.
    *
    * An option is a `{ value, label }` pair rather than a string plus a lookup table beside it. Two
@@ -573,15 +619,10 @@
       if (curveMatch) {
         column.type = "curve";
         var curveMode = (curveMatch[1] || "").trim();
-        // `curve(original)` — offer *Original*, the empty curve. Colours only: it means "leave the steps
-        // this file already has", which a scale has no equivalent of.
-        if (curveMode === "original") column.allowOriginal = true;
-        // `curve(growth:ratio)` — the **open-ended** editor. The plot's y axis is logarithmic, so a constant
-        // ratio is a straight line and its slope is the growth; one handle drags that slope and writes the
-        // named sibling cell. Spacing, radius and typography do not know their largest value, and pinning
-        // one would mean adding a token re-subdivides the range and moves every value below it.
-        var growth = curveMode.match(/^growth:([A-Za-z0-9_$]+)$/);
-        if (growth) column.growth = growth[1];
+        // **Comma-separated settings, not one word.** `curve(original)` and `curve(growth:ratio)` were the
+        // whole vocabulary while a curve was a shape in a unit square. A curve bound to an axis needs to say
+        // which two cells hold its ends and what the channel's limits are, and those are three facts, not one.
+        applyCurveSpec(column, curveMode);
         columns.push(column);
         continue;
       }
@@ -1034,9 +1075,17 @@
         // curve at all. Claimed here, ahead of the fallback below, for the same reason `@rows` is: an array
         // nothing has claimed becomes a read-only block.
         var f_curveOriginal = false;
+        // The same three settings a `curve(...)` column takes, spelled the way a field spells things.
+        // Collected here and applied below, because `f` does not exist yet.
+        var f_curveSpec = null;
         if (/@curve\b/.test(tip) && (Array.isArray(val) || val == null)) {
           inputType = "curve";
           f_curveOriginal = /@allowOriginal\b/.test(tip);
+          f_curveSpec = {};
+          var f_ends = tip.match(/@ends:\s*([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)/);
+          if (f_ends) applyCurveSpec(f_curveSpec, "ends:" + f_ends[1] + ".." + f_ends[2]);
+          var f_range = tip.match(/@range:\s*(-?[0-9.]+)\.\.(-?[0-9.]+)/);
+          if (f_range) applyCurveSpec(f_curveSpec, "range:" + f_range[1] + ".." + f_range[2]);
         }
         if (inputType === "object" || inputType === "array") {
           inputType = "unsupported";
@@ -1073,6 +1122,10 @@
         if (phMatch) f.placeholder = phMatch[1];
         if (helperMatch) f.helper = helperMatch[1].trim();
         if (inputType === "curve" && f_curveOriginal) f.allowOriginal = true;
+        if (f_curveSpec) {
+          if (f_curveSpec.ends) f.ends = f_curveSpec.ends;
+          if (f_curveSpec.range) f.range = f_curveSpec.range;
+        }
         if (inputType === "mode") {
           // `null` for a bare `@mode`, and it stays null: resolution happens against the rendered
           // form, so the two spellings serialise back exactly as they were written.
@@ -1101,7 +1154,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|helper)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|ends|range|helper)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -1303,6 +1356,8 @@
         if (r.inputType === "curve") {
           parts.push("@curve");
           if (r.allowOriginal) parts.push("@allowOriginal");
+          if (r.ends) parts.push("@ends: " + r.ends.from + ".." + r.ends.to);
+          if (r.range) parts.push("@range: " + r.range.lo + ".." + r.range.hi);
         }
         if (r.inputType === "mode") {
           parts.push("@mode" + (r.collectionField ? ": " + r.collectionField : ""));
@@ -1327,8 +1382,10 @@
             }
             if (c.type === "preview") return "@preview";
             var spec = c.type;
-            if (c.type === "curve" && c.allowOriginal) spec = "curve(original)";
-            if (c.type === "curve" && c.growth) spec = "curve(growth:" + c.growth + ")";
+            if (c.type === "curve") {
+              var curveSpec = curveSpecText(c);
+              if (curveSpec) spec = "curve(" + curveSpec + ")";
+            }
             // A group re-emits its own columns through this same function, so a nested spec round-trips by
             // construction rather than by a second printer that could disagree with the parser.
             if (c.type === "group") {

@@ -3544,6 +3544,106 @@
         margin: 7px 0;
       }
 
+      /* --- the value axis: a curve bound to two ends, with a rail to zoom it -------------------
+         Its own classes throughout. `.config-ui-curve__plot-wrap` is every curve's plot box and
+         `.config-ui-curve__end` is every curve's fixed dot; putting a flex row or a drag cursor on
+         either would restyle the scale editors in Spacing, Radius and Typography, which have no
+         axis and nothing to zoom. */
+
+      .config-ui-curve__chartline {
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+        margin: 7px 0;
+      }
+
+      /* The plot's own margin is on the row now, or the two would stack. */
+      .config-ui-curve__chartline .config-ui-curve__plot-wrap {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin: 0;
+      }
+
+      /* HTML over the plot, not `<text>` inside it — the canvas stretches by a different factor in each
+         direction, so anything drawn in it is the wrong size and the wrong shape. */
+      .config-ui-curve__ticks {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .config-ui-curve__tick {
+        position: absolute;
+        left: 3px;
+        /* The label sits above the line it names, so the line stays readable through the number. */
+        transform: translateY(-100%);
+        color: var(--text-secondary);
+        font-family: var(--font-family-base);
+        font-size: var(--font-size-small);
+        line-height: 1.2;
+      }
+
+      /* Square, because it moves the palette rather than the shape. Round is the shape handle. */
+      .config-ui-curve__axis-end {
+        fill: var(--active-bg);
+        stroke: var(--input-bg);
+        stroke-width: 2;
+        cursor: ns-resize;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .config-ui-curve__axis-end:focus {
+        outline: none;
+        stroke: var(--text-primary);
+      }
+
+      .config-ui-curve__rail {
+        position: relative;
+        flex: 0 0 22px;
+        width: 22px;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        background: var(--input-bg);
+        cursor: pointer;
+        touch-action: none;
+        overflow: hidden;
+      }
+
+      .config-ui-curve__rail[data-shown="false"] {
+        visibility: hidden;
+      }
+
+      .config-ui-curve__rail-window {
+        position: absolute;
+        left: 0;
+        right: 0;
+        cursor: grab;
+        box-shadow: inset 0 0 0 2px var(--active-bg);
+        background: rgba(13, 153, 255, 0.12);
+      }
+
+      .config-ui-curve__rail-grip {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 10px;
+        cursor: ns-resize;
+      }
+
+      .config-ui-curve__rail-grip::after {
+        content: '';
+        position: absolute;
+        left: 3px;
+        right: 3px;
+        top: 4px;
+        height: 2px;
+        border-radius: 1px;
+        background: var(--active-bg);
+      }
+
+      .config-ui-curve__rail-grip--top { top: -1px; }
+      .config-ui-curve__rail-grip--bottom { bottom: -1px; }
+
       .config-ui-curve__empty-note {
         position: absolute;
         inset: 0;
