@@ -413,16 +413,60 @@ function colorsPct(value) {
  * `[]` when there is nothing to fit: fewer than three steps, an unreadable hex, or a flat run.
  */
 function colorsFitCurve(hexes, oklch) {
+  var ladder = colorsLightnessOf(hexes, oklch);
+  if (!ladder.length) return [];
+  var fit = bezierFitRamp(ladder);
+  return fit ? fit.curve : [];
+}
+
+/** The lightness of each step, in the model asked for. `[]` if any step is unreadable. */
+function colorsLightnessOf(hexes, oklch) {
   if (!hexes || hexes.length < 3) return [];
   var read = oklch ? oklchFromHex : oklchHslFromHex;
-  var ladder = [];
+  var out = [];
   for (var i = 0; i < hexes.length; i++) {
     var seen = read(hexes[i]);
     if (!seen) return [];
-    ladder.push(seen.L);
+    out.push(seen.L);
   }
-  var fit = bezierFitRamp(ladder);
-  return fit ? fit.curve : [];
+  return out;
+}
+
+/**
+ * **The one ladder every OKLCH mode shares, averaged across them rather than taken from the first.**
+ *
+ * The ladder is shared — that is what makes the modes match in greyscale — so it has to come from
+ * somewhere, and it used to come from whichever mode recognised first. That silently favours one: read
+ * `lime` and its second mode landed **21** of 255 from the file against 11 for the first, purely because
+ * the first supplied the ladder. Averaging every mode's lightness step by step balances it — 11 and **14**
+ * — and costs a level on a collection whose modes already agree, like the three neutrals (4/4/4 to 5/4/5).
+ *
+ * A shared ladder matches no mode exactly by definition, so the question is only which modes carry the
+ * error. Spreading it is the honest answer; giving it all to whichever mode happened to be read first is
+ * not a decision anybody made.
+ *
+ * → `{ lightness: [...], bright, dark }`, or `null` if nothing is readable.
+ */
+function colorsSharedLadder(byMode, names) {
+  var usable = [];
+  for (var i = 0; i < names.length; i++) {
+    var got = colorsLightnessOf(byMode[names[i]], true);
+    if (got.length) usable.push(got);
+  }
+  if (!usable.length) return null;
+  var steps = usable[0].length;
+  var mean = [];
+  for (var s = 0; s < steps; s++) {
+    var total = 0, seen = 0;
+    for (var m = 0; m < usable.length; m++) {
+      if (usable[m].length !== steps) continue;
+      total += usable[m][s]; seen++;
+    }
+    if (!seen) return null;
+    mean.push(total / seen);
+  }
+  var fit = bezierFitRamp(mean);
+  return { curve: fit ? fit.curve : [], bright: mean[0], dark: mean[mean.length - 1] };
 }
 
 /**

@@ -19,6 +19,15 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Colors: an OKLCH collection's lightness ladder is now averaged across its modes** instead of
+  taken from whichever one was read first. The ladder is shared — that is what makes the modes match
+  in greyscale — so one mode used to get a ladder fitted to itself and the rest got someone else's.
+  On a two-mode lime that was worth thirteen 8-bit levels of accuracy for the mode that lost the
+  toss (21 from the file against 11); both now read 15. Collections whose modes already agree pay at
+  most one level.
+
 The find/replace scripts were the focus: they now agree on what a pattern means, and they show
 you what they will do before they do it. The Design System Foundations scripts also stopped
 deleting variable modes they did not recognise.

@@ -3760,25 +3760,31 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   }
 
   if (!perMode.length) return answer;
-  answer.recognition.lightnessFrom = leadName;
+  // **Every mode, not the first one.** The ladder is shared, so it is averaged across the modes that were
+  // read rather than taken from whichever recognised first — see `colorsSharedLadder`.
+  var sharedNames = perMode.map(function (m) { return m.name; });
+  var shared = colorsSharedLadder(answer.existing, sharedNames);
+  // **The modes it was averaged from**, not the one that happened to be read first — a list, because with
+  // more than one mode there is no single answer and a name would be a plausible-looking wrong one.
+  answer.recognition.lightnessFrom = shared ? sharedNames.slice() : [leadName];
   answer.source = 'recognised';
   answer.modes = perMode.map(function (m) { return m.name; });
   answer.tokens = perMode[0].steps.slice();
   answer.config = {
     steps: perMode[0].steps.join(', '),
-    // **OKLCH's curve is the collection's, so it is fitted once, from the mode that supplied the ladder.**
-    // The ladder is shared, so a claim about the shape of it is one the collection makes rather than one
-    // each mode makes separately — and `leadName` is the mode the anchors came from, so fitting anything
-    // else would describe a ladder nothing is generated from. An unfittable read gives `[]`, which is
-    // *Original*: the file's own colours, untouched.
-    // Fitted whichever model is selected, for the same reason: this is OKLCH's ladder, and a panel switched
-    // into OKLCH must not find the shipped Linear default where the file's own shape belongs.
-    curve: colorsFitCurve(answer.existing[leadName], true),
+    // **OKLCH's ladder is the collection's, averaged across its modes.** A claim about its shape is one the
+    // collection makes rather than one each mode makes separately, and a shared ladder matches no mode
+    // exactly by definition — so the only question is which modes carry the error, and spreading it beats
+    // giving all of it to whichever mode was read first.
+    //
+    // Fitted whichever model is selected: a panel switched into OKLCH must not find the shipped Linear
+    // default where the file's own shape belongs.
+    curve: shared ? shared.curve : colorsFitCurve(answer.existing[leadName], true),
     // **No middle.** The ladder's bend is the curve's own anchor now, so a middle lightness here would be a
     // second answer to a question the curve already answers — and the block has no field to show it in.
     lightness: {
-      bright: colorsRound1(leadAnchors.bright * 100),
-      dark: colorsRound1(leadAnchors.dark * 100)
+      bright: colorsRound1((shared ? shared.bright : leadAnchors.bright) * 100),
+      dark: colorsRound1((shared ? shared.dark : leadAnchors.dark) * 100)
     },
     // No `seed`: a file holds no record of one, and `fillConfigBlock` only touches the keys a payload
     // carries — so whatever seed the user typed survives being read over.

@@ -32,6 +32,17 @@ const LIBS = path.join(ROOT, 'scripts', 'CODEFIG_LIBRARIES');
 /** Worst single 8-bit channel a read may land from the file before this fails. */
 const LIMIT = 14;
 
+/**
+ * The same, for an OKLCH mode generated from a ladder shared with its siblings — a strictly harder problem,
+ * so a separate number rather than a weakened `LIMIT`.
+ *
+ * `lime` sets it. Its two modes disagree by up to 1.5 lightness points, so one shared ladder is 0.75 off
+ * both, and its ramp drops fourteen lightness points between `350` and `400` where its neighbours drop one
+ * — a discontinuity no three-anchor curve follows. The anchor search already puts the bend exactly on it
+ * (`350` scores 15, `300` scores 29 and `400` scores 59), so 15 is the floor for this model, not slack.
+ */
+const SHARED_LIMIT = 16;
+
 const ctx = {
   console, Math, String, Array, Object, JSON,
   isNaN, isFinite, parseInt, parseFloat, Number, RegExp, Infinity,
@@ -43,6 +54,7 @@ for (const file of ['@math-helpers.js', '@bezier.js', '@oklch.js', '@color-ramp.
 }
 
 const SCALES = JSON.parse(fs.readFileSync(path.join(__dirname, 'colour-scales.json'), 'utf8'));
+const MULTI = JSON.parse(fs.readFileSync(path.join(__dirname, 'colour-modes.json'), 'utf8'));
 
 const rgb = (hex) => ctx.oklchHexToRgb(hex).map((v) => v * 255);
 function channelError(a, b) {
@@ -51,7 +63,7 @@ function channelError(a, b) {
 }
 
 /** Exactly what recognition writes into the block, for one set in one model. */
-function configFor(steps, hexes, anchor, oklch) {
+function configFor(steps, hexes, anchor, oklch, ladder) {
   const okl = hexes.map(ctx.oklchFromHex);
   const hsl = hexes.map(ctx.oklchHslFromHex);
   const last = hexes.length - 1;
@@ -63,8 +75,11 @@ function configFor(steps, hexes, anchor, oklch) {
   return {
     colorModel: oklch ? 'oklch' : 'hsl',
     steps: steps.join(', '),
-    curve: ctx.colorsFitCurve(hexes, true),
-    lightness: { bright: okl[0].L * 100, dark: okl[last].L * 100 },
+    // The collection's ladder. One mode's own fit when it is alone; the shared one when it is not.
+    curve: ladder ? ladder.curve : ctx.colorsFitCurve(hexes, true),
+    lightness: ladder
+      ? { bright: ladder.bright * 100, dark: ladder.dark * 100 }
+      : { bright: okl[0].L * 100, dark: okl[last].L * 100 },
     existing: held,
     modes: [{
       name: 'M',
@@ -80,8 +95,8 @@ function configFor(steps, hexes, anchor, oklch) {
   };
 }
 
-function measure(steps, hexes, anchor, oklch) {
-  const made = ctx.colorsAlignment(configFor(steps, hexes, anchor, oklch)).modes[0].made;
+function measure(steps, hexes, anchor, oklch, ladder) {
+  const made = ctx.colorsAlignment(configFor(steps, hexes, anchor, oklch, ladder)).modes[0].made;
   const errors = made.rows.map((row, i) => channelError(row.hex, hexes[i]));
   return {
     worst: Math.round(Math.max.apply(null, errors)),
@@ -149,13 +164,45 @@ console.log(pad('worst of all', 20), num('', 7), num(worstHsl, 6), num('', 6), n
 console.log(pad('mean of worsts', 20), num('', 7), num(Math.round(sumHsl / labels.length), 6),
   num('', 6), num('', 5), num(Math.round(sumOklch / labels.length), 8));
 
+// ---- collections whose modes share one ladder ----
+//
+// **A path the section above cannot see.** It measures every set as if it were alone, and in OKLCH the
+// lightness ladder belongs to the *collection*: every mode of it is generated from the same one. So a mode
+// can read within a level on its own and land far from the file as part of a collection, which is exactly
+// what `lime` did — 8 alone, **21** as the second mode of two, because the ladder came from the first.
+// Averaging the ladder across the modes is what fixed it, and this is the only thing that would notice it
+// coming undone.
+console.log('\n\nOKLCH modes sharing one collection ladder  ·  worst 8-bit channel  ·  limit ' +
+  SHARED_LIMIT + '\n');
+console.log(pad('collection', 20), pad('mode', 14), num('shared', 8), num('alone', 8));
+console.log('-'.repeat(54));
+
+const multiLabels = Object.keys(MULTI);
+for (const label of multiLabels) {
+  const { steps, modes } = MULTI[label];
+  const names = Object.keys(modes);
+  const ladder = ctx.colorsSharedLadder(modes, names);
+  for (const name of names) {
+    const hexes = modes[name];
+    const anchor = ctx.colorsBestAnchor(hexes, steps);
+    const shared = measure(steps, hexes, anchor, true, ladder);
+    const alone = measure(steps, hexes, anchor, true, null);
+    if (shared.worst > SHARED_LIMIT) over.push(label + ' · ' + name);
+    worstOklch = Math.max(worstOklch, shared.worst);
+    console.log(pad(label, 20), pad(name, 14), num(shared.worst, 8), num(alone.worst, 8));
+  }
+}
+console.log('-'.repeat(54));
+console.log('a shared ladder matches no mode exactly — `alone` is the floor, not a target.');
+
 if (saveAs) {
   fs.writeFileSync(baselinePath(saveAs), JSON.stringify(results, null, 1));
   console.log('\nsaved baseline: ' + path.basename(baselinePath(saveAs)));
 }
 
 if (over.length) {
-  console.log('\n❌ over the ' + LIMIT + '-level limit: ' + over.join(', '));
+  console.log('\n❌ over the limit (' + LIMIT + ' alone, ' + SHARED_LIMIT + ' shared): ' + over.join(', '));
   process.exit(1);
 }
-console.log('\n✅ every set within ' + LIMIT + ' of 255, in both models.');
+console.log('\n✅ every set within ' + LIMIT + ' of 255 in both models, and every shared mode within ' +
+  SHARED_LIMIT + '.');
