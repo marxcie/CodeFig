@@ -1465,23 +1465,25 @@
   var CURVE_ZOOM_MIN = 0.2, CURVE_ZOOM_MAX = 20;
 
   /**
-   * **The colours down the side of a chart**, per curve field — the same seam as `curveBaselines`, and for
-   * the same reason.
+   * **The tokens' own colours**, per curve field — the same seam as `curveBaselines`, and for the same
+   * reason: the renderer knows the numbers, only the host knows what colour they are.
    *
-   * What colour a lightness *is* depends on the hue and the saturation beside it, and those live in other
-   * fields of other rows. The renderer knows the number; only the host knows what it looks like. So it
-   * publishes a function per key, and the column asks it for the window it is currently showing.
+   * A list of hex strings in step order, nothing more. The bar could have been a synthetic sweep computed
+   * from a value, but that needs the colour maths — and a second copy of `@oklch.js` in the UI is the one
+   * thing this repo has a standing rule against. It also needs the hue and the saturation beside the
+   * lightness to mean anything, which is three fields in two rows away from here.
+   *
+   * The tokens answer both objections. They are the colours the collection actually has, the host holds
+   * them already (`fileColorValues`), and placing each at the value its own curve puts it at makes the bar
+   * a picture of *this* ramp rather than of the channel in the abstract.
    */
   var curveRamps = {};
   function setCurveRamps(map) {
     curveRamps = map || {};
   }
-  /** `[css-colour position, ...]` for a gradient, or `null` when nothing has been published for this key. */
-  function curveRampFor(key, window) {
-    var make = key ? curveRamps[key] : null;
-    if (typeof make !== "function") return null;
-    var stops = make(window);
-    return stops && stops.length ? stops : null;
+  function curveRampHexes(key) {
+    var held = key ? curveRamps[key] : null;
+    return Array.isArray(held) && held.length > 1 ? held : null;
   }
   function curveBaselineFor(key) {
     var held = key ? curveBaselines[key] : null;
@@ -2038,11 +2040,44 @@
       if (stepIn) stepIn.disabled = z >= CURVE_ZOOM_MAX * 0.999;
       if (stepOut) stepOut.disabled = z <= CURVE_ZOOM_MIN * 1.001;
       if (rangeFill) {
-        var stops = curveRampFor(baselineKey, axisView(a));
+        var stops = rangeStops(a);
         rangeFill.style.background = stops
           ? "linear-gradient(to bottom, " + stops.join(", ") + ")" : "";
         rangeFill.setAttribute("data-shown", stops ? "true" : "false");
       }
+    }
+
+    /**
+     * **Each token's colour, at the value this curve puts it at**, as gradient stops down the window.
+     *
+     * Not a sweep of the channel in the abstract — a picture of *this* ramp. Zoom in between two steps and
+     * the bar is the blend between those two colours, which is what the ramp does there.
+     *
+     * Positions run top-down because a CSS gradient does and the axis does not: the window's high value is
+     * at the top of the plot. Stops outside the window are kept rather than dropped, with their positions
+     * clamped, so the colour at the edge is the one the ramp actually has there instead of the nearest
+     * token's.
+     */
+    function rangeStops(a) {
+      var hexes = curveRampHexes(baselineKey);
+      if (!hexes) return null;
+      var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
+      var w = axisView(a), span = w.hi - w.lo;
+      if (!(span > 0)) return null;
+      var last = hexes.length - 1;
+      var out = [];
+      for (var i = 0; i <= last; i++) {
+        var value = unitToValue(a, B ? B.bezierAt(pts, i / last) : i / last);
+        var at = Math.min(100, Math.max(0, ((w.hi - value) / span) * 100));
+        out.push(hexes[i] + " " + Math.round(at * 10) / 10 + "%");
+      }
+      // A gradient's stops have to ascend. A ramp that runs uphill in value runs downhill in position, so
+      // one of the two orders is always backwards — and the wrong one paints the bar inside out.
+      var ascending = true;
+      for (var k = 1; k < out.length; k++) {
+        if (parseFloat(out[k].split(" ")[1], 10) < parseFloat(out[k - 1].split(" ")[1], 10)) ascending = false;
+      }
+      return ascending ? out : out.reverse();
     }
 
     function draw() {

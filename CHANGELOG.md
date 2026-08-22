@@ -27,7 +27,8 @@ a plain statement of the new default.
   ends rather than the corners of the box. The ends become **square** handles you can drag, and dragging
   one types into its own field, drawn **filled** where a shape handle is hollow. Two columns sit beside the
   plot: a **zoom** — a triangle you drag, with step buttons above and below — and a bar showing the
-  channel's own colours across the window, which takes no input. Neither moves when you drag the curve;
+  collection's own token colours across the window, which takes no input. Zoom in between two steps and
+  the bar is the blend between those two, because it is a picture of that ramp rather than of the channel. Neither moves when you drag the curve;
   drag the empty chart vertically to follow a ramp that runs off the top or bottom. The ramp is clipped to
   the plot, grips to the plot plus their radius so one on the boundary sits *on* the frame, and a drag
   stops at the window's edge instead of pushing the curve out of sight. Curves without `@ends` — the scale

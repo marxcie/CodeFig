@@ -19,6 +19,8 @@
       // The host's fitted curves, published before anything is built — `buildCurveControl` reads them while
       // it constructs each preset dropdown, so they have to be in place first.
       if (R.setCurveBaselines) R.setCurveBaselines((opts && opts.curveBaselines) || {});
+      // The tokens' own colours, for the bar beside a charted curve. Same timing, same reason.
+      if (R.setCurveRamps) R.setCurveRamps((opts && opts.curveRamps) || {});
       schema = s;
       if (attached && attached.detach) attached.detach();
       R.buildForm(schema, container);

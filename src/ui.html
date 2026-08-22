@@ -784,6 +784,7 @@
             configUIInstance = window.CodeFigConfigUI.render(schema, {
               container: configUIContainer,
               curveBaselines: _curveBaselines,
+              curveRamps: _curveRamps,
               onChange: function (values, opts) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
                 // thing that asks. Every other edit is an answer, not a question.
@@ -2236,6 +2237,33 @@
         };
       }
 
+      /**
+       * **The colours the bar beside each chart is drawn from**, keyed the way the renderer addresses its
+       * curve controls — the same shape as `_curveBaselines`, published through the same call.
+       *
+       * The file's own hexes, in step order. The renderer places each at the value its curve puts it at, so
+       * the bar is a picture of this ramp rather than of the channel in the abstract, and no colour maths
+       * has to be inlined into the UI to draw it.
+       *
+       * The collection-scope curve is OKLCH's shared ladder, so it takes the first mode that has any: every
+       * mode of it is generated from that one ladder, and in greyscale they agree by construction.
+       */
+      let _curveRamps = {};
+      function rememberCurveRamps(config, byMode) {
+        _curveRamps = {};
+        if (!config || !byMode) return;
+        var names = Array.isArray(config.modes)
+          ? config.modes.map(function (m) { return m && m.name; }) : [];
+        names.forEach(function (name, i) {
+          var hexes = name && byMode[name];
+          if (Array.isArray(hexes) && hexes.length > 1) _curveRamps['modes[' + i + '].curve'] = hexes.slice();
+        });
+        for (var n = 0; n < names.length; n++) {
+          var lead = names[n] && byMode[names[n]];
+          if (Array.isArray(lead) && lead.length > 1) { _curveRamps.curve = lead.slice(); break; }
+        }
+      }
+
       // **There is no "has this been touched yet" flag, deliberately.**
       //
       // There was one, to keep the strip quiet on a fresh load, and it cost a flag, a snapshot, a clearing
@@ -3030,6 +3058,7 @@
         // exactly when that would happen — so this runs before the early return rather than after it.
         if (found && found.collection !== undefined) {
           rememberFileColors(found.collection, found.group, found.existing);
+          rememberCurveRamps(found.config, found.existing);
           scheduleConfigPreview();
         }
 

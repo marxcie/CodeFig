@@ -729,3 +729,36 @@ test("the curve is clipped to its plot, and the handles are not", () => {
   assert.equal(plain.wrap.querySelectorAll("g").length, 0);
   assert.equal(plain.wrap.querySelector(".config-ui-curve__path").getAttribute("clip-path"), null);
 });
+
+test("the colour bar is drawn from the tokens, at the values the curve puts them at", () => {
+  // **A picture of this ramp, not of the channel.** The alternative was computing a colour from a value,
+  // which needs `@oklch.js` inlined into the UI — a second copy of the colour maths, which is the one thing
+  // this repo has a standing rule against — and needs the hue and saturation beside it to mean anything.
+  const hexes = ["#FAFAFA", "#D0CFD6", "#A3A1AF", "#69677A", "#2B2A32", "#0A090B"];
+  renderer.setCurveRamps({ lc: hexes });
+  const form = axisForm();
+  const fill = form.container.querySelector(".config-ui-curve__range-fill");
+  assert.equal(fill.getAttribute("data-shown"), "true");
+
+  const stops = fill.style.background.replace(/^linear-gradient\(to bottom, |\)$/g, "").split(", ");
+  assert.equal(stops.length, hexes.length, "one stop per token");
+  hexes.forEach((hex) => {
+    assert.ok(stops.some((s) => s.indexOf(hex) === 0), hex + " is not on the bar");
+  });
+
+  // A gradient's stops have to ascend, whichever way the ramp runs.
+  const at = stops.map((s) => parseFloat(s.split(" ")[1], 10));
+  at.forEach((v, i) => {
+    assert.ok(v >= 0 && v <= 100, "a stop is off the bar at " + v + "%");
+    if (i) assert.ok(v >= at[i - 1], "stops are out of order: " + at.join(", "));
+  });
+
+  renderer.setCurveRamps({});
+});
+
+test("a curve with no published colours has no bar rather than an empty one", () => {
+  renderer.setCurveRamps({});
+  const form = axisForm();
+  assert.equal(
+    form.container.querySelector(".config-ui-curve__range-fill").getAttribute("data-shown"), "false");
+});
