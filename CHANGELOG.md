@@ -29,6 +29,11 @@ a plain statement of the new default.
   the plot zooms the axis: drag the window to pan, either edge to resize, the bare rail to jump. Zooming
   never touches the config. Curves without `@ends` — the scale editors in Spacing, Radius and
   Typography — are unchanged.
+- **Colors' lightness curves are drawn on that axis.** The OKLCH collection ladder reads against its
+  Bright and Dark, and each HSL mode's curve against its own — so the chart says what lightness a step
+  lands on rather than how far the shape sits from straight, and the ends are draggable. Chroma, hue
+  and saturation are unchanged for now: each of those still keeps a separate Middle field, and an axis
+  would put a second answer to that question on screen beside the first.
 
 ### Fixed
 
