@@ -473,6 +473,28 @@ deleting variable modes they did not recognise.
   with `autoOpen: false` on `displayResults`; the default is unchanged, so every other script still
   opens the panel for anything that is not a plain success.
 
+- **A read now lands within 10 of 255 in either colour model, on every scale.** It was 49 in HSL and 37 in
+  OKLCH, and the cause was that *where a ramp turns* was being decided twice: recognition read its three
+  anchors at the middle of the step list, while the generated ramp bent at its own midpoint. Those are one
+  fact. Real sets mostly turn at 400 while the midpoint of a sixteen-step list is 300, so the anchors were
+  read at one step and applied at another.
+  It is now found by measuring — generating at each candidate step and keeping the one closest to the file
+  — and recorded, so generation bends where the anchors were read. Two properties of the colours were tried
+  as a rule first and both failed: anchoring on the peak of OKLCH chroma is right for OKLCH and leaves HSL
+  at 60, anchoring on the peak of HSL saturation is the reverse at 67.
+
+- **Hue can carry its own curve.** Worth little on a cool palette (under 6°) and a lot on a warm one — an
+  amber ramp travelling 49° came back 10° out and is now within 1.2°. Only fitted where there is enough
+  chroma for a measured hue to be a value rather than rounding, which on a greyscale it is not.
+
+- **Colour has its own curve, not the lightness curve's timing.** Chroma used to be rebuilt by
+  interpolating three anchors on the *lightness* curve's schedule, so a palette was paced by its ladder
+  rather than by itself — Tailwind blue came back a third less colourful than the file at its most
+  saturated step. A read now fits a chroma curve too, and the worst-step error drops from 0.026–0.067 to
+  0.002–0.007. It is the same kind of curve as the lightness one, in the same editor: chroma is not
+  monotone, but each half of it is, and two half-fits joined at the peak is exactly a three-anchor curve.
+  Leaving it empty keeps the old behaviour, so nothing already made moves.
+
 - **A read recognises the curve the collection was already drawn with.** Opening a colour set used to land
   on *Original* — the file's values and an empty curve editor — because a ramp carries no record of how it
   was made. That is true of naming a preset and false of fitting one: a fitted three-anchor curve lands

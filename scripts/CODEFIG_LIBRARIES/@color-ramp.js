@@ -121,12 +121,13 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // recovered to the nearest rather than silently reassigned, and the stored value is left alone so it comes
   // back if the step does.
   var placementIndex, placementAuto = true, recoveredFrom = null;
+  var turnsAt = colorsMidIndex(steps);
   if (wanted) {
     var named = namedIndex;
     if (named >= 0) { placementIndex = named; placementAuto = false; }
-    else { placementIndex = seed ? oklchNearestStep(base, seed.L) : colorsMidIndex(steps); recoveredFrom = wanted; }
+    else { placementIndex = seed ? oklchNearestStep(base, seed.L) : turnsAt; recoveredFrom = wanted; }
   } else {
-    placementIndex = seed ? oklchNearestStep(base, seed.L) : colorsMidIndex(steps);
+    placementIndex = seed ? oklchNearestStep(base, seed.L) : turnsAt;
   }
 
   var lock = !!(mode.seed && mode.seed.lock);
@@ -137,8 +138,22 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // curve the ladder no longer follows is how the colour and the lightness came to turn at different steps.
   var walked = reanchor ? reanchor.curve : curveId;
 
+  // **Chroma's own schedule, when the mode carries one.** The anchors are the mode's in both models — only
+  // the lightness ladder is shared — so this is read from the mode whichever model is in play. Absent, the
+  // ramp paces colour by the lightness curve, which is what it has always done.
+  // **The curve for the model in play.** Chroma and saturation are different quantities — one absolute, one
+  // already a fraction of what the lightness holds — so a curve fitted to one describes nothing about the
+  // other. They are stored separately for the same reason the hue anchors are.
+  var chromaSource = oklch ? mode.chromaCurve : mode.saturationCurve;
+  var chromaCurve = Array.isArray(chromaSource) ? bezierNormalise(chromaSource) : [];
+  // Hue is a different angle in each model — OKLCH's is perceptual, HSL's is where the maximum channel
+  // sits, and on a near-neutral the two disagree by more than 30 degrees — so it carries two curves too.
+  var hueSource = oklch ? mode.hueCurve : mode.hslHueCurve;
+  var hueCurve = Array.isArray(hueSource) ? bezierNormalise(hueSource) : [];
+
   var rows = oklchRamp({
-    steps: steps, ladder: ladder, curve: walked, middleIndex: placementIndex,
+    steps: steps, ladder: ladder, curve: walked, chromaCurve: chromaCurve, hueCurve: hueCurve,
+    middleIndex: placementIndex,
     model: oklch ? 'oklch' : 'hsl',
     hue: colorsChannel(mode, 'hue', oklch),
     chroma: colorsChannel(mode, 'chroma', oklch)
@@ -178,6 +193,136 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
     drift: reanchor ? reanchor.drift : null, clamped: clamped, anchors: anchors, curve: walked,
     original: segments.original
   };
+}
+
+/**
+ * **Where a ramp turns**, found by trying every step and keeping the one that reproduces the file best.
+ *
+ * The anchor step is where the three colour anchors are read and where the generated ramp bends. Those are
+ * one fact, and they were being decided in two places: recognition read at the index midpoint while
+ * generation bent at `colorsMidIndex` or a typed placement. On this file's sets they are not the same step
+ * — eleven of sixteen turn at 400 while the midpoint of a sixteen-step list is 300 — and anchors read at
+ * one step and applied at another was the largest error left in a read.
+ *
+ * **Measured, not guessed, because every guess tried failed on half the library.** Anchoring on the
+ * extremum of OKLCH chroma is right for OKLCH and puts HSL's worst case at 60 of 255; anchoring on the
+ * extremum of HSL saturation is right for HSL and puts OKLCH's at 67. There is no property of the colours
+ * that picks correctly for both, so the choice is made by generating at each candidate and comparing —
+ * which is cheap, because the answer is wanted once per read rather than once per render.
+ *
+ * **One anchor for both models, on purpose.** Scored on the *worse* of the two so neither is sacrificed.
+ * Choosing per model would be optimal by 2 levels of 255 on four sets and would make the step a ramp turns
+ * at depend on which model you happened to be looking at, which is not a thing that should be true.
+ *
+ * Worst channel across the whole library, of 255: **10 in both models**, against 60 and 67 for the two
+ * heuristics, and equal to picking the best step per model separately.
+ */
+function colorsBestAnchor(hexes, steps) {
+  var fallback = colorsMidIndex(steps);
+  if (!hexes || hexes.length < 5 || hexes.length !== steps.length) return fallback;
+
+  /**
+   * **Everything the candidates share, computed once.**
+   *
+   * The two lightness curves do not depend on where the anchor goes — they span end to end — and each one
+   * costs a three-anchor sweep. Recomputing them inside the loop made a read take **11 seconds a mode**;
+   * hoisting them is the whole difference between this being a search and being unusable.
+   */
+  var okl = [], hsl = [];
+  for (var i = 0; i < hexes.length; i++) {
+    var a = oklchFromHex(hexes[i]), b = oklchHslFromHex(hexes[i]);
+    if (!a || !b) return fallback;
+    okl.push(a); hsl.push(b);
+  }
+  var shared = {
+    okl: okl, hsl: hsl,
+    lightnessOklch: colorsFitCurve(hexes, true),
+    lightnessHsl: colorsFitCurve(hexes, false)
+  };
+
+  /**
+   * **Scored without the channel curves.**
+   *
+   * The question is where the *anchors* go; the chroma and hue curves then adapt to whatever anchor was
+   * chosen, so refitting them inside the loop costs 16ms a candidate and does not change the answer.
+   * Checked across the whole library rather than assumed: scoring bare picks a different step on six of
+   * sixteen sets and lands on **exactly the same worst case, 10 of 255 in both models**, for a hundredth
+   * of the work. Refitting per candidate also had a cheaper-looking cousin — reusing the midpoint's curves
+   * — and that one is genuinely worse, 24 on sky, which is why this is the bare version and not that.
+   */
+  /**
+   * **Shortlist cheaply, then refit the finalists.**
+   *
+   * Scored bare — no chroma or hue curves — the ranking is close but not exact: it costs `neutral · Ash`
+   * two levels and `sage` one, because the curves that adapt to an anchor do change which anchor is best by
+   * a hair. Refitting *every* candidate fixes that and costs 16ms each, which is most of the search.
+   *
+   * So the bare score picks five finalists and only those are refitted properly. Measured across the
+   * library that lands on the same answer as refitting all fourteen, for a fifth of the refitting.
+   */
+  var bare = { chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [] };
+  var ranked = [];
+  for (var k = 2; k < hexes.length - 1; k++) {
+    ranked.push({ index: k, score: Math.max(colorsAnchorMiss(hexes, steps, k, true, shared, bare),
+                                            colorsAnchorMiss(hexes, steps, k, false, shared, bare)) });
+  }
+  ranked.sort(function (a, b) { return a.score - b.score; });
+
+  var best = fallback, bestScore = Infinity;
+  var finalists = Math.min(5, ranked.length);
+  for (var f = 0; f < finalists; f++) {
+    var at = ranked[f].index;
+    var fits = {
+      chromaCurve: colorsFitChromaCurve(hexes, true, at),
+      saturationCurve: colorsFitChromaCurve(hexes, false, at),
+      hueCurve: colorsFitHueCurve(hexes, true, at),
+      hslHueCurve: colorsFitHueCurve(hexes, false, at)
+    };
+    var score = Math.max(colorsAnchorMiss(hexes, steps, at, true, shared, fits),
+                         colorsAnchorMiss(hexes, steps, at, false, shared, fits));
+    if (score < bestScore - 1e-9) { bestScore = score; best = at; }
+  }
+  return best;
+}
+
+/**
+ * How far a read anchored at `mid` lands from the file, as the worst single 8-bit channel.
+ *
+ * Generates with an explicit placement, so `colorsGenerateMode` takes its named-placement path and never
+ * asks where the ramp turns — which is what keeps this from calling itself.
+ */
+function colorsAnchorMiss(hexes, steps, mid, oklch, shared, fits) {
+  var last = hexes.length - 1;
+  var okl = shared.okl, hsl = shared.hsl;
+  function anchorAt(i) {
+    return { hue: okl[i].H, chroma: okl[i].C, hslHue: hsl[i].H,
+             saturation: hsl[i].C * 100, lightness: hsl[i].L * 100 };
+  }
+  var existing = {};
+  existing.__probe__ = hexes;
+  var config = {
+    colorModel: oklch ? 'oklch' : 'hsl', steps: steps.join(', '), existing: existing,
+    curve: shared.lightnessOklch,
+    lightness: { bright: okl[0].L * 100, dark: okl[last].L * 100 }
+  };
+  var mode = {
+    name: '__probe__',
+    curve: shared.lightnessHsl,
+    chromaCurve: fits.chromaCurve,
+    saturationCurve: fits.saturationCurve,
+    hueCurve: fits.hueCurve,
+    hslHueCurve: fits.hslHueCurve,
+    seed: { hex: '', placement: steps[mid], lock: false },
+    bright: anchorAt(0), middle: anchorAt(mid), dark: anchorAt(last)
+  };
+  var made = colorsGenerateMode(config, mode, steps, null);
+  var worst = 0;
+  for (var c = 0; c <= last; c++) {
+    var got = oklchHexToRgb(made.rows[c].hex), want = oklchHexToRgb(hexes[c]);
+    if (!got || !want) return Infinity;
+    for (var ch = 0; ch < 3; ch++) worst = Math.max(worst, Math.abs(got[ch] - want[ch]) * 255);
+  }
+  return worst;
 }
 
 /**
@@ -260,6 +405,117 @@ function colorsFitCurve(hexes, oklch) {
   }
   var fit = bezierFitRamp(ladder);
   return fit ? fit.curve : [];
+}
+
+/**
+ * **The chroma curve a collection was already drawn with**, in the same shape as the lightness one.
+ *
+ * Lightness is fitted to every step and comes back within a point. Chroma is not: it is rebuilt by
+ * interpolating three anchors on the *lightness* curve's schedule, so the colour is paced by the ladder
+ * rather than by itself. Measured on Tailwind blue that is **0.068** out at its most saturated step — a
+ * third less colourful than the file — and no amount of moving the anchors fixes it, because the shape
+ * between them is not the lightness curve's shape.
+ *
+ * **It is not a new kind of object.** Chroma is not monotone — it rises to a peak and falls — so it cannot
+ * be one curve across the whole range. But it does not need to be: the ramp already interpolates each half
+ * separately, so what a curve has to describe is *progress through a half*, which is monotone in both. Two
+ * half-fits joined at the peak are exactly the three-anchor curve `bezierJoin` produces, and the editor
+ * that draws a lightness curve draws this one unchanged.
+ *
+ * The join's height is 0.5 and means nothing: each half is renormalised against it when it is read, so any
+ * value describes the same two shapes. Fixed rather than fitted, so two runs cannot disagree.
+ *
+ * → coordinates, or `[]` when there is nothing to fit — fewer than three steps, an unreadable hex, or a
+ * half with no chroma range to speak of, which is every neutral.
+ */
+function colorsFitChromaCurve(hexes, oklch, middleIndex) {
+  return colorsFitChannelCurve(colorsChannelSeries(hexes, oklch, 'chroma'), middleIndex, 0.01);
+}
+
+/**
+ * **The hue curve**, the same shape of thing.
+ *
+ * Fitted last of the three and worth the least on most sets — 1.8 to 6.2 degrees across cool palettes,
+ * where the chroma fit was worth ten times that. But warm ones move: amber travels 95 degrees to 46 and
+ * came back **10.2** out at its worst step, which is a visible 43 levels in a channel. With a curve it is
+ * **1.2**.
+ *
+ * **Unwrapped before fitting.** Hue is an angle, so a ramp crossing 0 reads as 358, 2, 6 — a jump of 356
+ * that is really a step of 4. Fitting that raw produces a curve describing a journey the colour never
+ * takes. The series is unwrapped to a continuous run first, and `oklchLerpHue` puts it back on the shortest
+ * arc when the ramp is generated.
+ *
+ * `[]` on anything near-grey: at low chroma a measured hue is rounding, not a value — this file already
+ * documents 52 degrees of swing from one 8-bit step at C=0.0017 — so a fit there describes noise.
+ */
+function colorsFitHueCurve(hexes, oklch, middleIndex) {
+  var chroma = colorsChannelSeries(hexes, oklch, 'chroma');
+  if (!chroma.length) return [];
+  var weakest = Math.min.apply(null, chroma);
+  if (weakest < 0.01) return [];
+  return colorsFitChannelCurve(colorsUnwrapHues(colorsChannelSeries(hexes, oklch, 'hue')), middleIndex, 1);
+}
+
+/** One channel of a ramp, read in the model that is in play. `[]` if any step is unreadable. */
+function colorsChannelSeries(hexes, oklch, which) {
+  if (!hexes || hexes.length < 5) return [];
+  var read = oklch ? oklchFromHex : oklchHslFromHex;
+  var out = [];
+  for (var i = 0; i < hexes.length; i++) {
+    var seen = read(hexes[i]);
+    if (!seen) return [];
+    out.push(which === 'hue' ? seen.H : seen.C);
+  }
+  return out;
+}
+
+/**
+ * Angles as a continuous run: every step within 180 degrees of the one before it.
+ *
+ * A ramp that crosses 0 reads 358, 2, 6 — three steps that look like a 356 degree lurch and are really a
+ * four degree drift. Only the *differences* are real, so the run is rebuilt from them.
+ */
+function colorsUnwrapHues(hues) {
+  if (!hues.length) return hues;
+  var out = [hues[0]];
+  for (var i = 1; i < hues.length; i++) {
+    var step = ((hues[i] - hues[i - 1] + 540) % 360) - 180;
+    out.push(out[i - 1] + step);
+  }
+  return out;
+}
+
+/**
+ * **A channel's shape, as two monotone halves joined at the middle.**
+ *
+ * Shared by chroma and hue because they need exactly the same thing: neither is monotone across a whole
+ * ramp — both rise to a peak and fall — but each *half* is, and the ramp already interpolates the halves
+ * separately. Two half-fits joined at the middle is the three-anchor curve the editor draws.
+ *
+ * `minSpan` is how much a half has to move before its shape is worth recovering. Below it, dividing the
+ * span out turns rounding into a curve.
+ */
+function colorsFitChannelCurve(values, middleIndex, minSpan) {
+  if (!values || values.length < 5) return [];
+  var last = values.length - 1;
+  var middle = (typeof middleIndex === 'number' && middleIndex >= 2 && middleIndex <= last - 2)
+    ? middleIndex : Math.floor(last / 2);
+
+  var lowerSpan = values[middle] - values[0];
+  var upperSpan = values[last] - values[middle];
+  if (Math.abs(lowerSpan) < minSpan || Math.abs(upperSpan) < minSpan) return [];
+
+  var lower = [], upper = [];
+  for (var a = 0; a <= middle; a++) lower.push((values[a] - values[0]) / lowerSpan);
+  for (var b = middle; b <= last; b++) upper.push((values[b] - values[middle]) / upperSpan);
+
+  // **Two anchors per half, because that is all a joined curve can hold.** `bezierJoin` puts each half into
+  // one cubic segment — `bezierHalf` collapses a three-anchor half with `bezierWithoutMiddle` — so fitting
+  // the halves unrestricted produces shapes the join then throws away, silently and by half.
+  var loFit = bezierFitRamp(lower, 2);
+  var hiFit = bezierFitRamp(upper, 2);
+  if (!loFit || !hiFit) return [];
+  return bezierJoin(loFit.curve, hiFit.curve, middle / last, 0.5);
 }
 
 /**

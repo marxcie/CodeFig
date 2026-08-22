@@ -529,35 +529,33 @@ function oklchRamp(spec) {
   // range, and reading its progress at the middle step is what keeps the two on the same schedule. Deriving
   // it rather than storing it is the same rule the curve itself follows: the numbers are the answer.
   var gm = oklchEaseAt(ramCurve, last === 0 ? 1 : middle / last);
+
+  /**
+   * **Chroma may run on a schedule of its own.**
+   *
+   * Without one it borrows the lightness curve's, which is what the ramp has always done — and what makes a
+   * read come back a third short of the file at its most saturated step. The colour of a palette is not
+   * paced by its lightness; a designed set rises to a peak and falls on its own timing. Absent, everything
+   * below falls through to `u` and nothing changes.
+   */
+  var chromaCurve = (spec.chromaCurve && spec.chromaCurve.length) ? oklchCurveOf(spec.chromaCurve) : null;
+  var cgm = chromaCurve ? oklchEaseAt(chromaCurve, last === 0 ? 1 : middle / last) : 0;
+  // Hue gets the same treatment, for the same reason: it is not paced by the lightness either. Worth least
+  // of the three on cool palettes and most on warm ones — amber travels 49 degrees and was 10.2 out.
+  var hueCurve = (spec.hueCurve && spec.hueCurve.length) ? oklchCurveOf(spec.hueCurve) : null;
+  var hgm = hueCurve ? oklchEaseAt(hueCurve, last === 0 ? 1 : middle / last) : 0;
   var oklch = spec.model !== 'hsl';
   var rows = [];
 
   /**
-   * **HSL saturation is not interpolatable across a lightness ramp.**
+   * **Saturation is carried across as saturation.**
    *
-   * `S = C / (1 - |2L - 1|)`. The denominator peaks at L = 0.5 and collapses towards white and black, so the
-   * same S means a different amount of colour at every step — and interpolating it multiplies a rising S by a
-   * rising denominator. Measured on a real ramp that came out at more than **double** the file's colourfulness
-   * in the upper half, with a dip at the middle anchor and a lurch after it; the three anchors were read at
-   * L 97.6, 70.8 and 6.7, which are three numbers that do not mean the same thing.
-   *
-   * So the *absolute* colourfulness is what travels: each anchor's S is converted at its **own** lightness,
-   * the interpolation runs in C, and every step derives its own S from its own L. The anchor keeps its
-   * meaning — an S is well defined at the step it was read from — and only the interpolation changes. OKLCH
-   * needed none of this: its chroma is already absolute, which is why it never had the kink.
+   * It was converted to an absolute colourfulness at each anchor's own lightness, interpolated, and
+   * converted back — `S = C / (1 - |2L - 1|)`, a denominator that collapses towards white and black. The
+   * conversion was introduced against a real overshoot and it did prevent that, but it also turned a flat
+   * saturation into a cliff at the bright end and left the middle of a ramp duller than the file. S is
+   * already the fraction of the colour a lightness can hold; there is nothing to convert.
    */
-  function hslDenominator(L) {
-    return 1 - Math.abs(2 * L - 1);
-  }
-  var absolute = null;
-  if (!oklch) {
-    absolute = {
-      bright: spec.chroma.bright * hslDenominator(spec.ladder[0].L),
-      middle: spec.chroma.middle * hslDenominator(spec.ladder[middle].L),
-      dark: spec.chroma.dark * hslDenominator(spec.ladder[last].L)
-    };
-  }
-
   for (var i = 0; i < steps.length; i++) {
     var seg = oklchSegmentAt(i, middle, last);
     var g = oklchEaseAt(ramCurve, last === 0 ? 1 : i / last);
@@ -565,20 +563,50 @@ function oklchRamp(spec) {
       ? (gm > 1e-9 ? g / gm : 1)
       : (gm < 1 - 1e-9 ? (g - gm) / (1 - gm) : 1);
     u = oklchClamp01(u);
-    var H = oklchLerpHue(spec.hue[seg.from], spec.hue[seg.to], u);
+    // Hue stays on the lightness schedule: measured, it is 1.8-6.2 degrees out across chromatic sets and
+    // pure noise on neutrals, so a curve of its own would be fitting rounding.
+    var uh = u;
+    if (hueCurve) {
+      var hg = oklchEaseAt(hueCurve, last === 0 ? 1 : i / last);
+      uh = oklchClamp01(seg.from === 'bright'
+        ? (hgm > 1e-9 ? hg / hgm : 1)
+        : (hgm < 1 - 1e-9 ? (hg - hgm) / (1 - hgm) : 1));
+    }
+    var H = oklchLerpHue(spec.hue[seg.from], spec.hue[seg.to], uh);
+    var uc = u;
+    if (chromaCurve) {
+      var cg = oklchEaseAt(chromaCurve, last === 0 ? 1 : i / last);
+      uc = oklchClamp01(seg.from === 'bright'
+        ? (cgm > 1e-9 ? cg / cgm : 1)
+        : (cgm < 1 - 1e-9 ? (cg - cgm) / (1 - cgm) : 1));
+    }
     var L = spec.ladder[i].L;
     var C, fit, thinned = false;
     if (oklch) {
-      C = oklchLerp(spec.chroma[seg.from], spec.chroma[seg.to], u);
+      C = oklchLerp(spec.chroma[seg.from], spec.chroma[seg.to], uc);
       fit = oklchToHex(L, C, H);
     } else {
-      var wanted = oklchLerp(absolute[seg.from], absolute[seg.to], u);
-      var room = hslDenominator(L);
-      // **A colourfulness this lightness cannot hold is reported, not hidden.** Near white and black the
-      // denominator is small, so an S over 1 is asking for more colour than HSL has at that lightness — the
-      // same situation OKLCH reports as a chroma reduction, and it is said the same way.
-      C = room < 1e-6 ? 0 : Math.max(0, wanted) / room;
-      if (C > 1) { C = 1; thinned = true; }
+      // **Saturation travels, not colourfulness.**
+      //
+      // `S = C / (1 - |2L - 1|)`, so S is *already* the fraction of the colour a lightness can hold — that
+      // is what it means. This used to multiply S out into an absolute colourfulness at each anchor's own
+      // lightness, interpolate that, and divide back; the denominator collapses towards white and black, so
+      // the round trip turned a flat saturation into a cliff. Measured on a real lime ramp it dropped 30 to
+      // 18.2 in a single step, and left the middle of the ramp visibly duller than the file.
+      //
+      // Carrying S across directly is both simpler and closer, on every set measured (worst channel, of 255):
+      //
+      //     lime 40 -> 7    teal 72 -> 14    blue 28 -> 12    amber 17 -> 16    zinc 8 -> 6
+      //
+      // It also fixes a units mismatch by construction: `colorsFitChromaCurve` fits the curve to saturation,
+      // which is now the quantity the curve shapes.
+      //
+      // **What this gives up.** The old model could not produce a step more colourful than its most colourful
+      // anchor. That bound was introduced against a real overshoot — better than double the file's peak — but
+      // it is stated against the *anchors*, and a ramp's most colourful step usually is not one: this lime
+      // peaks at 208 against anchors of 168, so the bound was cutting off the file's own shape. What replaces
+      // it is the real one — S cannot exceed 1, which is the most any lightness holds.
+      C = oklchClamp01(oklchLerp(spec.chroma[seg.from], spec.chroma[seg.to], uc));
       fit = oklchHslToHex(L, C, H);
     }
     rows.push({

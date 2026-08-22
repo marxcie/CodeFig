@@ -1871,7 +1871,8 @@ function foundationSliceKeys(domain) {
   // panel's. A field in a shipped default block is declared by definition — leave one out and the script
   // warns about its own untouched config the first time anyone runs it, which is how people learn that
   // warnings are noise.
-  if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'lower', 'upper', 'lightness']);
+  if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
+    'lower', 'upper', 'lightness']);
   return keys;
 }
 
@@ -1888,7 +1889,8 @@ function foundationDomainKeys(domain) {
       'styleNaming', 'overviewPreviewText']);
   }
   if (domain === 'grid') return common.concat(['extensionColumns']);
-  if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'lower', 'upper', 'lightness']);
+  if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
+    'lower', 'upper', 'lightness']);
   return common;
 }
 
@@ -3512,44 +3514,34 @@ async function colorsRecognise(collectionName, group, modeName) {
   var last = readings.length - 1;
 
   /**
-   * **The middle anchor goes where the colour is, not halfway along the list.**
+   * **The index midpoint, not the most colourful step.**
    *
-   * Lightness is fitted to every step, so it comes back within a point. Hue and chroma are not — they are
-   * rebuilt by interpolating three anchors, and *which* three decides how close that gets. Put the middle at
-   * `floor(last/2)` and a ramp whose chroma peaks later is reconstructed as a monotone fall from the middle
-   * to the dark end, which is not the shape it has: Tailwind blue peaks at 700 and came back **0.068** of
-   * chroma short at its most saturated step — a third less colourful, and the largest single error anywhere
-   * in a read.
+   * Anchoring on the chroma peak was tried and reverted. It read better in isolation — a palette rises to a
+   * peak and falls, so anchoring there let two segments describe that shape — but recognition does not get
+   * to choose where the *ramp* turns. That is `placementIndex`, which comes from the seed's placement or
+   * from this same midpoint, and nothing told it the anchors had moved. So the middle anchor was read at one
+   * step and applied at another: in HSL, catastrophically, because HSL saturation peaks on near-blacks —
+   * `#113300` reads as more saturated than a vivid lime, so the anchors came off step 800 and were applied
+   * at step 300.
    *
-   * Anchoring on the peak instead lets the two segments describe a rise and then a fall, which is what a
-   * designed palette actually does. Measured worst-chroma error, auto middle → peak:
-   *
-   * ```
-   * blue 0.068 → 0.026    teal 0.063 → 0.036    red 0.025 → 0.022    zinc 0.004 → 0.005
-   * ```
-   *
-   * A neutral has no peak worth finding and lands wherever rounding puts it, which costs nothing because
-   * there is almost no chroma to get wrong. The tie goes to the earlier step, so the answer does not depend
-   * on iteration order, and the ends are excluded because an anchor *on* an end is not a middle.
+   * The lesson is not "the midpoint is better". It is that *where the ramp turns* is one fact, and it cannot
+   * be decided in two places. Moving it is worth revisiting only alongside the placement it has to agree
+   * with — see colorizr's "lock step", which is the single named place its input colour is preserved.
    */
-  var mid = Math.floor((readings.length - 1) / 2);
-  if (last >= 2) {
-    var peak = 1;
-    for (var pi = 2; pi < last; pi++) if (readings[pi].C > readings[peak].C) peak = pi;
-    // **Only when there is a peak worth finding.** On a near-grey the highest chroma is whichever step
-    // rounding favoured — this file's own neutrals sit around 0.004, where one 8-bit step moves the measured
-    // value by more than the differences between steps. Anchoring on that would make `midStep` depend on
-    // rounding, and it would buy nothing: with almost no chroma there is almost no chroma to get wrong
-    // (zinc measured 0.004 against 0.005 either way). Below the threshold the index midpoint stands, which
-    // is the documented rule and the one the sixteen-step neutral is pinned on.
-    if (readings[peak].C >= 0.02) mid = peak;
-  }
+  // **Found by measuring, and written down** — see `colorsBestAnchor`. Generation cannot search for it
+  // (it would be searching for the answer to the question it is answering), so the read that *can* does it
+  // once and records it as the placement below. That is what stops the anchors being read at one step and
+  // applied at another.
+  var mid = colorsBestAnchor(answer.existing, answer.steps);
+
   answer.anchors = {
     bright: readings[0].L, middle: readings[mid].L, dark: readings[last].L
   };
   answer.hue = { bright: readings[0].H, middle: readings[mid].H, dark: readings[last].H };
   answer.chroma = { bright: readings[0].C, middle: readings[mid].C, dark: readings[last].C };
   answer.midStep = usable[mid].step;
+  // The index too, not just the name: the chroma fit joins its halves at this step and cannot look a name up.
+  answer.midIndex = mid;
 
   // **The same three colours, read again in HSL.** A hue is not a hue across models: OKLCH's is a perceptual
   // angle and HSL's is where the maximum channel sits, and the two disagree by tens of degrees on the very
@@ -3692,7 +3684,8 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     }
     answer.recognition.modes[wanted[w]] = {
       found: seen.found, skipped: seen.skipped, aliased: seen.aliased, duplicates: seen.duplicates,
-      notes: seen.notes, hueUnreliable: !!seen.hueUnreliable, midStep: seen.midStep
+      notes: seen.notes, hueUnreliable: !!seen.hueUnreliable, midStep: seen.midStep,
+      midIndex: seen.midIndex
     };
     if (!seen.found) {
       // **Present, and carrying nothing.** `fillConfigBlock` removes a block entry the payload does not
@@ -3735,23 +3728,34 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     }
     var entry = {
       name: wanted[w], steps: seen.steps,
-      bright: anchorAt('bright'), middle: anchorAt('middle'), dark: anchorAt('dark')
+      bright: anchorAt('bright'), middle: anchorAt('middle'), dark: anchorAt('dark'),
+      // **Chroma's schedule, fitted per mode in both models.** The lightness ladder is shared in OKLCH; the
+      // colour anchors never are, so neither is the curve that paces them. `[]` when the ramp is too flat
+      // to have a shape worth recovering, which is every neutral.
+      // **Both models' curves, every read** — the rule the hue and chroma anchors above already follow, and
+      // the one the curves were breaking. A read that fits only the selected model makes switching lossy:
+      // measured across this file's sixteen sets, reading in HSL and switching to OKLCH landed a mean of 59
+      // 8-bit levels from the file against 10 for a read in OKLCH, because the OKLCH ladder was still the
+      // block's Linear default. Nothing about a read is model-specific except which numbers get looked at.
+      chromaCurve: colorsFitChromaCurve(seen.existing, true, seen.midIndex),
+      saturationCurve: colorsFitChromaCurve(seen.existing, false, seen.midIndex),
+      hueCurve: colorsFitHueCurve(seen.existing, true, seen.midIndex),
+      hslHueCurve: colorsFitHueCurve(seen.existing, false, seen.midIndex),
+      // **The step the ramp turns at, written down.** Everything else about the anchors is recovered from
+      // the file, and so is this — `colorsBestAnchor` found it by measuring. Generation cannot search for
+      // it without searching for its own answer, so the read records it and generation reads it back.
+      //
+      // Only `placement`. `fillConfigBlock` merges a payload key by key, so a seed hex or a lock the user
+      // typed survives being read over — which they must, because a file holds no record of either.
+      seed: { placement: seen.steps[seen.midIndex] }
     };
     // Only HSL gets a curve, and only *Original*: it means "the ramp already in the file", which OKLCH has
     // no equivalent of because its ladder is shared. Left off the payload in OKLCH so `fillConfigBlock`
     // keeps whatever curve the block already had.
-    if (colorModel !== 'hsl') {
-      // OKLCH's curve is the collection's, so *Original* goes on the shared block rather than on each mode —
-      // set once below, outside this loop.
-      entry.curve = undefined;
-    }
-    if (colorModel === 'hsl') {
-      // **HSL's ladder is the mode's, so the fit is too.** Each mode is read back into the curve that draws
-      // it; a read that cannot be fitted falls back to the empty curve, which is *Original* — the file's own
-      // colours, untouched. A read fills coordinates and nothing else, so there is nothing here that a
-      // dragged handle could later disagree with.
-      entry.curve = colorsFitCurve(seen.existing, false);
-    }
+    // **HSL's ladder is the mode's, so the fit is too** — and it is filled whichever model is selected,
+    // because `curve` is the HSL field and switching to HSL must not find it empty. OKLCH's ladder is the
+    // collection's and is set once below, outside this loop.
+    entry.curve = colorsFitCurve(seen.existing, false);
     perMode.push(entry);
   }
 
@@ -3767,7 +3771,9 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     // each mode makes separately — and `leadName` is the mode the anchors came from, so fitting anything
     // else would describe a ladder nothing is generated from. An unfittable read gives `[]`, which is
     // *Original*: the file's own colours, untouched.
-    curve: colorModel === 'hsl' ? undefined : colorsFitCurve(answer.existing[leadName], true),
+    // Fitted whichever model is selected, for the same reason: this is OKLCH's ladder, and a panel switched
+    // into OKLCH must not find the shipped Linear default where the file's own shape belongs.
+    curve: colorsFitCurve(answer.existing[leadName], true),
     // **No middle.** The ladder's bend is the curve's own anchor now, so a middle lightness here would be a
     // second answer to a question the curve already answers — and the block has no field to show it in.
     lightness: {
@@ -3782,7 +3788,9 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     // this the second place that had to know which model was in play — and the place that would silently
     // drop Saturation and Lightness the moment the first one learned to produce them.
     modes: perMode.map(function (m) {
-      var entry = { name: m.name, bright: m.bright, middle: m.middle, dark: m.dark };
+      var entry = { name: m.name, bright: m.bright, middle: m.middle, dark: m.dark,
+                    chromaCurve: m.chromaCurve, saturationCurve: m.saturationCurve,
+                    hueCurve: m.hueCurve, hslHueCurve: m.hslHueCurve, seed: m.seed };
       // Only when it was read in HSL: `fillConfigBlock` touches the keys a payload carries and leaves the
       // rest, so omitting this keeps whatever curve an OKLCH block already had.
       if (m.curve) entry.curve = m.curve;

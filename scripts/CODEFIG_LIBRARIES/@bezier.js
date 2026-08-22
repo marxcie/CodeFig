@@ -586,7 +586,11 @@ function bezierFitSegment(xs, ys) {
   for (var s = 0; s < starts.length; s++) {
     var c = starts[s].slice();
     var err = bezierWorstError(bezierNormalise(c), xs, ys);
-    for (var step = 0.25; step > 2e-3; step *= 0.5) {
+    // **The floor is 8e-3, not smaller.** Below it the descent keeps working and stops improving: measured
+    // across sixteen real ramps, dropping from 2e-3 to 8e-3 leaves the worst fit at exactly 1.39 lightness
+    // points and takes 28% off the time. A control point is drawn at a few hundred pixels and stored to six
+    // decimals; refining it past a thousandth is arithmetic nobody can see.
+    for (var step = 0.25; step > 8e-3; step *= 0.5) {
       var moved = true;
       while (moved) {
         moved = false;

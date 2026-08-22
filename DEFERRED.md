@@ -588,6 +588,42 @@ That is the difference between view state and the kind of stored answer this cod
 
 ---
 
+## OKLCH chroma could be a fraction of the gamut ceiling
+
+**The idea, from colorizr.** Instead of interpolating absolute chroma between three anchors, carry the
+*fraction of what sRGB holds* at each step's own lightness and hue, and convert back. HSL already works this
+way — saturation is that fraction by definition — and switching HSL to carry it directly was a large win.
+
+**Measured for OKLCH, and it is a wash on error.** Worst 8-bit channel against the file, real pipeline:
+
+```
+              absolute      gamut, curve fitted     gamut, curve fitted
+                            in absolute space       in fraction space
+your lime     36 (10 clipped)        44                    35
+blue                16                41                    19
+teal                26                51                    16
+amber         43 (7 clipped)          44                    43
+zinc                 5                 6                     6
+```
+
+Two things that matters for. First, the middle column is a trap: fitting the chroma curve in absolute space
+and applying it in fraction space is a units mismatch, and it makes everything *worse* — the same class of
+bug that was making HSL dull. Any attempt at this has to fit the curve in the space it is used in.
+
+Second, at equal error the gamut version **stops clipping entirely** — lime went from 10 clipped steps to 0,
+amber from 7 to 0. A clipped step is one the panel cannot adjust: it is pinned to the gamut boundary and
+moving the anchor does nothing. That is worth something the error figure does not show.
+
+**Why it is not in.** Level on error is not a good enough reason to add a second interpolation space, and
+the HSL fix landed the win that was actually visible. Worth revisiting if clipping turns out to matter in
+use, or alongside colorizr's other idea — a *lock step*, the single named place the input colour is
+preserved exactly, which is what the reverted peak-anchoring got wrong by having two.
+
+`oklchMaxChroma(L, H)` is three lines when it is needed: `oklchToHex(L, 9, H).chroma` returns the ceiling,
+because fitting a colour already bisects for it. Six microseconds.
+
+---
+
 ## The colour tokens are not drawn on the curve editor
 
 **What it would be.** A dot per token on the curve chart, filled with the colour it stands for, placed at
@@ -607,6 +643,82 @@ the anchor should *become* that step's dot — colour fill, accent ring, slightl
 dragging it read correctly, since dragging the anchor is choosing which step carries the middle colour.
 Deciding that is the first move whenever this is picked up, because it changes what the dots are rather
 than just how big they are.
+
+---
+
+## The `@rows` spec should be JSON on its own lines, not a mini-language on one
+
+**What.** A `@rows` control's columns are declared in the property's trailing `//` comment, in a
+positional mini-language. Colors' is **2146 characters on one line**; the next worst (Typography) is 680,
+and the other four sit between 511 and 545. Márton, reading it: *"I'm worried it's really hard to read, and
+I feel the same structure can be stored in a JSON object, much more readable."*
+
+**The finding that matters.** The spec is a *serialization of an object the parser already builds*.
+`parseRowColumns` (`src/config-ui/parser.js:324-530`) produces exactly `{ key, label, labelSpelled, type,
+options, showWhen, disabledWhen, disabledNote, helper, placeholder, columns }`, and `renderer.js` consumes
+only those keys. So "store it as JSON" is not a new format — it is writing down the internal one and
+deleting the codec: ~207 lines of parser plus ~58 lines of printer (`serialiseColumn`,
+`parser.js:1188-1245`) exist purely to compress that object onto one line and expand it again.
+
+**Where the unreadability comes from — the one-line constraint, not the syntax.** One line means six
+punctuation classes carry meaning positionally at three depths: `:` type, `|` separator, `()` options, `{}`
+*both* group and condition (told apart by position only), `[]` disabled-when, `=` label (first one wins),
+`;` AND, `@word` modifiers. That forces a pile of extraction-order rules, each of which is a comment in the
+parser today because each was a bug first: `@rows:` before `@helper:` or the helper eats the spec; a
+group's braces before its `@helper:` or the helper swallows the closing brace and the column silently
+degrades to a text field; `@placeholder="…"` before the condition and the label because it may contain `=`
+or `{`; an option label is `value:Label` and never `value=Label`; a column helper cannot contain `|`,
+stated rather than escaped; `labelSpelled` exists only so the printer does not drop `=Columns` from
+`columns:number=Columns`; `\n` in a helper is a literal two-character escape. It also collides with JS —
+`radio(modular|metric)` was read as a call to `radio()`, which is why `validate-scripts.js:355-360` strips
+comments first.
+
+**Two separable decisions.** The first carries most of the win.
+
+1. **Move the spec off the value line onto its own comment lines.** This is what buys multi-line, and it
+   buys something bigger: the form never edits the spec, so a spec on its own lines can be carried back
+   **verbatim**. `serialize` reprints the property line whenever a value changes, which is the *only*
+   reason a spec printer exists — off that line, the printer is deleted rather than rewritten, and every
+   round-trip hazard above goes with it.
+2. **Make the syntax JSON.** `// @rows: {` … `// }` above the property, holding
+   `{ label, layout, columns: [ … ] }`. `looseJsonToJson` already accepts bare keys, single quotes,
+   trailing commas and comments, so reading it needs no new machinery. Conditions become named keys
+   (`showWhen: { family: ["sine","quad"] }`, multiple keys ANDed), options a `{value: label}` map, and
+   `@tabs`/`@blocks` — today two booleans where both could be set — become one `layout` of
+   `"table" | "tabs" | "blocks"`.
+
+**Dispatch is unambiguous, so nothing is forced.** A spec whose first non-space character is `{` is JSON;
+anything else is the current mini-language. Colors can move and the other four stay. If you would rather
+have one format, migrating all six sites is mechanical and lets `parseRowColumns` and `serialiseColumn` be
+deleted outright.
+
+**Considered and not chosen: the schema leaves the block entirely.** `// @rows: colorsModeColumns` naming a
+real JS object in the script. It is the honest split of audiences — values are user data that get pasted
+between files, the spec is author data that never is — and it is the only form that can *share*
+sub-objects, which matters because Colors' three anchor groups are byte-identical and are ~1400 of its 2146
+characters. But `parse(block)` is called from ~12 places in `src/ui.html` plus tests plus
+`build-style-reference.js`, all with block text only; threading a second source through is a wider
+commitment than this problem currently justifies. Revisit if a second script grows Colors-sized repetition.
+
+**What it would cost.** ~60 lines in the `parse()` comment branch, beside where `@fromFile`, `@preview` and
+`@collectionModes` already live (`parser.js:670-760`): recognise the opener, brace-count across comment
+lines, strip the `// ` prefixes, `JSON.parse(looseJsonToJson(...))`, normalise `options` → `[{value,label}]`
+and `showWhen` → `[{field,values}]`, attach to the next field row, keep `raw` for verbatim re-emit.
+**`renderer.js` does not change** — the normalised column object is identical to what is built today.
+Colors' spec migrates, `scripts/HELP/help-documentation.js` gains a JSON specimen, and therefore
+`artifacts/style-reference.html` regenerates with a coverage row in `tests/style-reference.test.js`.
+`config-rows`, `config-rows-group`, `rows-conditional-columns`, `rows-radio-and-named-options` and
+`config-tabs` stay as back-compat coverage and each wants a JSON twin asserting the same parsed object;
+`tests/config-round-trip.test.js` is the load-bearing one, and the verbatim-carry claim is what it should
+be made to prove.
+
+**One gate worth adding while in there.** Nothing validates the spec today, so a mistyped brace silently
+degrades a column to a text field. A malformed JSON spec should fail `npm run validate`.
+
+**One caveat on the shape.** An `options` map relies on JS insertion order, which holds for string keys but
+**not** for numeric-looking ones (`{2:"Two",1:"One"}` iterates 1 then 2). No shipped spec has numeric
+option values; if the format should be safe by construction rather than by inventory, use
+`[{ value, label }]` and accept the extra width.
 
 ---
 
