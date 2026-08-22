@@ -685,6 +685,30 @@ function colorsPreviewHtml(config, domain, modeName) {
   return out.join('');
 }
 
+/**
+ * **How far, not just how many.**
+ *
+ * A count on its own reads as an alarm. Since a read started reproducing the file closely, an untouched
+ * collection reports twelve of sixteen steps "changed" — and every one of them by one to four levels out
+ * of 255, which nobody can see. That number sent us looking for a bug in the generator three times.
+ *
+ * The distance is the thing that decides whether to care, so it leads. Under three levels is below what an
+ * eight-bit channel can carry meaningfully, and is called what it is rather than dressed up as a change.
+ */
+function colorsChangeCaption(entry, made) {
+  var worst = 0;
+  for (var i = 0; i < entry.changed.length; i++) {
+    var change = entry.changed[i];
+    var now = oklchHexToRgb(made.rows[change.index].hex);
+    var was = oklchHexToRgb(change.was);
+    if (!now || !was) continue;
+    for (var c = 0; c < 3; c++) worst = Math.max(worst, Math.round(Math.abs(now[c] - was[c]) * 255));
+  }
+  var count = entry.changed.length + ' of ' + made.rows.length + ' steps';
+  if (worst <= 2) return count + ' differ from the file, by less than one visible step';
+  return count + ' would change, by up to ' + worst + ' of 255';
+}
+
 /** Bright at the first step, Dark at the last, Middle over the step the seed landed on. */
 function colorsAnchorStrip(made, steps) {
   var last = steps.length - 1;
@@ -884,7 +908,7 @@ function colorsStrip(entry, steps) {
   var out = ['<div class="color-ramp-preview">'];
   if (entry.existing && entry.changed.length) {
     out.push('<div class="color-ramp-preview-caption">' +
-      colorsEscapeHtml(entry.changed.length + ' of ' + made.rows.length + ' steps would change') +
+      colorsEscapeHtml(colorsChangeCaption(entry, made)) +
       '</div>');
   }
   out.push(colorsAnchorStrip(made, steps));

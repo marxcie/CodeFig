@@ -473,6 +473,11 @@ deleting variable modes they did not recognise.
   with `autoOpen: false` on `displayResults`; the default is unchanged, so every other script still
   opens the panel for anything that is not a plain success.
 
+- **The preview says how far a change is, not only how many steps it touches.** Now that a read reproduces
+  a collection closely, an untouched one reports ten of sixteen steps "changed" — every one by a few levels
+  out of 255, which nobody can see. It now reads *"10 of 16 steps would change, by up to 4 of 255"*, and a
+  difference too small to see is named as one.
+
 - **A read now lands within 10 of 255 in either colour model, on every scale.** It was 49 in HSL and 37 in
   OKLCH, and the cause was that *where a ramp turns* was being decided twice: recognition read its three
   anchors at the middle of the step list, while the generated ramp bent at its own midpoint. Those are one
