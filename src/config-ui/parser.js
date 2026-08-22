@@ -325,6 +325,18 @@
       if (part === "original") { column.allowOriginal = true; return; }
       var growth = part.match(/^growth:([A-Za-z0-9_$]+)$/);
       if (growth) { column.growth = growth[1]; return; }
+      /**
+       * `ends:a..b` — the two the curve runs between. `ends:a..m..b` when the channel also has a **real**
+       * middle anchor of its own.
+       *
+       * The difference is not cosmetic. On lightness there is no middle field: the curve's own handle *is*
+       * the middle, so the box under the chart is a view of the handle. On chroma and hue there is one —
+       * the engine interpolates bright to `middle.chroma` to dark and paces it with the curve — and those
+       * are two different numbers. A box showing the handle there shows neither the anchor nor anything
+       * the engine reads, which is worse than showing nothing.
+       */
+      var trio = part.match(/^ends:([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)$/);
+      if (trio) { column.ends = { from: trio[1], mid: trio[2], to: trio[3] }; return; }
       var ends = part.match(/^ends:([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)$/);
       if (ends) { column.ends = { from: ends[1], to: ends[2] }; return; }
       var range = part.match(/^range:(-?[0-9.]+)\.\.(-?[0-9.]+)$/);
@@ -340,7 +352,9 @@
     var parts = [];
     if (c.allowOriginal) parts.push("original");
     if (c.growth) parts.push("growth:" + c.growth);
-    if (c.ends) parts.push("ends:" + c.ends.from + ".." + c.ends.to);
+    if (c.ends) {
+      parts.push("ends:" + c.ends.from + (c.ends.mid ? ".." + c.ends.mid : "") + ".." + c.ends.to);
+    }
     if (c.range) parts.push("range:" + c.range.lo + ".." + c.range.hi);
     return parts.join(", ");
   }
@@ -1101,8 +1115,9 @@
           inputType = "curve";
           f_curveOriginal = /@allowOriginal\b/.test(tip);
           f_curveSpec = {};
-          var f_ends = tip.match(/@ends:\s*([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)/);
-          if (f_ends) applyCurveSpec(f_curveSpec, "ends:" + f_ends[1] + ".." + f_ends[2]);
+          var f_trio = tip.match(/@ends:\s*([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)/);
+          var f_ends = f_trio || tip.match(/@ends:\s*([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)/);
+          if (f_ends) applyCurveSpec(f_curveSpec, "ends:" + f_ends.slice(1).join(".."));
           var f_range = tip.match(/@range:\s*(-?[0-9.]+)\.\.(-?[0-9.]+)/);
           if (f_range) applyCurveSpec(f_curveSpec, "range:" + f_range[1] + ".." + f_range[2]);
         }
@@ -1375,7 +1390,9 @@
         if (r.inputType === "curve") {
           parts.push("@curve");
           if (r.allowOriginal) parts.push("@allowOriginal");
-          if (r.ends) parts.push("@ends: " + r.ends.from + ".." + r.ends.to);
+          if (r.ends) {
+            parts.push("@ends: " + r.ends.from + (r.ends.mid ? ".." + r.ends.mid : "") + ".." + r.ends.to);
+          }
           if (r.range) parts.push("@range: " + r.range.lo + ".." + r.range.hi);
         }
         if (r.inputType === "mode") {

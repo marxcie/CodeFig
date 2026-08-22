@@ -26,9 +26,11 @@ a plain statement of the new default.
   channel is still read; switching one is not an edit and does not touch the config.
 - **The three anchor boxes sit under the chart**, left, centre and right. The two ends are the row's own
   cells, moved into place rather than rebuilt, so they keep their captions and their keys. The **Middle**
-  box is the curve's middle handle read in the channel's units — type in it and the handle moves, drag the
-  handle and it follows — and it is disabled with an em dash when the curve has no middle point, because
-  then there is nothing for it to be a view of.
+  box depends on the channel. Lightness has no middle anchor of its own, so its box **is** the curve's
+  middle handle read in lightness — type in it and the handle moves, drag the handle and it follows, and it
+  is disabled with an em dash when the curve has no middle point. Hue and Saturation do have one, and their
+  box is that anchor: the engine interpolates bright to middle to dark and paces it with the curve, which
+  are two different numbers, so showing the handle there would show neither.
 - **A curve can be drawn on a real axis.** `@ends: a..b` names the two fields a curve runs between and
   `@range: lo..hi` the limits of the quantity, and together they turn the plot's y axis from a unit
   square into the thing being edited — labelled at round values, with the dashed guide joining the two

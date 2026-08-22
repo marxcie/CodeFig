@@ -819,3 +819,34 @@ test('with no middle point the box has nothing to be a view of, and says so', ()
   assert.equal(form.middle.disabled, true);
   assert.equal(form.middle.value, '—', 'a number here would be one the curve does not hold');
 });
+
+test('a channel with a real middle adopts it; one without gets a view of the handle', () => {
+  /**
+   * **Two cases, and the binding says which.** Lightness has no middle field — the curve's handle *is* the
+   * middle — so the box under the chart is a view of the handle. Chroma and hue do have one: the engine
+   * interpolates bright to `middle.chroma` to dark and paces it with the curve, which are two different
+   * numbers. A box showing the handle there would show neither the anchor nor anything the engine reads.
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var modes = [{ name: "G", bright: { chroma: 0.02 }, middle: { chroma: 0.25 }, ' +
+      'dark: { chroma: 0.05 }, cc: [0.4, 0.2, 0.6, 0.8] }]; // @rows: name:text=Mode|#>Saturation|' +
+      'cc:curve(ends:bright.chroma..middle.chroma..dark.chroma, range:0..0.4)=Chroma curve|' +
+      'bright:{chroma:number=Start}=B|middle:{chroma:number=Middle}=M|dark:{chroma:number=End}=D @blocks',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  const row = container.querySelector('.config-ui-curve__anchors');
+  assert.deepEqual(row.querySelectorAll('input').map((i) => i.getAttribute('data-row-field')),
+    ['bright.chroma', 'middle.chroma', 'dark.chroma'],
+    'the real middle anchor is not under the chart, in the middle');
+  assert.equal(container.querySelectorAll('[data-curve-middle]').length, 0,
+    'a second view of the middle was invented beside the anchor the engine reads');
+
+  // And the two-key form still builds its own, because there is nothing to adopt.
+  assert.equal(anchoredForm().container.querySelectorAll('[data-curve-middle]').length, 1);
+});

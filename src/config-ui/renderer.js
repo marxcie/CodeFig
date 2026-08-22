@@ -1801,6 +1801,11 @@
     if (field.ends) {
       anchorRow = document.createElement("div");
       anchorRow.className = "config-ui-curve__anchors";
+    }
+    // **A middle box of our own only when the channel has no middle of its own.** With `ends:a..m..b` the
+    // middle is a real anchor the engine reads, so it is adopted like the two ends and this control has no
+    // business inventing a second view of it.
+    if (field.ends && !field.ends.mid) {
       var middleCell = document.createElement("label");
       middleCell.className = "config-ui-curve__anchor config-ui-curve__anchor--middle";
       var middleCap = document.createElement("span");
@@ -1813,8 +1818,8 @@
       middleCell.appendChild(middleCap);
       middleCell.appendChild(middleBox);
       anchorRow.appendChild(middleCell);
-      wrap.appendChild(anchorRow);
     }
+    if (anchorRow) wrap.appendChild(anchorRow);
 
     var text = document.createElement("input");
     text.type = "text";
@@ -1857,6 +1862,17 @@
         ? (from.closest(".config-ui-rows-cell") || from) : from;
       var toCell = to && typeof to.closest === "function"
         ? (to.closest(".config-ui-rows-cell") || to) : to;
+      // The middle, when the channel has a real one, sits between them and is adopted the same way.
+      if (field.ends.mid) {
+        var midEl = endCell("mid");
+        var midCell = midEl && typeof midEl.closest === "function"
+          ? (midEl.closest(".config-ui-rows-cell") || midEl) : midEl;
+        if (midCell && midCell.parentNode !== anchorRow) {
+          midCell.setAttribute("class", midCell.getAttribute("class") +
+            " config-ui-curve__anchor config-ui-curve__anchor--middle");
+          anchorRow.appendChild(midCell);
+        }
+      }
       if (fromCell && fromCell.parentNode !== anchorRow) {
         fromCell.setAttribute("class", fromCell.getAttribute("class") + " config-ui-curve__anchor");
         anchorRow.insertBefore(fromCell, anchorRow.firstChild);
