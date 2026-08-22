@@ -585,7 +585,11 @@ function bezierFitSegment(xs, ys) {
   var best = null;
   for (var s = 0; s < starts.length; s++) {
     var c = starts[s].slice();
-    var err = bezierWorstError(bezierNormalise(c), xs, ys);
+    // **Measured on the trial itself, not on a normalised copy of it.** `c` is four numbers already inside
+    // [0,1] — `bezierClamp01` put them there — so normalising is a fresh array and four roundings per
+    // evaluation, of which there are several hundred per fit. The winner is normalised once, below, which
+    // is where the stored form has to be right.
+    var err = bezierWorstError(c, xs, ys);
     // **The floor is 8e-3, not smaller.** Below it the descent keeps working and stops improving: measured
     // across sixteen real ramps, dropping from 2e-3 to 8e-3 leaves the worst fit at exactly 1.39 lightness
     // points and takes 28% off the time. A control point is drawn at a few hundred pixels and stored to six
@@ -600,7 +604,7 @@ function bezierFitSegment(xs, ys) {
             var trial = c.slice();
             trial[k] = bezierClamp01(trial[k] + delta);
             if (!bezierHandlesRise(trial)) continue;
-            var v = bezierWorstError(bezierNormalise(trial), xs, ys);
+            var v = bezierWorstError(trial, xs, ys);
             if (v < err - 1e-12) { c = trial; err = v; moved = true; }
           }
         }

@@ -3532,7 +3532,12 @@ async function colorsRecognise(collectionName, group, modeName) {
   // (it would be searching for the answer to the question it is answering), so the read that *can* does it
   // once and records it as the placement below. That is what stops the anchors being read at one step and
   // applied at another.
-  var mid = colorsBestAnchor(answer.existing, answer.steps);
+  // **The fits come back with the anchor.** The search fits all four channel curves for each finalist and
+  // both lightness curves once; the caller used to refit the same six for the anchor it was handed, which
+  // was about a third of the cost of a read. `answer.fits` carries them to the mode loop below.
+  var found = colorsAnchorFits(answer.existing, answer.steps);
+  var mid = found.index;
+  answer.fits = found;
 
   answer.anchors = {
     bright: readings[0].L, middle: readings[mid].L, dark: readings[last].L
@@ -3737,10 +3742,10 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
       // measured across this file's sixteen sets, reading in HSL and switching to OKLCH landed a mean of 59
       // 8-bit levels from the file against 10 for a read in OKLCH, because the OKLCH ladder was still the
       // block's Linear default. Nothing about a read is model-specific except which numbers get looked at.
-      chromaCurve: colorsFitChromaCurve(seen.existing, true, seen.midIndex),
-      saturationCurve: colorsFitChromaCurve(seen.existing, false, seen.midIndex),
-      hueCurve: colorsFitHueCurve(seen.existing, true, seen.midIndex),
-      hslHueCurve: colorsFitHueCurve(seen.existing, false, seen.midIndex),
+      chromaCurve: seen.fits.chromaCurve,
+      saturationCurve: seen.fits.saturationCurve,
+      hueCurve: seen.fits.hueCurve,
+      hslHueCurve: seen.fits.hslHueCurve,
       // **The step the ramp turns at, written down.** Everything else about the anchors is recovered from
       // the file, and so is this — `colorsBestAnchor` found it by measuring. Generation cannot search for
       // it without searching for its own answer, so the read records it and generation reads it back.
@@ -3755,7 +3760,7 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     // **HSL's ladder is the mode's, so the fit is too** — and it is filled whichever model is selected,
     // because `curve` is the HSL field and switching to HSL must not find it empty. OKLCH's ladder is the
     // collection's and is set once below, outside this loop.
-    entry.curve = colorsFitCurve(seen.existing, false);
+    entry.curve = seen.fits.lightnessHsl;
     perMode.push(entry);
   }
 

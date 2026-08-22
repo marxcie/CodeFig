@@ -218,8 +218,29 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
  * heuristics, and equal to picking the best step per model separately.
  */
 function colorsBestAnchor(hexes, steps) {
+  return colorsAnchorFits(hexes, steps).index;
+}
+
+/**
+ * **The anchor, and the curves that were fitted to find it.**
+ *
+ * The search already fits all four channel curves for each finalist and both lightness curves once, and the
+ * caller then fitted the same six again for the anchor it was handed. That duplicate was **a third of the
+ * cost of a read**: 2.9 seconds for a two-mode collection in Figma, of which about a second was work
+ * already done and thrown away.
+ *
+ * So the winner's fits come back with it. `colorsBestAnchor` stays as the one-line wrapper, because most
+ * callers — the benchmark, the panel's preview — want the index and nothing else.
+ *
+ * → `{ index, lightnessOklch, lightnessHsl, chromaCurve, saturationCurve, hueCurve, hslHueCurve }`
+ */
+function colorsAnchorFits(hexes, steps) {
   var fallback = colorsMidIndex(steps);
-  if (!hexes || hexes.length < 5 || hexes.length !== steps.length) return fallback;
+  var empty = {
+    index: fallback, lightnessOklch: [], lightnessHsl: [],
+    chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: []
+  };
+  if (!hexes || hexes.length < 5 || hexes.length !== steps.length) return empty;
 
   /**
    * **Everything the candidates share, computed once.**
@@ -231,7 +252,7 @@ function colorsBestAnchor(hexes, steps) {
   var okl = [], hsl = [];
   for (var i = 0; i < hexes.length; i++) {
     var a = oklchFromHex(hexes[i]), b = oklchHslFromHex(hexes[i]);
-    if (!a || !b) return fallback;
+    if (!a || !b) return empty;
     okl.push(a); hsl.push(b);
   }
   var shared = {
@@ -285,7 +306,7 @@ function colorsBestAnchor(hexes, steps) {
     ranked.sort(function (a, b) { return a.score - b.score; });
   }
 
-  var best = fallback, bestScore = Infinity;
+  var best = fallback, bestScore = Infinity, bestFits = null;
   var finalists = Math.min(5, ranked.length);
   for (var f = 0; f < finalists; f++) {
     var at = ranked[f].index;
@@ -297,9 +318,27 @@ function colorsBestAnchor(hexes, steps) {
     };
     var score = Math.max(colorsAnchorMiss(hexes, steps, at, true, shared, fits),
                          colorsAnchorMiss(hexes, steps, at, false, shared, fits));
-    if (score < bestScore - 1e-9) { bestScore = score; best = at; }
+    if (score < bestScore - 1e-9) { bestScore = score; best = at; bestFits = fits; }
   }
-  return best;
+  // The fallback wins when nothing scored, and then nothing was fitted for it either. Fitting it here keeps
+  // the promise this function makes rather than handing back four empty curves that look like a flat ramp.
+  if (!bestFits) {
+    bestFits = {
+      chromaCurve: colorsFitChromaCurve(hexes, true, best),
+      saturationCurve: colorsFitChromaCurve(hexes, false, best),
+      hueCurve: colorsFitHueCurve(hexes, true, best),
+      hslHueCurve: colorsFitHueCurve(hexes, false, best)
+    };
+  }
+  return {
+    index: best,
+    lightnessOklch: shared.lightnessOklch,
+    lightnessHsl: shared.lightnessHsl,
+    chromaCurve: bestFits.chromaCurve,
+    saturationCurve: bestFits.saturationCurve,
+    hueCurve: bestFits.hueCurve,
+    hslHueCurve: bestFits.hslHueCurve
+  };
 }
 
 /**

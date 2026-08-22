@@ -39,6 +39,14 @@ a plain statement of the new default.
   and saturation are unchanged for now: each of those still keeps a separate Middle field, and an axis
   would put a second answer to that question on screen beside the first.
 
+### Changed
+
+- **Reading a colour collection is about a third faster.** Selecting a collection and typing a group took
+  2.9 seconds for a two-mode collection and 3.7 for a three-mode one, almost all of it arithmetic rather
+  than reading the file — a second read of the same collection was no quicker. The anchor search already
+  fits every curve it needs and the caller was fitting the same six again; it hands them back now. Measured
+  in Figma: **2.9s to 2.1s** and **3.7s to 2.6s**, with every read landing on identical numbers.
+
 ### Fixed
 
 - **Colors: an OKLCH collection's lightness ladder is now averaged across its modes** instead of
