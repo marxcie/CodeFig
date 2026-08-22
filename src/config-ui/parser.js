@@ -323,6 +323,15 @@
       var part = piece.trim();
       if (!part) return;
       if (part === "original") { column.allowOriginal = true; return; }
+      /**
+       * `invert` — the axis counts **down** from the top of its range.
+       *
+       * A *display* transform and nothing more: the field still holds lightness, a run still generates from
+       * lightness, and 98 in the config draws at 2 on the chart. Márton's frames plot darkness, so a ramp
+       * reads downhill left to right the way its swatches do; storing darkness instead would mean changing
+       * the engine and every file already read, to move a minus sign.
+       */
+      if (part === "invert") { column.invert = true; return; }
       var growth = part.match(/^growth:([A-Za-z0-9_$]+)$/);
       if (growth) { column.growth = growth[1]; return; }
       /**
@@ -351,6 +360,7 @@
   function curveSpecText(c) {
     var parts = [];
     if (c.allowOriginal) parts.push("original");
+    if (c.invert) parts.push("invert");
     if (c.growth) parts.push("growth:" + c.growth);
     if (c.ends) {
       parts.push("ends:" + c.ends.from + (c.ends.mid ? ".." + c.ends.mid : "") + ".." + c.ends.to);
@@ -1159,6 +1169,7 @@
         if (f_curveSpec) {
           if (f_curveSpec.ends) f.ends = f_curveSpec.ends;
           if (f_curveSpec.range) f.range = f_curveSpec.range;
+          if (/@invert\b/.test(tip)) f.invert = true;
         }
         if (inputType === "mode") {
           // `null` for a bare `@mode`, and it stays null: resolution happens against the rendered
@@ -1188,7 +1199,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|ends|range|helper)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|ends|range|invert|helper)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -1394,6 +1405,7 @@
             parts.push("@ends: " + r.ends.from + (r.ends.mid ? ".." + r.ends.mid : "") + ".." + r.ends.to);
           }
           if (r.range) parts.push("@range: " + r.range.lo + ".." + r.range.hi);
+          if (r.invert) parts.push("@invert");
         }
         if (r.inputType === "mode") {
           parts.push("@mode" + (r.collectionField ? ": " + r.collectionField : ""));

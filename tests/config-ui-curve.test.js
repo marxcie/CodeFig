@@ -850,3 +850,55 @@ test('a channel with a real middle adopts it; one without gets a view of the han
   // And the two-key form still builds its own, because there is nothing to adopt.
   assert.equal(anchoredForm().container.querySelectorAll('[data-curve-middle]').length, 1);
 });
+
+test('@invert draws the axis counting down, and changes nothing that is stored', () => {
+  /**
+   * **A display transform, and only that.** Márton's frames plot darkness, so a ramp reads downhill left
+   * to right the way its swatches do. Storing darkness instead would mean changing the engine and every
+   * file already read, to move a minus sign — so the field holds lightness, the drag writes lightness, a
+   * run generates from lightness, and 98 simply draws at 2.
+   */
+  function chart(inverted) {
+    const source = [
+      '// @UI_CONFIG_START',
+      'var ladder = { bright: 98, dark: 4 }; // @group: bright:number=Bright|dark:number=Dark @label: Ends',
+      'var lc = [0.42, 0.16, 0.68, 0.52]; // @curve @ends: ladder.bright..ladder.dark @range: 0..100' +
+        (inverted ? ' @invert' : '') + ' @label: L',
+      '// @UI_CONFIG_END',
+    ].join('\n');
+    const schema = parser.parse(source);
+    const container = document.createElement('div');
+    renderer.buildForm(schema, container);
+    renderer.attachListeners(container, schema, function () {});
+    const svg = container.querySelector('.config-ui-curve__canvas');
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 200 });
+    container.querySelector('.config-ui-curve').dispatchEvent(new Event('config-ui-curve-refresh'));
+    return {
+      container,
+      svg,
+      brightY: +container.querySelector('[data-curve-end="from"]').getAttribute('cy'),
+      darkY: +container.querySelector('[data-curve-end="to"]').getAttribute('cy'),
+    };
+  }
+
+  const plain = chart(false);
+  assert.ok(plain.brightY < plain.darkY, 'lightness puts the bright end at the top');
+
+  const flipped = chart(true);
+  assert.ok(flipped.brightY > flipped.darkY,
+    'darkness puts the bright end at the bottom, so the ramp climbs as the swatches darken');
+
+  // The bright end holds 98 and draws near the floor of the plot: 100 - 98 of a 200px box.
+  assert.ok(flipped.brightY > 180, 'bright drew at ' + flipped.brightY + ', not near the bottom');
+
+  // And dragging still writes lightness, not what is on screen. Pull the bright end to the very top of an
+  // inverted chart: that is darkness 100, which is lightness 0.
+  flipped.svg.dispatch('pointerdown', {
+    target: flipped.container.querySelector('[data-curve-end="from"]'),
+    clientX: 0, clientY: 190, pointerId: 1,
+  });
+  flipped.svg.dispatch('pointermove', { clientX: 0, clientY: 0, pointerId: 1 });
+  flipped.svg.dispatch('pointerup', { clientX: 0, clientY: 0, pointerId: 1 });
+  const wrote = parseFloat(flipped.container.querySelector('[data-row-field="ladder.bright"]').value, 10);
+  assert.ok(wrote < 5, 'dragging to the top of a darkness axis should store a low lightness, got ' + wrote);
+});

@@ -43,6 +43,10 @@ a plain statement of the new default.
   the plot, grips to the plot plus their radius so one on the boundary sits *on* the frame, and a drag
   stops at the window's edge instead of pushing the curve out of sight. Curves without `@ends` — the scale
   editors in Spacing, Radius and Typography — are unchanged.
+- **The Lightness chart is drawn as darkness** — 0 at the bottom is white, 100 at the top is black — so a
+  ramp climbs left to right the way its swatches darken. Display only: the config still holds lightness, a
+  drag still writes lightness, and a run still generates from it. Hue, chroma and saturation plot as
+  stored.
 - **Colors' Mode settings are three channel tabs over one chart** — Hue, Saturation and Lightness — with
   Seed color above them, because a seed belongs to the mode rather than to a channel. Each tab holds that
   channel's curve and its two ends, and every curve is now on a real axis: hue in degrees, chroma 0 to 0.4,
