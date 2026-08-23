@@ -837,20 +837,24 @@ function colorsSwatch(hex, was) {
 }
 
 /** One step's labels, in the row under the bar: the token, its hex, and anything worth saying about it. */
+/**
+ * One swatch's caption: **the token, then the colour it will be.**
+ *
+ * It used to carry the old hex struck through, the new one under it, and the lightness delta between them —
+ * three numbers per step, sixteen steps, on a strip whose job is to be looked at rather than read. The
+ * banner above already says how many steps change and by how much, which is the summary anybody acts on;
+ * the per-step arithmetic was there for debugging the recogniser and outlived it.
+ *
+ * `was` and `delta` are still parameters. The caller still knows both, `colorsChangeCaption` still counts
+ * them, and a future *show me what changes* would want them back — dropping them from the signature would
+ * mean recomputing what the caller already has.
+ */
 function colorsCard(step, hex, seedLabel, pin, was, delta) {
   var out = ['<span class="color-ramp-preview-card">'];
   out.push('<span class="color-ramp-preview-token">' + colorsEscapeHtml(step) + '</span>');
-  if (was) {
-    out.push('<span class="color-ramp-preview-hex color-ramp-preview-hex--was">' +
-      colorsEscapeHtml(was) + '</span>');
-    out.push('<span class="color-ramp-preview-hex color-ramp-preview-hex--now">' +
-      colorsEscapeHtml(hex) + '</span>');
-  } else {
-    out.push('<span class="color-ramp-preview-hex">' + colorsEscapeHtml(hex) + '</span>');
-  }
+  out.push('<span class="color-ramp-preview-hex">' + colorsEscapeHtml(hex) + '</span>');
   if (seedLabel) out.push('<span class="color-ramp-preview-seed">' + colorsEscapeHtml(seedLabel) + '</span>');
   if (pin) out.push('<span class="color-ramp-preview-pin">' + colorsEscapeHtml(pin) + '</span>');
-  if (delta) out.push('<span class="color-ramp-preview-delta">' + colorsEscapeHtml(delta) + '</span>');
   out.push('</span>');
   return out.join('');
 }

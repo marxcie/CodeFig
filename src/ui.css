@@ -3044,11 +3044,15 @@
         min-width: 0;
       }
 
+      /* **The token is the label, so it reads like one.** It was the same weight and the same 60% as the
+         hex beside it, in a caption that also carried a struck-through old value and a delta — four things
+         of equal weight under every swatch. The name is what you look for; the rest is detail. */
       .color-ramp-preview-token {
         margin-top: 4px;
         font-size: var(--font-size-small);
         font-variant-numeric: tabular-nums;
-        opacity: 0.6;
+        font-weight: 600;
+        color: var(--text-primary);
       }
 
       .color-ramp-preview-hex {
@@ -3616,6 +3620,28 @@
       /* The label belongs with the preset row, not centred against the whole stack. */
       .config-ui-rows-cell--charted { align-items: start; }
       .config-ui-rows-cell--charted > .config-ui-rows-cell-label { padding-top: 7px; }
+
+      /* The preset, the point-count button and the coordinates on one line — one thought, one row.
+         The text takes the slack so the two controls before it keep their natural width. */
+      .config-ui-rows-cell--charted .config-ui-curve__head {
+        flex-wrap: nowrap;
+      }
+
+      .config-ui-rows-cell--charted .config-ui-curve__head .config-ui-curve__text {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin: 0;
+      }
+
+      .config-ui-rows-cell--charted .config-ui-curve__head .config-ui-curve__preset {
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+
+      .config-ui-rows-cell--charted .config-ui-curve__head .config-ui-curve__toggle {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
 
       .config-ui-curve__chartline {
         display: flex;

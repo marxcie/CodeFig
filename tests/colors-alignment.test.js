@@ -160,9 +160,15 @@ test('the banner and the strip are driven by one comparison', () => {
 
   // The summary line counts exactly the changed list.
   assert.match(html, new RegExp(entry.changed.length + ' of ' + entry.made.rows.length + ' steps would change'));
-  // And a struck-through hex appears once per changed step, never on a step that matches.
-  const struck = (html.match(/color-ramp-preview-hex--was/g) || []).length;
-  assert.equal(struck, entry.changed.length);
+  // **The per-step evidence used to be a struck-through old hex, and it is gone** — Márton asked for the
+  // caption to be the token and the colour it will be, nothing else. The banner is the surviving observable
+  // and the structural assertions below are what actually pin the claim: one comparison, in one place,
+  // handed to the strip. Counting struck hexes only ever proved the strip *rendered* the entry it was
+  // given, which the summary line proves too.
+  assert.equal(html.match(/color-ramp-preview-hex--was/g), null,
+    'the old value is back in the caption; the banner already says how much changes');
+  assert.equal((html.match(/color-ramp-preview-delta/g) || []).length, 0,
+    'the per-step delta is back in the caption');
 
   const source = fs.readFileSync(path.join(LIBS, '@color-ramp.js'), 'utf8');
   assert.match(source, /function colorsStrip\(entry, steps\)/,

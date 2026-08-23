@@ -1837,7 +1837,11 @@
     text.className = "config-ui-curve__text";
     text.setAttribute("spellcheck", "false");
     text.setAttribute("placeholder", "cubic-bezier(0.37, 0, 0.63, 1)");
-    wrap.appendChild(text);
+    // **On the preset row, not under the chart.** The three of them are one thought — which shape, how
+    // many points, and the shape as text — and the field sitting a chart's height away from the dropdown
+    // that writes it read as a separate control. Charted curves only: a scale editor is a narrow column
+    // where three controls on one line do not fit.
+    if (field.ends) head.appendChild(text); else wrap.appendChild(text);
 
     /**
      * **The axis, or nothing.** `@ends: a..b` names the two fields the curve runs between, and having them
@@ -1908,6 +1912,32 @@
           midCell.setAttribute("class", midCell.getAttribute("class") +
             " config-ui-curve__anchor config-ui-curve__anchor--middle");
           anchorRow.appendChild(midCell);
+        }
+        /**
+         * **Typing a middle moves the anchor**, which has to be wired here rather than at build time.
+         *
+         * The two ends need nothing: `axis()` reads their fields on every draw, so editing one moves the
+         * chart already. The middle is different — the anchor lives in the curve, not in a field — so the
+         * return leg is by hand. And `endCell` answers `null` until the control is in the tree, so wiring
+         * it where the control is *built* attaches nothing at all; this runs on every draw, and the marker
+         * is what keeps it to one listener.
+         */
+        if (midEl && !midEl.getAttribute("data-curve-mid-bound") && midEl.addEventListener) {
+          midEl.setAttribute("data-curve-mid-bound", "true");
+          midEl.addEventListener("input", function () {
+            var a = axis();
+            if (!a) return;
+            var typed = parseFloat(String(midEl.value).replace(/[^\d.\-]/g, ""), 10);
+            if (!isFinite(typed)) return;
+            var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
+            if (pts.length !== 10) return;
+            var want = Math.min(1, Math.max(0, valueToUnit(a, typed)));
+            // Only when it actually moves: this also fires on the `input` a drag dispatches, and writing
+            // back what the drag just wrote would fight the pointer.
+            if (Math.abs(pts[5] - want) < 1e-6) return;
+            pts[5] = want;
+            setPoints(pts, { keepText: true });
+          });
         }
       }
       if (fromCell && fromCell.parentNode !== anchorRow) {
@@ -2050,7 +2080,19 @@
       if (!cell || value === null || !isFinite(value)) return;
       var limit = field.range;
       var next = limit ? Math.min(limit.hi, Math.max(limit.lo, value)) : value;
-      var rounded = Math.round(next * 10) / 10;
+      /**
+       * **Rounded against the channel, not to one decimal.**
+       *
+       * A tenth is right for a lightness or a hue and destroys a chroma: dragging an anchor to 0.044 on a
+       * `0..0.4` channel wrote **0**. A thousandth of the range keeps four useful digits whatever the
+       * channel measures, which is finer than the drag can resolve on a 190px plot and coarser than the
+       * float noise a division leaves behind.
+       */
+      var span = limit ? Math.abs(limit.hi - limit.lo) : 100;
+      var quantum = Math.pow(10, Math.floor(Math.log((span || 100) / 1000) / Math.LN10));
+      var rounded = Math.round(next / quantum) * quantum;
+      // Back through a float's own shortest form, or `0.30000000000000004` reaches the config block.
+      rounded = parseFloat(rounded.toPrecision(12), 10);
       if (String(rounded) === cell.value) return;
       cell.value = String(rounded);
       if (typeof cell.dispatchEvent === "function" && typeof Event === "function") {
@@ -2752,6 +2794,19 @@
       var lift = growthKey ? curveGrowthHeight(growthRatio()) : 1;
       pts[dragging] = at.x;
       pts[dragging + 1] = lift > 0 ? at.y / lift : at.y;
+      /**
+       * **Dragging the middle anchor writes the middle field**, the same way dragging an end writes its
+       * own. The three boxes and the three points on the chart are one set of values seen twice: change
+       * either and the other follows. Without this the anchor moved, the box did not, and the box was the
+       * one the engine reads.
+       *
+       * Only for a channel that *has* a middle field — on lightness the box is already a view of this
+       * anchor and `draw` fills it, so writing would be the same value twice through two paths.
+       */
+      if (dragging === 4 && pts.length === 10 && field.ends && field.ends.mid) {
+        var a = axis();
+        if (a) setEndValue("mid", unitToValue(a, pts[5]));
+      }
       // `keepText` is off: the field is a readout while you drag, and a paste in progress is not a state
       // you can be in and dragging at the same time.
       setPoints(pts, { live: true });

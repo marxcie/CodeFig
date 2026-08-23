@@ -1096,3 +1096,62 @@ test('a hidden curve does not walk off with the anchor boxes', () => {
   assert.ok(!anchors || anchors.closest('[data-curve-value]') === curves[1],
     'the hidden curve adopted the shared cell, so the boxes vanished with it');
 });
+
+test('the three boxes and the three points are one set of values, both ways', () => {
+  /**
+   * Márton: *"when I change the numbers in the input fields, the chart points move, when I move a chart
+   * point, the same number change in the input field."*
+   *
+   * The two ends need nothing — `axis()` reads their fields on every draw, so editing one moves the chart
+   * already. The **middle** is the one that has to be wired by hand in both directions, because the anchor
+   * lives in the curve and the value lives in a field, and neither reads the other.
+   */
+  const withMiddle = B.bezierWithMiddle([0.4, 0.2, 0.6, 0.8]);
+  const source = [
+    '// @UI_CONFIG_START',
+    'var modes = [{ name: "G", bright: { chroma: 0.02 }, middle: { chroma: 0.035 }, ' +
+      'dark: { chroma: 0.05 }, cc: ' + JSON.stringify(withMiddle) + ' }]; // @rows: name:text=Mode|' +
+      'cc:curve(ends:bright.chroma..middle.chroma..dark.chroma, range:0..0.4)=Chroma|' +
+      'bright:{chroma:number=S}=B|middle:{chroma:number=M}=M|dark:{chroma:number=E}=D @blocks',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  const wrap = container.querySelector('.config-ui-curve');
+  const mid = container.querySelector('[data-row-field="middle.chroma"]');
+  const anchorValue = () => {
+    const u = JSON.parse(wrap.getAttribute('data-curve-value'))[5];
+    return 0.02 + (0.05 - 0.02) * u;
+  };
+
+  // field → chart
+  mid.value = '0.04';
+  mid.dispatch('input', { bubbles: true });
+  assert.ok(Math.abs(anchorValue() - 0.04) < 1e-4, 'typing did not move the anchor: ' + anchorValue());
+
+  // chart → field
+  const svg = wrap.querySelector('.config-ui-curve__canvas');
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  const anchor = wrap.querySelector('[data-curve-index="4"]');
+  svg.dispatch('pointerdown', { target: anchor, clientX: 50, clientY: 50, pointerId: 1 });
+  svg.dispatch('pointermove', { clientX: 50, clientY: 25, pointerId: 1 });
+  svg.dispatch('pointerup', { clientX: 50, clientY: 25, pointerId: 1 });
+  assert.ok(Math.abs(parseFloat(mid.value, 10) - anchorValue()) < 1e-3,
+    'the field and the anchor disagree after a drag: ' + mid.value + ' vs ' + anchorValue());
+});
+
+test('the coordinate field shares the preset row on a charted curve', () => {
+  // One thought — which shape, how many points, the shape as text — so one row. A scale editor keeps it
+  // under the plot, where the column is too narrow for three controls on a line.
+  const charted = axisForm();
+  const head = charted.wrap.querySelector('.config-ui-curve__head');
+  assert.ok(head.querySelector('.config-ui-curve__text'), 'the coordinates are not on the preset row');
+
+  const scale = build({}, [0.4, 0, 0.7, 0.55]);
+  const scaleHead = scale.wrap.querySelector('.config-ui-curve__head');
+  assert.equal(scaleHead.querySelector('.config-ui-curve__text'), null,
+    'a scale editor should keep its field under the plot');
+});
