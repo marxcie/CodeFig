@@ -74,7 +74,7 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
   // @fromFile: domains.radius
 
   // # General
-  collectionName: "Responsive System", // @collection @label: Collection
+  collectionName: "", // @collection @label: Collection
   // @collectionModes: Collection modes
   group: "Corner radius", // @label: Group within collection @placeholder="eg.: Corner radius"
   radii: ["none", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest, and radius-{1,10} is a series of ten. 

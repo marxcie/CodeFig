@@ -59,7 +59,7 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
   // @fromFile: domains.spacing
 
   // # General
-  collectionName: "Responsive System", // @collection @label: Collection
+  collectionName: "", // @collection @label: Collection
   // @collectionModes: Collection modes
   group: "Spacing", // @label: Group within collection @placeholder="eg.: Spacing"
   spacings: ["px", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest, and spacing-{1,10} is a series of ten. 

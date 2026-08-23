@@ -101,7 +101,7 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // @fromFile: domains.grid
 
   // # General
-  collectionName: "Responsive System", // @collection @label: Collection @placeholder="eg. Responsive System"
+  collectionName: "", // @collection @label: Collection @placeholder="eg. Responsive System"
   // @collectionModes: Collection modes
   group: "Grid", // @label: Group within collection @placeholder="eg. Grid"
 

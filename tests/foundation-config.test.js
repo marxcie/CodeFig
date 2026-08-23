@@ -349,6 +349,30 @@ test('typography keeps roundLowerValuesTo, and figmaStyles becomes styles', () =
   assert.ok(translated(result).includes('figmaStyles'));
 });
 
+test('the font weights come back as the list the block holds, not the map a run promoted', () => {
+  // **The complaint this fixes.** A run promotes `[400, 600]` into `{ "400": 400, "600": 600 }` — that is
+  // the shape the generator names styles from, and it is what the manifest records. Handed back as an
+  // object it went into a comma-list field, came back out as the *string* `"{ 400: 400, 600: 600 }"`, and
+  // the run enumerated its characters: a text style per index, 0 to 28, under every token.
+  const promoted = normaliseConfig({
+    fontScale: ['Text-Small'], fontWeights: { 400: 400, 600: 600 }
+  }).config;
+  assert.deepEqual(toDomainConfig(promoted, 'typography').fontWeights, [400, 600]);
+
+  // A name that is not its own value is the legacy spelling, and the naming is the whole of what it
+  // says — so it stays a map.
+  const named = normaliseConfig({
+    fontScale: ['Text-Small'], fontWeights: { Regular: 400, Semibold: 600 }
+  }).config;
+  assert.deepEqual(toDomainConfig(named, 'typography').fontWeights, { Regular: 400, Semibold: 600 });
+
+  // A style name promotes to a key equal to itself, so it demotes back too.
+  const styles = normaliseConfig({
+    fontScale: ['Text-Small'], fontWeights: { 400: 400, 'Semi Bold': 'Semi Bold' }
+  }).config;
+  assert.deepEqual(toDomainConfig(styles, 'typography').fontWeights, [400, 'Semi Bold']);
+});
+
 test('an unknown key survives under extra and is reported', () => {
   // Losing a field nobody has met yet on a round trip is worse than not understanding it.
   const result = normaliseConfig({ spacings: ['a'], someFutureThing: { nested: 1 } });

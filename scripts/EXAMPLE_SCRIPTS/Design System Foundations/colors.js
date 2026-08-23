@@ -132,7 +132,6 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   curve: [0.333333, 0.333333, 0.666667, 0.666667], // @curve @allowOriginal @ramp: oklch($% 0 0) @ends: lightness.bright..lightness.dark @range: 0..100 @label: Curve @showWhen: colorModel=oklch @showWhen: collectionName=* @showWhen: steps=* @helper: One curve, bright to dark. Drag a handle, pick a preset, or paste coordinates. Add middle point bends the two halves differently — which is what a real neutral ramp does — and that anchor is the middle colour's lightness and its step.
   // @preview
   lightness: {}, // @group: bright:number=Bright|dark:number=Dark @label: Lightness @showWhen: colorModel=oklch @showWhen: collectionName=* @showWhen: steps=* @helper: 0 to 100. The two ends hold exactly; the curve fills everything between them.
-
   // # Mode settings @showWhen: collectionName=* @showWhen: steps=*
   modes: [
     {

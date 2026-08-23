@@ -244,6 +244,21 @@ test('a value written the way a person writes it parses', () => {
   assert.deepEqual(valuesOf(source).scaling, { type: 'sine', ease: 'in', roundTo: 2 });
 });
 
+test('a bare numeric key parses, rather than degrading the whole value to a string', () => {
+  // `{ 400: 400 }` is legal JS and not legal JSON, and it is what Typography's font weights look like
+  // after a run promotes them. Unparsed, the value fell through to the raw text — which the panel then
+  // showed in a *text* field, collected, and wrote back into the block quoted. The run enumerated that
+  // string's characters and made a text style per index, 0 to 28, under every token.
+  const source = ['var fontWeights = {', '  400: 400,', '  600: 600', '};'].join('\n');
+  assert.deepEqual(valuesOf(source).fontWeights, { 400: 400, 600: 600 });
+  assert.equal(fieldsOf(source)[0].inputType, 'unsupported',
+    'and an object no control can edit is read-only, not an editable string');
+
+  // A number in a *value* position is still a number, and a decimal key is still a key.
+  const mixed = ['var m = {', '  0.5: [1, 2],', '  x: 3', '};'].join('\n');
+  assert.deepEqual(valuesOf(mixed).m, { 0.5: [1, 2], x: 3 });
+});
+
 test('tolerance stops at the string boundary', () => {
   const source = [
     'var tricky = {',

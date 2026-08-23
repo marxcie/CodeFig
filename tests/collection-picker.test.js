@@ -134,3 +134,30 @@ test('"New collection" is separated from the collections and is not one of them'
   assert.equal(options[options.length - 1], NEW, 'the create entry is last');
   assert.equal(IN_FILE.indexOf(NEW), -1, 'and the sentinel can never collide with a real name');
 });
+
+test('a script ships no collection name, so the picker opens on the prompt', () => {
+  // **The complaint this fixes.** A shipped default of `"Responsive System"` is a *suggestion*, and the
+  // picker cannot tell one from a pasted config — so opening Typography in a file without that
+  // collection landed on "New collection" with the name already typed in, and the first thing the panel
+  // said was that it was about to create something. An empty default is the plain dropdown: pick a
+  // collection in this file, or ask for a new one.
+  const fs = require('fs');
+  const path = require('path');
+  const DSF = path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations');
+
+  const shipped = [];
+  for (const file of fs.readdirSync(DSF).filter((f) => f.endsWith('.js'))) {
+    const source = fs.readFileSync(path.join(DSF, file), 'utf8');
+    for (const line of source.split('\n')) {
+      if (!/^\s*\w+:.*@collection\b/.test(line)) continue;
+      shipped.push(file);
+      assert.match(line, /:\s*""\s*,/, file + ' ships a collection name: ' + line.trim());
+    }
+  }
+  assert.ok(shipped.length >= 5, 'the pickers were not found: ' + shipped.join(', '));
+
+  const picker = renderPicker('', IN_FILE);
+  assert.equal(picker.select.value, '', 'the prompt, not a choice');
+  assert.equal(picker.input.style.display, 'none', 'and nothing to type into yet');
+  assert.equal(picker.note.style.display, 'none');
+});

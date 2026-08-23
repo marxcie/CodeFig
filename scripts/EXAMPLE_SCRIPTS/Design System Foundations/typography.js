@@ -107,8 +107,27 @@ function materializeFontSizes(config) {
  * supported, as a map from a name to either. So the list is promoted into that map rather than the
  * generator learning a second shape: `[400, "Semi Bold"]` becomes
  * `{ "400": 400, "Semi Bold": "Semi Bold" }`, and the style path reads `Typography/Heading-1/400`.
+ *
+ * **A string is read as that same list.** Every other shape here is enumerated with `Object.keys`, and
+ * a string enumerates as its character *indices* — so a quoted value in the config block generated a
+ * text style called `0`, one called `1`, and so on to the end of the text. There is no reading of a
+ * string under which that is what somebody meant.
+ *
+ * `"{ 400: 400, 600: 600 }"` is read as the list too, because that string is this map printed and then
+ * quoted — the shape a config loaded from a file used to arrive in. `name: value` collapses to one
+ * entry only when the two halves are the same text, so a real name is never thrown away.
  */
 function typographyPromoteFontWeights(config) {
+  if (typeof config.fontWeights === 'string') {
+    config.fontWeights = config.fontWeights
+      .replace(/^\s*\{/, '').replace(/\}\s*$/, '')
+      .split(',')
+      .map(function (item) {
+        var pair = item.split(':');
+        if (pair.length !== 2) return item;
+        return pair[0].trim() === pair[1].trim() ? pair[0] : item;
+      });
+  }
   if (!Array.isArray(config.fontWeights)) return;
   var out = {};
   config.fontWeights.forEach(function (entry) {
@@ -227,7 +246,7 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
   // @fromFile: domains.typography
 
   // # General
-  collectionName: "Responsive System", // @collection @label: Collection
+  collectionName: "", // @collection @label: Collection
   // @collectionModes: Collection modes
   group: "Typography", // @label: Group within collection @placeholder="eg.: Typography"
   fontScale: ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"], // @label: Tokens @helper: Named smallest to largest, and heading-{6,1} is a series of six. The Base unit below is the size of the first name here.

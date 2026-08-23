@@ -277,6 +277,20 @@ test('the weights list becomes the map the styles are named from', () => {
   assert.equal(T.variables['Typography/font-family/primary'].type, 'STRING');
 });
 
+test('a string of weights is read as the list, never enumerated character by character', () => {
+  // Everything downstream reads the weights with `Object.keys`, and a string enumerates as its
+  // character *indices* — so a quoted value in the block generated a text style called `0`, one called
+  // `1`, and so on to the end of the text, under every token in the scale.
+  const typed = { fontScale: ['a'], fontWeights: '400, Semi Bold', modes: [] };
+  T.ensureCompatTypographyConfig(typed);
+  assert.deepEqual(typed.fontWeights, { 400: 400, 'Semi Bold': 'Semi Bold' });
+
+  // The map printed and then quoted, which is the shape a config loaded from a file used to arrive in.
+  const printed = { fontScale: ['a'], fontWeights: '{\n    400: 400,\n    600: 600\n  }', modes: [] };
+  T.ensureCompatTypographyConfig(printed);
+  assert.deepEqual(printed.fontWeights, { 400: 400, 600: 600 });
+});
+
 test('the flat style fields fold into the nested object the generator reads', () => {
   const config = { fontScale: ['a'], createStyles: false, styleNaming: 'T/{$fontScale}', modes: [] };
   T.ensureCompatTypographyConfig(config);
