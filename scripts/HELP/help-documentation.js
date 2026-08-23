@@ -234,6 +234,8 @@
 // | `@curve @allowOriginal` | the same, with *Original* — the empty curve — offered in its preset list |
 // | `@curve @ends: a..b @range: lo..hi` | the same on a **value axis**: real numbers up the side, draggable ends that write `a` and `b`, and a zoom rail |
 // | `#>Hue` inside `@rows` | a **channel tab**: a section of a row you can only see one of. Closed tabs are hidden, never dropped |
+// | `#>Saturation{colorModel=hsl}` | a tab may carry the same `{…}` condition a column does. A tab with nothing visible left in it is **not drawn**, so a channel whose every cell belongs to the other model takes itself off the bar |
+// | `#>Saturation{…}\|#>Chroma{…}` | two tab markers **next to each other are one tab** under two names, captioned by the first whose condition holds. The panel keeps the first name as its key, so a rename does not close the tab you are on |
 // | `@ramp: hsl($ ~a.sat% 50%)` | the bar beside a charted curve: the **whole channel** in its own colours, with the plot's window bracketed on it. `$` is the axis value, `~key` a sibling field. CSS, so the browser mixes it |
 // | `key:curve=Label` inside `@rows` | the same editor as one column of a row. `key:curve(original)` to offer *Original* |
 // | `key:curve(growth:other)` | the **open-ended** editor: log axis, a handle for the growth, written to the config as `other` |

@@ -21,6 +21,10 @@ a plain statement of the new default.
 
 ### Added
 
+- **A tab can be named for the model it is showing, and can take itself off the bar.** `#>Hue{colorModel=hsl}`
+  carries the same `{…}` condition a column does, and **two tab markers written next to each other are one
+  tab under two names** — captioned by the first whose condition holds, sharing one panel. A tab with nothing
+  visible left in it is not drawn at all.
 - **Channel tabs in a `@rows` block.** `#>Hue` starts a tab where `#Hue` starts a section — the columns
   after it are shown only when that tab is open. Closed tabs are hidden rather than dropped, so every
   channel is still read; switching one is not an edit and does not touch the config.
@@ -63,6 +67,12 @@ a plain statement of the new default.
 
 ### Changed
 
+- **On OKLCH the channels are Hue and Chroma, and there is no Lightness tab.** Chroma and saturation are
+  different quantities in different units, so the tab is named for the one you are editing rather than for
+  HSL's. Lightness is the collection's shared ladder in this model, not a mode's, so the tab held nothing —
+  it now goes rather than opening an empty panel. Switch to HSL and all three come back.
+- **The collapse chevron is dark.** It inherited the title row's secondary grey and then dimmed itself to
+  0.55 of it, which left the control paler than the label beside it — the look of something disabled.
 - **OKLCH's shared ladder gets the same curve editor a mode has.** The collection-scope curve was still the
   old narrow control — 268px of chart in a full-width block, two unlabelled number boxes and no colour bar.
   It is now the charted layout: full width, a greyscale bar beside it showing the whole 0-100 channel with

@@ -495,7 +495,24 @@
        */
       var tabInColumns = text.match(/^#>\s*(.+)$/);
       if (tabInColumns) {
-        columns.push({ type: "tab", text: tabInColumns[1].trim() });
+        /**
+         * **A tab may carry a condition**, the same `{…}` a column and a section heading already do — and
+         * **two tabs written next to each other are one tab under two names**, each named for the model it
+         * belongs to. HSL calls the channel Saturation and OKLCH calls it Chroma; they are different
+         * quantities with different units, and the columns underneath already say so one condition at a
+         * time. The alternative — two real tabs with the columns split between them — collides in
+         * `collectRows`, where two `bright:` groups in one row overwrite rather than merge.
+         */
+        var tabText = tabInColumns[1].trim();
+        var tabWhen = null;
+        var twhen = tabText.match(/\{([^}]*)\}\s*$/);
+        if (twhen) {
+          tabWhen = parseConditionRules(twhen[1]);
+          tabText = tabText.slice(0, twhen.index).trim();
+        }
+        var tab = { type: "tab", text: tabText };
+        if (tabWhen) tab.showWhen = tabWhen;
+        columns.push(tab);
         continue;
       }
 
@@ -1447,7 +1464,14 @@
               return new Array(Math.max(1, (c.level || 2) - 1) + 1).join("#") + c.text + hw;
             }
             if (c.type === "preview") return "@preview";
-            if (c.type === "tab") return "#>" + c.text;
+            if (c.type === "tab") {
+              var tw = c.showWhen && c.showWhen.length
+                ? "{" + c.showWhen.map(function (rule) {
+                  return rule.field + "=" + rule.values.join("|");
+                }).join(";") + "}"
+                : "";
+              return "#>" + c.text + tw;
+            }
             var spec = c.type;
             if (c.type === "curve") {
               var curveSpec = curveSpecText(c);

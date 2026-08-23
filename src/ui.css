@@ -3202,8 +3202,12 @@
         border: none;
         background: none;
         padding: 0;
-        color: inherit;
-        opacity: 0.55;
+        /* **Not `inherit`.** The title row is `--text-secondary` so *Mode* reads as a label beside the mode's
+           own name, and inheriting that and then dimming it to 0.55 left the chevron paler than the label —
+           a control lighter than the text it sits beside reads as disabled. It is a control, so it takes the
+           primary colour and the hover is the last tenth rather than half of it. */
+        color: var(--text-primary);
+        opacity: 0.9;
         cursor: pointer;
       }
 

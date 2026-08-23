@@ -3108,6 +3108,59 @@
     });
   }
 
+  /**
+   * **A tab with nothing in it is not a tab, and a tab's name can depend on the model.**
+   *
+   * Both are read off the panel on every pass rather than recorded. Under OKLCH a mode's *Lightness* holds
+   * only `{colorModel=hsl}` cells — the ladder is the collection's — so the tab was a heading over an empty
+   * box; and *Saturation* is *Chroma* in OKLCH, which is a different quantity in different units and not a
+   * synonym. Naming the panel by the caption instead would rename it under the attribute that tracks which
+   * tab is open, so the key stays the first name and only the caption moves.
+   *
+   * If the open tab is the one that goes, the first surviving tab opens — otherwise switching model leaves
+   * a row with every panel closed, which reads as a block that failed to render.
+   */
+  function refreshRowTabs(root, holds) {
+    if (!root || typeof root.querySelectorAll !== "function") return;
+    root.querySelectorAll(".config-ui-rows-item").forEach(function (item) {
+      var buttons = item.querySelectorAll("[data-rows-tab]");
+      if (!buttons.length) return;
+      var open = item.getAttribute("data-rows-tab-open");
+      var firstLive = null, openLives = false;
+      buttons.forEach(function (button) {
+        var key = button.getAttribute("data-rows-tab");
+        var panel = item.querySelector('[data-rows-tabpanel="' + key + '"]');
+
+        var names = button.getAttribute("data-rows-tab-names");
+        if (names && holds) {
+          var alts = [];
+          try { alts = JSON.parse(names); } catch (e) { alts = []; }
+          for (var a = 0; a < alts.length; a++) {
+            if (alts[a].showWhen && !holds(item, alts[a].showWhen)) continue;
+            if (button.textContent !== alts[a].text) button.textContent = alts[a].text;
+            break;
+          }
+        }
+
+        var live = !!panel && panelHasContent(panel);
+        button.style.display = live ? "" : "none";
+        if (!live && panel) panel.setAttribute("data-shown", "false");
+        if (live && !firstLive) firstLive = key;
+        if (live && key === open) openLives = true;
+      });
+      if (!openLives && firstLive) showRowTab(item, firstLive);
+    });
+  }
+
+  /** Anything in this panel a person could see. A cell its condition hid does not count. */
+  function panelHasContent(panel) {
+    var kids = panel.children || [];
+    for (var i = 0; i < kids.length; i++) {
+      if (kids[i].style.display !== "none") return true;
+    }
+    return false;
+  }
+
   function refreshCurveControls(root, except) {
     if (!root || typeof root.querySelectorAll !== "function") return;
     root.querySelectorAll("[data-curve-value]").forEach(function (wrap) {
@@ -3265,8 +3318,24 @@
         var tabNames = [];
         function placeIn() { return tabPanel || rowEl; }
 
-        (field.columns || []).forEach(function (column) {
+        var tabRunEnd = 0;
+        (field.columns || []).forEach(function (column, at) {
           if (column.type === "tab") {
+            if (at < tabRunEnd) return; // already folded into the run that started above
+            /**
+             * **Two tabs written next to each other are one tab under two names.** HSL calls the channel
+             * Saturation and OKLCH calls it Chroma, and the columns beneath already carry that split one
+             * condition at a time — so the tab does too, rather than the panel being duplicated.
+             *
+             * The *key* is the first name and never changes; only the caption follows the condition.
+             * Keying the panel by the visible name instead would rename it under the open-tab attribute
+             * that tracks it, and switching model would close the tab you were looking at.
+             */
+            var alts = [column];
+            var next = at + 1;
+            while ((field.columns[next] || {}).type === "tab") { alts.push(field.columns[next]); next++; }
+            tabRunEnd = next;
+
             if (!channelBar) {
               channelBar = document.createElement("div");
               channelBar.className = "config-ui-rows-channels";
@@ -3275,14 +3344,19 @@
             var tabButton = document.createElement("button");
             tabButton.type = "button";
             tabButton.className = "config-ui-rows-channel";
-            tabButton.setAttribute("data-rows-tab", column.text);
-            tabButton.textContent = column.text;
+            tabButton.setAttribute("data-rows-tab", alts[0].text);
+            tabButton.textContent = alts[0].text;
+            if (alts.length > 1) {
+              tabButton.setAttribute("data-rows-tab-names", JSON.stringify(alts.map(function (t) {
+                return { text: t.text, showWhen: t.showWhen || null };
+              })));
+            }
             channelBar.appendChild(tabButton);
             tabPanel = document.createElement("div");
             tabPanel.className = "config-ui-rows-tabpanel";
-            tabPanel.setAttribute("data-rows-tabpanel", column.text);
+            tabPanel.setAttribute("data-rows-tabpanel", alts[0].text);
             rowEl.appendChild(tabPanel);
-            tabNames.push(column.text);
+            tabNames.push(alts[0].text);
             return;
           }
           // `#Seed` among the columns: the same `h2.config-ui-heading` the form builds from a `// ## Heading`
@@ -4105,6 +4179,31 @@
       }
 
       /** Every `[data-row-field]` under `root`, keyed as written and also by its last segment. */
+      /**
+       * Do these `{…}` rules hold, read through this chain of scopes, closest first?
+       *
+       * **The form-level fallback goes through the same reader as everything else.** A curve field answers
+       * `original` or `curve`; `String([0.37,0,0.63,1])` is a coordinate list, which matches no condition
+       * anyone would write. The row scopes are already curve-aware — the fallback was the one place that
+       * was not, and it is the path a condition naming a setting above the whole table takes.
+       */
+      function conditionsHold(rules, scopes) {
+        for (var i = 0; i < rules.length; i++) {
+          var field = rules[i].field;
+          var seen;
+          var found = false;
+          for (var s = 0; s < scopes.length && !found; s++) {
+            if (scopes[s] && Object.prototype.hasOwnProperty.call(scopes[s], field)) {
+              seen = scopes[s][field];
+              found = true;
+            }
+          }
+          var reading = found ? showWhenValueStr(seen) : conditionValueOf(field);
+          if (!conditionAccepts(rules[i].values, reading)) return false;
+        }
+        return true;
+      }
+
       function scopeUnder(root) {
         var own = {};
         root.querySelectorAll("[data-row-field]").forEach(function (el) {
@@ -4146,26 +4245,7 @@
           } catch (e) {
             return;
           }
-          var show = true;
-          for (var i = 0; i < rules.length; i++) {
-            var field = rules[i].field;
-            var seen;
-            var found = false;
-            for (var s = 0; s < scopes.length && !found; s++) {
-              if (scopes[s] && Object.prototype.hasOwnProperty.call(scopes[s], field)) {
-                seen = scopes[s][field];
-                found = true;
-              }
-            }
-            // **The form-level fallback goes through the same reader as everything else.** A curve field
-            // answers `original` or `curve`; `String([0.37,0,0.63,1])` is a coordinate list, which matches
-            // no condition anyone would write. The row scopes above are already curve-aware — this is the
-            // one place that was not, and it is the path a mode's condition takes when it names a setting
-            // above the whole table.
-            var reading = found ? showWhenValueStr(seen) : conditionValueOf(field);
-            if (!conditionAccepts(rules[i].values, reading)) show = false;
-          }
-          el.style.display = show ? "" : "none";
+          el.style.display = conditionsHold(rules, scopes) ? "" : "none";
         });
 
         // **The same rules, a different consequence.** `[…]` disables where `{…}` hides, so it runs through
@@ -4227,21 +4307,14 @@
         applyConditions(group, [scopeUnder(group), row ? scopeUnder(row) : null]);
       });
 
-      /**
-       * **A group with nothing left in it is not a caption, it is nothing.**
-       *
-       * Two ways a group empties out, both of them ordinary and both of them leaving a labelled blank:
-       *
-       * - Every part is conditional on the other model. On OKLCH a mode's Lightness cell holds only
-       *   `{colorModel=hsl}` parts — the ladder is the collection's — so the tab drew "Bright" and "Dark"
-       *   over two boxes that were not there.
-       * - A charted curve **adopted** the parts. The collection's own Lightness is exactly this: its two
-       *   numbers move under the chart, and the field row they came from is left holding a label and an ⓘ.
-       *
-       * Asked of the parts on every pass rather than recorded when one is hidden — the group is the answer
-       * to "is there anything to set here", and it has to survive an adoption that no condition triggered.
-       */
       hideEmptyGroups(container);
+
+      // And the tabs above them, which is the same question one level out: a channel whose every cell
+      // belongs to the other model is a heading over an empty box. Runs after the group sweep, because a
+      // group it just hid is exactly what can leave a panel empty.
+      refreshRowTabs(container, function (item, rules) {
+        return conditionsHold(rules, [scopeUnder(item)]);
+      });
 
       container.querySelectorAll("[data-show-when-field]").forEach(function (row) {
         if (row.getAttribute("data-show-when-rules")) return;
