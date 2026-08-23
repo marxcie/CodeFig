@@ -234,7 +234,6 @@
 // | `@curve @allowOriginal` | the same, with *Original* — the empty curve — offered in its preset list |
 // | `@curve @ends: a..b @range: lo..hi` | the same on a **value axis**: real numbers up the side, draggable ends that write `a` and `b`, and a zoom rail |
 // | `#>Hue` inside `@rows` | a **channel tab**: a section of a row you can only see one of. Closed tabs are hidden, never dropped |
-// | `@invert` on a charted curve | the axis counts **down** from the top of its range — lightness drawn as darkness. Display only; the field still holds what it held |
 // | `@ramp: hsl($ ~a.sat% 50%)` | the bar beside a charted curve: the **whole channel** in its own colours, with the plot's window bracketed on it. `$` is the axis value, `~key` a sibling field. CSS, so the browser mixes it |
 // | `key:curve=Label` inside `@rows` | the same editor as one column of a row. `key:curve(original)` to offer *Original* |
 // | `key:curve(growth:other)` | the **open-ended** editor: log axis, a handle for the growth, written to the config as `other` |

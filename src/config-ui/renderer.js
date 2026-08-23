@@ -2033,24 +2033,7 @@
     }
 
     /**
-     * **What a value is drawn as.** Its own involution, so one function converts both ways and the stored
-     * value and the drawn one cannot drift.
-     *
-     * `@invert` makes the axis count down from the top of the channel: a lightness of 98 draws at 2, which
-     * is the darkness Márton's frames plot. Nothing else changes — the field holds lightness, the drag
-     * writes lightness, a run generates from lightness. Only the picture is upside down, and only because
-     * a ramp reading downhill left to right is what its own swatches do.
-     */
-    function shown(a, v) { return field.invert ? (a.lo + a.hi - v) : v; }
-    /** The window in drawn units, low at the bottom of the plot whichever way the channel runs. */
-    function shownView(a) {
-      var w = axisView(a);
-      var one = shown(a, w.lo), two = shown(a, w.hi);
-      return { lo: Math.min(one, two), hi: Math.max(one, two) };
-    }
-
-    /**
-     * A curve's own 0..1 and the channel's value are the same fact in two units — unless the two ends are
+     * A curve's own 0..1 and the channel's value are the same fact in two units — unless the two ends hold
      * the same value, and then the curve has no span to be a fraction of. Everything lands on the one
      * value, and `valueToUnit` answers 0 rather than dividing by zero and drawing at infinity.
      */
@@ -2063,8 +2046,8 @@
     function toView(x, y) {
       var a = axis();
       if (!a) return { x: x * W, y: (1 - y) * H };
-      var w = shownView(a);
-      return { x: x * W, y: (1 - (shown(a, unitToValue(a, y)) - w.lo) / (w.hi - w.lo)) * H };
+      var w = axisView(a);
+      return { x: x * W, y: (1 - (unitToValue(a, y) - w.lo) / (w.hi - w.lo)) * H };
     }
     function fromView(vx, vy) {
       var a = axis();
@@ -2114,10 +2097,8 @@
     function valueFromView(vy) {
       var a = axis();
       if (!a) return null;
-      var w = shownView(a), real = axisView(a);
-      var drawn = w.lo + (1 - vy / H) * (w.hi - w.lo);
-      var value = shown(a, drawn);
-      return Math.min(Math.max(real.lo, real.hi), Math.max(Math.min(real.lo, real.hi), value));
+      var w = axisView(a);
+      return Math.min(w.hi, Math.max(w.lo, w.lo + (1 - vy / H) * (w.hi - w.lo)));
     }
 
     /** The draggable things, as `{ x, y, index }` — `index` is where the pair lives in the flat array. */
@@ -2266,7 +2247,7 @@
       // cannot describe a view the chart is not showing.
       if (rangeWindow) {
         var whole = a.hi - a.lo;
-        var view = shownView(a);
+        var view = axisView(a);
         var top = whole > 0 ? ((a.hi - view.hi) / whole) * 100 : 0;
         var bottom = whole > 0 ? ((a.hi - view.lo) / whole) * 100 : 100;
         rangeWindow.style.top = Math.max(0, Math.min(100, top)) + "%";
@@ -2313,7 +2294,7 @@
       for (var i = 0; i <= 10; i++) {
         var at = i / 10;
         // Top of the bar is the window's high value, as it is on the plot beside it.
-        var value = shown(a, w.hi - at * span);
+        var value = w.hi - at * span;
         var colour = field.ramp.replace(/~([A-Za-z0-9_$.]+)/g, function (all, key) {
           var cell = cellNamed(key);
           var held = cell ? parseFloat(cell.value, 10) : NaN;
@@ -2343,14 +2324,12 @@
       if (!ramp) return null;
       var hexes = ramp.hexes;
       var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
-      // Positioned in drawn units, like everything else on the axis, or an inverted chart would show its
-      // colours the right way up beside a ramp drawn upside down.
-      var w = shownView(a), span = w.hi - w.lo;
+      var w = axisView(a), span = w.hi - w.lo;
       if (!(span > 0)) return null;
       var last = hexes.length - 1;
       var out = [];
       for (var i = 0; i <= last; i++) {
-        var value = shown(a, unitToValue(a, B ? B.bezierAt(pts, i / last) : i / last));
+        var value = unitToValue(a, B ? B.bezierAt(pts, i / last) : i / last);
         var at = Math.min(100, Math.max(0, ((w.hi - value) / span) * 100));
         out.push(hexes[i] + " " + Math.round(at * 10) / 10 + "%");
       }
@@ -2423,7 +2402,7 @@
       // says nothing; a line at 80 and a line at 60 say where you are. Rounded to whatever tenth, unit or
       // ten keeps the count near four, so the labels never crowd.
       if (ax) {
-        var w = shownView(ax);
+        var w = axisView(ax);
         var span = w.hi - w.lo;
         var raw = span / 4;
         var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));

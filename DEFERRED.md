@@ -10,6 +10,19 @@ forgotten one.
 
 ---
 
+## The darkness axis, if it is ever wanted back
+
+`@invert` made a charted curve's y axis count down from the top of its range — lightness drawn as
+darkness, which is how Márton's Figma frames plot a ramp. It shipped, and then the numbers on the chart
+disagreed with the numbers in the boxes beside it, in the config and in the variable. He chose
+correlation over the frame and asked for it deleted rather than left unused: vocabulary nobody uses is
+worse than a revert, because every future script inherits it and someone eventually reaches for it to mean
+something else.
+
+**Added in `6a87d22`, removed in the commit that names this entry.** Both are in git with their tests and
+their documentation, so bringing it back is a revert rather than a rewrite. Anything reviving it should
+also answer the question that killed it: what do the anchor boxes show, given the config stores lightness.
+
 ## The preview flushes the config text on every frame of a drag
 
 `scheduleConfigPreview` has a 120ms maximum wait so the colour strip redraws while a curve handle is being
