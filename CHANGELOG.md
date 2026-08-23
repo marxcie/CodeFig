@@ -63,6 +63,15 @@ a plain statement of the new default.
 
 ### Changed
 
+- **OKLCH's shared ladder gets the same curve editor a mode has.** The collection-scope curve was still the
+  old narrow control — 268px of chart in a full-width block, two unlabelled number boxes and no colour bar.
+  It is now the charted layout: full width, a greyscale bar beside it showing the whole 0-100 channel with
+  the zoomed window marked, and **Bright / Middle / Dark** captioned under the plot. The bar is greyscale
+  because the ladder *is* greyscale — one lightness sequence every mode shares, which is what makes them
+  match.
+- **A collapsed mode block hides its curve as well as its seed.** The chevron left the channel tabs and the
+  chart in place, so collapsing a block saved a line and a half. Collapsed now means the mode name and its
+  colour strip, nothing else.
 - **The Documentation tab says which model to generate in, and why.** OKLCH to generate, HSL to read what
   is already there. HSL's colourfulness envelope, `C = S x (1 - |2L - 1|)`, has a corner at 50% lightness
   that every full ramp crosses: measured with the colour flat and the lightness on one smooth cubic, the
@@ -80,7 +89,8 @@ a plain statement of the new default.
   nothing about where that degree sits on the wheel. The bar answers *where in the channel am I*; the chart
   answers *what happens across it*.
 - **A swatch caption is the token and the colour it will be.** The struck-through old value and the
-  per-step lightness delta are gone; the banner above already says how many steps change and by how much.
+  per-step lightness delta are gone; the caption above each strip already says how many steps change and
+  by how much.
   The token is bold and full-strength, because it is the label.
 - **Reading a colour collection is about a third faster.** Selecting a collection and typing a group took
   2.9 seconds for a two-mode collection and 3.7 for a three-mode one, almost all of it arithmetic rather
@@ -89,6 +99,25 @@ a plain statement of the new default.
   in Figma: **2.9s to 2.1s** and **3.7s to 2.6s**, with every read landing on identical numbers.
 
 ### Fixed
+
+- **Setting OKLCH's lightness ends did nothing.** The two anchor boxes move under the chart — that is the
+  layout working — but the collector still asked the field they came *from* for them, and found it empty.
+  So the collection's Lightness rendered, accepted typing and saved `{}`, and every ramp was generated from
+  the fallback anchors whatever was on screen.
+- **A group with nothing left in it no longer draws its captions.** On OKLCH a mode's Lightness tab showed
+  "Bright" and "Dark" above two boxes that were not there — every part of that cell belongs to HSL, because
+  in OKLCH the ladder is the collection's. The same rule clears the empty *Lightness* label the collection's
+  own ladder used to leave behind.
+- **The two ends of a charted curve keep their captions**, so they read Bright and Dark rather than sitting
+  as bare number boxes beside a captioned Middle.
+- **Switching channel tabs no longer nudges the panel.** The curve's own Middle caption was 12px where the
+  two adopted ends are 10px, which made the Lightness tab 9px taller than Hue and Saturation.
+
+### Removed
+
+- **The "OKLCH scale not applied to ..." banner.** Its *Apply OKLCH scale* button had no handler and had not
+  had one for some time: pressing it did nothing. Each mode's own strip already names what changes and by
+  how much, which is the same fact at a grain you can act on.
 
 - **Dragging one inner handle brings the other with it**, collinear through the middle anchor — a smooth
   node, the way every vector tool behaves — so the two halves of a curve meet at the tangent and not only

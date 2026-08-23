@@ -254,3 +254,66 @@ test('each mode block gets its own estimate, not the collection\'s', () => {
   assert.deepEqual(JSON.parse(cell.getAttribute('data-curve-value')), mine,
     "the mode's curve was filled with the collection's estimate");
 });
+
+test('a curve that adopts a group part still collects the value it moved', () => {
+  /**
+   * **Adoption moves an input out of the field it belongs to.** A charted curve declares `@ends:` and pulls
+   * those two cells under its chart, which is the point of the layout — but at field scope an end is a part
+   * of a `@group:`, and the group collector asked *its own wrapper* for its parts. After adoption the
+   * wrapper is empty, so OKLCH's Lightness rendered, accepted typing, and saved nothing: the config kept
+   * `{}` however you set the ends, and every generated ramp fell back to the defaults.
+   *
+   * The panel looked entirely correct while this was true, which is why it is checked on the collected
+   * values rather than on the markup.
+   */
+  const block = [
+    '// @CONFIG_START',
+    '  curve: [0.33, 0.33, 0.67, 0.67], // @curve @ends: lightness.bright..lightness.dark @range: 0..100 @label: Curve',
+    '  lightness: {}, // @group: bright:number=Bright|dark:number=Dark @label: Lightness',
+    '// @CONFIG_END',
+  ].join('\n');
+
+  const container = mount();
+  let latest = null;
+  controller.createForm(container, parser.parse(block), {
+    container: container,
+    onChange: function (values) { latest = values; },
+  });
+
+  const bright = container.querySelector('[data-row-field="lightness.bright"]');
+  const dark = container.querySelector('[data-row-field="lightness.dark"]');
+  assert.ok(bright && dark, 'the group parts were never built');
+  assert.equal(bright.closest('.config-ui-curve__anchors') !== null, true,
+    'the curve did not adopt its ends, so this test is no longer exercising adoption');
+
+  bright.value = '97';
+  dark.value = '18';
+  dark.dispatchEvent(new Event('change', { bubbles: true }));
+
+  assert.deepEqual(latest.lightness, { bright: 97, dark: 18 },
+    'an adopted end is no longer collected — the field saves nothing');
+});
+
+test('a charted end keeps the caption its group part carries', () => {
+  // Adopting the bare `<input>` rather than the box around it left the two ends as unlabelled number boxes
+  // beside a captioned Middle — the one asymmetry in the panel that nothing else explained.
+  const block = [
+    '// @CONFIG_START',
+    '  curve: [0.33, 0.33, 0.67, 0.67], // @curve @ends: lightness.bright..lightness.dark @range: 0..100 @label: Curve',
+    '  lightness: {}, // @group: bright:number=Bright|dark:number=Dark @label: Lightness',
+    '// @CONFIG_END',
+  ].join('\n');
+
+  const container = mount();
+  controller.createForm(container, parser.parse(block), { container: container, onChange: function () {} });
+
+  const row = container.querySelector('.config-ui-curve__anchors');
+  const captions = Array.from(row.children)
+    .map((cell) => {
+      const cap = cell.querySelector('.config-ui-rows-group-label');
+      return cap ? cap.textContent : null;
+    });
+  // The Middle between them is the control's own — a two-end curve still offers one.
+  assert.deepEqual(captions, ['Bright', 'Middle', 'Dark'],
+    'the ends were adopted without their captions');
+});

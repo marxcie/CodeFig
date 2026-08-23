@@ -750,9 +750,6 @@ function colorsPreviewHtml(config, domain, modeName) {
   var alignment = colorsAlignment(config);
   var out = [];
 
-  // The banner goes in the section-level slot, which carries no row name.
-  out.push('<div data-preview-for="__panel__">' + colorsBannerHtml(alignment, config) + '</div>');
-
   // **One strip per mode, marked with the mode it belongs to.** Every frame draws the strip inside its own
   // mode block and none has a Preview section, so there is a slot per block rather than one at the bottom —
   // and one silent run has to fill all of them. The panel distributes these by `data-preview-for`.
@@ -881,7 +878,7 @@ function colorsTolerance() {
 /**
  * **Is each mode's current colour what this config would produce?**
  *
- * → `{ steps, shared, modes: [{ name, made, existing, changed, differs }], unapplied, hasExisting }`
+ * → `{ steps, shared, modes: [{ name, made, existing, changed, differs }], hasExisting }`
  *
  * Derived, never stored. There is no "applied" flag anywhere, and that is the point:
  *
@@ -908,7 +905,7 @@ function colorsAlignment(config) {
     : null;
 
   var tolerance = colorsTolerance();
-  var out = { steps: steps, shared: shared, modes: [], unapplied: [], hasExisting: false };
+  var out = { steps: steps, shared: shared, modes: [], hasExisting: false };
   var modes = Array.isArray(config.modes) ? config.modes : [];
 
   modes.forEach(function (mode) {
@@ -947,7 +944,6 @@ function colorsAlignment(config) {
     var entry = { name: mode.name || '', made: made, existing: existing,
                   changed: changed, differs: changed.length > 0 };
     out.modes.push(entry);
-    if (entry.differs) out.unapplied.push(entry.name || 'an unnamed mode');
   });
 
   return out;
@@ -1008,27 +1004,5 @@ function colorsStrip(entry, steps) {
   return out.join('');
 }
 
-/**
- * The banner, and the one action beside it.
- *
- * Names the modes rather than implying the whole collection, because with several modes some may match and some
- * may not. Apply still acts on the whole collection — the scale is a property of the collection, which is why
- * the OKLCH block sits above the modes in the first place — so only the wording is per mode.
- *
- * Empty in HSL, and empty when nothing has been read: there is no claim to make about a collection the panel
- * has not seen.
- */
-function colorsBannerHtml(alignment, config) {
-  if ((config.colorModel || 'hsl') === 'hsl') return '';
-  if (!alignment.hasExisting) return '';
-  if (!alignment.unapplied.length) return '';
-  return '<div class="color-apply-banner">' +
-    '<span class="color-apply-banner-text">OKLCH scale not applied to ' +
-      colorsEscapeHtml(alignment.unapplied.join(', ')) +
-      '. Apply it to the colors to achieve uniform lightness tones across the modes.</span>' +
-    '<button class="color-apply-banner-action" type="button" data-colors-apply="true">' +
-      'Apply OKLCH scale</button>' +
-  '</div>';
-}
 
 

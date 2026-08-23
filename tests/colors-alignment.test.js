@@ -80,21 +80,29 @@ test('the tolerance sits between one 8-bit step and anything visible', () => {
   assert.equal(E.oklchDistance('#FAFAFA', 'nonsense'), Infinity);
 });
 
-test('float noise at the anchors does not raise a banner', () => {
+/**
+ * The modes an alignment says have drifted from the file. Read from the per-mode flag: there is no
+ * collection-level list any more, because the banner that was its only reader is gone.
+ */
+function differing(alignment) {
+  return alignment.modes.filter((m) => m.differs).map((m) => m.name || 'an unnamed mode');
+}
+
+test('float noise at the anchors does not show drift', () => {
   // `applyEase` overshoots an anchor by 6e-17, so an exact comparison would show a permanent banner on a
   // perfectly applied collection. This is that case: the values are exactly what the config produces.
   const made = E.colorsAlignment(configFor(null));
   const generated = made.modes[0].made.rows.map((r) => r.hex);
 
   const aligned = E.colorsAlignment(configFor(generated));
-  assert.deepEqual(aligned.unapplied, [], 'a collection holding its own output must show no banner');
+  assert.deepEqual(differing(aligned), [], 'a collection holding its own output must show no drift');
   assert.deepEqual(aligned.modes[0].changed, []);
   assert.equal(aligned.modes[0].differs, false);
 });
 
-test('a hand-made ramp that sits on no curve shows the banner, and names the mode', () => {
+test('a hand-made ramp that sits on no curve reads as drifted, and names the mode', () => {
   const a = E.colorsAlignment(configFor(ASH));
-  assert.deepEqual(a.unapplied, ['Ash']);
+  assert.deepEqual(differing(a), ['Ash']);
   assert.ok(a.modes[0].changed.length > 10,
     'most of a ramp that sits on no curve should differ, got ' + a.modes[0].changed.length);
   // The anchor steps match, because the anchors were read from them — so it is not simply "everything differs".
@@ -104,7 +112,7 @@ test('a hand-made ramp that sits on no curve shows the banner, and names the mod
   });
 });
 
-test('the banner names only the modes that differ', () => {
+test('only the modes that differ are marked', () => {
   const config = configFor(ASH);
   const generated = E.colorsAlignment(configFor(null)).modes[0].made.rows.map((r) => r.hex);
   // Two modes, same anchors: one holding the config's output, one holding the file's hand-made values.
@@ -112,15 +120,11 @@ test('the banner names only the modes that differ', () => {
   config.existing = { Ash: generated, Bark: ASH };
 
   const a = E.colorsAlignment(config);
-  assert.deepEqual(a.unapplied, ['Bark'], 'only the mode that differs should be named');
-
-  const html = E.colorsBannerHtml(a, config);
-  assert.match(html, /OKLCH scale not applied to Bark\./);
-  assert.equal(/Ash/.test(html), false, 'a matching mode must not be named');
-  assert.match(html, /Apply OKLCH scale/);
+  assert.deepEqual(differing(a), ['Bark'], 'only the mode that differs should be marked');
+  assert.equal(a.modes[0].differs, false, 'a matching mode must not be marked');
 });
 
-test('a locked seed that the panel produced shows no banner', () => {
+test('a locked seed that the panel produced reads as aligned', () => {
   // The case that rules out comparing against the shared ladder. Lock seed re-anchors a mode on purpose, so it
   // sits off the shared ladder permanently — and a ladder comparison would show a banner that never clears.
   const locked = configFor(null);
@@ -131,27 +135,22 @@ test('a locked seed that the panel produced shows no banner', () => {
   const withValues = configFor(produced.made.rows.map((r) => r.hex));
   withValues.modes[0].seed = { hex: '#8A918F', placement: '400', lock: true };
   const a = E.colorsAlignment(withValues);
-  assert.deepEqual(a.unapplied, [], 'a deliberately re-anchored mode is not unapplied');
+  assert.deepEqual(differing(a), [], 'a deliberately re-anchored mode has not drifted');
 });
 
 test('there is no stored flag anywhere, and HSL round-trips', () => {
   // Nothing to reset: the same config with different `existing` gives a different answer, every time.
   const generated = E.colorsAlignment(configFor(null)).modes[0].made.rows.map((r) => r.hex);
-  assert.deepEqual(E.colorsAlignment(configFor(generated)).unapplied, []);
-  assert.deepEqual(E.colorsAlignment(configFor(ASH)).unapplied, ['Ash']);
-  assert.deepEqual(E.colorsAlignment(configFor(generated)).unapplied, [],
+  assert.deepEqual(differing(E.colorsAlignment(configFor(generated))), []);
+  assert.deepEqual(differing(E.colorsAlignment(configFor(ASH))), ['Ash']);
+  assert.deepEqual(differing(E.colorsAlignment(configFor(generated))), [],
     'the answer must not stick from the previous call');
 
-  // In HSL there is no banner at all — the shared ladder is not what that model does.
-  const hsl = configFor(ASH, { colorModel: 'hsl' });
-  assert.equal(E.colorsBannerHtml(E.colorsAlignment(hsl), hsl), '');
-
   // And a collection the panel has not read makes no claim either way.
-  const unread = configFor(null);
-  assert.equal(E.colorsBannerHtml(E.colorsAlignment(unread), unread), '');
+  assert.equal(E.colorsAlignment(configFor(null)).hasExisting, false);
 });
 
-test('the banner and the strip are driven by one comparison', () => {
+test('drift and the strip are driven by one comparison', () => {
   // They are the same fact at two grains. The strip is handed the alignment entry rather than recomputing
   // "does this step differ", which is how a summary and a detail come to disagree.
   const a = E.colorsAlignment(configFor(ASH));
@@ -196,10 +195,11 @@ test('a preview slot and its strip agree on a key that survives an unnamed mode'
   assert.equal(/data-preview-for="' \+ colorsEscapeHtml\(entry\.name\)/.test(ramp), false,
     'the preview is keyed by name again, which fails for an unnamed mode');
 
-  // And the panel-wide part has a key an unnamed mode cannot collide with.
+  // And the section-level slot keeps a reserved key an unnamed mode cannot collide with. Nothing in this
+  // script fills it since the alignment banner was removed, but the reservation is what stops a mode named
+  // "" from claiming the panel's own slot, so it is checked where it is defined.
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
   assert.match(ui, /'__panel__'/, 'the section-level slot has no reserved key');
-  assert.match(ramp, /data-preview-for="__panel__"/);
 });
 
 test('two HSL modes with different lightness generate different ramps', () => {
@@ -312,7 +312,7 @@ test('Original is the file\'s ramp, and picking a curve replaces it', () => {
   assert.deepEqual(original.modes[0].made.rows.map((r) => r.hex), hexes,
     'Original did not reproduce the file');
   assert.deepEqual(original.modes[0].changed, [], 'Original still reports steps as changing');
-  assert.equal(original.unapplied.length, 0, 'and the banner would still name this mode');
+  assert.equal(differing(original).length, 0, 'and the strip would still mark this mode as drifted');
 
   // A real curve regenerates, and now it differs — which is the point of choosing one.
   const linear = ctx.colorsAlignment({
@@ -451,7 +451,7 @@ test('the lightness gap is measured in the ramp\'s own model', () => {
   // The strip prints what the comparison measured rather than working it out again.
   const src = fs.readFileSync(
     path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES', '@color-ramp.js'), 'utf8');
-  const strip = src.slice(src.indexOf('function colorsStrip('), src.indexOf('function colorsBannerHtml('));
+  const strip = src.slice(src.indexOf('function colorsStrip('));
   assert.equal(/oklchFromHex\(change\.was\)/.test(strip), false,
     'colorsStrip reads the file value itself again — that is where the mixed units came from');
   assert.match(strip, /change\.dL/);
@@ -524,7 +524,7 @@ test('the curve is the collection\'s in OKLCH and the mode\'s in HSL', () => {
   assert.deepEqual(quiet.modes[0].made.rows.map((r) => r.hex), file.A);
   assert.deepEqual(quiet.modes[1].made.rows.map((r) => r.hex), file.B,
     'the second mode did not get its own file values from a collection-scope Original');
-  assert.deepEqual(quiet.unapplied, [], 'the banner fires on a collection that matches its file');
+  assert.deepEqual(differing(quiet), [], 'a collection that matches its file reports drift');
 
   // And choosing a real curve on the collection moves every mode off it.
   const applied = ctx.colorsAlignment({

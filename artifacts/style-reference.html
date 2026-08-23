@@ -1201,24 +1201,17 @@
             The ramp is clipped to the plot; the grips are clipped to the plot <strong>plus their own radius</strong>, so one on<br>the boundary sits <em>on</em> the frame rather than being sliced in half by it. A drag stops at the edge of the<br>window rather than pushing the curve out of sight.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="71">
+        <div class="config-ui-row config-ui-row--field" data-row-index="71" style="display: none">
           <div class="config-ui-field config-ui-field--group">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladder-21">Ends</label>
               <div class="config-ui-field__control">
-                <span class="config-ui-rows-group" data-group-field="ladder">
-                  <label class="config-ui-rows-group-part">
-                    <span class="config-ui-rows-group-label">Bright</span>
-                  </label>
-                  <label class="config-ui-rows-group-part">
-                    <span class="config-ui-rows-group-label">Dark</span>
-                  </label>
-                </span>
+                <span class="config-ui-rows-group" data-group-field="ladder"></span>
               </div>
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="72">
+        <div class="config-ui-row config-ui-row--field config-ui-row--charted" data-row-index="72">
           <div class="config-ui-field config-ui-field--curve">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladderCurve-22">
@@ -1335,12 +1328,18 @@
                     </div>
                   </div>
                   <div class="config-ui-curve__anchors">
-                    <input type="number" class="config-ui-input config-ui-input--number config-ui-curve__anchor" data-row-field="ladder.bright" value="98">
+                    <label class="config-ui-rows-group-part config-ui-curve__anchor">
+                      <span class="config-ui-rows-group-label">Bright</span>
+                      <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.bright" value="98">
+                    </label>
                     <label class="config-ui-curve__anchor config-ui-curve__anchor--middle">
-                      <span class="config-ui-rows-cell-label">Middle</span>
+                      <span class="config-ui-rows-group-label">Middle</span>
                       <input type="text" class="config-ui-input config-ui-input--number" data-curve-middle="true" disabled value="—">
                     </label>
-                    <input type="number" class="config-ui-input config-ui-input--number config-ui-curve__anchor config-ui-curve__anchor--end" data-row-field="ladder.dark" value="19">
+                    <label class="config-ui-rows-group-part config-ui-curve__anchor config-ui-curve__anchor--end">
+                      <span class="config-ui-rows-group-label">Dark</span>
+                      <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.dark" value="19">
+                    </label>
                   </div>
                 </div>
               </div>

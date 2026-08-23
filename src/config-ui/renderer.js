@@ -564,8 +564,11 @@
     }
     if (r.type === "field") {
       var wrap3 = document.createElement("div");
+      // A charted curve is the width of the block wherever it lives — in a mode's row cell or, as OKLCH's
+      // shared ladder is, as a field of its own. The modifier is what the stylesheet keys the break-out on.
       wrap3.className = "config-ui-row config-ui-row--field" +
-        (r.inputType === "rows" ? " config-ui-row--fullwidth" : "");
+        (r.inputType === "rows" ? " config-ui-row--fullwidth" : "") +
+        (r.inputType === "curve" && r.ends ? " config-ui-row--charted" : "");
       var frules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
       if (frules && frules.length) {
         wrap3.setAttribute("data-show-when-rules", JSON.stringify(frules));
@@ -1824,7 +1827,11 @@
       var middleCell = document.createElement("label");
       middleCell.className = "config-ui-curve__anchor config-ui-curve__anchor--middle";
       var middleCap = document.createElement("span");
-      middleCap.className = "config-ui-rows-cell-label";
+      // **The same caption class the adopted cells use.** Its two neighbours are group *parts*, whose
+      // captions are `config-ui-rows-group-label` at 10px; this one was a cell label at 12px, so Middle
+      // read as a heading beside two labels — and the extra two points made the Lightness tab nine pixels
+      // taller than Hue and Saturation, so the whole block jumped when you switched.
+      middleCap.className = "config-ui-rows-group-label";
       middleCap.textContent = "Middle";
       middleBox = document.createElement("input");
       middleBox.type = "text";
@@ -1899,19 +1906,18 @@
       // Asked of the **plot**, not the wrapper: a charted curve's wrapper is `display: contents`, which
       // generates no box at all, so asking it whether it is on screen answers "no" for every one of them.
       if (typeof plot.getClientRects === "function" && !plot.getClientRects().length) return;
+      // **The captioned box, not the input.** In a `@rows` row that is the cell; at field scope an end is a
+      // part of a `@group:`, and `.config-ui-rows-group-part` is the box holding its caption. Adopting the
+      // bare input instead left OKLCH's two ends as unlabelled number boxes beside a captioned Middle.
       var from = endCell("from"), to = endCell("to");
-      var fromCell = from && typeof from.closest === "function"
-        ? (from.closest(".config-ui-rows-cell") || from) : from;
-      var toCell = to && typeof to.closest === "function"
-        ? (to.closest(".config-ui-rows-cell") || to) : to;
+      var fromCell = adoptable(from), toCell = adoptable(to);
       // The middle, when the channel has a real one, sits between them and is adopted the same way.
       // **Disabled when the curve has no middle point**, because then the engine does not consult it: a
       // one-segment curve runs end to end. An editable box holding a number nothing reads is how the bump
       // at the middle went unexplained — the value was still there and still looked authoritative.
       if (field.ends.mid) {
         var midEl = endCell("mid");
-        var midCell = midEl && typeof midEl.closest === "function"
-          ? (midEl.closest(".config-ui-rows-cell") || midEl) : midEl;
+        var midCell = adoptable(midEl);
         if (midCell && midCell.parentNode !== anchorRow) {
           midCell.setAttribute("class", midCell.getAttribute("class") +
             " config-ui-curve__anchor config-ui-curve__anchor--middle");
@@ -1971,6 +1977,11 @@
      */
     function endCell(which) {
       return cellNamed(field.ends && field.ends[which]);
+    }
+    /** The captioned box an end lives in — a `@rows` cell, or a `@group:` part at field scope. */
+    function adoptable(el) {
+      if (!el || typeof el.closest !== "function") return el;
+      return el.closest(".config-ui-rows-cell") || el.closest(".config-ui-rows-group-part") || el;
     }
     function endValue(which) {
       var cell = endCell(which);
@@ -3065,6 +3076,38 @@
     return values.indexOf(current) !== -1;
   }
 
+  /**
+   * **A group with nothing left in it is not a caption, it is nothing.**
+   *
+   * Two ways a group empties out, both ordinary and both leaving a labelled blank behind:
+   *
+   * - Every part is conditional on the other model. On OKLCH a mode's Lightness cell holds only
+   *   `{colorModel=hsl}` parts — the ladder is the collection's — so the tab drew "Bright" and "Dark" over
+   *   two boxes that were not there.
+   * - A charted curve **adopted** the parts. The collection's own Lightness is exactly this: its two numbers
+   *   move under the chart, and the field row they came from is left holding a label and an ⓘ.
+   *
+   * Called from both `applyVisibility` and `refreshCurveControls`, because those are the two passes that
+   * empty one and they run in that order — swept only by the first, an adopted group stays visible until
+   * something else changes, which is a label that appears on load and vanishes on the next keystroke.
+   *
+   * Asked of the parts every time rather than recorded when one is hidden: the group is the answer to "is
+   * there anything to set here", and it has to survive an adoption that no condition triggered.
+   */
+  function hideEmptyGroups(root) {
+    if (!root || typeof root.querySelectorAll !== "function") return;
+    root.querySelectorAll(".config-ui-rows-group").forEach(function (group) {
+      var parts = group.querySelectorAll(".config-ui-rows-group-part");
+      var any = false;
+      for (var i = 0; i < parts.length; i++) {
+        if (parts[i].style.display !== "none") { any = true; break; }
+      }
+      var box = group.closest
+        ? (group.closest(".config-ui-rows-cell") || group.closest(".config-ui-row--field")) : null;
+      if (box) box.style.display = any ? "" : "none";
+    });
+  }
+
   function refreshCurveControls(root, except) {
     if (!root || typeof root.querySelectorAll !== "function") return;
     root.querySelectorAll("[data-curve-value]").forEach(function (wrap) {
@@ -3072,6 +3115,7 @@
       if (except && wrap === except) return;
       wrap.dispatchEvent(new Event("config-ui-curve-refresh"));
     });
+    hideEmptyGroups(root);
   }
 
   /**
@@ -3955,8 +3999,18 @@
         if (field.value && typeof field.value === "object") {
           for (var was in field.value) held[was] = field.value[was];
         }
+        /**
+         * **Searched from the form, not from the group.** A curve declaring `@ends: lightness.bright..`
+         * *adopts* those two inputs — moves them under its own chart, which is the whole point of the
+         * charted layout — and they land in a different field's subtree. Asking the group wrapper for its
+         * own parts then finds an empty box: OKLCH's Lightness rendered, accepted typing and saved nothing.
+         *
+         * Safe to widen because a field-level part's key is `group.part` and a `@rows` cell's group is not
+         * marked `data-group-field` at all, so there is exactly one element per key in the form.
+         */
         (field.columns || []).forEach(function (part) {
-          var el = wrap.querySelector('[data-row-field="' + groupName + "." + part.key + '"]');
+          var key = '[data-row-field="' + groupName + "." + part.key + '"]';
+          var el = wrap.querySelector(key) || container.querySelector(key);
           if (el) readRowCellInto(held, part, el);
         });
         vals[groupName] = held;
@@ -4172,6 +4226,22 @@
         var row = group.closest ? group.closest(".config-ui-rows-item") : null;
         applyConditions(group, [scopeUnder(group), row ? scopeUnder(row) : null]);
       });
+
+      /**
+       * **A group with nothing left in it is not a caption, it is nothing.**
+       *
+       * Two ways a group empties out, both of them ordinary and both of them leaving a labelled blank:
+       *
+       * - Every part is conditional on the other model. On OKLCH a mode's Lightness cell holds only
+       *   `{colorModel=hsl}` parts — the ladder is the collection's — so the tab drew "Bright" and "Dark"
+       *   over two boxes that were not there.
+       * - A charted curve **adopted** the parts. The collection's own Lightness is exactly this: its two
+       *   numbers move under the chart, and the field row they came from is left holding a label and an ⓘ.
+       *
+       * Asked of the parts on every pass rather than recorded when one is hidden — the group is the answer
+       * to "is there anything to set here", and it has to survive an adoption that no condition triggered.
+       */
+      hideEmptyGroups(container);
 
       container.querySelectorAll("[data-show-when-field]").forEach(function (row) {
         if (row.getAttribute("data-show-when-rules")) return;
