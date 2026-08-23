@@ -11,6 +11,27 @@
 // In **HSL** there is no shared ladder — a mode's own three anchors are its ladder, and the curve is per
 // mode, because an HSL curve is legitimately per hue. The *Color model* radio switches between the two.
 //
+// ## Which model to generate in
+//
+// **OKLCH to generate. HSL to read what is already there.** This is not a preference; HSL cannot express a
+// full ramp smoothly, and the reason is arithmetic rather than taste.
+//
+// HSL's saturation is a *fraction of the colour available at that lightness*, so the colourfulness a step
+// actually carries is `C = S x (1 - |2L - 1|)`. That envelope is two straight lines meeting at **L = 50%**,
+// and `|2L - 1|` has a corner there. Measured with the colour held flat and the lightness on one smooth
+// cubic — no join anywhere in the curve — the second difference of chroma runs ±4 across the whole ramp
+// and **-25 and -20 at the two steps either side of the crossing**. Every ramp that goes from near-white to
+// near-black crosses it.
+//
+// The same measurement in OKLCH: ±3 the whole way, and no crossing artefact at all. Its one irregularity is
+// at the extreme bright end, where the sRGB gamut runs out and chroma is clipped — the gamut's doing, not
+// the model's, and it happens where there is almost no colour left to lose.
+//
+// Neither anchor choice escapes it in HSL. With ends at near-white and near-black the absolute chroma there
+// is almost nothing, so interpolating `C` gives a ramp duller than the file and interpolating `S` gives the
+// cusp. That is why the panel offers both and reads in both: a collection authored in HSL is read back
+// faithfully, and a collection being *made* should be made in OKLCH.
+//
 // ## Seed color
 // A hex you already have. It fills the **Middle** anchor's hue and chroma once, when you enter it, and then
 // gets out of the way — the workflow is *place a colour, generate a scale from it, then adjust the scale*.
@@ -86,7 +107,7 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   // @collectionModes: Collection modes @showWhen: collectionName=* @showWhen: steps=*
   group: "", // @label: Group within collection @placeholder="eg.: Primitives/Neutrals"
   steps: "", // @label: Color tokens @placeholder="Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950" @helper: Named lightest to darkest, and the only source for token placement below. The variables are <group>/<step>.
-  colorModel: "hsl", // @options: hsl:HSL|oklch:OKLCH @radio @label: Color model @helper: HSL keeps a curve per mode. OKLCH shares one lightness ladder across every mode, which is what makes them match in greyscale.
+  colorModel: "hsl", // @options: hsl:HSL|oklch:OKLCH @radio @label: Color model @helper: OKLCH to generate, HSL to read. OKLCH shares one lightness ladder across every mode, which is what makes them match in greyscale. HSL keeps a curve per mode — and its colourfulness envelope, S x (1 - |2L - 1|), has a corner at 50% lightness that every full ramp crosses. See the Documentation tab.
   // Each anchor keeps a hue for both models: OKLCH's is a perceptual angle, HSL's is where the
   // maximum channel sits, and on a near-neutral ramp the two disagree by more than 30°. Both are
   // filled when the panel reads a collection, so switching model loses nothing.

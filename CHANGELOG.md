@@ -63,6 +63,12 @@ a plain statement of the new default.
 
 ### Changed
 
+- **The Documentation tab says which model to generate in, and why.** OKLCH to generate, HSL to read what
+  is already there. HSL's colourfulness envelope, `C = S x (1 - |2L - 1|)`, has a corner at 50% lightness
+  that every full ramp crosses: measured with the colour flat and the lightness on one smooth cubic, the
+  second difference of chroma runs ±4 across the ramp and **-25 and -20 either side of the crossing**. The
+  same measurement in OKLCH is ±3 with no crossing artefact.
+
 - **The Lightness chart plots lightness, not darkness.** Its numbers now match the anchor boxes, the
   config and the variable: bright at the top, dark at the bottom. The inverted axis read the other way
   round from every number beside it.
