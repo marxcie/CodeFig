@@ -6061,10 +6061,27 @@
             wrap.querySelectorAll('.config-ui-rows-tab').forEach(function (tab) {
               tabs.push({ label: tab.textContent, active: tab.classList.contains('is-active') });
             });
+            /**
+             * **The channel tabs, which are not the same thing as `tabs` above.** That is the `@tabs`
+             * display mode — one entry per tab. These are `#>Hue` inside a row: the caption depends on the
+             * colour model and a tab with nothing in it is not drawn, and neither fact was readable from
+             * the terminal. Both have now been reported wrong from a screenshot ("I have 4 tabs instead of
+             * 3", and Saturation where OKLCH means Chroma), which is exactly what this CLI is for.
+             */
+            var channels = [];
+            wrap.querySelectorAll('[data-rows-tab]').forEach(function (button) {
+              channels.push({
+                key: button.getAttribute('data-rows-tab'),
+                caption: button.textContent,
+                shown: button.style.display !== 'none',
+                open: button.getAttribute('aria-selected') === 'true'
+              });
+            });
             fields.push({
               name: wrap.getAttribute('data-rows-field'),
               control: 'rows',
               tabs: tabs.length > 0 ? tabs : null,
+              channels: channels.length > 0 ? channels : null,
               rows: rows,
               layout: layout,
               visible: rowVisible(wrap)
