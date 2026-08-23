@@ -84,6 +84,10 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **The colour strip redraws while you drag a curve handle**, instead of waiting for you to stop. Its
+  400ms debounce was reset by every frame of the drag, so it never fired until the pointer settled. There
+  is a 120ms maximum wait now — the drawing itself measures 0.6ms, so what is being paced is the round
+  trip, not the work.
 - **The three anchor boxes and the three chart points are one set of values, both ways.** Dragging the
   middle anchor writes its field and typing in the field moves the anchor — the ends already worked, the
   middle did not, because the anchor lives in the curve and the value in a field.

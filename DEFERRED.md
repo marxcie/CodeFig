@@ -10,6 +10,26 @@ forgotten one.
 
 ---
 
+## The preview flushes the config text on every frame of a drag
+
+`scheduleConfigPreview` has a 120ms maximum wait so the colour strip redraws while a curve handle is being
+dragged — without it a plain debounce was reset by every frame and the strip only caught up when the
+pointer stopped.
+
+The preview reads the config block, and `currentConfigBlock()` flushes `_configSyncPending`, so a drag now
+rewrites the config editor roughly eight times a second. That is what the live-deferral was built to
+avoid: two CodeMirror `setValue` calls per rewrite, on the panel with the largest config block in the
+plugin.
+
+It is bounded — `requestConfigPreview` declines while a silent run is in flight and reschedules — and
+`colorsPreviewHtml` itself measures 0.6ms in Figma, so the drawing is not the cost. Not chased because
+nothing has felt slow since, and the alternative is a real change: feed the preview from the form's values
+rather than from the text. The values are not a drop-in replacement — `getValues` only carries what the
+form renders, while the block also holds keys no control shows — so it would need the values overlaid on
+the last parsed config rather than used alone.
+
+**How it was found:** measured while fixing the strip not updating during a drag, rather than reported.
+
 ## 1. `matchPattern`'s `caseSensitive` option has never worked
 
 **What.** In its default (wildcard) mode, `matchPattern(text, pattern, { caseSensitive: true })`

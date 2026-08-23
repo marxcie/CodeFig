@@ -2182,10 +2182,41 @@
       }
 
       /** Debounced: long enough that typing `12` never renders `1`. */
+      /**
+       * How long the strip may go without redrawing while edits keep arriving.
+       *
+       * **A plain debounce never fires during a drag.** Every frame rescheduled it, so the strip only
+       * caught up when the pointer stopped — Márton: *"it should be auto updating, real time"*. The quiet
+       * delay is still there for typing, where re-running per keystroke is waste; the max wait is what
+       * makes a continuous drag redraw anyway.
+       *
+       * 120ms because the work is small: `colorsPreviewHtml` measured **0.6ms** in Figma, so what is being
+       * paced is the round trip and the config-text rewrite, not the drawing. `requestConfigPreview` also
+       * declines while a silent run is in flight and asks again, so the sandbox applies its own back
+       * pressure and this cannot outrun it.
+       *
+       * **What this costs, recorded in `DEFERRED.md`.** The preview reads the block, and
+       * `currentConfigBlock` flushes `_configSyncPending` — so a drag now rewrites the config editor about
+       * eight times a second, which is what the deferral was built to avoid. Bounded by the in-flight
+       * guard rather than unbounded. If the editor feels heavy during a drag again, this is the first
+       * place to look, and the fix is to feed the preview from the form's values instead of re-parsing the
+       * text it just wrote.
+       */
+      const PREVIEW_QUIET_MS = 400;
+      const PREVIEW_MAX_WAIT_MS = 120;
+      let _previewWaitingSince = 0;
+
       function scheduleConfigPreview() {
         if (!currentScript || !scriptPreviewFunction(currentScript.code || '')) return;
+        const now = Date.now();
+        if (!_previewWaitingSince) _previewWaitingSince = now;
         if (_previewTimer) clearTimeout(_previewTimer);
-        _previewTimer = setTimeout(requestConfigPreview, 400);
+        if (now - _previewWaitingSince >= PREVIEW_MAX_WAIT_MS) {
+          _previewTimer = null;
+          requestConfigPreview();
+          return;
+        }
+        _previewTimer = setTimeout(requestConfigPreview, PREVIEW_QUIET_MS);
       }
 
       /**
@@ -2301,6 +2332,8 @@
 
       function requestConfigPreview() {
         _previewTimer = null;
+        // The wait starts again from here, so the next burst of edits gets its own full allowance.
+        _previewWaitingSince = 0;
         if (!currentScript) return;
         const fn = scriptPreviewFunction(currentScript.code || '');
         if (!fn) return;
