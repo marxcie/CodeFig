@@ -63,6 +63,15 @@ a plain statement of the new default.
 
 ### Changed
 
+- **The Lightness chart plots lightness, not darkness.** Its numbers now match the anchor boxes, the
+  config and the variable: bright at the top, dark at the bottom. The inverted axis read the other way
+  round from every number beside it.
+- **The coordinate field sits on the preset row** — which shape, how many points, and the shape as text
+  are one thought. Scale editors keep theirs under the plot, where the column is too narrow for three
+  controls on a line.
+- **A swatch caption is the token and the colour it will be.** The struck-through old value and the
+  per-step lightness delta are gone; the banner above already says how many steps change and by how much.
+  The token is bold and full-strength, because it is the label.
 - **Reading a colour collection is about a third faster.** Selecting a collection and typing a group took
   2.9 seconds for a two-mode collection and 3.7 for a three-mode one, almost all of it arithmetic rather
   than reading the file — a second read of the same collection was no quicker. The anchor search already
@@ -70,6 +79,13 @@ a plain statement of the new default.
   in Figma: **2.9s to 2.1s** and **3.7s to 2.6s**, with every read landing on identical numbers.
 
 ### Fixed
+
+- **The three anchor boxes and the three chart points are one set of values, both ways.** Dragging the
+  middle anchor writes its field and typing in the field moves the anchor — the ends already worked, the
+  middle did not, because the anchor lives in the curve and the value in a field.
+- **An anchor drag no longer rounds a chroma to nothing.** It rounded to one decimal, which is right for a
+  lightness or a hue and turns 0.044 on a `0..0.4` channel into 0. The precision comes from the channel's
+  own range now.
 
 - **`easeInOut` presets are one curve, not two halves joined at a middle point.** Two segments meant a
   *middle anchor*, and a colour channel travels through its middle anchor value — so choosing
