@@ -69,6 +69,10 @@ a plain statement of the new default.
 - **The coordinate field sits on the preset row** — which shape, how many points, and the shape as text
   are one thought. Scale editors keep theirs under the plot, where the column is too narrow for three
   controls on a line.
+- **The bar beside a chart shows the whole channel, with the window bracketed on it.** It showed only the
+  slice the plot shows, which on a hue ramp travelling one degree is a solid block of one colour — it said
+  nothing about where that degree sits on the wheel. The bar answers *where in the channel am I*; the chart
+  answers *what happens across it*.
 - **A swatch caption is the token and the colour it will be.** The struck-through old value and the
   per-step lightness delta are gone; the banner above already says how many steps change and by how much.
   The token is bold and full-strength, because it is the label.

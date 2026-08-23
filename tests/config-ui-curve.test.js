@@ -1155,3 +1155,39 @@ test('the coordinate field shares the preset row on a charted curve', () => {
   assert.equal(scaleHead.querySelector('.config-ui-curve__text'), null,
     'a scale editor should keep its field under the plot');
 });
+
+test('the bar shows the whole channel, with the window bracketed on it', () => {
+  /**
+   * It showed the *window*, which on a hue ramp travelling one degree is a solid block of one colour — it
+   * told you nothing about where that degree sits on the wheel. Márton: show the whole channel with the
+   * window marked on it instead. The bar answers "where in the channel am I"; the chart answers "what
+   * happens across it".
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var a = { bright: 100, dark: 110, sat: 80 }; ' +
+      '// @group: bright:number=Start|dark:number=End|sat:number=Sat @label: Ends',
+    'var hc = [0.4, 0.2, 0.6, 0.8]; // @curve @ends: a.bright..a.dark @range: 0..360 ' +
+      '@ramp: hsl($ ~a.sat% 50%) @label: Hue',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  const stops = container.querySelector('.config-ui-curve__range-fill').style.background;
+  const values = (stops.match(/hsl\((-?[\d.]+)/g) || []).map((m) => parseFloat(m.slice(4), 10));
+  assert.ok(values.length > 2, 'no gradient: ' + stops.slice(0, 80));
+  // Top of the bar is the channel's ceiling, bottom its floor — 360 down to 0, not 110 down to 100.
+  assert.ok(Math.abs(values[0] - 360) < 1, 'the bar starts at ' + values[0] + ', not the top of the channel');
+  assert.ok(Math.abs(values[values.length - 1]) < 1, 'the bar ends at ' + values[values.length - 1]);
+
+  // And the ten degrees the ramp occupies are bracketed, near the bottom of a 0..360 bar.
+  const win = container.querySelector('.config-ui-curve__range-window');
+  assert.equal(win.getAttribute('data-shown'), 'true', 'a window inside the channel should be marked');
+  assert.ok(parseFloat(win.style.height, 10) < 15,
+    'the bracket should be a small part of the channel, not ' + win.style.height);
+  assert.ok(parseFloat(win.style.top, 10) > 60,
+    'a ramp around 100 of 360 belongs low on the bar, not at ' + win.style.top);
+});

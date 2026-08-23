@@ -1747,6 +1747,7 @@
     var zoomMark = null;
     var zoomTrack = null;
     var rangeFill = null;
+    var rangeWindow = null;
     if (field.ends) {
       var line = document.createElement("div");
       line.className = "config-ui-curve__chartline";
@@ -1777,6 +1778,9 @@
       rangeFill = document.createElement("div");
       rangeFill.className = "config-ui-curve__range-fill";
       rangeCol.appendChild(rangeFill);
+      rangeWindow = document.createElement("div");
+      rangeWindow.className = "config-ui-curve__range-window";
+      rangeCol.appendChild(rangeWindow);
       line.appendChild(rangeCol);
     } else {
       wrap.appendChild(plot);
@@ -2258,6 +2262,18 @@
           ? "linear-gradient(to bottom, " + stops.join(", ") + ")" : "";
         rangeFill.setAttribute("data-shown", stops ? "true" : "false");
       }
+      // Where the plot's slice sits in the whole channel. Derived from the window on every draw, so it
+      // cannot describe a view the chart is not showing.
+      if (rangeWindow) {
+        var whole = a.hi - a.lo;
+        var view = shownView(a);
+        var top = whole > 0 ? ((a.hi - view.hi) / whole) * 100 : 0;
+        var bottom = whole > 0 ? ((a.hi - view.lo) / whole) * 100 : 100;
+        rangeWindow.style.top = Math.max(0, Math.min(100, top)) + "%";
+        rangeWindow.style.height = Math.max(1.5, Math.min(100, bottom - top)) + "%";
+        // Nothing to mark when the window is the channel.
+        rangeWindow.setAttribute("data-shown", (bottom - top) < 99 ? "true" : "false");
+      }
     }
 
     /**
@@ -2286,18 +2302,23 @@
      */
     function templateStops(a) {
       if (!field.ramp) return null;
-      var w = shownView(a), span = w.hi - w.lo;
+      // **The whole channel, not the window.** A bar showing only what the plot shows is a second copy of
+      // the plot's own range — and on a hue ramp travelling one degree it is a solid block of one colour,
+      // which tells you nothing about where that degree sits on the wheel. The window is drawn *onto* it
+      // instead, so the bar answers "where in the channel am I" while the chart answers "what happens
+      // across it".
+      var w = { lo: a.lo, hi: a.hi }, span = w.hi - w.lo;
       if (!(span > 0)) return null;
       var out = [];
       for (var i = 0; i <= 10; i++) {
         var at = i / 10;
         // Top of the bar is the window's high value, as it is on the plot beside it.
-        var value = w.hi - at * span;
+        var value = shown(a, w.hi - at * span);
         var colour = field.ramp.replace(/~([A-Za-z0-9_$.]+)/g, function (all, key) {
           var cell = cellNamed(key);
           var held = cell ? parseFloat(cell.value, 10) : NaN;
           return isFinite(held) ? String(Math.round(held * 100) / 100) : "0";
-        }).replace(/\$/g, String(Math.round(shown(a, value) * 1000) / 1000));
+        }).replace(/\$/g, String(Math.round(value * 1000) / 1000));
         out.push(colour + " " + Math.round(at * 1000) / 10 + "%");
       }
       return out;
