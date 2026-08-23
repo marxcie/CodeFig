@@ -2725,6 +2725,7 @@
     var draggingGrowth = false;
     var draggingEnd = null;
     var panning = null;
+    var dragSmooth = false;
     svg.addEventListener("pointerdown", function (evt) {
       var target = evt.target;
       if (!target || typeof target.getAttribute !== "function") return;
@@ -2734,6 +2735,21 @@
         draggingGrowth = true;
       } else {
         var dot = target.getAttribute("data-curve-index");
+        if (dot !== null) {
+          /**
+           * **What kind of node this is, read once, at the start of the drag.**
+           *
+           * Read per frame it would flip the moment the first mirrored move made it collinear, and a corner
+           * you were pulling apart would snap smooth under the pointer. Read at `pointerdown` it is the
+           * state you began with, which is what "keeps it a corner" has to mean.
+           *
+           * Not stored between drags: the coordinates carry it, and this is a fact about *this* gesture.
+           */
+          var held = curveValueOf(wrap.getAttribute("data-curve-value"));
+          dragSmooth = B ? B.bezierNodeIsSmooth(held) : false;
+          // Alt inverts it, the way every vector tool does: break a smooth node, or restore a broken one.
+          if (evt.altKey) dragSmooth = !dragSmooth;
+        }
         if (dot === null) {
           // **Empty chart with an axis: scroll it.** A tight window has ramp above or below it, and this is
           // how you follow it. It slides the window and never resizes it, so a pan cannot become a zoom.
@@ -2794,6 +2810,19 @@
       var lift = growthKey ? curveGrowthHeight(growthRatio()) : 1;
       pts[dragging] = at.x;
       pts[dragging + 1] = lift > 0 ? at.y / lift : at.y;
+      /**
+       * **A smooth node stays smooth.** The two inner handles are stored independently, so nothing keeps
+       * them collinear through the anchor — drag one and the segments still meet at the point but no longer
+       * at the tangent, which is the kink Márton measured as a 15% slope discontinuity across the join.
+       *
+       * Only when the node *was* smooth when the drag began. A curve fitted to a real ramp may hold a
+       * genuine corner — lime's file is a plateau with a knee at each end, and forcing smoothness on the
+       * fit costs seven of 255 there — so mirroring on touch would destroy the fits the recogniser exists
+       * to produce.
+       */
+      if (dragSmooth && pts.length === 10 && (dragging === 2 || dragging === 6) && B) {
+        pts = B.bezierMirrorNode(pts, dragging);
+      }
       /**
        * **Dragging the middle anchor writes the middle field**, the same way dragging an end writes its
        * own. The three boxes and the three points on the chart are one set of values seen twice: change

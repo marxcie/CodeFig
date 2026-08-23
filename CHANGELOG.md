@@ -84,6 +84,11 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Dragging one inner handle brings the other with it**, collinear through the middle anchor — a smooth
+  node, the way every vector tool behaves — so the two halves of a curve meet at the tangent and not only
+  at the point. Only when the node was *already* smooth when the drag began: a curve fitted to a real ramp
+  may hold a genuine corner, and mirroring on touch would destroy it. **Alt** inverts either way. Nothing
+  is stored — collinear or not, the coordinates already say which kind of node it is.
 - **The colour strip redraws while you drag a curve handle**, instead of waiting for you to stop. Its
   400ms debounce was reset by every frame of the drag, so it never fired until the pointer settled. There
   is a 120ms maximum wait now — the drawing itself measures 0.6ms, so what is being paced is the round

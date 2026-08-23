@@ -13,6 +13,8 @@
  */
 const test = require("node:test");
 const assert = require("node:assert");
+const fs = require("fs");
+const path = require("path");
 const shim = require("./dom-shim.js");
 
 // The real library, loaded through the same helper `build-bezier.js` uses to inline it into `dist/ui.html`
@@ -1139,4 +1141,83 @@ test('the bar shows the whole channel, with the window bracketed on it', () => {
     'the bracket should be a small part of the channel, not ' + win.style.height);
   assert.ok(parseFloat(win.style.top, 10) > 60,
     'a ramp around 100 of 360 belongs low on the bar, not at ' + win.style.top);
+});
+
+/** The slope either side of the join, as a ratio. 1 is a smooth node; anything else is a corner. */
+function tangentRatio(curve) {
+  const mx = curve[4];
+  const e = 1e-4;
+  const into = (B.bezierAt(curve, mx) - B.bezierAt(curve, mx - e)) / e;
+  const outOf = (B.bezierAt(curve, mx + e) - B.bezierAt(curve, mx)) / e;
+  return outOf / into;
+}
+
+/** Drag the handle before the anchor, and hand back what the curve became. */
+function dragInnerHandle(curve, opts) {
+  const source = [
+    '// @UI_CONFIG_START',
+    'var a = { bright: 98.2, dark: 9.6 }; // @group: bright:number=B|dark:number=D @label: Ends',
+    'var c = ' + JSON.stringify(curve) + '; // @curve @ends: a.bright..a.dark @range: 0..100 @label: L',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+  const svg = container.querySelector('.config-ui-curve__canvas');
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  const handle = container.querySelector('[data-curve-index="2"]');
+  svg.dispatch('pointerdown', {
+    target: handle, clientX: 30, clientY: 60, pointerId: 1, altKey: !!(opts && opts.alt),
+  });
+  svg.dispatch('pointermove', { clientX: 18, clientY: 38, pointerId: 1 });
+  svg.dispatch('pointerup', { clientX: 18, clientY: 38, pointerId: 1 });
+  return JSON.parse(container.querySelector('.config-ui-curve').getAttribute('data-curve-value'));
+}
+
+test('a smooth node stays smooth through a drag, tangent ratio 1.0', () => {
+  /**
+   * **Two segments meet at the point and need not meet at the tangent.** The inner handles are stored
+   * independently, so dragging one leaves a slope discontinuity across the join — Márton measured 1.259
+   * into it against 1.448 out. Mirroring the other handle through the anchor is what removes it.
+   */
+  const smooth = B.bezierWithMiddle([0.42, 0.16, 0.68, 0.52]);
+  assert.ok(Math.abs(tangentRatio(smooth) - 1) < 1e-3, 'the fixture is not smooth to begin with');
+
+  const after = dragInnerHandle(smooth);
+  assert.ok(B.bezierNodeIsSmooth(after), 'the drag broke the node');
+  assert.ok(Math.abs(tangentRatio(after) - 1) < 1e-3,
+    'tangent ratio after the drag is ' + tangentRatio(after) + ', not 1');
+});
+
+test('a corner survives a drag, because a fitted ramp may need one', () => {
+  // Lime's file is a plateau with a knee at each end, and forcing smoothness on the *fit* costs seven of
+  // 255 there. So a node that was a corner when the drag began is still one when it ends.
+  const corner = B.bezierWithMiddle([0.42, 0.16, 0.68, 0.52]).slice();
+  corner[2] = 0.12;
+  corner[3] = 0.40;
+  assert.equal(B.bezierNodeIsSmooth(corner), false, 'the fixture is not a corner to begin with');
+  assert.equal(B.bezierNodeIsSmooth(dragInnerHandle(corner)), false, 'the drag smoothed a real corner');
+});
+
+test('alt inverts whichever kind of node it is', () => {
+  // The way every vector tool does it: break a smooth node, or restore a broken one.
+  const smooth = B.bezierWithMiddle([0.42, 0.16, 0.68, 0.52]);
+  const corner = smooth.slice();
+  corner[2] = 0.12;
+  corner[3] = 0.40;
+  assert.equal(B.bezierNodeIsSmooth(dragInnerHandle(smooth, { alt: true })), false);
+  assert.equal(B.bezierNodeIsSmooth(dragInnerHandle(corner, { alt: true })), true);
+});
+
+test('the node’s kind is read once, at the start of the drag', () => {
+  // Read per frame it would flip the instant the first mirrored move made the handles collinear, and a
+  // corner being pulled apart would snap smooth under the pointer. Source-level, because the bug is a
+  // timing one and the observable is a single frame.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8');
+  assert.match(source, /pointerdown[\s\S]{0,900}bezierNodeIsSmooth/,
+    'the node kind is not read at pointerdown');
+  assert.doesNotMatch(source, /function applyMove\([\s\S]{0,600}bezierNodeIsSmooth/,
+    'the node kind is re-read inside the move, so a mirrored drag would flip it');
 });

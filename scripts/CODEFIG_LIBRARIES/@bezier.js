@@ -279,6 +279,60 @@ function bezierWithMiddle(curve, at) {
  * Lossy by nature, and the editor says so before it does it. There is no way to store the discarded
  * middle for an undo that would not be state disagreeing with the coordinates.
  */
+/**
+ * **Is the middle anchor a smooth node or a corner?**
+ *
+ * A three-anchor curve stores two segments whose inner handles are independent, so they meet at the point
+ * but need not meet at the tangent. Collinear through the anchor is a smooth node; anything else is a
+ * corner. Nothing records which — the coordinates already say, and asking them is what keeps a second,
+ * disagreeable copy from existing.
+ *
+ * **The stored form is absolute**, in one unit square across the whole curve: `bezierAt` normalises each
+ * half as it evaluates, so collinearity here *is* collinearity in the ramp. There is no local-to-global
+ * conversion to get wrong.
+ *
+ * The tolerance is on the sine of the angle between the two arms — a direction test, so it does not tighten
+ * as the handles get shorter.
+ */
+function bezierNodeIsSmooth(curve) {
+  var c = bezierNormalise(curve);
+  if (c.length !== 10) return false;
+  var inX = c[4] - c[2], inY = c[5] - c[3];
+  var outX = c[6] - c[4], outY = c[7] - c[5];
+  var inLen = Math.sqrt(inX * inX + inY * inY);
+  var outLen = Math.sqrt(outX * outX + outY * outY);
+  // A zero-length arm has no direction to disagree with, so it cannot be a corner.
+  if (inLen < 1e-9 || outLen < 1e-9) return true;
+  var cross = (inX * outY - inY * outX) / (inLen * outLen);
+  return Math.abs(cross) < 1e-3;
+}
+
+/**
+ * **Move one inner handle and bring the other with it**, collinear through the middle anchor.
+ *
+ * `moved` is the index of the handle that was just dragged — 2 for the one before the anchor, 6 for the one
+ * after. The other keeps its own distance from the anchor and takes the opposite direction, which is how
+ * every vector tool behaves and is the only thing that removes the kink: the two segments then share a
+ * tangent as well as a point.
+ *
+ * Called only when the node was *already* smooth. A curve fitted to a real ramp may have a genuine corner
+ * — lime's file is a plateau with a knee at each end — and mirroring on touch would destroy exactly the
+ * fits the recogniser works to produce.
+ */
+function bezierMirrorNode(curve, moved) {
+  var c = bezierNormalise(curve).slice();
+  if (c.length !== 10) return c;
+  var other = moved === 2 ? 6 : 2;
+  var mx = c[4], my = c[5];
+  var dx = c[moved] - mx, dy = c[moved + 1] - my;
+  var len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1e-9) return c;
+  var otherLen = Math.sqrt(Math.pow(c[other] - mx, 2) + Math.pow(c[other + 1] - my, 2));
+  c[other] = mx - (dx / len) * otherLen;
+  c[other + 1] = my - (dy / len) * otherLen;
+  return bezierNormalise(c);
+}
+
 function bezierWithoutMiddle(curve) {
   var segs = bezierSegments(curve);
   if (segs.length !== 2) return bezierNormalise(curve);
