@@ -854,6 +854,39 @@ that anyone hits them first.
 
 ---
 
+## The fitter places corners the data does not ask for
+
+**Found by** measuring the tangent either side of the join on every ladder in
+`benchmarks/colour-scales.json`. 27 of 28 fitted lightness ladders come back as *corners* — the two
+inner handles are not collinear through the middle anchor — and on several the file itself is
+smooth there. Coral is the clearest: across the fitted join its ΔL changes by 0.3 where a typical
+step changes by 2.0, so the data is very nearly straight and the fit put a kink in it.
+
+Nothing is visibly wrong, which is why it is here rather than fixed: the numbers are within the
+accuracy limit and the ramp looks right. What it costs is *editing*. Márton's mirrored-drag
+refinement — smooth stays smooth, a corner stays a corner — reads the node's kind off the
+coordinates, so a spurious corner means dragging a handle does **not** bring its partner, on a
+curve where it should. The behaviour is correct and the input to it is wrong.
+
+**Fixing it** means the fitter preferring a smooth node when the data does not pay for a corner —
+fit both, keep the corner only when it buys more than some margin. Measured cost of forcing
+*every* join smooth, worst 8-bit channel from the file, via `npm run bench:colors`:
+
+| | shipped (free fit) | forced smooth |
+|---|---|---|
+| HSL, worst of all sets | 10 | **15** |
+| OKLCH, worst of all sets | 11 | **12** |
+| mean of worsts, HSL / OKLCH | 5 / 5 | 7 / 6 |
+
+So an unconditional constraint is affordable in OKLCH and **not** in HSL, where lime goes over the
+14 limit in both its modes. Lime is the set that decides it either way — its file drops fourteen
+lightness points between `350` and `400` where its neighbours drop one, which is a genuine corner
+and the one the fit must keep. A per-join decision is therefore the shape of the fix, not a global
+switch. Measured 19 Aug 2026; harness kept out of the repo, it is thirty lines around
+`bezierWorstError` with the two inner handles parameterised as one angle and two lengths.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.
