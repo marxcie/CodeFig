@@ -128,6 +128,16 @@ a plain statement of the new default.
   as bare number boxes beside a captioned Middle.
 - **Switching channel tabs no longer nudges the panel.** The curve's own Middle caption was 12px where the
   two adopted ends are 10px, which made the Lightness tab 9px taller than Hue and Saturation.
+- **Grid, Spacing, Radius and Typography paid for a full document read on every panel open, even
+  when nothing had moved.** The read already resolved a renamed group correctly, through
+  `findFoundationSet`'s stamp lookup — but it asked the stamps unconditionally instead of trying
+  the cheap recorded-address read first. `findFoundationSetCached` (`@foundation.js`) tries that
+  cache read first and only reaches for the stamps on a miss, same result, cost paid only when a
+  set has actually moved.
+- **A renamed or duplicated collection's panel says so when it recovers a set from its previous
+  group name**, instead of silently reporting it as a clean load. Recovery itself already worked;
+  the panel just never said which happened. A genuinely duplicated collection has no manifest and
+  no stamps to recover from — see `DEFERRED.md` #10.
 
 ### Developer
 

@@ -955,6 +955,31 @@ async function findFoundationSet(collection, domain, group) {
 }
 
 /**
+ * `findFoundationSet`, cheap first.
+ *
+ * A panel asks this on every edit to Collection or Group, and the overwhelming majority of those asks
+ * are a clean cache hit — the group nobody renamed. `findFoundationSet` answers all of them correctly
+ * already, by deriving where a set lives from its stamps, but it does that by reading every variable in
+ * the collection every single time, which is a full document read the common case never needed. This
+ * tries `readManifest` first — no document read at all — and only reaches for the stamps when that
+ * misses, which is exactly the rename (or anything else that moved a set off its recorded address).
+ *
+ * → same shape as `findFoundationSet`. `recordedGroup` is the tell: null on the cache hit, the old
+ * group name when the stamps had to find it.
+ */
+async function findFoundationSetCached(collection, domain, group) {
+  var wanted = group == null ? '' : String(group);
+  var cached = readManifest(collection, domain, wanted);
+  if (cached.manifest) {
+    return {
+      id: cached.id, manifest: cached.manifest, key: cached.key,
+      group: wanted, recordedGroup: null, collection: collection || null
+    };
+  }
+  return findFoundationSet(collection, domain, wanted);
+}
+
+/**
  * What a Collection + Group already holds, for a panel to fill itself from.
  *
  * Replaces the import button: the question "is there a config here" is asked the moment those two
@@ -984,10 +1009,11 @@ async function foundationAutoImport(collectionName, group, domain) {
   var collection = collections.filter(function(c) { return c.name === collectionName; })[0];
   if (!collection) return answer;
 
-  // The resolver, not `readManifest`: a group renamed in the variable table has to load the config that
-  // belongs to it, which is the whole reason a panel opening on somebody's real collection is worth
-  // anything. Read-only, still — nothing here writes, so asking costs nothing.
-  var read = await findFoundationSet(collection, domain, group == null ? '' : group);
+  // The resolver, not plain `readManifest`: a group renamed in the variable table has to load the
+  // config that belongs to it, which is the whole reason a panel opening on somebody's real collection
+  // is worth anything. Cached: the cheap read first, so this only pays a document read on a set that
+  // actually moved. Read-only either way — nothing here writes, so asking costs nothing.
+  var read = await findFoundationSetCached(collection, domain, group == null ? '' : group);
   if (!read.manifest) {
     // Nothing recorded. For Grid, read the variables instead — a set that predates manifests is the
     // common case, not the exotic one.

@@ -3374,7 +3374,16 @@
         if (addedNoteOnLoad) summary += ' ' + addedNoteOnLoad;
 
         lastAutoImport.summary = filled.summary || null;
-        if (found.source === 'recorded') {
+        if (found.source === 'recorded' && found.recordedGroup) {
+          // The group this loaded under isn't the one the set was recorded under — a rename, most
+          // likely, or a duplicate that inherited an old set's stamps. The data was never at risk; it
+          // was just filed under a name that's no longer current. Say so, and say the record catches
+          // up the next time this script runs, so the note doesn't overclaim a fix that hasn't
+          // happened yet.
+          lastAutoImport.note = 'The recorded ' + configPreviewDomainLabel().toLowerCase() +
+            ' set was found under its previous group, ' + found.recordedGroup +
+            '. Nothing was lost; running this script will re-file it under ' + found.group + '.' + summary;
+        } else if (found.source === 'recorded') {
           lastAutoImport.note = 'As this Collection and Group combination contains a ' +
             configPreviewDomainLabel() + ' set, it was imported automatically.' + summary;
         } else {

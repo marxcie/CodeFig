@@ -237,6 +237,55 @@ nobody has run against a real published library yet.
   relying on.
 - Say the true thing in the refusal: *not published* is evidence, not proof.
 
+**Two more facts a proper treatment would have to sit on top of, not design around yet.**
+A variable's id cannot be reused or assigned — Figma mints it once, at creation, and nothing after
+that can hand a new variable an old one. So a merge that wants bindings to survive has to rebind
+every consumer to the new variable before the source is deleted; keeping the id is not an option on
+the table. Separately, a published collection can have consumers in other files, and nothing run
+from this file can see or rebind them. That is exactly why publish status is a poor proxy for
+"unused" — but it is a good proxy for "there are consumers I can neither see nor fix", which is the
+question the refusal is actually answering today.
+
+
+## 10. A duplicated collection has no manifest and no stamps to recover from
+
+**Already fixed, and verified — recorded here so it isn't reinvented.** A renamed group already
+recovers correctly: `findFoundationSet` derives where a set lives
+from its per-variable stamps, and every writer (`@linear-ramp.js`, `grid.js`, `typography.js`)
+already resolves a set's id through it before calling `writeManifest`, so a run after a rename
+re-files the record rather than duplicating it. `foundationAutoImport` (the read path for
+Grid/Spacing/Radius/Typography) already calls the same resolver, so a renamed group's panel loads
+its recorded config today, live-verified against a real rename performed with CodeFig's own
+`duplicate-variable-collection.js` and Figma's group-rename. This was already built; nothing here
+needed reinventing.
+
+**What.** `duplicate-variable-collection.js` copies modes, variable names, values-by-mode,
+descriptions and scopes — and nothing else. It calls neither `setSharedPluginData` nor
+`getSharedPluginData` at any level, so a duplicated collection carries no manifest and its
+variables carry no stamps. `findFoundationSet` has nothing to derive from in that case: it isn't
+wrong, there is genuinely no data left to recover. Confirmed live: duplicating a stamped, manifested
+test collection and reading both `readStamp()` and the collection's `set:` keys on the copy returned
+nothing.
+
+**How it was found.** Asked directly, live in Figma: write a manifest and stamp a set, duplicate
+the collection with CodeFig's own script, read both back on the copy.
+
+**Why it was left.** The fix is in `duplicate-variable-collection.js` itself — copy
+`getSharedPluginDataKeys`/`getSharedPluginData` on the collection, and each variable's stamp, the
+same way it already copies values-by-mode. That is a change to a different script with its own
+call sites and behaviour to preserve, not a fallback to add to the read path, so it is out of scope
+here and left as its own task.
+
+**A rejected idea, so it doesn't get proposed again as free.** A cheap alternative to asking the
+variables is: if a collection has exactly one set recorded for a domain, assume any group name
+asked of it is that set, renamed. Rejected — a panel asks this on every keystroke while someone
+types a group name, and this would match a genuine typo as confidently as a real rename, showing a
+stranger's settings under a name nobody chose. `findFoundationSet`'s stamp-derived match doesn't
+have this failure: it verifies the tokens actually at that address carry the asked-for group,
+which a typo does not. The cheap path taken instead (`findFoundationSetCached`, in `@foundation.js`)
+tries the sync cache read first and falls through to the same stamp-verified resolver on a miss —
+same correctness, cost paid only when the cache misses.
+
 
 ## The tone pass over the remaining 77 helper texts
 
