@@ -296,7 +296,9 @@ worked examples that did not work. The other 77 explanations are accurate and we
 **How it was found.** Márton asked whether `content-designer/ux-writing-skill` would help. Measured
 against it, the copy already passes its rules — median sentence 8 words, 85% under 14, 2% over 25 — so
 the skill would have flagged 13 of 85 and none of the real faults. What is left is tone and rhythm, not
-a rule anything can check.
+a rule anything can check. `.claude/skills/ux-copy/SKILL.md` now encodes what the real faults were
+(mechanism asides, em-dash asides, teaching the domain, naming the internal concept, restating the
+label) — use it for the panel-by-panel read instead of re-deriving the checklist.
 
 **Why it was left.** It is taste, it is a large diff, and it wants reading rather than a sweep. The
 house voice is in `CLAUDE.md` and `CHANGELOG.md`, not in a generic skill.
