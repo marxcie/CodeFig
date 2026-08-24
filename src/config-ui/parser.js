@@ -838,7 +838,147 @@
     };
   }
 
-  function parse(code) {
+  // --- @PANEL_START: the panel spec as JSON, beside the values -------------------------------
+  //
+  // See .plans/31-panel-spec-json.md. `@CONFIG_START` stays a value list — this is a second,
+  // separate region naming the panel's structure. Comment-region JSON (`// {` … `// }`), same
+  // convention @DOC_START and @STYLE_START already use for a `//`-prefixed block of real content.
+  //
+  // **Dispatch lives at the top of `parse()`, not in the caller.** Every existing call site keeps
+  // calling `parse(code)` with one argument; `panelSpecText` is a second, optional parameter no
+  // current caller passes, so this is purely additive. **Not yet wired into `src/ui.html`'s own
+  // `@CONFIG_START`/`@CONFIG_END` extraction** — that logic does not currently look for a second,
+  // separate `@PANEL_START` region elsewhere in a script's source, and touching every one of its
+  // call sites without the ability to reload the plugin and check script loading still works was
+  // judged too risky for this pass. A future pass wires the caller; the reader and its tests do
+  // not depend on that wiring.
+
+  /** Strips a leading `// ` (or bare `//`) from every line — the same convention @DOC_START uses. */
+  function stripLinePrefixes(text) {
+    return String(text || "").split(/\r?\n/).map(function (line) {
+      return line.replace(/^\s*\/\/ ?/, "");
+    }).join("\n");
+  }
+
+  /** `{ value: label }` or `[{value,label}]` → `[{value,label}]`, the shape columns already carry. */
+  function panelOptions(raw) {
+    if (!raw) return undefined;
+    if (Array.isArray(raw)) {
+      return raw.map(function (o) {
+        if (o && typeof o === "object") {
+          var k = Object.keys(o)[0];
+          return { value: k, label: o[k] };
+        }
+        return { value: String(o), label: String(o) };
+      });
+    }
+    return Object.keys(raw).map(function (k) { return { value: k, label: raw[k] }; });
+  }
+
+  /** `{ field: value|values }` → `[{field, values}]` — one key, ANDed if more are added later. */
+  function panelConditionRules(cond) {
+    if (!cond || typeof cond !== "object") return undefined;
+    return Object.keys(cond).map(function (field) {
+      var v = cond[field];
+      return { field: field, values: Array.isArray(v) ? v.map(String) : [String(v)] };
+    });
+  }
+
+  /** One `@rows` column, from its JSON block to the shape `parseRowColumns` already produces. */
+  function panelColumn(block) {
+    var column = {
+      key: block.key, label: block.label || labelFromName(block.key), type: block.type,
+      labelSpelled: !!block.label
+    };
+    var options = panelOptions(block.options);
+    if (options) column.options = options;
+    var showWhen = panelConditionRules(block.showWhen);
+    if (showWhen) column.showWhen = showWhen;
+    var disabledWhen = panelConditionRules(block.disabledWhen);
+    if (disabledWhen) column.disabledWhen = disabledWhen;
+    if (block.disabledNote) column.disabledNote = block.disabledNote;
+    if (block.helper) column.helper = block.helper;
+    if (block.placeholder) column.placeholder = block.placeholder;
+    if (block.ends) column.ends = block.ends;
+    if (block.range) column.range = block.range;
+    if (block.ramp) column.ramp = block.ramp;
+    if (block.growth) column.growth = block.growth;
+    if (block.fields) {
+      // A nested group ("bright", "middle", "dark"): the group's own fields, each a column in turn.
+      column.columns = block.fields.map(panelColumn);
+      column.group = block.group || block.key;
+    }
+    if (block.section) column.section = block.section;
+    return column;
+  }
+
+  /** One plain `@UI_CONFIG` field, from its JSON block plus its live value from `@CONFIG_START`. */
+  function panelFieldRow(block, values, idx) {
+    var row = {
+      type: "field", name: block.key, value: values ? values[block.key] : undefined,
+      label: block.label || labelFromName(block.key), labelSpelled: !!block.label, tooltip: "",
+      inputType: block.type
+    };
+    if (block.placeholder) row.placeholder = block.placeholder;
+    if (block.helper) row.helper = block.helper;
+    if (block.options) row.options = panelOptions(block.options);
+    var showWhen = panelConditionRules(block.showWhen);
+    if (showWhen) row.showWhenRules = showWhen;
+    if (block.type === "rows") {
+      row.columns = (block.columns || []).map(panelColumn);
+      row.tabs = block.layout === "tabs";
+      row.blocks = block.layout === "blocks";
+    }
+    return row;
+  }
+
+  /**
+   * `@PANEL_START`'s parsed JSON (a flat `blocks` array — see the module comment) plus the values
+   * `parseConfigBlockObject` already reads from `@CONFIG_START`, merged into the exact `{ rows }`
+   * shape `parse()` builds today. `renderer.js` does not change: this is the object it already
+   * consumes, assembled from two sources instead of one.
+   *
+   * Not implemented here: writing an edited value back (`serialize`'s job for the old format).
+   * Nothing ships with a `@PANEL_START` block yet, so there is nothing to round-trip against —
+   * see `.plans/31-panel-spec-json.md`.
+   */
+  function parsePanelSpec(panelSpecText, values) {
+    var spec;
+    try {
+      spec = JSON.parse(looseJsonToJson(stripLinePrefixes(panelSpecText)));
+    } catch (e) {
+      return { rows: [], error: "unreadable @PANEL_START: " + e.message };
+    }
+    var rows = [];
+    // A field is recognised by carrying `key`, not by a `type` wrapper — `type` on a field block is
+    // its *control* type ("collection", "number", "rows", …), the same word `heading`/`divider`/
+    // `chips`/`suggestions`/`preview`/`directive` use for their own kind. Two meanings for one word
+    // would either collide or need a second key nobody could remember the name of.
+    (spec.blocks || []).forEach(function (block, idx) {
+      if (block.key != null) {
+        rows.push(panelFieldRow(block, values, idx));
+      } else if (block.type === "heading") {
+        rows.push({ type: "heading", level: block.level || 1, text: block.text });
+      } else if (block.type === "divider") {
+        rows.push({ type: "divider", section: !!block.section });
+      } else if (block.type === "chips") {
+        rows.push({ type: "chips", label: block.label || "Collection modes", from: block.from || "modes" });
+      } else if (block.type === "suggestions") {
+        rows.push({ type: "suggestions" });
+      } else if (block.type === "preview") {
+        rows.push({ type: "preview" });
+      } else if (block.type === "directive") {
+        rows.push({ type: "directive", directive: block.name });
+      }
+    });
+    return { rows: rows };
+  }
+
+  function parse(code, panelSpecText) {
+    if (panelSpecText) {
+      var values = parseConfigBlockObject(code) || {};
+      return parsePanelSpec(panelSpecText, values);
+    }
     var rows = [];
     var lines = (code || "").split(/\r?\n/);
     var i = 0;
@@ -2611,6 +2751,11 @@
     // replacement — understating what was about to happen, in the one place that exists to state it.
     sameModeName: sameModeName,
     parseConfigBlockObject: parseConfigBlockObject,
-    hasFileFields: hasFileFields
+    hasFileFields: hasFileFields,
+    // `@PANEL_START` reader (.plans/31-panel-spec-json.md). `parse(code, panelSpecText)` dispatches
+    // to `parsePanelSpec` on its own; these are exported so the differential test can call the new
+    // reader directly without needing a script on disk that uses it yet.
+    parsePanelSpec: parsePanelSpec,
+    stripLinePrefixes: stripLinePrefixes
   };
 });

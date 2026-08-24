@@ -4,6 +4,7 @@ const { inlineVendors } = require('./bundle-ui.js');
 const { inlineConfigUI } = require('./build-config-ui.js');
 const { inlineBezier } = require('./build-bezier.js');
 const { inlineImportResolver } = require('./build-import-resolver.js');
+const { inlineStyleScoper } = require('./build-style-scoper.js');
 const { inlineAppCSS } = require('./build-app-css.js');
 
 const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
@@ -147,6 +148,7 @@ function updateUIHtml() {
   uiContent = inlineBezier(uiContent);
   uiContent = inlineConfigUI(uiContent);
   uiContent = inlineImportResolver(uiContent);
+  uiContent = inlineStyleScoper(uiContent);
   uiContent = inlineAppCSS(uiContent);
   uiContent = inlineVendors(uiContent);
   

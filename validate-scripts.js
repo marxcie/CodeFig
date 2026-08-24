@@ -3,7 +3,12 @@ const path = require('path');
 const vm = require('vm');
 // Single implementation of @import parsing and function extraction, shared with the
 // UI at run time (inlined into dist/ui.html). Do not re-implement either here.
-const { findImports, stripImports, extractFunctionMap, resolveImports, listFunctionNames } = require('./src/import-resolver.js');
+const { findImports, stripImports, extractFunctionMap, resolveImports, listFunctionNames, findScript } = require('./src/import-resolver.js');
+// Single implementation of CSS scoping, shared with the UI at run time. See
+// .plans/30-scoped-stylesheets.md.
+const { scopeStylesheet, topLevelSelectors } = require('./src/style-scoper.js');
+// @PANEL_START reader, shared with the UI at run time. See .plans/31-panel-spec-json.md.
+const configUIParser = require('./src/config-ui/parser.js');
 
 // Colors for console output
 const colors = {
@@ -667,6 +672,170 @@ function validatePiecewiseScaleFixtures() {
  * title because of the leading `@` — so it warned about ten library files whose names
  * plainly came from those very comments.
  */
+/** A folder name as a stable, non-empty owner id for `scopeStylesheet` at validation time. */
+function packageIdFromFolder(folderName) {
+  return String(folderName || 'package').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'package';
+}
+
+/**
+ * Every `package.css` under `scripts/`, scoped and cross-checked the way `.plans/30-scoped-stylesheets.md`
+ * describes. Two gates, both build errors:
+ *
+ * 1. A stylesheet `scopeStylesheet` cannot safely rewrite — an unparseable selector, a non-`data:`
+ *    `url()`, `position: fixed` — fails here rather than shipping and failing silently at injection
+ *    time in the iframe.
+ * 2. The same raw selector declared in two different packages' `package.css` is an error pointing at
+ *    `ui.css`, so the split this plan makes does not rot back within six months: the second package
+ *    copying the first's rule instead of promoting it to the shared stylesheet is exactly this.
+ *
+ * `@STYLE_START` (the user-script carrier) has no build step, so it cannot be checked here — its
+ * `url()`/`position: fixed` rejection has to run again at injection time, in the same rewriter pass
+ * that does the selector prefixing. This function is the `package.css` half only.
+ */
+function validatePackageStylesheets(scriptsDir) {
+  const errors = [];
+  const selectorOwners = {}; // selector text -> [{ folder, file }]
+
+  function scan(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const item of fs.readdirSync(dir)) {
+      if (item.startsWith('.') || item.startsWith('_')) continue;
+      const itemPath = path.join(dir, item);
+      const stat = fs.statSync(itemPath);
+      if (stat.isDirectory()) {
+        scan(itemPath);
+        continue;
+      }
+      if (item !== 'package.css') continue;
+
+      // The package is the file's own immediate parent — "Design System Foundations", not the
+      // category folder ("EXAMPLE_SCRIPTS") several levels up. Two packages under the same
+      // category must still be told apart.
+      const folderName = path.basename(dir);
+      const css = fs.readFileSync(itemPath, 'utf8');
+      const ownerId = packageIdFromFolder(folderName);
+      const result = scopeStylesheet(css, ownerId);
+      if (!result.ok) {
+        result.errors.forEach((message) => {
+          errors.push({ type: 'package-css', file: itemPath, message: message, line: 'unknown' });
+        });
+        continue; // an unparseable sheet has nothing reliable to extract selectors from
+      }
+
+      topLevelSelectors(css).forEach((selector) => {
+        (selectorOwners[selector] = selectorOwners[selector] || []).push({ folder: folderName, file: itemPath });
+      });
+    }
+  }
+
+  scan(scriptsDir);
+
+  Object.keys(selectorOwners).forEach((selector) => {
+    const owners = selectorOwners[selector];
+    const distinctFolders = new Set(owners.map((o) => o.folder));
+    if (distinctFolders.size < 2) return;
+    errors.push({
+      type: 'package-css',
+      file: owners.map((o) => o.file).join(', '),
+      message: `Selector "${selector}" is declared in more than one package's package.css ` +
+        `(${Array.from(distinctFolders).join(', ')}). Promote it to src/ui.css instead of copying it.`,
+      line: 'unknown'
+    });
+  });
+
+  return errors;
+}
+
+/**
+ * Every key `@PANEL_START` declares a field for must exist in `@CONFIG_START`'s values, and every
+ * key `@CONFIG_START` holds a value for must be declared somewhere in `@PANEL_START` — otherwise
+ * the two drift the way `spacing.js`'s `@DOC_START` table already has (see `DEFERRED.md`). Scoped
+ * to top-level keys: a `@rows` field's own value is an array of row objects, and those keys are
+ * already the columns spec's job to declare, not this gate's.
+ *
+ * A no-op today — no shipped script has a `@PANEL_START` block yet — but scans every script so it
+ * starts working the moment one does, rather than needing to be remembered and wired in later.
+ */
+function validatePanelKeyParity(scripts) {
+  const errors = [];
+  scripts.forEach((script) => {
+    const panelMatch = /\/\/ @PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(script.code);
+    const configMatch = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(script.code);
+    if (!panelMatch || !configMatch) return; // old-format script, or no config at all
+
+    const panel = configUIParser.parsePanelSpec(panelMatch[1], {});
+    if (panel.error) {
+      errors.push({ type: 'panel-key-parity', file: script.name, message: panel.error, line: 'unknown' });
+      return;
+    }
+    const panelKeys = new Set(panel.rows.filter((r) => r.type === 'field').map((r) => r.name));
+
+    const values = configUIParser.parseConfigBlockObject(configMatch[1]);
+    if (!values) {
+      errors.push({
+        type: 'panel-key-parity', file: script.name,
+        message: '@CONFIG_START does not parse as a plain values object', line: 'unknown'
+      });
+      return;
+    }
+    const valueKeys = new Set(Object.keys(values));
+
+    valueKeys.forEach((key) => {
+      if (!panelKeys.has(key)) {
+        errors.push({
+          type: 'panel-key-parity', file: script.name,
+          message: `"${key}" has a value in @CONFIG_START but no field in @PANEL_START`, line: 'unknown'
+        });
+      }
+    });
+    panelKeys.forEach((key) => {
+      if (!valueKeys.has(key)) {
+        errors.push({
+          type: 'panel-key-parity', file: script.name,
+          message: `"${key}" is a field in @PANEL_START but has no value in @CONFIG_START`, line: 'unknown'
+        });
+      }
+    });
+  });
+  return errors;
+}
+
+/**
+ * A package member name that also resolves in the global (non-package) script list — the risk
+ * `.plans/32-packages.md` calls out explicitly: "make the collision a hard validator failure
+ * rather than letting resolution order decide silently." `findScript`'s package-scoped lookup
+ * always prefers the package member, so a collision is not a crash — it is a script quietly
+ * getting the wrong one of two same-named things, which is worse.
+ *
+ * Uses the same fuzzy match `findScript` resolves with, not exact-name equality: a package member
+ * called "Foo" and a global library ending " / Foo" collide under `findScript`'s rules just as
+ * much as two scripts named "Foo" outright, and a validator using a narrower check than the
+ * resolver it is guarding would pass exactly the case it exists to catch.
+ *
+ * A no-op today — no shipped script has a `packageId` yet.
+ */
+function validatePackageImportCollisions(scripts) {
+  const errors = [];
+  const packageIds = new Set(scripts.filter((s) => s.packageId).map((s) => s.packageId));
+  packageIds.forEach((packageId) => {
+    const members = scripts.filter((s) => s.packageId === packageId);
+    const outside = scripts.filter((s) => s.packageId !== packageId);
+    members.forEach((member) => {
+      const collision = findScript(outside, member.name);
+      if (collision) {
+        errors.push({
+          type: 'package-collision', file: member.name,
+          message: `"${member.name}" is a member of package "${packageId}" and also resolves to ` +
+            `"${collision.name}" outside it. Package-scoped resolution would prefer the package ` +
+            'member silently; rename one of them.',
+          line: 'unknown'
+        });
+      }
+    });
+  });
+  return errors;
+}
+
 function validateMetadata(scripts) {
   const warnings = [];
 
@@ -753,6 +922,19 @@ function validateScripts() {
   console.log(`${colors.cyan}📐 Checking piecewise scale fixtures...${colors.reset}`);
   const piecewiseFixtureErrors = validatePiecewiseScaleFixtures();
   allErrors.push(...piecewiseFixtureErrors);
+
+  // Scoped stylesheets: package.css must rewrite cleanly, and no selector may be copied
+  // across two packages instead of promoted to ui.css. See .plans/30-scoped-stylesheets.md.
+  console.log(`${colors.cyan}🎨 Checking package stylesheets...${colors.reset}`);
+  allErrors.push(...validatePackageStylesheets(scriptsDir));
+
+  // @PANEL_START / @CONFIG_START key parity. See .plans/31-panel-spec-json.md.
+  console.log(`${colors.cyan}🔑 Checking panel spec key parity...${colors.reset}`);
+  allErrors.push(...validatePanelKeyParity(scripts));
+
+  // A package member name must not also resolve outside its package. See .plans/32-packages.md.
+  console.log(`${colors.cyan}📦 Checking package import collisions...${colors.reset}`);
+  allErrors.push(...validatePackageImportCollisions(scripts));
   
   // Validate metadata
   console.log(`${colors.cyan}📝 Checking metadata...${colors.reset}`);
@@ -809,5 +991,8 @@ if (require.main === module) {
 // the only automated check standing between an unimported library call and a swallowed
 // ReferenceError in Figma, and it has now been wrong in both directions — once blind to a real
 // missing import, once shouting about a call that was only ever text in a comment.
-module.exports = { validateScripts, shouldExclude, findAllScripts, validateResolvedCalls, withoutComments };
+module.exports = {
+  validateScripts, shouldExclude, findAllScripts, validateResolvedCalls, withoutComments,
+  validatePackageStylesheets, validatePanelKeyParity, validatePackageImportCollisions
+};
 

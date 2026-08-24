@@ -325,9 +325,9 @@
         a chip does not rename.
       </p>
       <div class="ref-panel">
-      <div class="config-ui-form config-ui-form--rows">
+      <div class="config-ui-form config-ui-form--rows" data-package="">
         <div class="config-ui-row config-ui-row--directive" data-row-index="0" style="display: none"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="1">
+        <div class="config-ui-row config-ui-row--heading" data-section="heading-level-1" data-row-index="1">
           <h1 class="config-ui-heading">Heading level 1</h1>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="2">
@@ -336,7 +336,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="3"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="4">
+        <div class="config-ui-row config-ui-row--heading" data-section="heading-level-2" data-row-index="4">
           <h2 class="config-ui-heading">Heading level 2</h2>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="5">
@@ -345,7 +345,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="6"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="7">
+        <div class="config-ui-row config-ui-row--heading" data-section="heading-level-3" data-row-index="7">
           <h3 class="config-ui-heading">Heading level 3</h3>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="8">
@@ -376,11 +376,11 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="15"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="16">
+        <div class="config-ui-row config-ui-row--heading" data-section="text-and-numbers" data-row-index="16">
           <h1 class="config-ui-heading">Text and numbers</h1>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="17">
-          <div class="config-ui-field config-ui-field--string">
+          <div class="config-ui-field config-ui-field--string" data-key="textField" data-type="string" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-textField-0">
                 Text
@@ -393,7 +393,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="18">
-          <div class="config-ui-field config-ui-field--string">
+          <div class="config-ui-field config-ui-field--string" data-key="withPlaceholder" data-type="string" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-withPlaceholder-1">
                 Text with a placeholder
@@ -406,7 +406,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="19">
-          <div class="config-ui-field config-ui-field--number">
+          <div class="config-ui-field config-ui-field--number" data-key="numberField" data-type="number" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-numberField-2">
                 Number
@@ -419,7 +419,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="20">
-          <div class="config-ui-field config-ui-field--textarea">
+          <div class="config-ui-field config-ui-field--textarea" data-key="longText" data-type="textarea" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-longText-3">
                 Textarea
@@ -432,7 +432,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="21">
-          <div class="config-ui-field config-ui-field--list">
+          <div class="config-ui-field config-ui-field--list" data-key="nameList" data-type="list" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-nameList-4">
                 List of names
@@ -445,11 +445,11 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="22"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="23">
+        <div class="config-ui-row config-ui-row--heading" data-section="choices" data-row-index="23">
           <h1 class="config-ui-heading">Choices</h1>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="24">
-          <div class="config-ui-field config-ui-field--boolean">
+          <div class="config-ui-field config-ui-field--boolean" data-key="toggle" data-type="boolean" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-toggle-5">
                 Checkbox
@@ -464,7 +464,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="25">
-          <div class="config-ui-field config-ui-field--select">
+          <div class="config-ui-field config-ui-field--select" data-key="dropdown" data-type="select" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-dropdown-6">
                 Dropdown
@@ -481,7 +481,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="26">
-          <div class="config-ui-field config-ui-field--radio">
+          <div class="config-ui-field config-ui-field--radio" data-key="radioChoice" data-type="radio" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-radioChoice-7">
                 Radio group
@@ -503,7 +503,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="27">
-          <div class="config-ui-field config-ui-field--multiselect">
+          <div class="config-ui-field config-ui-field--multiselect" data-key="multiChoice" data-type="multiselect" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-multiChoice-8">
                 Multi-select
@@ -529,7 +529,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="28">
-          <div class="config-ui-field config-ui-field--select">
+          <div class="config-ui-field config-ui-field--select" data-key="documentList" data-type="select" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-documentList-9">
                 From the document
@@ -544,7 +544,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]" data-row-index="29">
-          <div class="config-ui-field config-ui-field--string" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]">
+          <div class="config-ui-field config-ui-field--string" data-key="dependent" data-type="string" data-section="choices" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-dependent-10">
                 Only while Checkbox is on
@@ -557,11 +557,11 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="30"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="31">
+        <div class="config-ui-row config-ui-row--heading" data-section="collections-and-modes" data-row-index="31">
           <h1 class="config-ui-heading">Collections and modes</h1>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="32">
-          <div class="config-ui-field config-ui-field--collection">
+          <div class="config-ui-field config-ui-field--collection" data-key="collectionName" data-type="collection" data-section="collections-and-modes">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-collectionName-11">
                 Collection
@@ -585,7 +585,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="33">
-          <div class="config-ui-field config-ui-field--mode">
+          <div class="config-ui-field config-ui-field--mode" data-key="collectionMode" data-type="mode" data-section="collections-and-modes">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-collectionMode-12">
                 Mode
@@ -636,7 +636,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="36">
-          <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field config-ui-field--rows" data-key="modes" data-type="rows" data-section="collections-and-modes">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
                 <div class="config-ui-rows config-ui-rows--tabs" data-rows-field="modes">
@@ -683,7 +683,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="37"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="38">
+        <div class="config-ui-row config-ui-row--heading" data-section="one-thing-set-by-several-numbers" data-row-index="38">
           <h1 class="config-ui-heading">One thing set by several numbers</h1>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="39">
@@ -698,7 +698,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="42">
-          <div class="config-ui-field config-ui-field--group">
+          <div class="config-ui-field config-ui-field--group" data-key="lightness" data-type="group" data-section="one-thing-set-by-several-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-lightness-14">
                 Lightness
@@ -730,7 +730,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="45">
-          <div class="config-ui-field config-ui-field--group">
+          <div class="config-ui-field config-ui-field--group" data-key="lineHeight" data-type="group" data-section="one-thing-set-by-several-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-lineHeight-15">Line height</label>
               <div class="config-ui-field__control">
@@ -755,7 +755,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="46"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="47">
+        <div class="config-ui-row config-ui-row--heading" data-section="a-column-that-depends-on-its-row" data-row-index="47">
           <h1 class="config-ui-heading">A column that depends on its row</h1>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="48">
@@ -764,7 +764,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="49">
-          <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field config-ui-field--rows" data-key="scales" data-type="rows" data-section="a-column-that-depends-on-its-row">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
                 <div class="config-ui-rows config-ui-rows--tabs" data-rows-field="scales">
@@ -850,7 +850,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="50"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="51">
+        <div class="config-ui-row config-ui-row--heading" data-section="table-rows" data-row-index="51">
           <h1 class="config-ui-heading">Table rows</h1>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="52">
@@ -859,7 +859,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="53">
-          <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field config-ui-field--rows" data-key="breakpoints" data-type="rows" data-section="table-rows">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
                 <div class="config-ui-rows" data-rows-field="breakpoints">
@@ -891,7 +891,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="54"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="55">
+        <div class="config-ui-row config-ui-row--heading" data-section="a-curve-you-can-drag" data-row-index="55">
           <h1 class="config-ui-heading">A curve you can drag</h1>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="56">
@@ -900,7 +900,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="57">
-          <div class="config-ui-field config-ui-field--curve">
+          <div class="config-ui-field config-ui-field--curve" data-key="easing" data-type="curve" data-section="a-curve-you-can-drag">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-easing-18">
                 Curve
@@ -997,7 +997,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="60">
-          <div class="config-ui-field config-ui-field--curve">
+          <div class="config-ui-field config-ui-field--curve" data-key="twoSegment" data-type="curve" data-section="a-curve-you-can-drag">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-twoSegment-19">Two-segment curve</label>
               <div class="config-ui-field__control">
@@ -1096,7 +1096,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="63">
-          <div class="config-ui-field config-ui-field--curve">
+          <div class="config-ui-field config-ui-field--curve" data-key="maybeCurve" data-type="curve" data-section="a-curve-you-can-drag">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-maybeCurve-20">
                 Curve or original
@@ -1181,7 +1181,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="64"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="65">
+        <div class="config-ui-row config-ui-row--heading" data-section="a-curve-on-a-real-axis" data-row-index="65">
           <h1 class="config-ui-heading">A curve on a real axis</h1>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="66">
@@ -1202,7 +1202,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="71" style="display: none">
-          <div class="config-ui-field config-ui-field--group">
+          <div class="config-ui-field config-ui-field--group" data-key="ladder" data-type="group" data-section="a-curve-on-a-real-axis">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladder-21">Ends</label>
               <div class="config-ui-field__control">
@@ -1212,7 +1212,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field config-ui-row--charted" data-row-index="72">
-          <div class="config-ui-field config-ui-field--curve">
+          <div class="config-ui-field config-ui-field--curve" data-key="ladderCurve" data-type="curve" data-section="a-curve-on-a-real-axis">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladderCurve-22">
                 Lightness
@@ -1347,7 +1347,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="73"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="74">
+        <div class="config-ui-row config-ui-row--heading" data-section="a-scale-with-no-far-end" data-row-index="74">
           <h1 class="config-ui-heading">A scale with no far end</h1>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="75">
@@ -1368,7 +1368,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="80">
-          <div class="config-ui-field config-ui-field--rows">
+          <div class="config-ui-field config-ui-field--rows" data-key="openScale" data-type="rows" data-section="a-scale-with-no-far-end">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
                 <div class="config-ui-rows config-ui-rows--tabs" data-rows-field="openScale">
@@ -1463,11 +1463,11 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--line-break" aria-hidden="true" data-row-index="81"></div>
-        <div class="config-ui-row config-ui-row--heading" data-row-index="82">
+        <div class="config-ui-row config-ui-row--heading" data-section="what-the-form-cannot-hold" data-row-index="82">
           <h1 class="config-ui-heading">What the form cannot hold</h1>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="83">
-          <div class="config-ui-field config-ui-field--unsupported">
+          <div class="config-ui-field config-ui-field--unsupported" data-key="nested" data-type="unsupported" data-section="what-the-form-cannot-hold">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-nested-24">
                 Nested object

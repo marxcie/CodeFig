@@ -129,6 +129,31 @@ a plain statement of the new default.
 - **Switching channel tabs no longer nudges the panel.** The curve's own Middle caption was 12px where the
   two adopted ends are 10px, which made the Lightness tab 9px taller than Hue and Saturation.
 
+### Developer
+
+- **`src/import-resolver.js` can resolve and extract across a package's members, opt-in.**
+  `findScript`'s new third argument and `extractFunctions`'s new fifth argument are both no-ops
+  when omitted — every existing script keeps resolving exactly as before, confirmed by the full
+  pre-existing `tests/import-resolver.test.js` suite passing unedited. `build-package-manifest.js`
+  compiles a package's manifest from its scripts and an explicit library list, verified against
+  this repo's real Design System Foundations scripts. See `.plans/32-packages.md` — no shipped
+  script has a package id yet, so none of this changes anything a user can see.
+- **`src/config-ui/parser.js`'s `parse()` accepts an optional second argument, `panelSpecText`.**
+  When given, the config form is read from a `@PANEL_START` JSON block instead of the one-line
+  annotation syntax — see `.plans/31-panel-spec-json.md`. No existing call passes it, so every
+  current script's rendering is unchanged; the differential test proves the new reader produces
+  the same form as the old one for a real panel (Grid). No shipped script uses it yet.
+- **A CSS scoping module (`src/style-scoper.js`) is inlined into the build, unused.** Rewrites a
+  stylesheet's selectors under an owner attribute, namespaces `@keyframes`, and rejects any
+  non-`data:` `url()` and `position: fixed` outright rather than stripping them silently. Nothing
+  calls it yet — it is groundwork for letting a script own its panel's styling, not a user-facing
+  change; see `.plans/30-scoped-stylesheets.md` and `DEFERRED.md`.
+- **A plain config field's DOM wrapper carries `data-key`, `data-type` and `data-section`; the form
+  root carries `data-package`.** Additive — no class changed, no user script's rendering changes —
+  so a stylesheet can finally address "everything in the General section" or "this one field"
+  without editing `renderer.js`. Does not yet reach inside an `@rows` table (a mode's cells, an
+  anchor group); see `DEFERRED.md`.
+
 ### Removed
 
 - **The "OKLCH scale not applied to ..." banner.** Its *Apply OKLCH scale* button had no handler and had not

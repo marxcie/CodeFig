@@ -107,6 +107,14 @@ the table, `@Math Helpers` reads it, and every consumer imports both. Doing it b
 changing the import contract of every existing consumer to remove a duplication no one can
 currently trip over.
 
+**Or they collapse once `.plans/32-packages.md` actually ships.** Both libraries are DSF-only and
+both would be members of the same package (confirmed: a real manifest compiled against this repo's
+current scripts puts both in `design-system-foundations`'s member list). Package-scoped extraction
+means `@Math Helpers` calling into `@Scale Models` resolves without every consumer importing both
+— the root cause this entry names goes away for DSF specifically, not just for this one pair. Not
+done yet: the manifest compiler exists and is tested, but nothing wires a real `packageId` onto a
+shipped script, so this is still exactly as true as written until that lands.
+
 ---
 
 ## 4. `variable-inspector.js` declares a function in an unimportable form
@@ -782,6 +790,19 @@ degrades a column to a text field. A malformed JSON spec should fail `npm run va
 option values; if the format should be safe by construction rather than by inventory, use
 `[{ value, label }]` and accept the extra width.
 
+**Formalized as `.plans/31-panel-spec-json.md`.** Same diagnosis (the config block serving two masters),
+same dispatch shape (new reader if the new region is present, old parser otherwise, nothing deleted), same
+differential-test discipline. The plan additionally names the region `@PANEL_START`/`@PANEL_END` rather than
+an in-block `@rows:` marker, covers all six panels' specs (not just `@rows`), and gates key-parity between
+the new region and `@CONFIG_START` in `validate-scripts.js`. Read the plan before implementing this entry —
+it supersedes the sketch above rather than sitting beside it.
+
+**Reader implemented 2026-08-23, differentially proven for Grid only.** The one-liner this entry
+describes still exists for Colors and the other four panels — nothing shipped has moved to
+`@PANEL_START` yet. See the plan's own Status note for exactly what landed and what a Colors
+migration would still need (the `sections`/`fields` vs. flat `blocks` shape decision, the
+`serialize()` round-trip, and wiring `src/ui.html`'s block extraction to find the new region).
+
 ---
 
 ## Styles are still found by name, and have the rename problem variables just stopped having
@@ -917,6 +938,119 @@ lightness points between `350` and `400` where its neighbours drop one, which is
 and the one the fit must keep. A per-join decision is therefore the shape of the fix, not a global
 switch. Measured 19 Aug 2026; harness kept out of the repo, it is thirty lines around
 `bezierWorstError` with the two inner handles parameterised as one angle and two lengths.
+
+---
+
+## `spacing.js`'s option table documents a config that no longer exists
+
+**What.** `@DOC_START` in `scripts/EXAMPLE_SCRIPTS/Design System Foundations/spacing.js`
+documents `modes: { name, min, max }`, `scaling.type`, `scaling.rangeMode`, `scaling.ease`,
+`fontScaling` and `scaling.roundTo`. Its `@CONFIG_START` block holds `scaleType`, `base`,
+`ratio`, `curve`, `step`, `mod`, `roundTo`, `extras`. None of the documented mode keys are in
+it. `corner-radius.js` has the same drift, partly fenced off under a "The older shape still
+runs" heading, which `spacing.js` lacks.
+
+**Why it drifted.** The table is hand-restated prose with nothing tying it to the block. The
+legacy keys are still accepted by the generator, so the table is not wrong, it is just
+describing the legacy path as if it were the current one.
+
+**Fix.** `.plans/31-panel-spec-json.md` adds a key-parity gate between the panel spec and the
+values block. Extend it to generate the option table, or at minimum to fail when `@DOC_START`
+names a key that is in neither. Until then, split `spacing.js`'s table the way `corner-radius.js`
+does.
+
+---
+
+## The import blocks are hand-maintained dependency closures
+
+**What.** `spacing.js` imports 37 names and calls 8. `corner-radius.js`: 37 and 8. `colors.js`:
+49 and 5. Re-count against your working tree.
+
+**Why.** `@import` is textual splicing and `extractFunctions` in `src/import-resolver.js` follows
+calls only within one source file, so a consumer must re-declare everything its libraries
+transitively reach. `validateResolvedCalls` keeps the list honest, which turns it into an
+authoring tax rather than a safety net.
+
+**Fix.** `.plans/32-packages.md`, step 4 — implemented and tested 2026-08-23
+(`extractFunctions`'s `siblingLookup` parameter in `src/import-resolver.js`). Not wired to these
+five scripts: nothing ships with a `packageId` yet, so today's import blocks are unaffected. Step 6
+(actually trimming them) has its own explicit stop-gate in the plan and was not attempted.
+
+---
+
+## Nine of eighteen shared libraries have no non-DSF consumer
+
+**What.** `@Foundation`, `@Linear Ramp`, `@Color Ramp`, `@OKLCH`, `@Type Scale`, `@Scale Models`,
+`@Foundation overview`, `@Bezier`, `@Math Helpers` — nine of the eighteen files in
+`scripts/CODEFIG_LIBRARIES/`, listed in CodeFig Libraries next to `@Core Library` as if a user
+might import them standalone. (Verified by directory listing on `dsf-foundations`, 2026-08-23;
+earlier notes said "9 of 19" and, separately, "eleven total" — both stale.)
+
+**Why it was left.** There is no private-member concept. Every library is global because that is
+the only thing the resolver knows how to be.
+
+**Fix.** `.plans/32-packages.md`. `@Math Helpers` has no functional non-DSF caller (`grep -rl
+"Math Helpers" scripts/` turns up only DSF scripts, DSF's own libraries, and one line in
+`scripts/HELP/help-documentation.js` that just *lists* it in prose) — safe to mark
+package-private, but update that documentation line so it stops naming a library users can no
+longer import standalone.
+
+**The manifest that would hide these nine compiles correctly, but nothing shows it to anyone
+yet.** `build-package-manifest.js`'s `compilePackageManifest`, run against this repo's real
+scripts, produces exactly this package's member list (verified 2026-08-23). What's missing:
+`build-scripts.js` does not call it, so no script the plugin ships carries a `packageId`, and
+`src/ui.html`'s CodeFig Libraries list has not been taught to hide `visibility: "package"`
+members — these nine are still listed exactly as before.
+
+---
+
+## The panel DOM has no selectable identity — partly fixed, the dense part is not
+
+**What.** `buildField()` in `src/config-ui/renderer.js` stamped `config-ui-field
+config-ui-field--{type}` and nothing else. No key, no group, no section, no package. No
+stylesheet could address a specific group of fields, so panel arrangement could not be changed at
+all without editing the renderer.
+
+**Fixed 2026-08-23, for plain fields.** `buildField()` now stamps `data-key`/`data-type`, and
+`data-section` from the nearest heading above it (derived at render time in `buildRow()`, not
+stored — see `.plans/29-field-identity.md`); `buildForm()`'s root carries an empty `data-package`.
+Covers every plain `@UI_CONFIG` field and the outer wrapper of a whole `@rows` control.
+
+**Still open: `buildRowsControl`, `buildRowGroup`, `buildRowCell`.** The builders for what is
+*inside* an `@rows` table — a mode's individual cells, an anchor group like "bright" — were not
+touched. This is the part that actually matters for Colors: its hue anchors, chroma anchors and
+curve editors all live inside `@rows`, so `[data-section="hue"] [data-type="curve"]` — the plan's
+own motivating example — does not work yet. Deferred rather than attempted in the same pass
+because it happened while the plugin could not be reloaded to check the Colors panel still
+renders correctly, and this builder family is the one `DEFERRED.md` already has several
+silent-breakage entries about.
+
+**The exact fix is spec'd, not implemented.** `.plans/34-devtools-harness.md`'s "B3, extended"
+walked all 6 in-rows curve instances' real ancestor chains and names the precise two-line change
+(`data-section` on `.config-ui-rows-tabpanel` at `renderer.js:3387-3388`, optionally `data-key`/
+`data-type="curve"` on `.config-ui-curve` at `renderer.js:3774`), with a checked-in failing
+assertion (`npm run devtools:assert-layout`) that will start passing once it lands.
+
+---
+
+## `@keyframes` and `:root` will collide once scripts can ship CSS — the rewriter is done, nothing calls it yet
+
+**What.** Not a current bug — no script can ship CSS today. `.plans/30-scoped-stylesheets.md`
+introduces the surface; this recorded the part that was easy to miss: two scripts defining
+`@keyframes pulse`, or a script setting a custom property on `:root`, would escape any
+prefix-based scoping that only rewrites plain selectors.
+
+**Fixed, in the rewriter, 2026-08-23.** `src/style-scoper.js` namespaces `@keyframes` names by
+owner id and rewrites `animation`/`animation-name` references to match, rewrites `:root` to the
+owner's `[data-style-owner]` attribute, and strips stylesheet-level `@import`. 30 cases in
+`tests/style-scoper.test.js`, including a hostile stylesheet and the CSS-only exfiltration shape
+the amendment to this plan raised (`input[value^="x"] { background-image: url(...) }`).
+
+**Still true: nothing calls this yet.** The rewriter is inlined into `dist/ui.html` as
+`CodeFigStyleScoper` but unused — the injector that would insert `<style data-style-owner>` when a
+script's panel opens was not built in the same pass (see `.plans/30-scoped-stylesheets.md`'s
+Status note for why). So this entry stays open until that wiring lands and a script actually ships
+CSS through it.
 
 ---
 

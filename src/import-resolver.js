@@ -415,7 +415,17 @@
   }
 
   /** Names called inside `code` that are also declared as functions in `sourceCode`. */
-  function findFunctionCallsInCode(code, sourceCode) {
+  /**
+   * `includeUnknown`, optional (plan `.plans/32-packages.md`): without it, a call only counts as
+   * a dependency if `sourceCode` itself declares it — which is exactly right for one file, and
+   * exactly wrong across a package. `top()` calling `middle()`, where `middle` lives in a sibling
+   * and not in `sourceCode` at all, would otherwise never be reported as a dependency to chase, no
+   * matter how good the cross-file lookup is — this function decides what counts as "called",
+   * `extractFunctions` decides where to look for it. With it, every non-built-in call is a
+   * candidate; one that resolves in neither the file nor a sibling is silently skipped exactly as
+   * an unresolvable name always has been (see `extractFunctions`'s own doc comment).
+   */
+  function findFunctionCallsInCode(code, sourceCode, includeUnknown) {
     var dependencies = [];
     var definedFunctions = {};
     var functionDefRegex = /(?:async\s+)?function\s+(\w+)\s*\(/g;
@@ -428,7 +438,7 @@
     while ((match = functionCallRegex.exec(code)) !== null) {
       var functionName = match[1];
       if (BUILT_INS.indexOf(functionName) !== -1) continue;
-      if (!definedFunctions[functionName]) continue;
+      if (!definedFunctions[functionName] && !includeUnknown) continue;
       if (dependencies.indexOf(functionName) === -1) dependencies.push(functionName);
     }
     return dependencies;
@@ -441,8 +451,14 @@
    * Only `function name()` / `async function name()` declarations are extractable;
    * anything else in `functionNames` is skipped without comment. `extractedSet`
    * dedupes across the recursion, which is also what makes call cycles terminate.
+   *
+   * `siblingLookup(name)`, optional (plan `.plans/32-packages.md`): when a name is not declared
+   * in `sourceCode` at all, and a lookup is given, it is asked for another script whose code
+   * might declare it — a package member's own siblings, in practice. Every existing caller omits
+   * this, so extraction stays scoped to one file exactly as before; passing it is what makes
+   * extraction follow a call across a package rather than only within one script.
    */
-  function extractFunctions(sourceCode, functionNames, extractedSet, depth) {
+  function extractFunctions(sourceCode, functionNames, extractedSet, depth, siblingLookup) {
     extractedSet = extractedSet || new Set();
     depth = depth || 0;
 
@@ -451,6 +467,7 @@
     }
 
     var extractedCode = '';
+    var crossFileCode = '';
     var newFunctionsToExtract = [];
 
     functionNames.forEach(function (functionName) {
@@ -460,6 +477,7 @@
       // extraction — dropping it would break every await in the body.
       var functionStartPattern = new RegExp('(?:async\\s+)?function\\s+' + functionName + '\\s*\\(', 'g');
       var match;
+      var foundHere = false;
 
       while ((match = functionStartPattern.exec(sourceCode)) !== null) {
         var startIndex = match.index;
@@ -470,22 +488,32 @@
         var functionBody = sourceCode.substring(range.bodyStart + 1, range.bodyEnd);
 
         extractedSet.add(functionName);
+        foundHere = true;
 
-        findFunctionCallsInCode(functionBody, sourceCode).forEach(function (dep) {
+        findFunctionCallsInCode(functionBody, sourceCode, !!siblingLookup).forEach(function (dep) {
           if (!extractedSet.has(dep)) newFunctionsToExtract.push(dep);
         });
 
         extractedCode += functionCode + '\n\n';
         break; // Found the function, move to the next name
       }
+
+      // Not declared in this file at all — ask the sibling lookup once, rather than treating
+      // "not here" the same as "does not exist" the way a single-file extraction always has.
+      if (!foundHere && siblingLookup && !extractedSet.has(functionName)) {
+        var sibling = siblingLookup(functionName);
+        if (sibling) {
+          crossFileCode += extractFunctions(sibling.code, [functionName], extractedSet, depth + 1, siblingLookup);
+        }
+      }
     });
 
     if (newFunctionsToExtract.length > 0) {
-      var dependencyCode = extractFunctions(sourceCode, newFunctionsToExtract, extractedSet, depth + 1);
+      var dependencyCode = extractFunctions(sourceCode, newFunctionsToExtract, extractedSet, depth + 1, siblingLookup);
       extractedCode = dependencyCode + extractedCode;
     }
 
-    return extractedCode;
+    return crossFileCode + extractedCode;
   }
 
   // ---------------------------------------------------------------------------
@@ -514,7 +542,8 @@
    * `"@Foundation"` is a substring of `"@Foundation overview"`. An import resolving to the
    * wrong library is a `ReferenceError` at run time, or a build error if you are lucky.
    */
-  function findScript(scripts, scriptName) {
+  /** The six fuzzy-match rules, applied in order against one list. See findScript. */
+  function findInList(list, scriptName) {
     var lower = String(scriptName).toLowerCase();
     var isAtName = scriptName.charAt(0) === '@';
 
@@ -537,10 +566,32 @@
     ];
 
     for (var i = 0; i < rules.length; i++) {
-      var found = scripts.find(rules[i]);
+      var found = list.find(rules[i]);
       if (found) return found;
     }
     return null;
+  }
+
+  /**
+   * `packageId`, optional (plan `.plans/32-packages.md`): a script with `script.packageId` set
+   * (compiled by `build-scripts.js` from a folder's manifest — see `compilePackageManifest`) is a
+   * package member. When the *importing* script's own package id is passed here, that package's
+   * members are searched with the same six rules before the full list is — package-scoped
+   * resolution, without a second lookup mechanism.
+   *
+   * A name resolving inside the package **and** in the global list is not decided here: silently
+   * preferring one would be exactly the shadowing the plan calls out. That collision is a build
+   * error from `validatePackageImportCollisions`, not a runtime choice.
+   */
+  function findScript(scripts, scriptName, packageId) {
+    if (packageId) {
+      var inPackage = findInList(
+        scripts.filter(function (s) { return s.packageId === packageId; }),
+        scriptName
+      );
+      if (inPackage) return inPackage;
+    }
+    return findInList(scripts, scriptName);
   }
 
   /** Looser lookup used only to expand `@import * from "X"` into a name list. */
@@ -610,9 +661,35 @@
     return stripped;
   }
 
+  /**
+   * A sibling lookup for `extractFunctions`, scoped to one package — every member with that
+   * `packageId`, so a call declared in one library and used by another in the same package
+   * resolves without the consumer having to import both. `null` when `packageId` is falsy, so
+   * extraction falls back to today's single-file behaviour with no lookup at all.
+   *
+   * **Keyed by package id, not by "every script except the one I started from."** The same
+   * closure is reused for the whole recursive extraction, including calls rooted in a sibling's
+   * own file — a function pulled in from library B that calls back into library A (the one the
+   * `@import` actually named) has to find A too. Excluding "the script I was first asked about"
+   * from its own package's member list would make that lookback invisible, and `extractedSet`
+   * already stops any name being extracted twice regardless of which member it came from, so
+   * there is nothing to protect by excluding it.
+   */
+  function packageSiblingLookup(scripts, packageId) {
+    if (!packageId) return null;
+    var members = scripts.filter(function (s) { return s.packageId === packageId; });
+    return function (functionName) {
+      var pattern = new RegExp('(?:async\\s+)?function\\s+' + functionName + '\\s*\\(');
+      for (var i = 0; i < members.length; i++) {
+        if (pattern.test(members[i].code)) return members[i];
+      }
+      return null;
+    };
+  }
+
   /** Splice one import statement, or replace it with a failure comment. */
-  function spliceImport(code, statement, functionNames, scriptName, scripts, handlers) {
-    var sourceScript = findScript(scripts, scriptName);
+  function spliceImport(code, statement, functionNames, scriptName, scripts, handlers, packageId) {
+    var sourceScript = findScript(scripts, scriptName, packageId);
 
     if (!sourceScript) {
       handlers.warn('⚠️ Script not found for import: ' + scriptName);
@@ -625,7 +702,8 @@
     // Use library source as-is. Do NOT run a global .replace(/\\n/g, '\n') here: it
     // corrupts valid code such as .split("\\r\\n") by turning the \\n inside string
     // literals into real newlines.
-    var extractedFunctions = extractFunctions(sourceScript.code, functionNames);
+    var siblingLookup = packageSiblingLookup(scripts, sourceScript.packageId);
+    var extractedFunctions = extractFunctions(sourceScript.code, functionNames, undefined, undefined, siblingLookup);
     var injectedCode = '// Runtime imported from: ' + sourceScript.name + '\n' + extractedFunctions + '\n';
 
     return spliceAt(code, statement, injectedCode);
@@ -636,7 +714,9 @@
    *
    * `scripts` is the full script list, each entry `{ name, filename, code }`.
    * `options` may carry `log`, `warn` and `notify` callbacks; all default to no-ops,
-   * so a caller that only wants the resolved string can pass nothing.
+   * so a caller that only wants the resolved string can pass nothing. `options.packageId`
+   * (plan `.plans/32-packages.md`) is the *importing* script's own package id, if it has one —
+   * omitted, resolution is exactly today's global-list lookup.
    *
    * Unresolvable imports become a comment plus a notify() — never a throw.
    */
@@ -647,6 +727,7 @@
       warn: options.warn || noop,
       notify: options.notify || noop
     };
+    var packageId = options.packageId;
 
     // Skip import processing for simple scripts to reduce overhead
     if (code.length < 500 && code.indexOf('@import') === -1) {
@@ -660,7 +741,7 @@
     findImports(code).forEach(function (imp) {
       if (imp.functionNames) {
         processedCode = spliceImport(
-          processedCode, imp.statement, imp.functionNames, imp.scriptName, scripts, handlers
+          processedCode, imp.statement, imp.functionNames, imp.scriptName, scripts, handlers, packageId
         );
         return;
       }
@@ -682,7 +763,8 @@
       }
 
       processedCode = spliceImport(
-        processedCode, imp.statement, listFunctionNames(sourceScript.code), imp.scriptName, scripts, handlers
+        processedCode, imp.statement, listFunctionNames(sourceScript.code), imp.scriptName, scripts, handlers,
+        packageId
       );
     });
 
@@ -700,6 +782,9 @@
     listFunctionNames: listFunctionNames,
     extractFunctions: extractFunctions,
     extractFunctionMap: extractFunctionMap,
-    resolveImports: resolveImports
+    resolveImports: resolveImports,
+    // Package-scoped resolution (.plans/32-packages.md). Exported so the collision and
+    // cross-member extraction cases are directly testable.
+    packageSiblingLookup: packageSiblingLookup
   };
 });

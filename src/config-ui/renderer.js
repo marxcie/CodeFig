@@ -223,6 +223,18 @@
     return { prose: prose, folded: folded };
   }
 
+  // **A section's identity, derived rather than stored.** `parse()` returns a flat `rows` array with
+  // no section object of its own — a section is "whatever fields come after this heading" only at
+  // render time. `currentSectionSlug` is reset once per `buildForm` pass and updated by `buildRow`
+  // whenever it draws a heading, so a plain field can be stamped with the section it visually sits in
+  // without the parser needing to compute or store one. See `.plans/29-field-identity.md`.
+  var currentSectionSlug = "";
+
+  /** Lowercase, non-alphanumeric runs collapsed to one hyphen, no leading or trailing hyphen. */
+  function sectionSlug(text) {
+    return String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
   function buildField(field, idx, prose) {
     var n = field.name;
     var t = field.type;
@@ -232,6 +244,16 @@
     var id = "config-ui-" + n + "-" + idx;
     var wrap = document.createElement("div");
     wrap.className = "config-ui-field config-ui-field--" + t;
+    // **Identity a stylesheet can select on** — a field wrapper otherwise carries only its control
+    // type. Additive: no class changed, no parser input required. `data-group` is the parent group a
+    // `@rows` cell belongs to (unset for a plain `@UI_CONFIG` field, which has no group of its own);
+    // `data-package` wants a package id, which does not exist before `.plans/32-packages.md`, so a
+    // plain field is never inside one and does not carry it — only `buildForm`'s root does, empty for
+    // now. See `.plans/29-field-identity.md`.
+    wrap.setAttribute("data-key", n);
+    wrap.setAttribute("data-type", t);
+    if (field.group) wrap.setAttribute("data-group", field.group);
+    if (field.sectionSlug) wrap.setAttribute("data-section", field.sectionSlug);
     var fswr = field.showWhenRules || (field.showWhen ? [field.showWhen] : []);
     if (fswr && fswr.length) {
       wrap.setAttribute("data-show-when-rules", JSON.stringify(fswr));
@@ -495,6 +517,9 @@
       // to hang it.
       attachInfo(h, r, prose);
       wrap.appendChild(h);
+      // Every field row from here until the next heading carries this slug — see `currentSectionSlug`.
+      currentSectionSlug = sectionSlug(r.text);
+      wrap.setAttribute("data-section", currentSectionSlug);
       return wrap;
     }
     if (r.type === "paragraph") {
@@ -583,6 +608,7 @@
         if (Object.prototype.hasOwnProperty.call(r, key)) f[key] = r[key];
       }
       f.type = r.inputType;
+      f.sectionSlug = currentSectionSlug;
       // The value of the collection this mode picker follows, read from the block rather than from
       // the DOM: at this point the collection picker may not have been built yet.
       if (r.inputType === "mode") f.collectionValue = seedCollectionValue(r, schema);
@@ -604,6 +630,11 @@
       hideTip(true);
       container.innerHTML = "";
       container.className = "config-ui-form config-ui-form--rows";
+      // Reset once per render pass, before any heading has been seen — see `currentSectionSlug`.
+      currentSectionSlug = "";
+      // Empty until `.plans/32-packages.md` assigns real ids; stamped now so a stylesheet has a
+      // stable attribute to select on rather than waiting for the value to exist.
+      container.setAttribute("data-package", "");
       // **Who owns the membership of the mode list.** A chips row *is* the list of modes, so wherever one
       // exists the array control must not offer its own Add — two controls for one action is the shape that
       // produced the mode-picker confusion. This used to be decided by `field.tabs`, which was only ever a
