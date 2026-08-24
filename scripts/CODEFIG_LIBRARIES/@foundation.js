@@ -1078,7 +1078,7 @@ async function foundationAutoImport(collectionName, group, domain) {
  * entry per mode, so "has a values-by-mode key" counts everything; what a person means by "holds
  * values there" is a value that differs from the collection's first mode, which is what disappears.
  */
-async function foundationCollectionModes(collectionName) {
+async function foundationCollectionModes(collectionName, index) {
   // **Two identities, and neither is `figma.root.id`** — that is `0:0` in every file, which is how a
   // panel came to order Márton's five-viewport system against a throwaway file's three modes and call
   // it done. `figma.root.name` is the file, and the collection's own id is unique within it, so a
@@ -1089,7 +1089,10 @@ async function foundationCollectionModes(collectionName) {
   };
   if (!collectionName) return answer;
 
-  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  // **`index`, optional: `{ byId, collections }`.** This function has a second, unindexed call site
+  // (`src/ui.html`'s standalone mode-table read) that has no index to give it, so both the collection
+  // lookup and the per-variable fetch below fall back to their original API-walking path when absent.
+  var collections = index ? index.collections : await figma.variables.getLocalVariableCollectionsAsync();
   var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
   if (!collection) return answer;
   answer.found = true;
@@ -1102,13 +1105,16 @@ async function foundationCollectionModes(collectionName) {
 
   var ids = collection.variableIds || [];
   for (var i = 0; i < ids.length; i++) {
-    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    var variable = index ? index.byId[ids[i]] : await figma.variables.getVariableByIdAsync(ids[i]);
     if (!variable) continue;
     var byMode = variable.valuesByMode || {};
+    // Hoisted out of the mode loop below: the base value is the same for every mode compared against
+    // it, so this used to be stringified M times per variable for one answer.
+    var baseValue = baseId != null ? JSON.stringify(byMode[baseId]) : undefined;
     for (var j = 0; j < modes.length; j++) {
       var id = modes[j].modeId;
       if (!Object.prototype.hasOwnProperty.call(byMode, id)) continue;
-      if (id !== baseId && JSON.stringify(byMode[id]) === JSON.stringify(byMode[baseId])) continue;
+      if (id !== baseId && JSON.stringify(byMode[id]) === baseValue) continue;
       counts[id]++;
     }
   }
@@ -3389,7 +3395,7 @@ async function foundationConfigPayload(domain, options) {
  *
  * Stored RGB is treated as **sRGB**. Scoping and hidden-from-publishing are ignored on read.
  */
-async function colorsRecognise(collectionName, group, modeName) {
+async function colorsRecognise(collectionName, group, modeName, index, skipFit) {
   var answer = {
     found: false, collection: collectionName || null, group: group == null ? '' : group,
     modeName: modeName || null, steps: [], existing: [], anchors: null, hue: null, chroma: null,
@@ -3401,7 +3407,10 @@ async function colorsRecognise(collectionName, group, modeName) {
   };
   if (!collectionName) return answer;
 
-  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  // **`index`, optional: `{ byId, collections }` built once by a caller reading several modes.** Falls
+  // back to the API-walking path below when absent, so every existing caller keeps working — this
+  // parameter exists for `foundationColorsAutoImport`, which reads the same collection once per mode.
+  var collections = index ? index.collections : await figma.variables.getLocalVariableCollectionsAsync();
   var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
   if (!collection) return answer;
 
@@ -3433,7 +3442,7 @@ async function colorsRecognise(collectionName, group, modeName) {
   var members = [];
   var ids = collection.variableIds || [];
   for (var i = 0; i < ids.length; i++) {
-    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    var variable = index ? index.byId[ids[i]] : await figma.variables.getVariableByIdAsync(ids[i]);
     if (!variable || variable.resolvedType !== 'COLOR') continue;
     if (variable.name.indexOf(prefix) !== 0) continue;
     var tail = variable.name.slice(prefix.length);
@@ -3479,7 +3488,7 @@ async function colorsRecognise(collectionName, group, modeName) {
 
     var raw = entry.variable.valuesByMode[mode.modeId];
     if (raw && raw.type === 'VARIABLE_ALIAS') {
-      var resolved = await colorsResolveAlias(raw.id, collections);
+      var resolved = await colorsResolveAlias(raw.id, collections, index);
       answer.aliased.push(entry.variable.name);
       if (!resolved || (typeof resolved.a === 'number' && resolved.a < 1)) {
         answer.skipped.push({ name: entry.variable.name, why: resolved ? 'not opaque' : 'alias did not resolve' });
@@ -3528,25 +3537,41 @@ async function colorsRecognise(collectionName, group, modeName) {
    * be decided in two places. Moving it is worth revisiting only alongside the placement it has to agree
    * with — see colorizr's "lock step", which is the single named place its input colour is preserved.
    */
-  // **Found by measuring, and written down** — see `colorsBestAnchor`. Generation cannot search for it
-  // (it would be searching for the answer to the question it is answering), so the read that *can* does it
-  // once and records it as the placement below. That is what stops the anchors being read at one step and
-  // applied at another.
-  // **The fits come back with the anchor.** The search fits all four channel curves for each finalist and
-  // both lightness curves once; the caller used to refit the same six for the anchor it was handed, which
-  // was about a third of the cost of a read. `answer.fits` carries them to the mode loop below.
-  var found = colorsAnchorFits(answer.existing, answer.steps);
-  var mid = found.index;
-  answer.fits = found;
+  // **`skipFit`, optional: defer the anchor search entirely.** `.plans/36-lazy-fit-on-demand.md` — a read
+  // that never opens a curve tab does not need to know where the ramp turns, only what its own ends already
+  // are. `mid`, `midStep`, `midIndex`, `fits` and every `middle` anchor are simply absent; the on-demand fit
+  // (triggered from `src/ui.html` when a tab opens) calls `colorsAnchorFits` directly for the one mode in
+  // question. Bright and dark never needed a fit either way, so this changes nothing about them.
+  var mid = null;
+  if (!skipFit) {
+    // **Found by measuring, and written down** — see `colorsBestAnchor`. Generation cannot search for it
+    // (it would be searching for the answer to the question it is answering), so the read that *can* does it
+    // once and records it as the placement below. That is what stops the anchors being read at one step and
+    // applied at another.
+    // **The fits come back with the anchor.** The search fits all four channel curves for each finalist and
+    // both lightness curves once; the caller used to refit the same six for the anchor it was handed, which
+    // was about a third of the cost of a read. `answer.fits` carries them to the mode loop below.
+    var found = colorsAnchorFits(answer.existing, answer.steps);
+    mid = found.index;
+    answer.fits = found;
+    answer.midStep = usable[mid].step;
+    // The index too, not just the name: the chroma fit joins its halves at this step and cannot look a name up.
+    answer.midIndex = mid;
+  }
 
-  answer.anchors = {
-    bright: readings[0].L, middle: readings[mid].L, dark: readings[last].L
-  };
-  answer.hue = { bright: readings[0].H, middle: readings[mid].H, dark: readings[last].H };
-  answer.chroma = { bright: readings[0].C, middle: readings[mid].C, dark: readings[last].C };
-  answer.midStep = usable[mid].step;
-  // The index too, not just the name: the chroma fit joins its halves at this step and cannot look a name up.
-  answer.midIndex = mid;
+  // **`middle` in the pre-`skipFit` key order when it exists** (`bright, middle, dark`) — a golden
+  // test in `scripts/_TESTS/` compares this as JSON text, not structurally, so assigning `middle`
+  // after the object literal (`obj.middle = ...`) inserts it *after* `dark` instead of between the
+  // other two, which reads as a changed answer even though every value is identical.
+  if (mid !== null) {
+    answer.anchors = { bright: readings[0].L, middle: readings[mid].L, dark: readings[last].L };
+    answer.hue = { bright: readings[0].H, middle: readings[mid].H, dark: readings[last].H };
+    answer.chroma = { bright: readings[0].C, middle: readings[mid].C, dark: readings[last].C };
+  } else {
+    answer.anchors = { bright: readings[0].L, dark: readings[last].L };
+    answer.hue = { bright: readings[0].H, dark: readings[last].H };
+    answer.chroma = { bright: readings[0].C, dark: readings[last].C };
+  }
 
   // **The same three colours, read again in HSL.** A hue is not a hue across models: OKLCH's is a perceptual
   // angle and HSL's is where the maximum channel sits, and the two disagree by tens of degrees on the very
@@ -3554,12 +3579,18 @@ async function colorsRecognise(collectionName, group, modeName) {
   // every field, which is worse than an empty one. Read here rather than converted later, because the file's
   // own hex is the only thing both readings can honestly come from.
   var asHsl = answer.existing.map(function (hex) { return oklchHslFromHex(hex); });
-  if (asHsl[0] && asHsl[mid] && asHsl[last]) {
-    answer.hsl = {
-      hue: { bright: asHsl[0].H, middle: asHsl[mid].H, dark: asHsl[last].H },
-      saturation: { bright: asHsl[0].C, middle: asHsl[mid].C, dark: asHsl[last].C },
-      lightness: { bright: asHsl[0].L, middle: asHsl[mid].L, dark: asHsl[last].L }
-    };
+  if (asHsl[0] && asHsl[last] && (mid === null || asHsl[mid])) {
+    answer.hsl = mid !== null
+      ? {
+          hue: { bright: asHsl[0].H, middle: asHsl[mid].H, dark: asHsl[last].H },
+          saturation: { bright: asHsl[0].C, middle: asHsl[mid].C, dark: asHsl[last].C },
+          lightness: { bright: asHsl[0].L, middle: asHsl[mid].L, dark: asHsl[last].L }
+        }
+      : {
+          hue: { bright: asHsl[0].H, dark: asHsl[last].H },
+          saturation: { bright: asHsl[0].C, dark: asHsl[last].C },
+          lightness: { bright: asHsl[0].L, dark: asHsl[last].L }
+        };
   }
 
   // **A hue read off a near-grey is rounding, not a value.** Measured on this file's own neutrals: at the
@@ -3572,7 +3603,14 @@ async function colorsRecognise(collectionName, group, modeName) {
   // value the file does not contain, and the panel filling three fields with noise is at least visible.
   // 0.01 is the threshold because below it one byte moves hue by more than the hue *difference* a designed
   // ramp puts between its anchors.
-  var weakest = Math.min(answer.chroma.bright, answer.chroma.middle, answer.chroma.dark);
+  //
+  // **Bright and dark only, not middle — checked, not assumed** (`.plans/36-lazy-fit-on-demand.md`).
+  // `chroma.middle` used to be part of this `Math.min`, but across every real collection in the test file it
+  // was never the smallest of the three: a ramp's chroma rises from an end, peaks somewhere past it, and
+  // falls to the other, so the minimum is structurally always at bright or dark — where the sRGB gamut is
+  // narrowest anyway. Dropping it is not a behaviour change on any collection checked, and it means this
+  // check needs no fit at all, ever, regardless of `skipFit`.
+  var weakest = Math.min(answer.chroma.bright, answer.chroma.dark);
   if (weakest < 0.01) {
     answer.hueUnreliable = true;
     answer.notes.push('Hue read from a near-grey: the lowest chroma here is ' +
@@ -3597,12 +3635,14 @@ function colorsStepNameOk(name) {
  *  document-wide handle, so `getVariableByIdAsync` does not care which collection it lands in — what differs
  *  is only which collection's *default mode* supplies the value. A chain is followed a few hops and then
  *  given up on rather than looped forever. */
-async function colorsResolveAlias(id, collections) {
+async function colorsResolveAlias(id, collections, index) {
   var byId = {};
   collections.forEach(function (c) { byId[c.id] = c; });
   var currentId = id;
   for (var hop = 0; hop < 8; hop++) {
-    var variable = await figma.variables.getVariableByIdAsync(currentId);
+    // Most hops land on a variable this file already indexed — a remote (library) variable never will,
+    // since `getLocalVariablesAsync` is local-only, and falls through to the API exactly as before.
+    var variable = (index && index.byId[currentId]) || await figma.variables.getVariableByIdAsync(currentId);
     if (!variable) return null;
     var owner = byId[variable.variableCollectionId];
     // A remote (library) variable has no local collection here, so its own default mode is unreachable;
@@ -3649,7 +3689,7 @@ function colorsRound4(value) {
  *
  * Read-only, like the rest of the import path.
  */
-async function foundationColorsAutoImport(collectionName, group, modeNames, colorModel) {
+async function foundationColorsAutoImport(collectionName, group, modeNames, colorModel, index, skipFit) {
   var answer = {
     source: 'none', config: null, collection: collectionName || null,
     group: group == null ? null : group, tokens: [], modes: [], existing: {},
@@ -3658,7 +3698,11 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   };
   if (!collectionName) return answer;
 
-  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  // **`index`, optional: `{ byId, collections }`.** A caller reading several panel blocks (`src/ui.html`'s
+  // `requestAutoImport`) builds one and hands it in, so this and the `foundationCollectionModes` call
+  // beside it share a single document-wide read instead of each walking the collection again. Absent —
+  // any other caller, including a bare `@import` — one is built here so behaviour is unchanged.
+  var collections = index ? index.collections : await figma.variables.getLocalVariableCollectionsAsync();
   var owner = collections.filter(function (c) { return c.name === collectionName; })[0];
   if (!owner) return answer;
 
@@ -3679,9 +3723,23 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   answer.modeSource = asked.length ? 'panel' : 'collection';
   if (!wanted.length) return answer;
 
+  // **One indexed read for every mode this loop is about to ask about**, replacing the (M+1)×V
+  // sequential `getVariableByIdAsync` calls `colorsRecognise` used to make per mode. Untyped — not
+  // `getLocalVariablesAsync('COLOR')` — because this same index is handed to `foundationCollectionModes`
+  // in the same snippet, which counts every variable's mode differences regardless of type; a
+  // COLOR-only index would silently drop every non-colour variable from that count. See
+  // `.plans/28-read-path-performance.md`.
+  var readIndex = index;
+  if (!readIndex) {
+    var allVariables = await figma.variables.getLocalVariablesAsync();
+    var byId = {};
+    allVariables.forEach(function (v) { byId[v.id] = v; });
+    readIndex = { byId: byId, collections: collections };
+  }
+
   var perMode = [], unread = [], leadAnchors = null, leadName = null;
   for (var w = 0; w < wanted.length; w++) {
-    var seen = await colorsRecognise(collectionName, group == null ? '' : group, wanted[w]);
+    var seen = await colorsRecognise(collectionName, group == null ? '' : group, wanted[w], readIndex, skipFit);
     // A declined group is a fact about the group, not about one mode, so it stops the whole answer.
     if (seen.declined) {
       answer.recognition.declined = seen.declined;
@@ -3731,44 +3789,83 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
       }
       return both;
     }
-    var entry = {
-      name: wanted[w], steps: seen.steps,
-      bright: anchorAt('bright'), middle: anchorAt('middle'), dark: anchorAt('dark'),
-      // **Chroma's schedule, fitted per mode in both models.** The lightness ladder is shared in OKLCH; the
-      // colour anchors never are, so neither is the curve that paces them. `[]` when the ramp is too flat
-      // to have a shape worth recovering, which is every neutral.
-      // **Both models' curves, every read** — the rule the hue and chroma anchors above already follow, and
-      // the one the curves were breaking. A read that fits only the selected model makes switching lossy:
-      // measured across this file's sixteen sets, reading in HSL and switching to OKLCH landed a mean of 59
-      // 8-bit levels from the file against 10 for a read in OKLCH, because the OKLCH ladder was still the
-      // block's Linear default. Nothing about a read is model-specific except which numbers get looked at.
-      chromaCurve: seen.fits.chromaCurve,
-      saturationCurve: seen.fits.saturationCurve,
-      hueCurve: seen.fits.hueCurve,
-      hslHueCurve: seen.fits.hslHueCurve,
-      // **The step the ramp turns at, written down.** Everything else about the anchors is recovered from
-      // the file, and so is this — `colorsBestAnchor` found it by measuring. Generation cannot search for
-      // it without searching for its own answer, so the read records it and generation reads it back.
-      //
-      // Only `placement`. `fillConfigBlock` merges a payload key by key, so a seed hex or a lock the user
-      // typed survives being read over — which they must, because a file holds no record of either.
-      seed: { placement: seen.steps[seen.midIndex] }
-    };
-    // Only HSL gets a curve, and only *Original*: it means "the ramp already in the file", which OKLCH has
-    // no equivalent of because its ladder is shared. Left off the payload in OKLCH so `fillConfigBlock`
-    // keeps whatever curve the block already had.
-    // **HSL's ladder is the mode's, so the fit is too** — and it is filled whichever model is selected,
-    // because `curve` is the HSL field and switching to HSL must not find it empty. OKLCH's ladder is the
-    // collection's and is set once below, outside this loop.
-    entry.curve = seen.fits.lightnessHsl;
+    var entry;
+    if (skipFit) {
+      // **Nothing here needed a fit, so nothing here has one.** `.plans/36-lazy-fit-on-demand.md`: every
+      // curve is `[]`, which `colorsCurve` reads as *Original* — the file's own steps, not an estimate of
+      // them — and `colorsGenerateMode` regenerates them exactly from `answer.existing` below, unfitted.
+      // No `middle`: there is no anchor to show one from yet, and the curve editor's own em-dash already
+      // covers the missing-middle display without a placeholder value to invent here. No `seed.placement`,
+      // for the same reason `colorsBestAnchor` had nothing to place it at.
+      entry = {
+        name: wanted[w], steps: seen.steps,
+        bright: anchorAt('bright'), dark: anchorAt('dark'),
+        chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [], curve: []
+      };
+    } else {
+      // **Key order matches the pre-`skipFit` shape exactly** (`bright, middle, dark, ...curves...,
+      // seed`, `curve` assigned last) — a golden test in `scripts/_TESTS/` compares the read's answer as
+      // JSON text, not structurally, so an insertion-order change reads as a value change even when
+      // nothing about the data did. Built as one object rather than assigned field by field for that
+      // reason: whichever order the branch that ships wins is the one worth keeping stable.
+      entry = {
+        name: wanted[w], steps: seen.steps,
+        bright: anchorAt('bright'), middle: anchorAt('middle'), dark: anchorAt('dark'),
+        // **Chroma's schedule, fitted per mode in both models.** The lightness ladder is shared in OKLCH;
+        // the colour anchors never are, so neither is the curve that paces them. `[]` when the ramp is
+        // too flat to have a shape worth recovering, which is every neutral.
+        // **Both models' curves, every read** — the rule the hue and chroma anchors above already follow,
+        // and the one the curves were breaking. A read that fits only the selected model makes switching
+        // lossy: measured across this file's sixteen sets, reading in HSL and switching to OKLCH landed a
+        // mean of 59 8-bit levels from the file against 10 for a read in OKLCH, because the OKLCH ladder
+        // was still the block's Linear default. Nothing about a read is model-specific except which
+        // numbers get looked at.
+        chromaCurve: seen.fits.chromaCurve, saturationCurve: seen.fits.saturationCurve,
+        hueCurve: seen.fits.hueCurve, hslHueCurve: seen.fits.hslHueCurve,
+        // **The step the ramp turns at, written down.** Everything else about the anchors is recovered
+        // from the file, and so is this — `colorsBestAnchor` found it by measuring. Generation cannot
+        // search for it without searching for its own answer, so the read records it and generation reads
+        // it back.
+        //
+        // Only `placement`. `fillConfigBlock` merges a payload key by key, so a seed hex or a lock the
+        // user typed survives being read over — which they must, because a file holds no record of either.
+        seed: { placement: seen.steps[seen.midIndex] }
+      };
+      // Only HSL gets a curve, and only *Original*: it means "the ramp already in the file", which OKLCH has
+      // no equivalent of because its ladder is shared. Left off the payload in OKLCH so `fillConfigBlock`
+      // keeps whatever curve the block already had.
+      // **HSL's ladder is the mode's, so the fit is too** — and it is filled whichever model is selected,
+      // because `curve` is the HSL field and switching to HSL must not find it empty. OKLCH's ladder is the
+      // collection's and is set once below, outside this loop.
+      entry.curve = seen.fits.lightnessHsl;
+    }
     perMode.push(entry);
   }
 
   if (!perMode.length) return answer;
   // **Every mode, not the first one.** The ladder is shared, so it is averaged across the modes that were
   // read rather than taken from whichever recognised first — see `colorsSharedLadder`.
+  //
+  // **Skipped entirely under `skipFit`.** `colorsSharedLadder` does its own `bezierFitRamp` call — a real
+  // fit, on the collection's averaged ladder, separate from anything `colorsAnchorFits` does per mode. A
+  // lazy read that ran every mode unfitted and then fit the shared ladder anyway would still pay a search
+  // on every single selection, just a smaller one — so this is `[]` (Original) too, for the same reason
+  // the per-mode curves are.
+  //
+  // **Not also skipped under HSL — tried, reverted, `.plans/36-lazy-fit-on-demand.md`.** Nothing reads
+  // `config.curve` *while* the model is HSL (`colorsCurve`/`colorsGenerateMode` both branch to the
+  // mode's own curve instead) — but `tests/colors-recognise.test.js`'s "a read fills both models, so
+  // switching between them is lossless" test exists precisely because computing it anyway is what makes
+  // switching *to* OKLCH afterward correct rather than lossy, and that switch is a synchronous radio
+  // click with no read of its own to compute it at. Measured, not hypothetical, the first time this was
+  // wrong: reading in HSL and switching to OKLCH landed a mean of 59 8-bit levels from the file against
+  // 10 for a native OKLCH read. Skipping this for `requestQuickFit`'s on-demand call (the thing actually
+  // costing 291-306ms) would reintroduce exactly that regression the moment someone reads in HSL and
+  // switches models, since nothing currently triggers a recompute on switch. Fixing the switch itself —
+  // a real trigger, a real new cost to measure at that moment instead — is bigger than "skip a wasted
+  // computation" and not done in this pass.
   var sharedNames = perMode.map(function (m) { return m.name; });
-  var shared = colorsSharedLadder(answer.existing, sharedNames);
+  var shared = skipFit ? null : colorsSharedLadder(answer.existing, sharedNames);
   // **The modes it was averaged from**, not the one that happened to be read first — a list, because with
   // more than one mode there is no single answer and a name would be a plausible-looking wrong one.
   answer.recognition.lightnessFrom = shared ? sharedNames.slice() : [leadName];
@@ -3783,8 +3880,9 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     // giving all of it to whichever mode was read first.
     //
     // Fitted whichever model is selected: a panel switched into OKLCH must not find the shipped Linear
-    // default where the file's own shape belongs.
-    curve: shared ? shared.curve : colorsFitCurve(answer.existing[leadName], true),
+    // default where the file's own shape belongs — see the note above `shared` for why this still runs
+    // under HSL. `skipFit`: `[]`, Original, no fit at all.
+    curve: skipFit ? [] : (shared ? shared.curve : colorsFitCurve(answer.existing[leadName], true)),
     // **No middle.** The ladder's bend is the curve's own anchor now, so a middle lightness here would be a
     // second answer to a question the curve already answers — and the block has no field to show it in.
     lightness: {
@@ -3799,11 +3897,25 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     // this the second place that had to know which model was in play — and the place that would silently
     // drop Saturation and Lightness the moment the first one learned to produce them.
     modes: perMode.map(function (m) {
-      var entry = { name: m.name, bright: m.bright, middle: m.middle, dark: m.dark,
-                    chromaCurve: m.chromaCurve, saturationCurve: m.saturationCurve,
-                    hueCurve: m.hueCurve, hslHueCurve: m.hslHueCurve, seed: m.seed };
+      // **Omitted, not `undefined`, and in the pre-`skipFit` key order when present.**
+      // `fillConfigBlock` decides whether to touch a key with `hasOwnProperty`, which is true even for
+      // an explicit `undefined` — so `middle`/`seed` have to be left off the object entirely under
+      // `skipFit`, not set to a missing value, or the block would still get one written into it with
+      // nothing real to write. And a golden test in `scripts/_TESTS/` compares this as JSON text, not
+      // structurally, so `middle` has to land *between* `bright` and `dark`, not merely present
+      // somewhere — the same fact `entry`'s own construction above already has to honour.
+      var entry = m.middle
+        ? { name: m.name, bright: m.bright, middle: m.middle, dark: m.dark,
+            chromaCurve: m.chromaCurve, saturationCurve: m.saturationCurve,
+            hueCurve: m.hueCurve, hslHueCurve: m.hslHueCurve }
+        : { name: m.name, bright: m.bright, dark: m.dark,
+            chromaCurve: m.chromaCurve, saturationCurve: m.saturationCurve,
+            hueCurve: m.hueCurve, hslHueCurve: m.hslHueCurve };
+      if (m.seed) entry.seed = m.seed;
       // Only when it was read in HSL: `fillConfigBlock` touches the keys a payload carries and leaves the
-      // rest, so omitting this keeps whatever curve an OKLCH block already had.
+      // rest, so omitting this keeps whatever curve an OKLCH block already had. Unchanged by `skipFit`:
+      // `m.curve` is `[]` either way (fit-found-nothing or fit-skipped-entirely) and both are real answers
+      // — Original — not an absence to omit.
       if (m.curve) entry.curve = m.curve;
       return entry;
     }).concat(unread)

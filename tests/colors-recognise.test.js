@@ -76,6 +76,11 @@ function stubFigma(spec) {
     variables: {
       getLocalVariableCollectionsAsync: async () => collections,
       getVariableByIdAsync: async (id) => variables[id] || null,
+      // Untyped, matching plan 28's `foundationColorsAutoImport`: it must not filter to COLOR, because
+      // the same index also feeds `foundationCollectionModes`, which counts every variable's mode
+      // differences regardless of type.
+      getLocalVariablesAsync: async (type) =>
+        Object.values(variables).filter((v) => !type || v.resolvedType === type),
     },
   };
 }

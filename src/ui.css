@@ -2876,6 +2876,16 @@
         opacity: 0.6;
       }
 
+      /* New with `.plans/36-lazy-fit-on-demand.md`'s Original-unavailable guard, so there is nothing
+         to check this against yet — no Figma frame shows this state. Full opacity on purpose (unlike
+         the caption above): this replaces the whole strip, not a note beside it, so it needs to read
+         as the answer rather than as decoration. Revisit once a frame exists to match. */
+      .color-ramp-preview-unavailable {
+        font-size: var(--font-size-small);
+        font-weight: var(--font-weight-semibold);
+        padding: var(--space-sm) 0;
+      }
+
       /* Tighter to the strip above it: the pair reads as one comparison rather than two previews, so the
          gap within a pair is smaller than the gap to whatever follows. */
       .color-ramp-preview--existing {

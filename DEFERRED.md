@@ -887,6 +887,53 @@ switch. Measured 19 Aug 2026; harness kept out of the repo, it is thirty lines a
 
 ---
 
+## The sequential `getVariableByIdAsync` loop is in seven places
+
+**What.** `colorsRecognise` and `foundationCollectionModes` are fixed by `.plans/28-read-path-performance.md`,
+but the same shape appears elsewhere in `@foundation.js`: lines 837, 1105, 1184, 1255, 1642 and
+2051. Each is `for (i of ids) { var v = await figma.variables.getVariableByIdAsync(ids[i]); … }`,
+one round trip per variable, in series.
+
+**Why it is left.** Plan 28 fixes only the loops on the colours read path, because that is the
+one with a measured user complaint attached, and each fix carries the risk of changing what a
+read returns. Fixing all seven in one commit means seven golden tests or none.
+
+**Fix.** Once plan 28 has proved the pattern (`getLocalVariablesAsync(type)` once, index by id,
+pass the index down), work through the rest in order of how hot they are. Write the collection
+overview and stamping paths last, since they run once per Run rather than once per keystroke.
+
+---
+
+## `foundationCollectionModes` stringifies the base value once per variable per mode
+
+**What.** `@foundation.js:1111`:
+`JSON.stringify(byMode[id]) === JSON.stringify(byMode[baseId])`, inside a loop over modes, inside
+a loop over variables. `byMode[baseId]` is stringified M times per variable for the same answer.
+
+**Why it is left.** Trivial next to the async cost in plan 28, and fixing it in the same commit
+would muddy that change's before/after numbers.
+
+**Fix.** Hoist the base stringify out of the inner loop. Two lines. Do it while plan 28 is open,
+in a separate commit.
+
+---
+
+## Nobody knows how many times a read rebuilds the form
+
+**What.** `requestAutoImport`'s own comments describe the cycle as "reset, fill, rebuild, reset,
+fill, rebuild", and the `detectedFor` address-claiming guard exists specifically to stop a
+collection selection running the whole thing twice. Whether it now runs exactly once has never
+been measured.
+
+**Why it matters.** If it is still above 1, every fix in plan 28 gets divided by a number nobody
+has looked at, and the flicker Márton describes in the Colors config prose has the same cause.
+
+**Fix.** A counter in the form-render entry point, logged at the end of a read, as part of plan
+28's instrumentation (see `.plans/28-read-path-performance.md`). If it comes back above 1, it
+gets its own plan.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.

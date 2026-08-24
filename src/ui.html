@@ -785,6 +785,8 @@
               container: configUIContainer,
               curveBaselines: _curveBaselines,
               curveRamps: _curveRamps,
+              // A channel tab opening for a mode that has never been fitted — see `requestQuickFit`.
+              onChannelOpen: function (rowEl) { requestQuickFit(rowEl); },
               onChange: function (values, opts) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
                 // thing that asks. Every other edit is an answer, not a question.
@@ -2249,6 +2251,19 @@
        * one to offer — an *Estimated original* describing the previous collection would be worse than none.
        */
       let _curveBaselines = {};
+      /**
+       * **Has this mode's on-demand fit already run this session?** `.plans/36-lazy-fit-on-demand.md` —
+       * a read no longer fits every mode; opening a channel tab does, once, per mode. This answers
+       * exactly that one question and nothing else — not "does this curve have a middle point"
+       * (`curveHasMiddle` in `renderer.js` already answers that, from the curve's own array length) and
+       * not "should the preset dropdown offer Estimated original" (`_curveBaselines`, below). Three
+       * different facts used to share one signal (curve-is-empty); this is the one CLAUDE.md's "a
+       * variable does one job" rule was written for. Keyed by row index within the `modes` rows field,
+       * the same way `_curveBaselines` is. Cleared on every real read — a new address means every mode
+       * starts unfitted again, whatever the last address's session state was.
+       */
+      let _modeFitted = {};
+      let _quickFitSeq = 0;
       function rememberCurveBaselines(config) {
         _curveBaselines = {};
         if (!config) return;
@@ -2696,19 +2711,45 @@
         var importLine = domain === 'colors'
           ? '@import { foundationColorsAutoImport, foundationCollectionModes } from "@Foundation"'
           : '@import { foundationAutoImport, foundationCollectionModes } from "@Foundation"';
+        // **One indexed read, shared by both calls below — colours only.** `foundationColorsAutoImport`
+        // and `foundationCollectionModes` each used to walk every variable in the collection with its own
+        // sequential `getVariableByIdAsync` loop, once per mode. Built once here and handed to both, it is
+        // one document-wide read for the whole snippet instead of (M+1)×V round trips. See
+        // `.plans/28-read-path-performance.md`. Only the colours branch carries the per-mode cost this
+        // fixes, so `foundationAutoImport` (grid/spacing/radius/typography) is unchanged.
+        var indexSetup = domain === 'colors'
+          ? [
+              '  var __codefigAllVars = await figma.variables.getLocalVariablesAsync();',
+              '  var __codefigById = {};',
+              '  __codefigAllVars.forEach(function (v) { __codefigById[v.id] = v; });',
+              '  var __codefigCollections = await figma.variables.getLocalVariableCollectionsAsync();',
+              '  var __codefigIndex = { byId: __codefigById, collections: __codefigCollections };'
+            ].join('\n')
+          : '';
+        // **`, true)` — skip the fit.** `.plans/36-lazy-fit-on-demand.md`: `colorsAnchorFits` is
+        // 86-94% of a colours read and a read does not need it, because `colorsGenerateMode` already
+        // regenerates a mode's exact colours from `existing` when its curve is `[]` (Original). The
+        // sixth argument is new and optional — `foundationColorsAutoImport`'s and `colorsRecognise`'s
+        // own signatures default it to `undefined`/falsy, so any other caller (a saved script, a
+        // bare `@import`) is completely unaffected. Only this call site opts in. The deferred fit
+        // itself runs from `requestQuickFit`, below, when a channel tab opens.
         var call = domain === 'colors'
           ? '  var found = await foundationColorsAutoImport(' +
             JSON.stringify(collection) + ', ' + JSON.stringify(group == null ? '' : group) + ', ' +
-            JSON.stringify(colourModes) + ', ' + JSON.stringify(colorModelInConfig()) + ');'
+            JSON.stringify(colourModes) + ', ' + JSON.stringify(colorModelInConfig()) + ', __codefigIndex, true);'
           : '  var found = await foundationAutoImport(' +
             JSON.stringify(collection) + ', ' + JSON.stringify(group == null ? '' : group) + ', ' +
             JSON.stringify(domain) + ');';
+        var modesCall = domain === 'colors'
+          ? '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ', __codefigIndex);'
+          : '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ');';
 
         var started = runSilentSnippet(scriptImportLines().concat([
           importLine,
           '(async function () {',
+          indexSetup,
           call,
-          '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ');',
+          modesCall,
           '  window.codefigConfigLoadResult({',
           '    autoImport: found, fileModes: modes, autoImportSeq: ' + seq + ',',
           '    detectOnly: ' + (detectOnly ? 'true' : 'false'),
@@ -2726,6 +2767,104 @@
               requestAutoImport((attempt || 0) + 1, detectOnly);
             }, 400);
           }
+        }
+      }
+
+      /**
+       * **The deferred half of a colours read: fit one mode, on demand.**
+       *
+       * `.plans/36-lazy-fit-on-demand.md`. `requestAutoImport`'s own read (`skipFit: true`, above)
+       * never calls `colorsAnchorFits` — every mode arrives as Original, raw anchors, no curve. This
+       * is what runs the search that a plain read no longer does, for exactly one mode, the moment a
+       * channel tab opens for it.
+       *
+       * **Per mode, not per channel.** `colorsAnchorFits` cannot fit one channel cheaper than all
+       * four — the anchor-placement search scores every candidate by generating a full ramp, which
+       * needs the chroma and hue fits at that candidate as much as the lightness one. So opening any
+       * tab for a mode fits every channel of that mode at once; every other tab for the same mode is
+       * then already fitted. `_modeFitted` is what remembers that, keyed by row index.
+       *
+       * Reuses `foundationColorsAutoImport` itself, for the one mode in question, rather than
+       * inventing a second entry-shaping path — its `config.modes[0]` is already exactly the shape a
+       * row's cells need. The one known gap: the OKLCH *shared* ladder this same call also returns is
+       * fitted from only this one mode's colours, since the others may not be fitted yet — a later
+       * on-demand fit for a different mode recomputes it from that mode's colours instead of
+       * averaging across every mode fitted so far. Not solved here; noted rather than hidden.
+       */
+      function requestQuickFit(rowEl) {
+        if (!rowEl) return;
+        var rowIndex = rowEl.getAttribute('data-row-index');
+        if (rowIndex === null || _modeFitted[rowIndex]) return;
+        if (!scriptHasConfig || !configUIInstance) return;
+        // **Two shapes for one fact, checked in order.** A table row (`field.tabs` off,
+        // `field.blocks` off) renders `name` as a real `data-row-field="name"` input. Colors uses
+        // `@blocks`, which draws the name as a title instead — `buildRowsControl`'s
+        // `.config-ui-rows-item-title-name` — and never builds the input at all. Missing this the
+        // first time meant `requestQuickFit` always read an empty name and silently did nothing,
+        // for every mode, forever: confirmed live, not assumed, via `readForm` showing no `name` key
+        // anywhere in a real row.
+        var nameInput = rowEl.querySelector('[data-row-field="name"]');
+        var nameTitle = rowEl.querySelector('.config-ui-rows-item-title-name');
+        var modeName = nameInput ? String(nameInput.value || '').trim()
+          : nameTitle ? String(nameTitle.textContent || '').trim() : '';
+        if (!modeName) return;
+        var values = configUIInstance.getValues();
+        var collection = values.collectionName;
+        var group = values.group;
+        if (!collection || typeof collection !== 'string' || !collection.trim()) return;
+
+        // Claimed immediately, not after the result lands — a second tab opened on the same mode
+        // while the first fit is still in flight must not queue a second, redundant search.
+        _modeFitted[rowIndex] = true;
+        var seq = ++_quickFitSeq;
+
+        var started = runSilentSnippet(scriptImportLines().concat([
+          '@import { foundationColorsAutoImport } from "@Foundation"',
+          '(async function () {',
+          '  var found = await foundationColorsAutoImport(' +
+            JSON.stringify(collection) + ', ' + JSON.stringify(group == null ? '' : group) + ', ' +
+            JSON.stringify([modeName]) + ', ' + JSON.stringify(colorModelInConfig()) + ');',
+          '  window.codefigConfigLoadResult({ quickFit: found, quickFitSeq: ' + seq +
+            ', quickFitRowIndex: ' + JSON.stringify(rowIndex) + ' });',
+          '})();'
+        ]).join('\n'));
+
+        // Refused (a preview or another read already in flight) — the same retry shape
+        // `requestAutoImport` uses, and the claim above is released so the retry can re-claim it.
+        if (!started) {
+          delete _modeFitted[rowIndex];
+          setTimeout(function () { requestQuickFit(rowEl); }, 400);
+        }
+      }
+
+      /** Applies one mode's on-demand fit straight into its row's own curve controls — no form rebuild. */
+      function applyQuickFit(found, rowIndex) {
+        var rowEl = configUIContainer &&
+          configUIContainer.querySelector('[data-row-index="' + rowIndex + '"]');
+        if (!rowEl || !found || !found.config || !found.config.modes || !found.config.modes[0]) return;
+        var mode = found.config.modes[0];
+
+        function setCurve(fieldKey, points) {
+          var wrap = rowEl.querySelector('[data-row-field="' + fieldKey + '"]');
+          if (!wrap || !wrap.hasAttribute('data-curve-value')) return;
+          wrap.setAttribute('data-curve-value', JSON.stringify(points || []));
+          wrap.dispatchEvent(new Event('config-ui-curve-refresh'));
+        }
+        setCurve('hueCurve', mode.hueCurve);
+        setCurve('chromaCurve', mode.chromaCurve);
+        setCurve('hslHueCurve', mode.hslHueCurve);
+        setCurve('saturationCurve', mode.saturationCurve);
+        if (mode.curve) setCurve('curve', mode.curve);
+
+        // The same fact `rememberCurveBaselines` records at read time, for this one mode, so
+        // *Estimated original* becomes offerable the moment this fit lands rather than never.
+        if (mode.curve && mode.curve.length) {
+          _curveBaselines['modes[' + rowIndex + '].curve'] = mode.curve.slice();
+        }
+        // The OKLCH shared ladder — collection-scope, not this row's — same caveat as above about
+        // being fitted from one mode's colours only.
+        if (found.config.curve && found.config.curve.length) {
+          _curveBaselines.curve = found.config.curve.slice();
         }
       }
 
@@ -3109,17 +3248,28 @@
         return true;
       }
 
+      /**
+       * **Re-derive `existing` on load — never persist it.** `.plans/36-lazy-fit-on-demand.md`:
+       * `config.existing` is not part of the saved config text (no key for it exists in
+       * `colors.js`'s own block), so it has to come from *somewhere* live every time the panel
+       * needs it, not from a copy that goes stale the moment a variable changes. This is that
+       * somewhere — shared by a real address change (`applyAutoImport`) and a plain script open
+       * on an address that was already there (`scheduleGroupDetection`'s `detectOnly` read,
+       * below), so a panel reopened days later re-derives exactly the same way a fresh selection
+       * does. Comparison strip must not keep drawing the last collection's colours under the new
+       * one's ramp, and a declined or empty answer is exactly when that would happen — so this
+       * runs unconditionally on any real answer, not only a successful one.
+       */
+      function rememberReadResult(found) {
+        if (!found || found.collection === undefined) return;
+        rememberFileColors(found.collection, found.group, found.existing);
+        rememberCurveRamps(found.config, found.existing);
+        scheduleConfigPreview();
+      }
+
       function applyAutoImport(found) {
         lastAutoImport.source = found ? found.source : 'no-answer';
-
-        // **Remembered whatever the answer was, including nothing.** The comparison strip must not keep
-        // drawing the last collection's colours under the new one's ramp, and a declined or empty answer is
-        // exactly when that would happen — so this runs before the early return rather than after it.
-        if (found && found.collection !== undefined) {
-          rememberFileColors(found.collection, found.group, found.existing);
-          rememberCurveRamps(found.config, found.existing);
-          scheduleConfigPreview();
-        }
+        rememberReadResult(found);
 
         if (!found || !found.config ||
             (found.source !== 'recorded' && found.source !== 'recognised')) {
@@ -3165,6 +3315,8 @@
         // Read from the payload rather than recomputed, so the option can never describe a different curve
         // from the one the block was filled with.
         rememberCurveBaselines(found.config);
+        // A new address's modes have never had their on-demand fit run, whatever the last address left behind.
+        _modeFitted = {};
 
         var fill = window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock;
         if (!fill) return;
@@ -5075,6 +5227,13 @@
                 if (data.autoImportSeq === autoImportSeq) {
                   applyFileModes(data.fileModes);
                   if (data.detectOnly) {
+                    // **Also re-derives `existing`, never writes the config.** This is the read that
+                    // runs when a script opens on an address it already had — the only moment a saved
+                    // Original config would otherwise have no live `existing` to preview or (once it
+                    // exists) run against. `rememberReadResult` only touches session state
+                    // (`fileColorValues`/`_curveRamps`) and reschedules the preview — the fill below it
+                    // stays exactly what it was, so nothing here can overwrite what the person saved.
+                    rememberReadResult(data.autoImport);
                     // Read-only half: point the panel at a grid if this address holds none, and
                     // otherwise leave everything exactly as the person left it — bar the modes, which
                     // are a view of the collection rather than something the person set here.
@@ -5103,6 +5262,12 @@
                 if (data.previewSeq === _previewSeq) {
                   renderConfigPreview(data.preview);
                   renderConfigSuggestions(data.suggestions);
+                }
+                return;
+              }
+              if (data.quickFit !== undefined) {
+                if (data.quickFitSeq === _quickFitSeq) {
+                  applyQuickFit(data.quickFit, data.quickFitRowIndex);
                 }
                 return;
               }
@@ -5486,6 +5651,17 @@
             var tabs = rows.querySelectorAll('.config-ui-rows-tab');
             return tabs[at] || null;
           }
+          // **`channel:<name>` — a row's own Hue/Saturation/Lightness tab**, distinct from `tab` above:
+          // that one is the `@tabs` field's row-switcher (`.config-ui-rows-tab`, not used by Colors,
+          // which uses `@blocks`); this is the channel tab *inside* one already-visible row
+          // (`[data-rows-tab]`, built by `buildRowsControl`'s curve/anchor cells). Added for
+          // `.plans/36-lazy-fit-on-demand.md`'s phase 3 measurement — driving the on-demand fit's
+          // trigger from the terminal needed a way to click it that did not already exist.
+          if (part && part.indexOf('channel:') === 0) {
+            var channelName = part.slice('channel:'.length);
+            var item = items[at];
+            return item ? item.querySelector('[data-rows-tab="' + channelName + '"]') : null;
+          }
           if (part) {
             // **`cellKey:inner` — the cell, then the thing inside it that has no address of its own.**
             // A radio group and a curve editor both carry the cell's `data-row-field` on a *wrapper*, so
@@ -5839,9 +6015,11 @@
             // than a free-form selector, for the reason the whole addressing scheme exists: a command that
             // can build its own selector is a short step from one that can reach Run.
             var curveButton = /:(shape|middle)$/.test(String(a.part || ''));
-            if (!curveButton && ['add', 'remove', 'tab', 'chip-remove', 'card'].indexOf(a.part) === -1) {
+            var channelTab = String(a.part || '').indexOf('channel:') === 0;
+            if (!curveButton && !channelTab &&
+                ['add', 'remove', 'tab', 'chip-remove', 'card'].indexOf(a.part) === -1) {
               throw new Error('clickControl accepts part add, remove, tab, chip-remove, card, ' +
-                '<cell>:shape or <cell>:middle — not "' + a.part + '"');
+                '<cell>:shape, <cell>:middle, or channel:<name> — not "' + a.part + '"');
             }
             var clickable = uiControlTarget(a.name, a.part, a.index);
             if (!clickable) throw new Error('No "' + a.part + '" on control "' + a.name + '"');

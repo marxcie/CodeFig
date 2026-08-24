@@ -10,6 +10,7 @@
     var getV = null;
     var applyV = null;
     var onCh = (opts && opts.onChange) || null;
+    var onChannelOpen = (opts && opts.onChannelOpen) || null;
 
     // The listeners `attachListeners` puts on the container, so a re-render can take the previous set off.
     // Without this they accumulate and every keystroke does the work of every render that came before it.
@@ -34,7 +35,8 @@
               // of a drag as a committed edit, which is the whole cost the flag exists to avoid.
               onCh(v, o);
             }
-          : null
+          : null,
+        onChannelOpen
       );
       getV = attached.getValues;
       applyV = attached.applyVisibility;

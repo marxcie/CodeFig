@@ -110,6 +110,12 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Selecting a collection in the Colors panel took about three seconds.** The read walked every variable in
+  the collection with its own Figma API call, once per panel mode, plus a second full walk to count mode
+  differences for the mode chips — `(M+1)×V` sequential round trips for `M` modes and `V` variables. It now
+  reads the file's variables once, indexed, and shares that index across both reads. Guarded by a new golden
+  test (`scripts/_TESTS/_tests-foundation-colors-read.js`) and the existing `tests/colors-recognise.test.js`;
+  pending a plugin reload to confirm the call-count drop in Figma itself — see `.plans/28-read-path-performance.md`.
 - **Setting OKLCH's lightness ends did nothing.** The two anchor boxes move under the chart — that is the
   layout working — but the collector still asked the field they came *from* for them, and found it empty.
   So the collection's Lightness rendered, accepted typing and saved `{}`, and every ramp was generated from

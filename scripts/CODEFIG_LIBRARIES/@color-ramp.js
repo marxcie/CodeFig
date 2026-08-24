@@ -160,14 +160,34 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   });
 
   // Original is not a curve, so it cannot be eased into place — the steps it covers are simply the file's.
-  if (held && segments.original) {
-    for (var oi = 0; oi < rows.length; oi++) {
-      var wasHex = held[oi];
-      if (!wasHex) continue;
-      var seenIt = read(wasHex);
-      if (!seenIt) continue;
-      rows[oi] = { step: rows[oi].step, hex: oklchNormaliseHex(wasHex), L: seenIt.L, C: seenIt.C,
-        H: seenIt.H, chroma: seenIt.C, clamped: false };
+  //
+  // **A guard, not a fallthrough — `.plans/36-lazy-fit-on-demand.md`.** `held` is re-derived live on
+  // every load (`config.existing` is never saved), so it is absent whenever the address no longer
+  // resolves, and it can disagree in length with `steps` whenever the collection's own step list has
+  // changed since this config was last read. Either way, generating anyway from the bare anchors and
+  // empty curves below would produce *something* — plausible-looking, silently wrong, and exactly the
+  // failure mode the golden test in `scripts/_TESTS/` exists to catch on the read side. Caught here
+  // instead, on the generate side, because this is the one function both the preview and the eventual
+  // write path share, and neither may disagree about it.
+  //
+  // Not caught: the same length with the collection's own steps renamed or reordered since. `held` is
+  // positional, not keyed by step name, so that case still substitutes by index rather than by name.
+  // Narrower than "changed," worth a real fix if it turns out to matter, not solved here.
+  var originalUnavailable = null;
+  if (segments.original) {
+    if (!held) {
+      originalUnavailable = 'missing';
+    } else if (held.length !== steps.length) {
+      originalUnavailable = 'mismatched';
+    } else {
+      for (var oi = 0; oi < rows.length; oi++) {
+        var wasHex = held[oi];
+        if (!wasHex) continue;
+        var seenIt = read(wasHex);
+        if (!seenIt) continue;
+        rows[oi] = { step: rows[oi].step, hex: oklchNormaliseHex(wasHex), L: seenIt.L, C: seenIt.C,
+          H: seenIt.H, chroma: seenIt.C, clamped: false };
+      }
     }
   }
 
@@ -191,7 +211,7 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
     seed: seed, seedHex: seedHex, invalidHex: invalidHex, seedRow: seedRow, seedState: seedState,
     reanchored: reanchored, collapsed: !!(reanchor && reanchor.collapsed),
     drift: reanchor ? reanchor.drift : null, clamped: clamped, anchors: anchors, curve: walked,
-    original: segments.original
+    original: segments.original, originalUnavailable: originalUnavailable
   };
 }
 
@@ -962,6 +982,19 @@ function colorsAlignment(config) {
  */
 function colorsStrip(entry, steps) {
   var made = entry.made;
+
+  // **A guard failing loudly, not a ramp that happens to be wrong.** `.plans/36-lazy-fit-on-demand.md`:
+  // `colorsGenerateMode` already refused to substitute when `existing` is missing or its length
+  // disagrees with `steps` — this is where that refusal becomes something a person sees, instead of
+  // a plausible-looking ramp nobody asked for. A status message, not help, per the `ux-copy` skill:
+  // what happened, then what to do about it.
+  if (made.originalUnavailable) {
+    var why = made.originalUnavailable === 'missing'
+      ? 'Original has no colours to show right now.'
+      : "This collection's steps changed since Original was set.";
+    return '<div class="color-ramp-preview color-ramp-preview-unavailable">' +
+      colorsEscapeHtml(why) + ' Reselect the collection, or choose a curve instead.</div>';
+  }
 
   // **The same `changed` list the banner counts.** Recomputing "does this step differ" here is how the summary
   // and the detail come to disagree, so the comparison happens once in `colorsAlignment` and both read it.

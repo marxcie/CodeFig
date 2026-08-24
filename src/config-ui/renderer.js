@@ -3996,7 +3996,7 @@
     }
   }
 
-  function attachListeners(container, schema, onChange) {
+  function attachListeners(container, schema, onChange, onChannelOpen) {
     if (!onChange || typeof onChange !== "function") return;
 
     /**
@@ -4381,6 +4381,11 @@
       // The chart in the tab that just appeared has been sized 0x0 all along, so it has never measured
       // itself. Everything else in there is laid out by CSS and needs no telling.
       refreshCurveControls(rowEl);
+      // **A tab opening, not a value changing.** The row itself is the unit the host fits by — see
+      // `.plans/36-lazy-fit-on-demand.md` — so this hands over the row, not the tab name; whether it
+      // needs a fit at all, and which mode it is, are questions only the host's own session state and
+      // the row's own `name` cell can answer.
+      if (typeof onChannelOpen === "function") onChannelOpen(rowEl);
     });
 
     applyVisibility();
