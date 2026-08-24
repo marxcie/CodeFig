@@ -308,17 +308,20 @@ of `scripts/`.
 
 ---
 
-## A `@rows` control has no ⓘ
+## A `@rows` control as a whole has no ⓘ
 
-**What.** Every other control shows its explanation on an ⓘ beside its label. A `@rows` control is a
-section rather than a field — the renderer deliberately builds no label for it, because the heading
-above it already names it — so there is nothing to hang the button from. If one ever carries a
-`@helper:` or has a paragraph folded onto it, the text falls back to a native `title` on the wrapper:
-slow, unstyled, and easy to miss.
+**What.** A `@rows` column and a part caption already get one: each carries its own `@helper:` and
+the renderer builds a real ⓘ for it (`renderer.js` ~3503 for a column, ~3702 for a part). What has
+none is the `@rows` control taken as a whole — the block above every column and part — because the
+renderer deliberately builds no label for that level, only for the heading above it. If a `@rows`
+block-level helper is ever written anyway, it falls back to a native `title` on the wrapper: slow,
+unstyled, and easy to miss.
 
 **How it was found.** Building the ⓘ. Checked against every config block in `scripts/`: no `@rows`
-field owns any explanation today — the paragraphs near one all attach to the heading above it, which
-is the right owner anyway and is where a reader is looking.
+control uses a block-level explanation today — the paragraphs near one all attach to the heading
+above it, which is the right owner anyway and is where a reader is looking. Column- and part-level
+`@helper:` text is used elsewhere and renders correctly; it is only the block level that has nowhere
+to go.
 
 **Why it was left.** The fix is a header row inside the `@rows` block to hold the button, which is new
 layout for a case that does not exist yet. Inventing a place to put a button nothing needs is how a

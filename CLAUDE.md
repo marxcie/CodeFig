@@ -139,7 +139,10 @@ Two rules that only bite when authoring one:
   release time; `build:release` does not touch it.
 - **`DEFERRED.md`** — known issues and work deliberately not done, each with how it was found and
   what fixing it involves. Add to it whenever you decide *not* to chase something.
-- **`.plans/`** — the numbered plan files (gitignored, local only). All of 01–12 are done.
+- **`.plans/`** — the numbered plan files (gitignored, local only). All of 01–12 are done (the
+  streamlining pass). 13–27 (DSF and panel UI/UX) are also done, with two tracked partials —
+  Colors has no write path yet and its anchor model isn't fully collapsed, both logged in
+  `DEFERRED.md`. 28–33 are queued, not started. See `.plans/00-INDEX.md` for the status table.
 
 ## Gotchas
 
