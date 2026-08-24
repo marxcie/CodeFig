@@ -52,4 +52,3 @@ figma-console.log
 # The style reference page is generated (build-style-reference.js) but committed: reviewing it is the
 # whole point, and a test compares the committed copy against a fresh build so it cannot go stale.
 !/artifacts/style-reference.html
-/tests
