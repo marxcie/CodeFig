@@ -697,7 +697,7 @@
         const block = currentConfigBlock();
         let schema;
         try {
-          schema = api.parse(block);
+          schema = api.parse(block, currentPanelSpecText());
         } catch (e) {
           debugError('A chip edit could not read the config block: ' + (e && e.message));
           return;
@@ -779,7 +779,7 @@
           content = extractConfigSection(code.getValue(), useUI).trim();
         }
         try {
-          var schema = window.CodeFigConfigUI.parse(content);
+          var schema = window.CodeFigConfigUI.parse(content, currentPanelSpecText());
           if (schema && schema.rows && schema.rows.length > 0) {
             configUIContainer.innerHTML = '';
             configUIInstance = window.CodeFigConfigUI.render(schema, {
@@ -819,6 +819,19 @@
                 if (addressChanged) scheduleAutoImport();
               }
             });
+            // `driftWarning` only exists on a @PANEL_START-backed schema, and only when its two
+            // regions disagree -- checked at load, not only at save, so a script pasted straight
+            // into clientStorage says so before anyone starts editing rather than after an edit
+            // silently has nowhere to land. Appended after `render()`, not before: `buildForm`
+            // clears the container on every rebuild, so anything added earlier would not survive
+            // it. Not folded into the auto-import note either -- that note is about *this read*
+            // of a file; this is a fact about the script itself.
+            if (schema.driftWarning) {
+              var driftEl = document.createElement('div');
+              driftEl.className = 'config-ui-drift-warning';
+              driftEl.textContent = schema.driftWarning;
+              configUIContainer.insertBefore(driftEl, configUIContainer.firstChild);
+            }
           } else {
             configUIContainer.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
           }
@@ -850,7 +863,7 @@
             mergeConfigIntoMain();
           } else {
             if (!configEditor) return;
-            const schema = window.CodeFigConfigUI.parse(configEditor.getValue());
+            const schema = window.CodeFigConfigUI.parse(configEditor.getValue(), currentPanelSpecText());
             const newCode = window.CodeFigConfigUI.serialize(schema, values);
             configEditor.setValue(newCode);
             mergeConfigIntoMain();
@@ -926,8 +939,19 @@
         const hasUIConfig = hasSection(fullCode, '@UI_CONFIG_START');
         const hasCodeConfig = hasSection(fullCode, '@CONFIG_START');
         const hasConfig = hasUIConfig || hasCodeConfig;
+        // The panel spec, read once here rather than re-extracted at every `.parse()` call site —
+        // it does not change while a script is open (plan 31: "the panel spec is read-only at
+        // runtime"), so every caller downstream of this function can just read it off
+        // `parsedSections` instead of each carrying its own extraction. Absent for every script
+        // that exists today, since none ship one yet — `panelSpecContent` is `undefined`, not an
+        // empty string, so `parse(code, panelSpecContent)` takes exactly today's path for them.
+        const hasPanelSpec = hasSection(fullCode, '@PANEL_START');
+        const panelSpecContent = hasPanelSpec ? extractSection(fullCode, '@PANEL_START', '@PANEL_END') : undefined;
         if (!hasDocs && !hasConfig) {
-          return { hasDocs: false, hasConfig: false, hasUIConfig: false, fullCode: fullCode };
+          return {
+            hasDocs: false, hasConfig: false, hasUIConfig: false, fullCode: fullCode,
+            hasPanelSpec: hasPanelSpec, panelSpecContent: panelSpecContent
+          };
         }
         const docContent = hasDocs ? extractDocContent(fullCode) : '';
         const configContent = hasConfig ? extractConfigSection(fullCode, hasUIConfig) : '';
@@ -964,8 +988,23 @@
           configContent,
           preDoc,
           postDocPreConfig,
-          postConfig
+          postConfig,
+          hasPanelSpec,
+          panelSpecContent
         };
+      }
+
+      /**
+       * The current script's panel spec text, or `undefined` — the one thing every `.parse()`
+       * call site in this file needs to add to keep working once a script can carry
+       * `@PANEL_START`. `undefined`, not `''`: `parse(code, panelSpecText)` dispatches on
+       * `panelSpecText` being truthy, and an empty string is still falsy, but being explicit
+       * about *why* nothing is passed matters more here than it looks — a bug that turned this
+       * into `''` by accident would silently keep every script on the old path forever, which is
+       * safe, just invisible.
+       */
+      function currentPanelSpecText() {
+        return parsedSections && parsedSections.hasPanelSpec ? parsedSections.panelSpecContent : undefined;
       }
 
       function mergeConfigIntoMain() {
@@ -1010,7 +1049,7 @@
             if (blockWrites.length > 8) blockWrites.shift();
             return;
           }
-          const schema = window.CodeFigConfigUI.parse(blockNow);
+          const schema = window.CodeFigConfigUI.parse(blockNow, currentPanelSpecText());
           // The same fresh schema is handed to `getValues` as the base for anything the form did not read.
           // A cell hidden by its own condition writes nothing — correctly — and what it falls back to has to
           // be the block as it stands, not the copy the form was built from before any of this was typed.
@@ -1212,7 +1251,7 @@
         // `extractConfigSection` needs; it stopped meaning "has a form".
         var parsedForForm = null;
         try {
-          parsedForForm = window.CodeFigConfigUI ? window.CodeFigConfigUI.parse(block) : null;
+          parsedForForm = window.CodeFigConfigUI ? window.CodeFigConfigUI.parse(block, currentPanelSpecText()) : null;
         } catch (e) {
           parsedForForm = null;
         }
@@ -2025,7 +2064,7 @@
         var api = window.CodeFigConfigUI;
         if (!api || typeof api.parse !== 'function') return [];
         var schema;
-        try { schema = api.parse(currentConfigBlock()); } catch (e) { return []; }
+        try { schema = api.parse(currentConfigBlock(), currentPanelSpecText()); } catch (e) { return []; }
         var out = [];
         (schema && schema.rows ? schema.rows : []).forEach(function (row) {
           if (row.type !== 'field' || row.inputType !== 'rows' || !Array.isArray(row.value)) return;
@@ -2047,7 +2086,7 @@
         var api = window.CodeFigConfigUI;
         if (!api || typeof api.parse !== 'function') return 'oklch';
         var schema;
-        try { schema = api.parse(currentConfigBlock()); } catch (e) { return 'oklch'; }
+        try { schema = api.parse(currentConfigBlock(), currentPanelSpecText()); } catch (e) { return 'oklch'; }
         var found = null;
         (schema && schema.rows ? schema.rows : []).forEach(function (row) {
           if (row.type === 'field' && row.name === 'colorModel') found = row.value;
@@ -2154,7 +2193,7 @@
 
         var schema;
         try {
-          schema = api.parse(currentConfigBlock());
+          schema = api.parse(currentConfigBlock(), currentPanelSpecText());
         } catch (e) {
           return;
         }
@@ -2944,7 +2983,7 @@
         var field = (wrap && wrap.getAttribute('data-chips-field')) || 'modes';
         var schema;
         try {
-          schema = api.parse(text);
+          schema = api.parse(text, currentPanelSpecText());
         } catch (e) {
           record({ skipped: 'block does not parse' });
           return answer;
@@ -3051,7 +3090,7 @@
         var wrap = configUIContainer && configUIContainer.querySelector('[data-chips-field]');
         var field = (wrap && wrap.getAttribute('data-chips-field')) || 'modes';
         try {
-          var schema = window.CodeFigConfigUI.parse(currentConfigBlock());
+          var schema = window.CodeFigConfigUI.parse(currentConfigBlock(), currentPanelSpecText());
           var row = (schema.rows || []).filter(function (r) {
             return r.type === 'field' && r.name === field;
           })[0];
@@ -3231,7 +3270,7 @@
         if (!api) return false;
         var schema;
         try {
-          schema = api.parse(currentConfigBlock());
+          schema = api.parse(currentConfigBlock(), currentPanelSpecText());
         } catch (e) {
           return false;
         }

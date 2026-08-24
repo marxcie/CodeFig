@@ -10,6 +10,7 @@
     "bench:colors": "node benchmarks/colour-reads.js",
     "devtools:profile-colors-fit": "node devtools/profile-colors-fit.js",
     "devtools:assert-layout": "node devtools/assert-layout.js",
+    "devtools:dom-diff-panel": "node devtools/dom-diff-panel.js",
     "devtools:css-coverage": "node devtools/css-coverage.js",
     "devtools:rebuild-count": "node devtools/rebuild-count.js",
     "build:style-reference": "node build-style-reference.js",

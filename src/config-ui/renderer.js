@@ -205,18 +205,39 @@
       return null;
     }
 
+    // A `@PANEL_START` paragraph carries its own direction (see `parser.js`'s `parsePanelSpec`) —
+    // there is no blank-line gap in JSON to read one from, so it says which neighbour it explains
+    // instead of the search below guessing. Old-format rows never set `attachTo`, so nothing here
+    // changes for them.
+    function seekDirected(from, step) {
+      for (var j = from; j >= 0 && j < rows.length; j += step) {
+        var r = rows[j];
+        if (r.type === "paragraph" || gap(r)) continue;
+        if (owns(r)) return j;
+        return null; // a divider, a preview slot, anything else: the search stops here
+      }
+      return null;
+    }
+
     for (var i = 0; i < rows.length; i++) {
       if (rows[i].type !== "paragraph") continue;
-      var back = seek(i - 1, -1);
-      var fwd = seek(i + 1, 1);
-      var target =
-        (back && back.adjacent) ? back.at :
-        (fwd && fwd.adjacent) ? fwd.at :
-        back ? back.at :
-        fwd ? fwd.at : null;
+      var target;
+      if (rows[i].attachTo === "next") {
+        target = seekDirected(i + 1, 1);
+      } else if (rows[i].attachTo === "previous") {
+        target = seekDirected(i - 1, -1);
+      } else {
+        var back = seek(i - 1, -1);
+        var fwd = seek(i + 1, 1);
+        target =
+          (back && back.adjacent) ? back.at :
+          (fwd && fwd.adjacent) ? fwd.at :
+          back ? back.at :
+          fwd ? fwd.at : null;
+      }
       // Nothing to explain — a paragraph alone between two rules stays on the page rather than
       // vanishing, because the alternative is losing text with nowhere to put it.
-      if (target === null) continue;
+      if (target == null) continue;
       (prose[target] || (prose[target] = [])).push(rows[i].text);
       folded[i] = true;
     }

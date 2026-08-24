@@ -933,29 +933,25 @@
   }
 
   /** Marker entries a `columns` list may carry instead of a keyed field — no `key` of their own. */
-  var PANEL_COLUMN_MARKER_TYPES = { tab: true, heading: true, divider: true, preview: true };
+  var PANEL_COLUMN_MARKER_TYPES = { heading: true, divider: true, preview: true };
 
   /**
    * One `@rows` column, from its JSON block to the shape `parseRowColumns` already produces.
    *
-   * **A `columns` entry is not always a field.** `#>Hue`, a bare `#Heading` and the trailing
-   * `@preview` inside Colors' real `@rows` line are marker entries with no `key` — `parseRowColumns`
-   * gives each its own branch (`{type:"tab",...}`, `{type:"heading",...}`, `{type:"preview"}`)
-   * before it ever looks for a key. This used to fall straight into the keyed-field path below,
-   * which built `{key: undefined, label: labelFromName(undefined), type: "tab", ...}` — nonsense
-   * the renderer had never seen, rather than the marker it needed.
+   * **A `columns` entry is not always a field.** A bare `#Heading` and the trailing `@preview`
+   * inside Colors' real `@rows` line are marker entries with no `key` — `parseRowColumns` gives
+   * each its own branch before it ever looks for a key. This used to fall straight into the
+   * keyed-field path below, which built `{key: undefined, label: labelFromName(undefined), ...}` —
+   * nonsense the renderer had never seen, rather than the marker it needed.
+   *
+   * **`tab` and `anchors` never reach this function.** Both expand into several sibling entries,
+   * not one — `expandColumnsList`, below, handles them before a single block ever gets here.
    */
   function panelColumn(block) {
     if (block.key == null) {
       if (!PANEL_COLUMN_MARKER_TYPES[block.type]) {
         throw new Error("a keyless column has an unrecognised type: " +
           (block.type == null ? "(none)" : JSON.stringify(block.type)));
-      }
-      if (block.type === "tab") {
-        var tab = { type: "tab", text: block.text };
-        var tabWhen = panelConditionRules(block.showWhen);
-        if (tabWhen) tab.showWhen = tabWhen;
-        return tab;
       }
       if (block.type === "heading") {
         var headingWhen = panelConditionRules(block.showWhen);
@@ -987,11 +983,148 @@
     if (block.allowOriginal) column.allowOriginal = true;
     if (block.fields) {
       // A nested group ("bright", "middle", "dark"): the group's own fields, each a column in turn.
-      column.columns = block.fields.map(panelColumn);
+      column.columns = expandColumnsList(block.fields);
       column.group = block.group || block.key;
     }
     if (block.section) column.section = block.section;
     return column;
+  }
+
+  /**
+   * One `positions` × `fields` cross-product, expanded into the group columns
+   * `parseRowColumns` would have produced from N near-identical `bright:{...}`/`middle:{...}`/
+   * `dark:{...}` blocks. This is what makes Colors' nine anchor blocks (three positions each for
+   * Hue, three for Saturation/Chroma, two for Lightness) three declarations instead of nine —
+   * a position axis and a field-per-colour-model axis, the two facts an anchor actually varies
+   * by, named once instead of repeated with one word changed each time.
+   *
+   * `labels`/`placeholders` are per-position maps rather than a `{channel} {position}` template:
+   * Hue's start/middle/end suffix pattern does not hold for Lightness (`"Bright"`, not
+   * `"Lightness start"`) or for the placeholder examples (Lightness's are real boundary values,
+   * `"eg. 98"`/`"eg. 4"`, not one example repeated). Deriving a label from a formula would have
+   * been magic that broke on the second real case; a map costs one line per position and breaks
+   * on nothing.
+   *
+   * `notes`, optional: the old format's `@disabledNote:` could only attach to whichever column's
+   * segment it was written in — Colors' has it on `dark` only, not `bright`, an artifact of where
+   * the one-liner happened to put it rather than a rule about which position deserves one. Kept as
+   * a per-position escape hatch rather than smoothed into "every position gets one" or "none do,"
+   * either of which would change what the old parser produces.
+   */
+  /**
+   * A per-position value, written once for every position or spelled out per position — for
+   * `placeholders` and `notes`, never for `labels` (see `expandAnchors`'s own comment on why not).
+   * Three of `anchors`' four real uses have the *same* placeholder at every position (Hue's,
+   * Chroma's, Saturation's — an abstract example that doesn't change shape by position); only
+   * Lightness's genuinely differs (`"eg. 98"` near white, `"eg. 4"` near black). Before this, every
+   * one of the four had to spell out the same map shape regardless, so the one block that actually
+   * varies read no differently from the three that don't. A bare scalar now says "every position,
+   * unconditionally" — a map is still there for exactly the case where positions disagree, and
+   * only that case looks like one.
+   */
+  function perPosition(value, position) {
+    if (value == null) return undefined;
+    if (typeof value === "string") return value;
+    return value[position];
+  }
+
+  /**
+   * `positions` × `fields`, expanded into the group columns `parseRowColumns` would have produced
+   * from N near-identical `bright:{...}`/`middle:{...}`/`dark:{...}` blocks — one declaration for
+   * an idea that used to need one block per position.
+   *
+   * **`labels` stays an explicit map, deliberately, unlike `placeholders`/`notes`.** Hue's
+   * "start"/"middle"/"end" suffix is not a rule the format could apply on the author's behalf:
+   * Lightness's own labels are `"Bright"`/`"Dark"`, not `"Lightness start"`/`"Lightness end"` — so
+   * a template would need a way to say "don't template me" for the one case that doesn't fit,
+   * which is worse than the map it would replace. A scalar shorthand has no such trap: "the same
+   * value at every position" is unambiguous, and the map is still there the moment a position
+   * needs to differ, which is exactly what happened to `placeholders` (three anchors share one
+   * value, one doesn't) and not to `labels` (none of the four share theirs).
+   */
+  function expandAnchors(block) {
+    if (!Array.isArray(block.positions) || !block.positions.length) {
+      throw new Error("an anchors block needs a non-empty positions list");
+    }
+    if (!Array.isArray(block.fields) || !block.fields.length) {
+      throw new Error("an anchors block needs a non-empty fields list");
+    }
+    var disabledWhen = panelConditionRules(block.disabledWhen);
+    return block.positions.map(function (position) {
+      var group = {
+        // A position's group label is always spelled in the anchors block that names it
+        // (`labelFromName` only supplies a *default* when nothing was given — here something
+        // always was, just once instead of per position), matching the old parser recording
+        // `labelSpelled: true` for every `bright`/`middle`/`dark` group it has ever produced.
+        key: position, label: labelFromName(position), type: "group", labelSpelled: true
+      };
+      if (disabledWhen) group.disabledWhen = disabledWhen;
+      var note = perPosition(block.notes, position);
+      if (note) group.disabledNote = note;
+      group.columns = block.fields.map(function (field) {
+        if (!field.labels || field.labels[position] == null) {
+          throw new Error('anchors field "' + field.key + '" has no label for position "' + position + '"');
+        }
+        var col = {
+          key: field.key, label: field.labels[position], type: field.type || "number",
+          labelSpelled: true
+        };
+        var placeholder = perPosition(field.placeholders, position);
+        if (placeholder != null) col.placeholder = placeholder;
+        var fieldWhen = panelConditionRules(field.showWhen);
+        if (fieldWhen) col.showWhen = fieldWhen;
+        return col;
+      });
+      group.group = position;
+      return group;
+    });
+  }
+
+  /**
+   * A `columns` (or group `fields`) list, with `tab` and `anchors` entries expanded in place —
+   * the one function every list of columns goes through, so a tab or an anchors block nested
+   * inside a group's own `fields` expands exactly the same way a top-level one does.
+   *
+   * **`tab` nests its contents; `parseRowColumns` still emits a flat marker.** Indentation answers
+   * "which columns belong to this tab" while writing the spec; the columns handed to the renderer
+   * are exactly the flat `{type:"tab",...}` marker followed by its columns that the old format
+   * always produced — this function is where the un-nesting happens, once, so nothing downstream
+   * has to know the JSON was ever nested at all.
+   *
+   * **A merged tab is one container, several `names`.** `#>Saturation{colorModel=hsl}` and
+   * `#>Chroma{colorModel=oklch}` sit adjacent in the old format with no columns between them,
+   * because they are one tab shown under two labels depending on which model is active — the
+   * columns after them are shared, not duplicated per name. `names` is a list for exactly that:
+   * each becomes its own marker row, in order, before the (one, shared) set of columns.
+   */
+  function expandColumnsList(list) {
+    var out = [];
+    (list || []).forEach(function (block) {
+      if (block.type === "tab") {
+        if (!Array.isArray(block.names) || !block.names.length) {
+          throw new Error('a tab needs a non-empty "names" list');
+        }
+        if (!Array.isArray(block.columns)) {
+          throw new Error('tab "' + block.names[0].text + '" has no columns — ' +
+            "a tab nests its contents now, it does not mark a position in a flat list");
+        }
+        block.names.forEach(function (name) {
+          if (!name.text) throw new Error("a tab name needs text");
+          var tab = { type: "tab", text: name.text };
+          var tabWhen = panelConditionRules(name.showWhen);
+          if (tabWhen) tab.showWhen = tabWhen;
+          out.push(tab);
+        });
+        out = out.concat(expandColumnsList(block.columns));
+        return;
+      }
+      if (block.type === "anchors") {
+        out = out.concat(expandAnchors(block));
+        return;
+      }
+      out.push(panelColumn(block));
+    });
+    return out;
   }
 
   /** One plain `@UI_CONFIG` field, from its JSON block plus its live value from `@CONFIG_START`. */
@@ -999,7 +1132,15 @@
     var row = {
       type: "field", name: block.key, value: values ? values[block.key] : undefined,
       label: block.label || labelFromName(block.key), labelSpelled: !!block.label, tooltip: "",
-      inputType: block.type
+      inputType: block.type,
+      // `@CONFIG_START` is always the property-list shape for a `@PANEL_START`-backed script —
+      // there is no `@UI_CONFIG_START`/`var x = …;` form of this format. Set because it genuinely
+      // applies, not to make `serialize()`'s old per-row branch accept the row: this row carries
+      // no `.raw`, on purpose (see `serialize()`'s own comment on why one is never invented here),
+      // so the old branch's fast path never fires for it and its full-reconstruction path throws
+      // rather than building a line from a spec grammar that cannot express `anchors` or nested
+      // `tab` containers.
+      syntax: "property"
     };
     if (block.placeholder) row.placeholder = block.placeholder;
     if (block.helper) row.helper = block.helper;
@@ -1007,7 +1148,7 @@
     var showWhen = panelConditionRules(block.showWhen);
     if (showWhen) row.showWhenRules = showWhen;
     if (block.type === "rows") {
-      row.columns = (block.columns || []).map(panelColumn);
+      row.columns = expandColumnsList(block.columns);
       row.tabs = block.layout === "tabs";
       row.blocks = block.layout === "blocks";
     }
@@ -1097,8 +1238,17 @@
         } else if (block.type === "directive") {
           rows.push({ type: "directive", directive: block.name });
         } else if (block.type === "paragraph") {
+          // The one bit a blank `// ` line carries in the old format: does this explain what
+          // comes before it or what comes after? JSON has no blank-line equivalent, so the format
+          // asks for the bit directly rather than guessing a default that would be right for some
+          // paragraphs and silently wrong for others — see `foldProse` in renderer.js, which reads
+          // this instead of its own adjacency search whenever it is set.
+          if (block.attachTo !== "next" && block.attachTo !== "previous") {
+            throw new Error('block ' + idx + ' is a paragraph with no attachTo ' +
+              '("next" or "previous" — which row does it explain?)');
+          }
           var pWhen = panelConditionRules(block.showWhen);
-          var paragraph = { type: "paragraph", text: block.text };
+          var paragraph = { type: "paragraph", text: block.text, attachTo: block.attachTo };
           if (pWhen) paragraph.showWhenRules = pWhen;
           rows.push(paragraph);
         }
@@ -1109,10 +1259,86 @@
     return { rows: rows };
   }
 
+  /**
+   * Walks `@CONFIG_START`'s property-list text into `{ key, raw, trailingComma }` entries plus
+   * whatever sits between them, in source order — reusing `readPropertyEntry`'s own brace-depth
+   * scan rather than a second one, so a multi-line value (a `modes` array, a `bright: {...}`) is
+   * one entry here exactly as it is one property to the parser that already reads this text.
+   *
+   * This is what lets a `@PANEL_START`-backed save reprint an untouched value **verbatim** —
+   * byte for byte, not reconstructed from the parsed shape — and an edited one in the same
+   * indentation and comma style the file already had, without a per-row `.raw` to carry it.
+   */
+  function indexConfigProperties(text) {
+    var lines = String(text == null ? "" : text).split(/\r?\n/);
+    var parts = [];
+    var byKey = {};
+    var i = 0;
+    while (i < lines.length) {
+      var entry = readPropertyEntry(lines, i);
+      if (entry) {
+        var part = { key: entry.match[1], raw: entry.match[0], trailingComma: entry.trailingComma };
+        parts.push(part);
+        byKey[part.key] = part;
+        i = entry.endLine + 1;
+      } else {
+        parts.push({ key: null, raw: lines[i] });
+        i++;
+      }
+    }
+    return { parts: parts, byKey: byKey };
+  }
+
+  /**
+   * Whether `@PANEL_START`'s fields and `@CONFIG_START`'s values agree — the same comparison
+   * `validatePanelKeyParity` makes in `validate-scripts.js`, at build time, over a script already
+   * committed. This is the runtime half: a script pasted into `clientStorage` never goes through
+   * a build, so nothing has checked it until now. Checked at **load**, not only at save, so a
+   * mismatch is something the author is told about before they start editing, not something they
+   * find out afterwards because a field they could not see never had anywhere to save.
+   *
+   * Not data loss either way — `serializePanelValues` never drops a value with no field, it
+   * reprints it untouched — but a value with no field cannot be edited from the panel, and a
+   * field with no value opens blank, and both are worth saying plainly rather than leaving the
+   * author to notice on their own.
+   *
+   * → a status string, or `null` when the two agree.
+   */
+  function panelKeyDrift(rows, values) {
+    var fieldKeys = {};
+    rows.forEach(function (r) { if (r.type === "field") fieldKeys[r.name] = true; });
+    var valueKeys = Object.keys(values || {});
+    var missing = rows.filter(function (r) { return r.type === "field" && valueKeys.indexOf(r.name) === -1; })
+      .map(function (r) { return r.name; });
+    var extra = valueKeys.filter(function (k) { return !fieldKeys[k]; });
+    if (!missing.length && !extra.length) return null;
+
+    function list(keys) { return keys.map(function (k) { return '"' + k + '"'; }).join(", "); }
+    var parts = [];
+    if (missing.length) {
+      parts.push((missing.length === 1 ? list(missing) + " is a field" : list(missing) + " are fields") +
+        " with no value here, so " + (missing.length === 1 ? "it opens" : "they open") + " blank.");
+    }
+    if (extra.length) {
+      parts.push((extra.length === 1 ? list(extra) + " has" : list(extra) + " have") +
+        " a value here with no matching field, so " + (extra.length === 1 ? "it won't" : "they won't") +
+        " show in the form.");
+    }
+    return parts.join(" ");
+  }
+
   function parse(code, panelSpecText) {
     if (panelSpecText) {
       var values = parseConfigBlockObject(code) || {};
-      return parsePanelSpec(panelSpecText, values);
+      var result = parsePanelSpec(panelSpecText, values);
+      // `fromPanelSpec` is what `serialize()` dispatches on, and `configText` is `@CONFIG_START`'s
+      // own raw text — carried on the schema rather than threaded through as a third argument to
+      // `serialize()`, so every existing call site (which passes exactly `(schema, values)`) is
+      // unaffected whether or not it ever touches a `@PANEL_START` script.
+      result.fromPanelSpec = true;
+      result.configText = code;
+      if (!result.error) result.driftWarning = panelKeyDrift(result.rows, values);
+      return result;
     }
     var rows = [];
     var lines = (code || "").split(/\r?\n/);
@@ -1558,89 +1784,143 @@
     return { rows: rows };
   }
 
+  /**
+   * A value printed the way the block is written, not the way `JSON.stringify` writes it.
+   *
+   * This used to be `JSON.stringify(v, null, 2)` for anything holding objects, which quoted every
+   * key and indented from column 0. Editing one Gap in the Mode settings tabs therefore rewrote
+   * Grid's whole `modes` array from
+   *
+   *     modes: [
+   *       {
+   *         name: "desktop",
+   *
+   * to `"name": "desktop"` hanging off the left margin — the block still ran, and it was no longer
+   * something a person would have written. **The block is the human format**: its keys are bare, its
+   * indentation is the block's own, and a config is read and pasted far more often than it is
+   * generated. So the printer matches the source style, and `indent` is the row's own leading
+   * whitespace rather than a constant.
+   *
+   * Arrays of primitives stay on one line, where a line each would be noise.
+   *
+   * **An object is printed the way the source wrote it**, inline or expanded. Not by a heuristic: the
+   * first attempt was "an object of primitives stays inline", which is right for Colours' `bright: { hue,
+   * chroma }` and wrong for Grid's mode entries, which are also objects of primitives and are written a
+   * key per line. Reshaping one block to stop reshaping another is not a fix.
+   *
+   * So `sourceText` is the row's own raw text, and a key written as `key: { … }` on one line stays that
+   * way. Without it, editing a single hue reprinted a 43-line block as 69 — still valid, and no longer
+   * something a person would have written, which is the failure this printer exists to prevent.
+   *
+   * Module-level (not a `serialize()`-local closure) so `serializePanelValues` can reuse it — a
+   * `@PANEL_START`-backed save formats a value exactly the same way an old-format one does, since
+   * the value itself (`{hue:0, chroma:0}`) looks identical regardless of which spec format
+   * described the field it belongs to.
+   */
+  function fmt(v, indent, sourceText, key) {
+    var pad = indent || "";
+    var inner = pad + "  ";
+    if (v === null) return "null";
+    if (typeof v === "boolean") return v ? "true" : "false";
+    if (typeof v === "number") return String(v);
+    if (typeof v === "string") return JSON.stringify(v);
+    if (Array.isArray(v)) {
+      var holdsObjects = v.some(function (item) {
+        return item !== null && typeof item === "object";
+      });
+      if (!holdsObjects) {
+        return "[" + v.map(function (item) { return fmt(item, ""); }).join(", ") + "]";
+      }
+      return "[\n" + v.map(function (item) {
+        return inner + fmt(item, inner, sourceText);
+      }).join(",\n") + "\n" + pad + "]";
+    }
+    if (typeof v === "object") {
+      var keys = Object.keys(v);
+      if (keys.length === 0) return "{}";
+      if (key && wasInlineInSource(sourceText, key)) {
+        return "{ " + keys.map(function (k) {
+          return printKey(k) + ": " + fmt(v[k], "", sourceText, k);
+        }).join(", ") + " }";
+      }
+      return "{\n" + keys.map(function (k) {
+        return inner + printKey(k) + ": " + fmt(v[k], inner, sourceText, k);
+      }).join(",\n") + "\n" + pad + "}";
+    }
+    return JSON.stringify(v);
+  }
+
+  /**
+   * Did the source write `key: { … }` on one line?
+   *
+   * Deliberately literal: a brace-to-brace match with no newline in it. A key whose object the source
+   * expanded stays expanded, and a key the source has no opinion about — a value the panel just invented —
+   * expands too, which is the safer default in a file people read.
+   */
+  function wasInlineInSource(sourceText, key) {
+    if (typeof sourceText !== "string" || !sourceText) return false;
+    var escaped = String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp('["\']?' + escaped + '["\']?\\s*:\\s*\\{[^\\n{}]*\\}').test(sourceText);
+  }
+
+  /** Bare where JavaScript allows it, quoted where it does not. */
+  function printKey(key) {
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
+  }
+
+  /**
+   * Values only, for a `@PANEL_START`-backed schema — `@CONFIG_START` has no annotations left to
+   * reprint, so this never builds one. Every property in `configText` is reprinted **verbatim**
+   * unless its value actually changed, and an edited one keeps the same indentation and comma
+   * style the file already had — `indexConfigProperties` (this file) reads that directly from
+   * `configText` per key, the same way a per-row `.raw` would have, if this format had one.
+   *
+   * A schema field with no matching key in `configText` throws: that is exactly the drift
+   * `panelKeyDrift` warns about at load, and a save has no correct place to put a value with
+   * nowhere to land. A `configText` key with no matching schema field is left alone, verbatim —
+   * not this function's problem to solve, and never silently dropped.
+   */
+  function serializePanelValues(schema, values) {
+    var configText = schema.configText;
+    if (typeof configText !== "string") {
+      throw new Error("serialize: a @PANEL_START-sourced schema has no configText to write into");
+    }
+    var index = indexConfigProperties(configText);
+    var vm = values || {};
+    var fieldsByName = {};
+    schema.rows.forEach(function (r) { if (r.type === "field") fieldsByName[r.name] = r; });
+
+    schema.rows.forEach(function (r) {
+      if (r.type === "field" && !index.byKey[r.name]) {
+        throw new Error('serialize: field "' + r.name + '" has no value in @CONFIG_START to write back into');
+      }
+    });
+
+    var out = index.parts.map(function (part) {
+      if (part.key == null) return part.raw;
+      var r = fieldsByName[part.key];
+      if (!r) return part.raw;
+      var v = vm[r.name];
+      if (v === undefined || JSON.stringify(v) === JSON.stringify(r.value)) return part.raw;
+      var indent = /^[ \t]*/.exec(part.raw)[0];
+      return indent + printKey(r.name) + ": " + fmt(v, indent, part.raw, r.name) +
+        (part.trailingComma ? "," : "");
+    });
+    return out.join("\n").replace(/\s+$/, "");
+  }
+
   function serialize(schema, values) {
     if (!schema || !schema.rows) return "";
+    // A `@PANEL_START`-backed schema never reaches the reconstruction below: `panelFieldRow`
+    // deliberately gives its rows no `.raw`, so the old per-row branch — built around a spec
+    // grammar that cannot express `anchors` or a nested `tab` — would either misprint or throw
+    // trying. Dispatching here is the primary guard; the field branch's own check further down
+    // is the second one, in case a future refactor ever lets a `.raw`-less field reach it some
+    // other way.
+    if (schema.fromPanelSpec) return serializePanelValues(schema, values);
+
     var out = [];
     var vm = values || {};
-
-    /**
-     * A value printed the way the block is written, not the way `JSON.stringify` writes it.
-     *
-     * This used to be `JSON.stringify(v, null, 2)` for anything holding objects, which quoted every
-     * key and indented from column 0. Editing one Gap in the Mode settings tabs therefore rewrote
-     * Grid's whole `modes` array from
-     *
-     *     modes: [
-     *       {
-     *         name: "desktop",
-     *
-     * to `"name": "desktop"` hanging off the left margin — the block still ran, and it was no longer
-     * something a person would have written. **The block is the human format**: its keys are bare, its
-     * indentation is the block's own, and a config is read and pasted far more often than it is
-     * generated. So the printer matches the source style, and `indent` is the row's own leading
-     * whitespace rather than a constant.
-     *
-     * Arrays of primitives stay on one line, where a line each would be noise.
-     *
-     * **An object is printed the way the source wrote it**, inline or expanded. Not by a heuristic: the
-     * first attempt was "an object of primitives stays inline", which is right for Colours' `bright: { hue,
-     * chroma }` and wrong for Grid's mode entries, which are also objects of primitives and are written a
-     * key per line. Reshaping one block to stop reshaping another is not a fix.
-     *
-     * So `sourceText` is the row's own raw text, and a key written as `key: { … }` on one line stays that
-     * way. Without it, editing a single hue reprinted a 43-line block as 69 — still valid, and no longer
-     * something a person would have written, which is the failure this printer exists to prevent.
-     */
-    function fmt(v, indent, sourceText, key) {
-      var pad = indent || "";
-      var inner = pad + "  ";
-      if (v === null) return "null";
-      if (typeof v === "boolean") return v ? "true" : "false";
-      if (typeof v === "number") return String(v);
-      if (typeof v === "string") return JSON.stringify(v);
-      if (Array.isArray(v)) {
-        var holdsObjects = v.some(function (item) {
-          return item !== null && typeof item === "object";
-        });
-        if (!holdsObjects) {
-          return "[" + v.map(function (item) { return fmt(item, ""); }).join(", ") + "]";
-        }
-        return "[\n" + v.map(function (item) {
-          return inner + fmt(item, inner, sourceText);
-        }).join(",\n") + "\n" + pad + "]";
-      }
-      if (typeof v === "object") {
-        var keys = Object.keys(v);
-        if (keys.length === 0) return "{}";
-        if (key && wasInlineInSource(sourceText, key)) {
-          return "{ " + keys.map(function (k) {
-            return printKey(k) + ": " + fmt(v[k], "", sourceText, k);
-          }).join(", ") + " }";
-        }
-        return "{\n" + keys.map(function (k) {
-          return inner + printKey(k) + ": " + fmt(v[k], inner, sourceText, k);
-        }).join(",\n") + "\n" + pad + "}";
-      }
-      return JSON.stringify(v);
-    }
-
-    /**
-     * Did the source write `key: { … }` on one line?
-     *
-     * Deliberately literal: a brace-to-brace match with no newline in it. A key whose object the source
-     * expanded stays expanded, and a key the source has no opinion about — a value the panel just invented —
-     * expands too, which is the safer default in a file people read.
-     */
-    function wasInlineInSource(sourceText, key) {
-      if (typeof sourceText !== "string" || !sourceText) return false;
-      var escaped = String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return new RegExp('["\']?' + escaped + '["\']?\\s*:\\s*\\{[^\\n{}]*\\}').test(sourceText);
-    }
-
-    /** Bare where JavaScript allows it, quoted where it does not. */
-    function printKey(key) {
-      return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
-    }
 
     schema.rows.forEach(function (r) {
       // Everything that is not an edited field is written back exactly as it was written, before
@@ -1691,9 +1971,18 @@
         return;
       }
       if (r.type === "field") {
+        // Refuses rather than misprints. Every field this loop has ever produced carries its own
+        // `.raw` — it is how the fast path below works at all — so a field with none did not come
+        // from here. The only other source is `panelFieldRow`, which withholds `.raw` on purpose;
+        // reconstructing one from `@rows:`/`@group:`/`@curve` syntax that has never heard of
+        // `anchors` or a nested `tab` would be a corrupted script, not a slow correct one.
+        if (typeof r.raw !== "string") {
+          throw new Error('serialize: field "' + r.name + '" has no raw text — this looks like a ' +
+            "@PANEL_START-sourced row reaching the old reconstruction path, which cannot express it");
+        }
         var v = vm[r.name];
         // Untouched means untouched: only a value the form actually edited is rewritten.
-        if (typeof r.raw === "string" && (v === undefined || JSON.stringify(v) === JSON.stringify(r.value))) {
+        if (v === undefined || JSON.stringify(v) === JSON.stringify(r.value)) {
           out.push(r.raw);
           return;
         }

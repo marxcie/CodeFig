@@ -46,6 +46,20 @@ function configBlockOf(source, name) {
 }
 
 /**
+ * A migrated script's `@PANEL_START` region, or `undefined` — the same detection `src/ui.html`'s
+ * `parseScriptSections` does at run time, so a preview of a shipped script takes the identical
+ * path a real load would. Without this, `build()` on a script that has moved its spec out of
+ * `@CONFIG_START` would parse a pure-values block with nothing left in it to read as one-liner
+ * annotations, which degrades to a labelless field dump rather than an error — silently wrong
+ * output instead of a loud one, exactly what this file's own module comment on refusing rather
+ * than dropping is elsewhere careful to avoid.
+ */
+function panelSpecOf(source) {
+  const match = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(source);
+  return match ? match[1] : undefined;
+}
+
+/**
  * Replace `key: "…"` with the value asked for, leaving the line's comment — and therefore its whole
  * annotation — untouched. The annotation is what the renderer reads; rewriting the value has to not
  * disturb it, which is why this is a surgical replace rather than a parse and reprint.
@@ -75,6 +89,53 @@ function bezierGlobal() {
     BEZIER_UI_EXPORTS.map((n) => n + ': ' + n).join(', ') + ' };';
 }
 
+/**
+ * The page both `build()` and `buildFromPanelSpec()` write — one template, whichever source the
+ * values/spec came from. `panelSpecText` is `undefined` for a plain `@CONFIG_START`-only script,
+ * which is exactly the argument `ConfigUIParser.parse` already treats as "no second region".
+ */
+function renderPage(name, note, block, panelSpecText, outPath) {
+  const page = [
+    '<!doctype html><meta charset="utf-8">',
+    '<title>' + name + ' — panel preview</title>',
+    '<style>',
+    '  body { margin: 0; background: #fff; font-family: Inter, system-ui, sans-serif; }',
+    // The plugin's panel is a fixed width; this is the widest it gets, which is where a layout that
+    // depends on its container shows its seams.
+    '  .frame { width: 1040px; margin: 0 auto; padding: 24px; }',
+    '  .note { max-width: 1040px; margin: 0 auto; padding: 16px 24px 0; color: #6b6b73; font-size: 13px; }',
+    '</style>',
+    '<style>' + read('src/ui.css') + '</style>',
+    '<p class="note"><b>' + name + '</b> — ' + note + '</p>',
+    '<div class="frame"><div id="panel"></div></div>',
+    '<script>' + bezierGlobal() + '<\/script>',
+    // No `module`, so the UMD wrappers take their browser branch — the same way `dist/ui.html` loads them.
+    '<script>' + read('src/config-ui/parser.js') + '<\/script>',
+    '<script>' + read('src/config-ui/renderer.js') + '<\/script>',
+    '<script>',
+    // Kept on `window` so a rebuild can be driven from the console — which is how the panel behaves on a
+    // committed edit, and the only way to see a bug that only appears after one.
+    '  window.__block = ' + JSON.stringify(block) + ';',
+    '  window.__panelSpec = ' + JSON.stringify(panelSpecText === undefined ? null : panelSpecText) + ';',
+    '  window.__rebuild = function () {',
+    '    var again = ConfigUIParser.parse(window.__block, window.__panelSpec || undefined);',
+    '    var host = document.getElementById("panel");',
+    '    host.innerHTML = "";',
+    '    ConfigUIRenderer.buildForm(again, host);',
+    '    ConfigUIRenderer.attachListeners(host, again, function () {});',
+    '  };',
+    '  var schema = ConfigUIParser.parse(window.__block, window.__panelSpec || undefined);',
+    '  var host = document.getElementById("panel");',
+    '  ConfigUIRenderer.buildForm(schema, host);',
+    '  ConfigUIRenderer.attachListeners(host, schema, function () {});',
+    '<\/script>',
+  ].join('\n');
+
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, page);
+  return { name: name, out: outPath };
+}
+
 function build(wanted, overrides) {
   const scripts = findAllScripts(path.join(ROOT, 'scripts'));
   const want = String(wanted).toLowerCase();
@@ -87,45 +148,32 @@ function build(wanted, overrides) {
   }
 
   const block = applyOverrides(configBlockOf(script.code, script.name), overrides || {});
-  const page = [
-    '<!doctype html><meta charset="utf-8">',
-    '<title>' + script.name + ' — panel preview</title>',
-    '<style>',
-    '  body { margin: 0; background: #fff; font-family: Inter, system-ui, sans-serif; }',
-    // The plugin's panel is a fixed width; this is the widest it gets, which is where a layout that
-    // depends on its container shows its seams.
-    '  .frame { width: 1040px; margin: 0 auto; padding: 24px; }',
-    '  .note { max-width: 1040px; margin: 0 auto; padding: 16px 24px 0; color: #6b6b73; font-size: 13px; }',
-    '</style>',
-    '<style>' + read('src/ui.css') + '</style>',
-    '<p class="note"><b>' + script.name + '</b> — the real renderer, the real stylesheet, the config the ' +
-      'script ships with. Regenerate with <code>npm run preview:panel</code>.</p>',
-    '<div class="frame"><div id="panel"></div></div>',
-    '<script>' + bezierGlobal() + '<\/script>',
-    // No `module`, so the UMD wrappers take their browser branch — the same way `dist/ui.html` loads them.
-    '<script>' + read('src/config-ui/parser.js') + '<\/script>',
-    '<script>' + read('src/config-ui/renderer.js') + '<\/script>',
-    '<script>',
-    // Kept on `window` so a rebuild can be driven from the console — which is how the panel behaves on a
-    // committed edit, and the only way to see a bug that only appears after one.
-    '  window.__block = ' + JSON.stringify(block) + ';',
-    '  window.__rebuild = function () {',
-    '    var again = ConfigUIParser.parse(window.__block);',
-    '    var host = document.getElementById("panel");',
-    '    host.innerHTML = "";',
-    '    ConfigUIRenderer.buildForm(again, host);',
-    '    ConfigUIRenderer.attachListeners(host, again, function () {});',
-    '  };',
-    '  var schema = ConfigUIParser.parse(window.__block);',
-    '  var host = document.getElementById("panel");',
-    '  ConfigUIRenderer.buildForm(schema, host);',
-    '  ConfigUIRenderer.attachListeners(host, schema, function () {});',
-    '<\/script>',
-  ].join('\n');
+  const panelSpecText = panelSpecOf(script.code);
+  return renderPage(
+    script.name,
+    'the real renderer, the real stylesheet, the config the script ships with. Regenerate with ' +
+      '<code>npm run preview:panel</code>.',
+    block, panelSpecText, OUT
+  );
+}
 
-  fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, page);
-  return { name: script.name, out: OUT };
+/**
+ * The `@PANEL_START` analogue of `build()`: a values block plus a panel-spec text instead of a
+ * shipped script's own `@CONFIG_START` (which — until a script actually migrates — is a hand
+ * authored fixture, not something on disk). Same page, same real `parser.js`/`renderer.js`, so a
+ * DOM comparison against `build()`'s output is a comparison of the renderer's own interpretation,
+ * not of two different templates. Used by `devtools/dom-diff-panel.js`; writes to its own path so
+ * it never collides with a `build()` run against the same name.
+ */
+function buildFromPanelSpec(name, valuesBlock, panelSpecText, overrides, outPath) {
+  const block = applyOverrides(valuesBlock, overrides || {});
+  return renderPage(
+    name,
+    'the real renderer, the real stylesheet, a hand-authored @PANEL_START fixture instead of a ' +
+      'shipped script\'s own config block.',
+    block, panelSpecText,
+    outPath || path.join(ROOT, 'artifacts', 'panel-preview-panelspec.html')
+  );
 }
 
 if (require.main === module) {
@@ -146,4 +194,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build };
+module.exports = { build, buildFromPanelSpec };

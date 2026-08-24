@@ -1,209 +1,66 @@
 /**
  * Phase 1 of `.plans/31-panel-spec-json.md`'s hardest case, per the prompt "make the DSF config
- * blocks readable": hand-author the `@PANEL_START` equivalent of `colors.js`'s real spec — the
- * 3,222-character `@rows` line the reader had never been tried against — and diff it against the
- * old parser, field by field.
+ * blocks readable": hand-author the `@PANEL_START` equivalent of `colors.js`'s real spec and diff
+ * it against the old parser, field by field.
  *
- * **History.** The first pass through this fixture found 13 real gaps (see git history / the
- * session that wrote them for the full list) — tabs, a top-level curve field, prose paragraphs,
- * `showWhen` on headings and chips, `@group:` columns, a curve column's `ends`/`range` shape, and
- * a JSON field's `options` silently breaking its own radio group. All are now fixed in
- * `parser.js`, and the fixture below is the **full** spec — all 27 old-parser rows, all 20
- * `@rows` columns, tabs included — matching the old parser exactly. `colors.js` itself is
- * untouched; this fixture is a test artefact only.
+ * **History, in two passes.** The first pass found 13 real gaps and fixed them — tabs, a
+ * top-level curve field, prose paragraphs, `showWhen` on headings and chips, `@group:` columns, a
+ * curve column's `ends`/`range` shape, and a JSON field's `options` silently breaking its own
+ * radio group (git history has the full list). That pass matched the old parser exactly, but the
+ * fixture came back **larger** than the one-liner it replaced (10.2k characters against 7.2k) and
+ * left two faults un-deduplicated: `#>Hue` sat as a flat sibling marker rather than a container,
+ * and the anchor groups (Hue's `bright`/`middle`/`dark`, Saturation/Chroma's own, Lightness's own)
+ * were eight near-identical blocks for one idea. Correct, but not what "readable" asked for.
  *
- * **The one surprise, worth recording:** the "anchor asymmetry" (Hue/Chroma's `bright`/`middle`/
- * `dark` groups, Saturation/Chroma's own, Lightness's own) was flagged as gap 6 — three sets of
- * columns reusing the same keys (`bright`, `middle`, `dark`) in one flat array, which looked like
- * it would collide once tabs were added. It doesn't: the *old* parser already produces exactly
- * this — `bright` appears three times in `colors.js`'s real parsed columns today, tabs and all —
- * and works, because whatever reads the columns downstream (`renderer.js`'s tab-aware row
- * building) scopes a key lookup to the tab it is currently drawing, not to the whole flat array.
- * Once `panelColumn` could produce a `{type:"tab",...}` entry at all, the duplicate-key case
- * needed no special handling — it was never actually a JSON-format problem, just an untested
- * assumption from `panelColumn` not having tabs yet to test it with.
+ * **Second pass: two format features, not a Colors-specific fix.**
  *
- * **The reader now refuses rather than drops.** `parsePanelSpec`/`panelColumn` throw (surfaced as
- * `{rows:[], error}`) on an unrecognised block type, a keyed block with no `type`, and an
- * unparsceable `ends`/`range` — see the dedicated tests below, and `parser.js`'s own comments at
- * `PANEL_MARKER_TYPES`/`PANEL_COLUMN_MARKER_TYPES`.
+ * 1. **Tabs are containers.** `{ type: "tab", names: [...], columns: [...] }` nests what belongs
+ *    to it — indentation answers "which columns are Hue's" instead of scanning forward for the
+ *    next marker. `expandColumnsList` (`parser.js`) un-nests it back into the flat
+ *    `{type:"tab",...}` marker + columns the old parser has always produced, so nothing
+ *    downstream — not `renderer.js`, not the old parser's own output — changes. A merged tab
+ *    (`#>Saturation{colorModel=hsl}` / `#>Chroma{colorModel=oklch}`, one tab shown under two
+ *    names) is one container with two entries in `names`, each carrying its own `showWhen`; the
+ *    shared `columns` are written once and expand to two marker rows followed by the columns
+ *    once, matching the old parser's own two-markers-then-shared-columns shape exactly.
+ * 2. **`anchors` deduplicates the position × field-per-colour-model cross-product.** One block
+ *    names `positions` (`["bright","middle","dark"]` or `["bright","dark"]`), `disabledWhen` if
+ *    the whole set is conditionally inert, and `fields` — each with a `labels` map and optional
+ *    `placeholders` map, one entry per position, because Hue's "start"/"middle"/"end" suffix
+ *    pattern does not hold for Lightness (`"Bright"`, not `"Lightness start"`) or for placeholder
+ *    examples (Lightness's are real boundary values, not one example repeated) — a derived
+ *    template would have been magic that broke on the second real case. `notes`, optional, is a
+ *    per-position escape hatch: the old format's `@disabledNote:` could only attach to whichever
+ *    column's segment it was written in (Colors has it on `dark` only), an artifact of the
+ *    one-liner rather than a rule, and the mechanism reproduces that asymmetry rather than
+ *    smoothing it into "every position" or "none," either of which would change old-parser output.
  *
- * **`text` vs `string`**: still two words for one concept (`inferType()` says `"string"`, every
- * `@rows` column says `"text"`) — decided (`text` canonical, `string` an alias) but not
- * implemented; out of scope for this pass, unrelated to what this fixture tests.
+ * Both are core format features, not Colors-specific: `expandColumnsList` and `expandAnchors` are
+ * plain functions over any `columns`/`fields` list, usable with or without tabs, and the
+ * dedicated tests below exercise them directly, independent of the full fixture.
+ *
+ * **The reader still refuses rather than drops.** `parsePanelSpec`/`panelColumn` throw on an
+ * unrecognised block or column type, a keyed block with no `type`, an unparseable `ends`/`range`
+ * — and now also a tab with no `columns` (the old marker-only shape, no longer accepted) or no
+ * `names`, and an `anchors` field missing a label for one of its declared positions.
+ *
+ * **`text` vs `string`**: still two words for one concept — decided (`text` canonical, `string`
+ * an alias) but not implemented; unrelated to what this fixture tests.
  */
 const test = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
 
 const parser = require('../src/config-ui/parser.js');
+const {
+  COLORS_PANEL_SPEC, COLORS_VALUES_BLOCK, innerPanelSpec, PRE_MIGRATION_COLORS_ROWS_BLOCK
+} = require('./fixtures/colors-panel-spec.js');
 
-const COLORS_PATH = path.join(
-  __dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'colors.js'
-);
-
+// `colors.js` migrated to `@PANEL_START` — its `@CONFIG_START` is pure values now, nothing left to
+// compare the new reader against. `oldParseColors()` reads the frozen pre-migration text instead
+// of the live file, so this stays "did the migration change what the panel shows", the question it
+// was written to answer, rather than becoming "is the fixture consistent with itself."
 function oldParseColors() {
-  const src = fs.readFileSync(COLORS_PATH, 'utf8');
-  const m = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(src);
-  assert.ok(m, 'colors.js has no @CONFIG_START block — has it moved?');
-  return parser.parse(m[1]);
-}
-
-/** The full `@PANEL_START` equivalent of `colors.js`'s spec. `@fromFile` omitted (see Grid's
- *  fixture header for why: something downstream reads that value by its own regex over the raw
- *  `@CONFIG_START` text, out of scope for the reader itself). */
-const COLORS_PANEL_SPEC = [
-  '// @PANEL_START',
-  '// {',
-  '//   blocks: [',
-  '//     { type: "heading", text: "General" },',
-  '//     { key: "collectionName", type: "collection", label: "Collection" },',
-  '//     { type: "paragraph", text: "The collection\'s own modes. The chips are the mode list — a read fills them, and there is one mode block below per chip, in chip order. Removing and renaming happen here, which is why a block carries neither." },',
-  '//     { type: "chips", label: "Collection modes",',
-  '//       showWhen: { collectionName: "*", steps: "*" } },',
-  '//     { key: "group", type: "string", label: "Group within collection",',
-  '//       placeholder: "eg.: Primitives/Neutrals" },',
-  '//     { key: "steps", type: "string", label: "Color tokens",',
-  '//       placeholder: "Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950",',
-  '//       helper: "Named lightest to darkest, and the only source for token placement below. The variables are <group>/<step>." },',
-  '//     { key: "colorModel", type: "radio", label: "Color model",',
-  '//       options: [{ hsl: "HSL" }, { oklch: "OKLCH" }],',
-  '//       helper: "OKLCH to generate, HSL to read. OKLCH shares one lightness ladder across every mode, which is what makes them match in greyscale. HSL keeps a curve per mode — and its colourfulness envelope, S x (1 - |2L - 1|), has a corner at 50% lightness that every full ramp crosses. See the Documentation tab." },',
-  '//     { type: "paragraph", text: "Each anchor keeps a hue for both models: OKLCH\'s is a perceptual angle, HSL\'s is where the maximum channel sits, and on a near-neutral ramp the two disagree by more than 30°. Both are filled when the panel reads a collection, so switching model loses nothing." },',
-  '//     { type: "divider", section: true },',
-  '//     { type: "heading", text: "OKLCH settings",',
-  '//       showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" } },',
-  '//     { type: "paragraph", text: "The same curve editor a mode has, at collection scope: the ladder is shared, so the curve belongs to the collection rather than to one of its modes — **one curve for every mode**, which is what makes the modes match in greyscale." },',
-  '//     { type: "paragraph", text: "**Nothing below General until there are tokens.** Choosing a collection sets a read going — modes are fetched, blocks are added, the block is rewritten — and every one of those rebuilds the form. With the mode settings on screen that reads as flicker and a jumping layout, over a panel that cannot say anything useful yet: a collection with no token list has no ramp to show. Naming the tokens is the point at which there is something to draw, so it is the point at which the rest appears." },',
-  '//     { type: "paragraph", text: "**A new scale starts Linear, not Original.** *Original* means \\"the ramp already in the file\\", so on a collection that has no ramp yet it names nothing — an empty editor and a preview with no line in it. Linear is the honest starting point: an even ladder between the two ends, which is a thing you can see and then bend. A read replaces it with the curve fitted to what the file actually holds." },',
-  '//     { key: "curve", type: "curve", label: "Curve", allowOriginal: true,',
-  '//       ramp: "oklch($% 0 0)", ends: "lightness.bright..lightness.dark", range: [0, 100],',
-  '//       showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" },',
-  '//       helper: "One curve, bright to dark. Drag a handle, pick a preset, or paste coordinates. Add middle point bends the two halves differently — which is what a real neutral ramp does — and that anchor is the middle colour\'s lightness and its step." },',
-  '//     { type: "preview" },',
-  '//     { key: "lightness", type: "group", label: "Lightness",',
-  '//       showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" },',
-  '//       helper: "0 to 100. The two ends hold exactly; the curve fills everything between them.",',
-  '//       fields: [',
-  '//         { key: "bright", type: "number", label: "Bright" },',
-  '//         { key: "dark", type: "number", label: "Dark" }',
-  '//       ] },',
-  '//     { type: "heading", text: "Mode settings", showWhen: { collectionName: "*", steps: "*" } },',
-  '//     { key: "modes", type: "rows", label: "Modes", layout: "blocks",',
-  '//       showWhen: { collectionName: "*", steps: "*" },',
-  '//       columns: [',
-  '//         { key: "name", type: "text", label: "Mode" },',
-  '//         { key: "seed", type: "group", label: "Seed color", fields: [',
-  '//           { key: "hex", type: "text", label: "Hex", placeholder: "eg. #71717A" },',
-  '//           { key: "placement", type: "text", label: "Token", placeholder: "Auto" },',
-  '//           { key: "lock", type: "checkbox", label: "Lock seed color",',
-  '//             helper: "On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\\nOff. Seed moves to the nearest step on the ladder." }',
-  '//         ] },',
-  '//         { type: "tab", text: "Hue" },',
-  '//         { key: "hueCurve", type: "curve", label: "Hue curve",',
-  '//           ramp: "oklch(70% ~bright.chroma $)",',
-  '//           ends: "bright.hue..middle.hue..dark.hue", range: [0, 360],',
-  '//           showWhen: { colorModel: "oklch" },',
-  '//           helper: "How the hue travels between the ends. Worth least on a cool palette and most on a warm one — amber crosses 49 degrees and needs its own timing. Empty on a near-grey, where a measured hue is rounding rather than a value." },',
-  '//         { key: "hslHueCurve", type: "curve", label: "Hue curve",',
-  '//           ramp: "hsl($ ~bright.saturation% 50%)",',
-  '//           ends: "bright.hslHue..middle.hslHue..dark.hslHue", range: [0, 360],',
-  '//           showWhen: { colorModel: "hsl" },',
-  '//           helper: "The same, for HSL — a different angle from OKLCH\'s, so a different curve." },',
-  '//         { key: "bright", type: "group", label: "Bright", disabledWhen: { hueCurve: "original" }, fields: [',
-  '//           { key: "hue", type: "number", label: "Hue start", placeholder: "eg. 264",',
-  '//             showWhen: { colorModel: "oklch" } },',
-  '//           { key: "hslHue", type: "number", label: "Hue start", placeholder: "eg. 264",',
-  '//             showWhen: { colorModel: "hsl" } }',
-  '//         ] },',
-  '//         { key: "middle", type: "group", label: "Middle", disabledWhen: { hueCurve: "original" }, fields: [',
-  '//           { key: "hue", type: "number", label: "Hue middle", placeholder: "eg. 264",',
-  '//             showWhen: { colorModel: "oklch" } },',
-  '//           { key: "hslHue", type: "number", label: "Hue middle", placeholder: "eg. 264",',
-  '//             showWhen: { colorModel: "hsl" } }',
-  '//         ] },',
-  '//         { key: "dark", type: "group", label: "Dark", disabledWhen: { hueCurve: "original" }, fields: [',
-  '//           { key: "hue", type: "number", label: "Hue end", placeholder: "eg. 264",',
-  '//             showWhen: { colorModel: "oklch" } },',
-  '//           { key: "hslHue", type: "number", label: "Hue end", placeholder: "eg. 264",',
-  '//             showWhen: { colorModel: "hsl" } }',
-  '//         ] },',
-  '//         { type: "tab", text: "Saturation", showWhen: { colorModel: "hsl" } },',
-  '//         { type: "tab", text: "Chroma", showWhen: { colorModel: "oklch" } },',
-  '//         { key: "chromaCurve", type: "curve", label: "Chroma curve",',
-  '//           ramp: "oklch(70% $ ~bright.hue)",',
-  '//           ends: "bright.chroma..middle.chroma..dark.chroma", range: [0, 0.4],',
-  '//           showWhen: { colorModel: "oklch" },',
-  '//           helper: "How fast the colour arrives, as opposed to the lightness. A designed palette usually rises to its most colourful step and falls, on its own timing." },',
-  '//         { key: "saturationCurve", type: "curve", label: "Saturation curve",',
-  '//           ramp: "hsl(~bright.hslHue $% 50%)",',
-  '//           ends: "bright.saturation..middle.saturation..dark.saturation", range: [0, 100],',
-  '//           showWhen: { colorModel: "hsl" },',
-  '//           helper: "The same, for HSL. Saturation and chroma are different quantities, so they carry different curves and a read fits both — switching model keeps whichever one it is switching to." },',
-  '//         { key: "bright", type: "group", label: "Bright", fields: [',
-  '//           { key: "chroma", type: "number", label: "Chroma start", placeholder: "eg. 0.012",',
-  '//             showWhen: { colorModel: "oklch" } },',
-  '//           { key: "saturation", type: "number", label: "Saturation start", placeholder: "eg. 12",',
-  '//             showWhen: { colorModel: "hsl" } }',
-  '//         ] },',
-  '//         { key: "middle", type: "group", label: "Middle", fields: [',
-  '//           { key: "chroma", type: "number", label: "Chroma middle", placeholder: "eg. 0.012",',
-  '//             showWhen: { colorModel: "oklch" } },',
-  '//           { key: "saturation", type: "number", label: "Saturation middle", placeholder: "eg. 12",',
-  '//             showWhen: { colorModel: "hsl" } }',
-  '//         ] },',
-  '//         { key: "dark", type: "group", label: "Dark", fields: [',
-  '//           { key: "chroma", type: "number", label: "Chroma end", placeholder: "eg. 0.012",',
-  '//             showWhen: { colorModel: "oklch" } },',
-  '//           { key: "saturation", type: "number", label: "Saturation end", placeholder: "eg. 12",',
-  '//             showWhen: { colorModel: "hsl" } }',
-  '//         ] },',
-  '//         { type: "tab", text: "Lightness" },',
-  '//         { key: "curve", type: "curve", label: "Lightness curve", allowOriginal: true,',
-  '//           ramp: "hsl(~bright.hslHue ~bright.saturation% $%)",',
-  '//           ends: "bright.lightness..dark.lightness", range: [0, 100],',
-  '//           showWhen: { colorModel: "hsl" },',
-  '//           helper: "One curve, bright to dark. Drag a handle, pick a preset, or paste coordinates. Add middle point bends the two halves differently — which is what a real neutral ramp does — and that anchor is the middle colour\'s lightness and its step." },',
-  '//         { key: "bright", type: "group", label: "Bright", fields: [',
-  '//           { key: "lightness", type: "number", label: "Bright", placeholder: "eg. 98",',
-  '//             showWhen: { colorModel: "hsl" } }',
-  '//         ] },',
-  '//         { key: "dark", type: "group", label: "Dark", disabledNote: "Anchors take effect once you choose a curve.", fields: [',
-  '//           { key: "lightness", type: "number", label: "Dark", placeholder: "eg. 4",',
-  '//             showWhen: { colorModel: "hsl" } }',
-  '//         ] },',
-  '//         { type: "preview" }',
-  '//       ] }',
-  '//   ]',
-  '// }',
-  '// @PANEL_END',
-].join('\n');
-
-const COLORS_VALUES_BLOCK = [
-  '  collectionName: "",',
-  '  group: "",',
-  '  steps: "",',
-  '  colorModel: "hsl",',
-  '  curve: [0.333333, 0.333333, 0.666667, 0.666667],',
-  '  lightness: {},',
-  '  modes: [',
-  '    {',
-  '      name: "",',
-  '      curve: [0.333333, 0.333333, 0.666667, 0.666667],',
-  '      chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [],',
-  '      seed: { hex: "", placement: "", lock: false },',
-  '      bright: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 98 },',
-  '      middle: { hue: 0, hslHue: 0, chroma: 0, saturation: 0 },',
-  '      dark: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 4 }',
-  '    }',
-  '  ]',
-].join('\n');
-
-function innerPanelSpec(block) {
-  const m = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(block);
-  assert.ok(m, 'COLORS_PANEL_SPEC fixture has no @PANEL_START/@PANEL_END markers');
-  return m[1];
+  return parser.parse(PRE_MIGRATION_COLORS_ROWS_BLOCK);
 }
 
 function newParseColors() {
@@ -251,6 +108,12 @@ function stripRowNoise(row) {
   delete clone.raw;
   delete clone.syntax;
   delete clone.trailingComma;
+  // Not a gap: `attachTo` is how a `@PANEL_START` paragraph replaces the blank-`//`-line signal
+  // the old format used for the same fact (see `parser.js`'s `parsePanelSpec` and `renderer.js`'s
+  // `foldProse`). The old reader has no such field; the new one always sets it. Comparing it here
+  // would flag every paragraph row as a mismatch for carrying information the old format simply
+  // has nowhere to put.
+  delete clone.attachTo;
   if (clone.helper !== undefined) clone.helper = normaliseHelper(clone.helper);
   if (clone.type === 'paragraph' && clone.text !== undefined) clone.text = normaliseParagraph(clone.text);
   if (clone.columns) {
@@ -305,6 +168,22 @@ test('a keyed block with no type is refused, not silently dropped', () => {
   assert.deepStrictEqual(result.rows, []);
 });
 
+test('a paragraph with no attachTo is refused, not silently defaulted', () => {
+  const result = parser.parse('{}', [
+    '// { blocks: [ { type: "paragraph", text: "huh" } ] }',
+  ].join('\n'));
+  assert.ok(result.error, 'a paragraph with no attachTo should produce an error');
+  assert.match(result.error, /attachTo/);
+});
+
+test('a paragraph with an attachTo other than next/previous is refused', () => {
+  const result = parser.parse('{}', [
+    '// { blocks: [ { type: "paragraph", text: "huh", attachTo: "sideways" } ] }',
+  ].join('\n'));
+  assert.ok(result.error, 'an invalid attachTo should produce an error');
+  assert.match(result.error, /attachTo/);
+});
+
 test('an unrecognised top-level block type is refused, not silently dropped', () => {
   const result = parser.parse('{}', [
     '// { blocks: [ { type: "wat", text: "huh" } ] }',
@@ -354,4 +233,218 @@ test('gap 10, fixed: a field radio option round-trips through the renderer\'s ow
   assert.ok(colorModel.options.every((o) => typeof o === 'string'), 'field options should be raw strings now');
   assert.strictEqual(fieldOptionValue(colorModel.options[0]), 'hsl');
   assert.strictEqual(fieldOptionValue(colorModel.options[1]), 'oklch');
+});
+
+test('a tab with no columns is refused -- tabs nest now, they do not mark a position in a flat list', () => {
+  const result = parser.parse('{}', [
+    '// { blocks: [ { key: "modes", type: "rows", columns: [',
+    '//   { type: "tab", names: [{ text: "Hue" }] }',
+    '// ] } ] }',
+  ].join('\n'));
+  assert.ok(result.error, 'a tab with no columns should produce an error');
+});
+
+test('a tab with no names is refused', () => {
+  const result = parser.parse('{}', [
+    '// { blocks: [ { key: "modes", type: "rows", columns: [',
+    '//   { type: "tab", columns: [] }',
+    '// ] } ] }',
+  ].join('\n'));
+  assert.ok(result.error, 'a tab with no names should produce an error');
+});
+
+test('an anchors block with no positions, or no fields, is refused', () => {
+  const noPositions = parser.parse('{}', [
+    '// { blocks: [ { key: "modes", type: "rows", columns: [',
+    '//   { type: "anchors", fields: [ { key: "hue", labels: { bright: "Hue" } } ] }',
+    '// ] } ] }',
+  ].join('\n'));
+  assert.ok(noPositions.error, 'an anchors block with no positions should produce an error');
+
+  const noFields = parser.parse('{}', [
+    '// { blocks: [ { key: "modes", type: "rows", columns: [',
+    '//   { type: "anchors", positions: ["bright"] }',
+    '// ] } ] }',
+  ].join('\n'));
+  assert.ok(noFields.error, 'an anchors block with no fields should produce an error');
+});
+
+test('an anchors field missing a label for one of the declared positions is refused', () => {
+  const result = parser.parse('{}', [
+    '// { blocks: [ { key: "modes", type: "rows", columns: [',
+    '//   { type: "anchors", positions: ["bright", "dark"],',
+    '//     fields: [ { key: "hue", labels: { bright: "Hue start" } } ] }',
+    '// ] } ] }',
+  ].join('\n'));
+  assert.ok(result.error, 'a missing per-position label should produce an error, not a silent undefined label');
+  assert.match(result.error, /dark/);
+});
+
+test('anchors: deduplication does not change what the old parser produces', () => {
+  // The same check the full-fixture test already makes, isolated to just the mechanism that
+  // changed in this pass -- 3 positions x 2 fields should equal the 3 hand-written groups the
+  // old parser builds from 3 separate bright:{...}/middle:{...}/dark:{...} blocks.
+  const expanded = parser.parse('{}', [
+    '// { blocks: [ { key: "modes", type: "rows", columns: [',
+    '//   { type: "anchors", positions: ["bright", "middle", "dark"],',
+    '//     disabledWhen: { hueCurve: "original" },',
+    '//     fields: [',
+    '//       { key: "hue", showWhen: { colorModel: "oklch" },',
+    '//         labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },',
+    '//         placeholders: { bright: "eg. 264", middle: "eg. 264", dark: "eg. 264" } }',
+    '//     ] }',
+    '// ] } ] }',
+  ].join('\n'));
+  const groups = expanded.rows[0].columns;
+  assert.strictEqual(groups.length, 3, 'one group per position');
+  assert.deepStrictEqual(groups.map((g) => g.key), ['bright', 'middle', 'dark']);
+  assert.deepStrictEqual(groups.map((g) => g.label), ['Bright', 'Middle', 'Dark']);
+  assert.ok(groups.every((g) => g.disabledWhen && g.disabledWhen[0].field === 'hueCurve'), 'disabledWhen applies to every position');
+  assert.strictEqual(groups[0].columns[0].label, 'Hue start');
+  assert.strictEqual(groups[1].columns[0].label, 'Hue middle');
+  assert.strictEqual(groups[2].columns[0].label, 'Hue end');
+});
+
+test('anchors: a scalar placeholder/note is the same at every position as writing the map out', () => {
+  function withPlaceholders(placeholders) {
+    return parser.parse('{}', [
+      '// { blocks: [ { key: "modes", type: "rows", columns: [',
+      '//   { type: "anchors", positions: ["bright", "middle", "dark"], notes: NOTE,',
+      '//     fields: [ { key: "hue", labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },',
+      '//       placeholders: PLACEHOLDERS } ]',
+      '//   }',
+      '// ] } ] }',
+    ].join('\n')
+      .replace('PLACEHOLDERS', JSON.stringify(placeholders))
+      .replace('NOTE', JSON.stringify('note')));
+  }
+  const scalar = withPlaceholders('eg. 264').rows[0].columns;
+  const map = withPlaceholders({ bright: 'eg. 264', middle: 'eg. 264', dark: 'eg. 264' }).rows[0].columns;
+  assert.deepStrictEqual(scalar, map, 'a scalar placeholder should produce exactly the same output as the equivalent map');
+  assert.strictEqual(scalar[0].disabledNote, 'note', 'a scalar note applies to every position too');
+  assert.strictEqual(scalar[1].disabledNote, 'note');
+  assert.strictEqual(scalar[2].disabledNote, 'note');
+});
+
+test('tabs: a merged tab (two names, one shared column set) matches the old parser\'s two-marker-then-columns-once shape', () => {
+  const result = parser.parse('{}', [
+    '// { blocks: [ { key: "modes", type: "rows", columns: [',
+    '//   { type: "tab", names: [',
+    '//       { text: "Saturation", showWhen: { colorModel: "hsl" } },',
+    '//       { text: "Chroma", showWhen: { colorModel: "oklch" } }',
+    '//     ],',
+    '//     columns: [ { key: "x", type: "number", label: "X" } ] }',
+    '// ] } ] }',
+  ].join('\n'));
+  const cols = result.rows[0].columns;
+  assert.strictEqual(cols.length, 3, 'two tab markers, then the shared column once -- not duplicated per name');
+  assert.strictEqual(cols[0].type, 'tab');
+  assert.strictEqual(cols[0].text, 'Saturation');
+  assert.strictEqual(cols[1].type, 'tab');
+  assert.strictEqual(cols[1].text, 'Chroma');
+  assert.strictEqual(cols[2].key, 'x');
+});
+
+// ---------------------------------------------------------------------------------------------
+// Round-trip: serialize() against a @PANEL_START-backed schema.
+// ---------------------------------------------------------------------------------------------
+
+/** Deep-cloned baseline values, shared by every edit-case test below so each starts from the
+ *  exact same defaults colors.js itself ships with. */
+function baseValues() {
+  return JSON.parse(JSON.stringify(parser.parseConfigBlockObject(COLORS_VALUES_BLOCK)));
+}
+
+/** Runs one edit through both paths and returns the two resulting *values* objects, re-parsed
+ *  from whatever text each path produced -- not a text comparison, since the old block still
+ *  carries annotations/comments the new one has never had, and never will. */
+function editBothPaths(mutate) {
+  const oldValues = baseValues();
+  const newValues = baseValues();
+  mutate(oldValues);
+  mutate(newValues);
+
+  const oldParsed = oldParseColors();
+  const oldOut = parser.serialize(oldParsed, oldValues);
+  const oldReparsed = parser.parseConfigBlockObject(oldOut);
+  assert.ok(oldReparsed, 'the old path\'s own output should still parse as a values object');
+
+  const newParsed = newParseColors();
+  const newOut = parser.serialize(newParsed, newValues);
+  const newReparsed = parser.parseConfigBlockObject(newOut);
+  assert.ok(newReparsed, 'the new path\'s output should parse as a values object');
+
+  return { oldOut, newOut, oldReparsed, newReparsed };
+}
+
+test('round-trip: idempotence -- serializing with nothing edited reproduces the values block byte-identically', () => {
+  const parsed = newParseColors();
+  const values = parser.parseConfigBlockObject(COLORS_VALUES_BLOCK);
+  const output = parser.serialize(parsed, values);
+  assert.strictEqual(output, COLORS_VALUES_BLOCK,
+    'no edit should reprint every property verbatim -- indentation, trailing commas, key order, all of it');
+});
+
+test('round-trip: a plain top-level field (group)', () => {
+  const { oldReparsed, newReparsed } = editBothPaths((v) => { v.group = 'neutral'; });
+  assert.strictEqual(newReparsed.group, 'neutral');
+  assert.strictEqual(newReparsed.group, oldReparsed.group);
+  // Nothing else should have moved.
+  assert.strictEqual(newReparsed.steps, oldReparsed.steps);
+  assert.strictEqual(newReparsed.colorModel, oldReparsed.colorModel);
+});
+
+test('round-trip: a value inside an @rows cell (modes[0].name)', () => {
+  const { oldReparsed, newReparsed } = editBothPaths((v) => { v.modes[0].name = 'Granite'; });
+  assert.strictEqual(newReparsed.modes[0].name, 'Granite');
+  assert.strictEqual(newReparsed.modes[0].name, oldReparsed.modes[0].name);
+});
+
+test('round-trip: a value inside a nested group (modes[0].seed.hex)', () => {
+  const { oldReparsed, newReparsed } = editBothPaths((v) => { v.modes[0].seed.hex = '#71717A'; });
+  assert.strictEqual(newReparsed.modes[0].seed.hex, '#71717A');
+  assert.deepStrictEqual(newReparsed.modes[0].seed, oldReparsed.modes[0].seed);
+});
+
+test('round-trip: an anchor value (modes[0].bright.hue)', () => {
+  const { oldReparsed, newReparsed } = editBothPaths((v) => { v.modes[0].bright.hue = 264; });
+  assert.strictEqual(newReparsed.modes[0].bright.hue, 264);
+  assert.deepStrictEqual(newReparsed.modes[0].bright, oldReparsed.modes[0].bright);
+});
+
+test('round-trip: a curve (the top-level OKLCH curve field)', () => {
+  const { oldReparsed, newReparsed } = editBothPaths((v) => { v.curve = [0.1, 0.2, 0.8, 0.9]; });
+  assert.deepStrictEqual(newReparsed.curve, [0.1, 0.2, 0.8, 0.9]);
+  assert.deepStrictEqual(newReparsed.curve, oldReparsed.curve);
+});
+
+test('round-trip: an untouched value in the same save reprints verbatim, edited or not', () => {
+  const { newOut } = editBothPaths((v) => { v.group = 'neutral'; });
+  // steps was never touched -- its line should be byte-identical to the source, not just
+  // value-equal after reparsing.
+  const originalStepsLine = COLORS_VALUES_BLOCK.split('\n').find((l) => l.trim().startsWith('steps:'));
+  assert.ok(newOut.includes(originalStepsLine), 'an untouched property should reprint its exact original line');
+});
+
+test('serialize refuses a @PANEL_START-sourced field reaching the old reconstruction path', () => {
+  const parsed = newParseColors();
+  const fakedOldSchema = { rows: parsed.rows }; // no .fromPanelSpec -- forces the old branch
+  assert.throws(() => parser.serialize(fakedOldSchema, { group: 'neutral' }), /has no raw text/);
+});
+
+test('serialize refuses when a @PANEL_START field has no matching value in @CONFIG_START', () => {
+  const parsed = parser.parsePanelSpec(innerPanelSpec(COLORS_PANEL_SPEC), {});
+  parsed.fromPanelSpec = true;
+  parsed.configText = '  group: "",'; // only one of the real keys
+  assert.throws(() => parser.serialize(parsed, { group: 'x' }), /has no value in @CONFIG_START/);
+});
+
+test('parse() reports drift on load, not only on save', () => {
+  const withExtra = parser.parse('  group: "", ghost: "left behind",', innerPanelSpec(COLORS_PANEL_SPEC));
+  assert.ok(withExtra.driftWarning, 'a value with no field should be reported at load time');
+  assert.match(withExtra.driftWarning, /"ghost"/);
+  assert.match(withExtra.driftWarning, /won't show/);
+
+  const clean = newParseColors();
+  assert.strictEqual(clean.driftWarning, null, 'agreeing regions should report no drift');
 });

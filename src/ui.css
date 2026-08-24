@@ -2121,6 +2121,19 @@
          was asked. `pre-line` so a helper written as two lines stays two lines: a toggle's *On.* and
          *Off.* cases are a table of two, and wrapped into one paragraph they read as one sentence
          contradicting itself. Only newlines are honoured, so the note is still text and never markup. */
+      /* A @PANEL_START script whose two regions disagree -- a value with no field, or a field
+         with no value. Its own class: this is a fact about the whole script's structure, not a
+         note about one field, so it does not belong on `.config-ui-field-note` (per-field) or
+         `.config-ui-empty` (replaces the form rather than sitting above it). */
+      .config-ui-drift-warning {
+        padding: var(--space-sm) var(--space-md);
+        margin-bottom: var(--space-md);
+        border-left: 3px solid #f57c00;
+        background: rgba(245, 124, 0, 0.08);
+        font-size: var(--font-size-small);
+        line-height: 1.4;
+      }
+
       .config-ui-field-note {
         white-space: pre-line;
         /* The second column of the field's grid, so it lands under the control it explains. */
