@@ -1206,3 +1206,8 @@ Not deferred work — patterns that repeatedly paid off, recorded so they surviv
   function got it to 0 false positives with no parser and no dependency.
 - **Ask what an unconfigured run does.** A semantic that is correct in isolation (blank find
   replaces the whole name) was destructive combined with a default config.
+- **Verify a claimed file edit before reporting it, not after.** A plan-31 update was reported
+  landed and hadn't — described in the same message that should have included it, never written.
+  Re-reading the file after the edit is cheap; being wrong about your own last action in the same
+  breath you reported it is the expensive version of the same mistake grep-checking guards exists
+  to catch.

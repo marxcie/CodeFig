@@ -150,9 +150,17 @@ a plain statement of the new default.
   script has a package id yet, so none of this changes anything a user can see.
 - **`src/config-ui/parser.js`'s `parse()` accepts an optional second argument, `panelSpecText`.**
   When given, the config form is read from a `@PANEL_START` JSON block instead of the one-line
-  annotation syntax — see `.plans/31-panel-spec-json.md`. No existing call passes it, so every
-  current script's rendering is unchanged; the differential test proves the new reader produces
-  the same form as the old one for a real panel (Grid). No shipped script uses it yet.
+  annotation syntax — see `.plans/31-panel-spec-json.md`. `src/ui.html` now looks for this region
+  alongside `@CONFIG_START` at every real call site and passes it through; a script without one
+  (every shipped script except Colors) takes exactly the old path. **Colors has migrated** — its
+  spec now lives in `@PANEL_START`, `@CONFIG_START` holds only values, and the panel renders,
+  edits and saves identically to before (proved twice: a DOM diff against the old parser's own
+  render, and a live Figma session against a throwaway copy of the script, before the real one was
+  touched). A paragraph in the new format states which neighbouring field it explains
+  (`attachTo: "next" | "previous"`, required, no default) — the one thing a blank comment line
+  could say that JSON otherwise couldn't, and the gap a DOM-level render comparison
+  (`npm run devtools:dom-diff-panel`, new) found before anything shipped. Typography, Spacing,
+  Corner Radius and the rest stay on the old path until Colors has been used in anger.
 - **A CSS scoping module (`src/style-scoper.js`) is inlined into the build, unused.** Rewrites a
   stylesheet's selectors under an owner attribute, namespaces `@keyframes`, and rejects any
   non-`data:` `url()` and `position: fixed` outright rather than stripping them silently. Nothing
