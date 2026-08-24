@@ -148,6 +148,21 @@ test('a script ships no collection name, so the picker opens on the prompt', () 
   const shipped = [];
   for (const file of fs.readdirSync(DSF).filter((f) => f.endsWith('.js'))) {
     const source = fs.readFileSync(path.join(DSF, file), 'utf8');
+    // A migrated script (`@PANEL_START`) carries the picker as `{ key: "...", type: "collection" }`
+    // instead of an inline `@collection` annotation — parse it the same way the panel does rather
+    // than re-deriving a second regex for a shape `parser.js` already understands.
+    const panelMatch = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(source);
+    if (panelMatch) {
+      const configMatch = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(source);
+      assert.ok(configMatch, file + ' has @PANEL_START but no @CONFIG_START');
+      const schema = P.parse(configMatch[1], panelMatch[1]);
+      const pickers = schema.rows.filter((r) => r.type === 'field' && r.inputType === 'collection');
+      pickers.forEach((r) => {
+        shipped.push(file);
+        assert.equal(r.value, '', file + ' ships a collection name for "' + r.name + '": ' + JSON.stringify(r.value));
+      });
+      continue;
+    }
     for (const line of source.split('\n')) {
       if (!/^\s*\w+:.*@collection\b/.test(line)) continue;
       shipped.push(file);

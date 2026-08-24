@@ -67,7 +67,10 @@ function targetCells(html) {
 function panelColumns(source) {
   const block = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(source);
   if (!block) return null;
-  const schema = P.parse(block[1]);
+  // A migrated script (`@PANEL_START`) keeps its mode table there instead of in an inline `@rows`
+  // annotation — same second argument `src/ui.html` passes at run time, not a second reader.
+  const panelMatch = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(source);
+  const schema = P.parse(block[1], panelMatch ? panelMatch[1] : undefined);
   const rows = schema.rows.filter((r) => r.type === 'field' && r.inputType === 'rows');
   if (!rows.length) return null;
   const out = {};
