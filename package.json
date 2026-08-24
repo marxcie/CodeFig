@@ -8,6 +8,10 @@
     "validate:soft": "node validate-scripts.js || true",
     "test": "node --test \"tests/**/*.test.js\"",
     "bench:colors": "node benchmarks/colour-reads.js",
+    "devtools:profile-colors-fit": "node devtools/profile-colors-fit.js",
+    "devtools:assert-layout": "node devtools/assert-layout.js",
+    "devtools:css-coverage": "node devtools/css-coverage.js",
+    "devtools:rebuild-count": "node devtools/rebuild-count.js",
     "build:style-reference": "node build-style-reference.js",
     "preview:panel": "node build-panel-preview.js",
     "build:production": "npm run validate && tsc && node build-scripts.js",
@@ -30,6 +34,7 @@
     "@figma/plugin-typings": "^1.88.0",
     "chokidar-cli": "^3.0.0",
     "concurrently": "^8.2.2",
+    "puppeteer-core": "^25.8.0",
     "typescript": "^5.2.2"
   },
   "keywords": [

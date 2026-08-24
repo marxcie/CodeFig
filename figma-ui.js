@@ -31,7 +31,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { PORT } = require('./figma-console-server.js');
+const { PORT, assertDevBuild } = require('./figma-console-server.js');
 const BASE = 'http://127.0.0.1:' + PORT;
 
 /**
@@ -162,6 +162,7 @@ function print(command, result) {
 }
 
 async function main() {
+  assertDevBuild();
   const args = parseArgs(process.argv.slice(2));
   if (!args.command) {
     usage();

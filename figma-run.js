@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { PORT } = require('./figma-console-server.js');
+const { PORT, assertDevBuild } = require('./figma-console-server.js');
 const { buildRunPrelude, findConfigVarName, findFromFilePath, isTestFileName } = require('./run-prelude.js');
 const { findAllScripts } = require('./validate-scripts.js');
 const BASE = 'http://127.0.0.1:' + PORT;
@@ -176,6 +176,7 @@ The plugin must be open in Figma with \`npm run dev\` running — this cannot la
 }
 
 async function main() {
+  assertDevBuild();
   const args = parseArgs(process.argv.slice(2));
   if (!args.script && !args.code) {
     usage();

@@ -291,6 +291,39 @@ evidence of anything; read `figma-console.log` and `readInfoPanel` before believ
 
 ---
 
+## The dev bridge's job and UI queues have no protection against a second consumer
+
+**What.** `figma-console-server.js`'s `POST /jobs`/`GET /jobs/next` and `POST /ui`/`GET /ui/next`
+are a single-consumer protocol by convention only — whichever caller polls `/next` first gets the
+item, and nothing marks it as claimed against a second poll. A stray `curl`, a debugging script, or
+an agent inspecting queue state by hand can dequeue a job meant for the real plugin, which then
+never sees it and never posts a result — so the original requester's `await` hangs until its own
+timeout, with no error anywhere saying why. Same surface as the entry above: a run that actually
+finished (or, here, a run that was quietly rerouted) reports as a stall.
+
+**How it was found.** Mid-session, investigating why a UI-command measurement had hung: a direct
+`GET /ui/next` call, made only to inspect what was queued, dequeued the pending `readForm` command
+itself. The measurement script's own `await` for that command's result then had nothing to ever
+resolve it. Reproduced the failure by causing it, not by hitting it unprompted — but the mechanism
+is general, not specific to that one measurement.
+
+**Why it was left.** The queues are explicitly in-memory, dev-only, no-auth infrastructure
+(`figma-console-server.js`'s own doc comment: "There is no auth, which is why nothing here may ever
+be reachable from a production build"). A single local developer driving one CLI at a time was the
+whole use case; a second concurrent consumer was never a scenario this was built to refuse, only
+one that happened not to come up until an agent started reaching into the protocol's own inspection
+endpoints rather than treating them as a black box.
+
+**What fixing it involves.** Either mark a dequeued item as claimed-but-not-yet-consumed so a second
+`/next` within some short window gets it back (a lease, with the CLI or plugin renewing it), or stop
+exposing a bare `GET /next` at all and require the caller to prove it is the one true consumer (a
+per-role token set once at bridge startup). Either is real design work on shared state a single
+local user was never expected to race against themselves. Until then: never call `/jobs/next` or
+`/ui/next` directly to "just look" — use `GET /jobs/:id` or `GET /ui/:id` instead, which read
+without dequeuing.
+
+---
+
 ## `displayResults` cannot carry a `grouping` with functions in it
 
 **What.** `@InfoPanel`'s documented `grouping.getGroupKey` / `getGroupTitle` callbacks cannot work.

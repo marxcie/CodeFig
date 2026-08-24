@@ -46,6 +46,41 @@ const LOG_FILE = path.join(__dirname, 'figma-console.log');
 /** A job the plugin has not finished within this window is reported as timed out. */
 const JOB_TIMEOUT_MS = 120000;
 
+/**
+ * True if the manifest at `manifestPath` allows localhost — a dev build. Throws if the file is
+ * missing or not JSON, so a caller can tell "no dist/" apart from "dist/, but production."
+ */
+function manifestAllowsLocalhost(manifestPath) {
+  var manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  var domains = (manifest.networkAccess && manifest.networkAccess.allowedDomains) || [];
+  return domains.some(function (d) { return /localhost/i.test(d); });
+}
+
+/**
+ * Refuses to queue a job against a production `dist/`. A production manifest has no localhost in
+ * `allowedDomains` — the same fact `build-scripts.js`'s `writeManifest()` writes and
+ * `CODEFIG_BUILD_IS_DEV` gates in `src/ui.html` — so a plugin loaded from one can run a job and log
+ * its own START, but `_codefigBridgeFetch` is a no-op there and the result never reaches this
+ * queue. Without this check that reads as a 120s timeout with no other signal; a real hang looks
+ * identical from the CLI's side, which is exactly the trap this closes. One source of truth: the
+ * literal `dist/manifest.json` on disk, not a second guess at which build is running.
+ */
+function assertDevBuild(manifestPath) {
+  var target = manifestPath || path.join(__dirname, 'dist', 'manifest.json');
+  var isDev;
+  try {
+    isDev = manifestAllowsLocalhost(target);
+  } catch (err) {
+    console.error('❌ No dist/manifest.json. Run npm run build:dev first.');
+    process.exit(1);
+    return;
+  }
+  if (!isDev) {
+    console.error('❌ dist/ is a production build. It has no localhost, so a queued job can never report back. Run npm run build:dev first.');
+    process.exit(1);
+  }
+}
+
 function createBridgeServer(options) {
   const opts = options || {};
   const logFile = opts.logFile || LOG_FILE;
@@ -417,4 +452,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createBridgeServer, PORT, JOB_TIMEOUT_MS };
+module.exports = { createBridgeServer, PORT, JOB_TIMEOUT_MS, assertDevBuild, manifestAllowsLocalhost };
