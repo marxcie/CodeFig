@@ -884,8 +884,89 @@
     });
   }
 
-  /** One `@rows` column, from its JSON block to the shape `parseRowColumns` already produces. */
+  /**
+   * A field's own `options`, in the shape `renderer.js`'s field-level `fieldOptionValue`/
+   * `fieldOptionLabel` expect (`renderer.js:3680`) — raw `"value:Label"` strings, bare when the
+   * label matches the value. **Not** the `{value,label}` object `panelOptions()` returns: that
+   * shape is `parseColumnOptions`'s, for an `@rows` column, and a radio/select *field* fed objects
+   * there reads `String(option)` as `"[object Object]"` for both value and label — silently, since
+   * nothing there throws. `multiselect` is its own third shape again (bare strings, no `:` split
+   * at all — `renderer.js`'s multiselect branch uses the string as-is), so it is kept plain.
+   */
+  function panelFieldOptions(raw, fieldType) {
+    var objs = panelOptions(raw);
+    if (!objs) return undefined;
+    if (fieldType === "multiselect") return objs.map(function (o) { return o.value; });
+    return objs.map(function (o) { return o.value === o.label ? o.value : o.value + ":" + o.label; });
+  }
+
+  /**
+   * `"a..b"` or `"a..b..c"` → `{from,to}` / `{from,mid,to}` — the shape a curve's `ends` has always
+   * carried, parsed by `applyCurveSpec` for the one-line format. Plan 31's own worked example
+   * writes `ends` as exactly this string; `panelColumn` used to store it verbatim, so a curve
+   * column read from JSON carried a string where the renderer expects an object — never checked,
+   * because nothing reads `column.ends.from` without first confirming `column.ends` is truthy.
+   * Also accepts the already-parsed `{from[,mid],to}` object, so an author (or an older draft of
+   * this file) who wrote the structured shape directly still works.
+   */
+  function panelEnds(raw) {
+    if (raw && typeof raw === "object") return raw;
+    var text = String(raw == null ? "" : raw);
+    var trio = text.match(/^([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)$/);
+    if (trio) return { from: trio[1], mid: trio[2], to: trio[3] };
+    var pair = text.match(/^([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)$/);
+    if (pair) return { from: pair[1], to: pair[2] };
+    throw new Error('ends "' + text + '" is not "a..b" or "a..b..c"');
+  }
+
+  /** `[lo, hi]` → `{lo,hi}` — same reasoning as `panelEnds`, for `range`. Accepts `{lo,hi}` too. */
+  function panelRange(raw) {
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw;
+    if (!Array.isArray(raw) || raw.length !== 2) {
+      throw new Error("range " + JSON.stringify(raw) + " is not [lo, hi]");
+    }
+    var lo = raw[0], hi = raw[1];
+    if (typeof lo !== "number" || typeof hi !== "number" || !(hi > lo)) {
+      throw new Error("range " + JSON.stringify(raw) + " is not two numbers with hi > lo");
+    }
+    return { lo: lo, hi: hi };
+  }
+
+  /** Marker entries a `columns` list may carry instead of a keyed field — no `key` of their own. */
+  var PANEL_COLUMN_MARKER_TYPES = { tab: true, heading: true, divider: true, preview: true };
+
+  /**
+   * One `@rows` column, from its JSON block to the shape `parseRowColumns` already produces.
+   *
+   * **A `columns` entry is not always a field.** `#>Hue`, a bare `#Heading` and the trailing
+   * `@preview` inside Colors' real `@rows` line are marker entries with no `key` — `parseRowColumns`
+   * gives each its own branch (`{type:"tab",...}`, `{type:"heading",...}`, `{type:"preview"}`)
+   * before it ever looks for a key. This used to fall straight into the keyed-field path below,
+   * which built `{key: undefined, label: labelFromName(undefined), type: "tab", ...}` — nonsense
+   * the renderer had never seen, rather than the marker it needed.
+   */
   function panelColumn(block) {
+    if (block.key == null) {
+      if (!PANEL_COLUMN_MARKER_TYPES[block.type]) {
+        throw new Error("a keyless column has an unrecognised type: " +
+          (block.type == null ? "(none)" : JSON.stringify(block.type)));
+      }
+      if (block.type === "tab") {
+        var tab = { type: "tab", text: block.text };
+        var tabWhen = panelConditionRules(block.showWhen);
+        if (tabWhen) tab.showWhen = tabWhen;
+        return tab;
+      }
+      if (block.type === "heading") {
+        var headingWhen = panelConditionRules(block.showWhen);
+        var heading = { type: "heading", level: block.level || 1, text: block.text };
+        if (headingWhen) heading.showWhen = headingWhen;
+        return heading;
+      }
+      if (block.type === "divider") return { type: "divider" };
+      return { type: "preview" };
+    }
+    if (!block.type) throw new Error("column \"" + block.key + "\" has no type");
     var column = {
       key: block.key, label: block.label || labelFromName(block.key), type: block.type,
       labelSpelled: !!block.label
@@ -899,10 +980,11 @@
     if (block.disabledNote) column.disabledNote = block.disabledNote;
     if (block.helper) column.helper = block.helper;
     if (block.placeholder) column.placeholder = block.placeholder;
-    if (block.ends) column.ends = block.ends;
-    if (block.range) column.range = block.range;
+    if (block.ends) column.ends = panelEnds(block.ends);
+    if (block.range) column.range = panelRange(block.range);
     if (block.ramp) column.ramp = block.ramp;
     if (block.growth) column.growth = block.growth;
+    if (block.allowOriginal) column.allowOriginal = true;
     if (block.fields) {
       // A nested group ("bright", "middle", "dark"): the group's own fields, each a column in turn.
       column.columns = block.fields.map(panelColumn);
@@ -921,13 +1003,30 @@
     };
     if (block.placeholder) row.placeholder = block.placeholder;
     if (block.helper) row.helper = block.helper;
-    if (block.options) row.options = panelOptions(block.options);
+    if (block.options) row.options = panelFieldOptions(block.options, block.type);
     var showWhen = panelConditionRules(block.showWhen);
     if (showWhen) row.showWhenRules = showWhen;
     if (block.type === "rows") {
       row.columns = (block.columns || []).map(panelColumn);
       row.tabs = block.layout === "tabs";
       row.blocks = block.layout === "blocks";
+    }
+    // A top-level `@group:` field ("lightness": bright/dark) — the same nested-columns shape a
+    // `@rows` group cell carries, read the same way (`block.fields`, not `block.columns`, so a
+    // group's own members are never confused with a rows table's columns).
+    if (block.type === "group") {
+      row.columns = (block.fields || []).map(panelColumn);
+    }
+    // A top-level curve field (Colors' collection-scope OKLCH curve). `panelColumn` already reads
+    // these five keys for a `@rows` curve column; a plain field never did, so `@curve @allowOriginal
+    // @ramp:... @ends:... @range:...` rendered — an editor with no ramp swatch, no axis range and no
+    // Original preset, because nothing here ever looked at the JSON block for them.
+    if (block.type === "curve") {
+      if (block.ramp) row.ramp = block.ramp;
+      if (block.growth) row.growth = block.growth;
+      if (block.ends) row.ends = panelEnds(block.ends);
+      if (block.range) row.range = panelRange(block.range);
+      if (block.allowOriginal) row.allowOriginal = true;
     }
     return row;
   }
@@ -942,6 +1041,12 @@
    * Nothing ships with a `@PANEL_START` block yet, so there is nothing to round-trip against —
    * see `.plans/31-panel-spec-json.md`.
    */
+  /** Every block type `parsePanelSpec` knows how to draw something for, key-less blocks only. */
+  var PANEL_MARKER_TYPES = {
+    heading: true, divider: true, chips: true, suggestions: true, preview: true,
+    directive: true, paragraph: true
+  };
+
   function parsePanelSpec(panelSpecText, values) {
     var spec;
     try {
@@ -950,27 +1055,57 @@
       return { rows: [], error: "unreadable @PANEL_START: " + e.message };
     }
     var rows = [];
-    // A field is recognised by carrying `key`, not by a `type` wrapper — `type` on a field block is
-    // its *control* type ("collection", "number", "rows", …), the same word `heading`/`divider`/
-    // `chips`/`suggestions`/`preview`/`directive` use for their own kind. Two meanings for one word
-    // would either collide or need a second key nobody could remember the name of.
-    (spec.blocks || []).forEach(function (block, idx) {
-      if (block.key != null) {
-        rows.push(panelFieldRow(block, values, idx));
-      } else if (block.type === "heading") {
-        rows.push({ type: "heading", level: block.level || 1, text: block.text });
-      } else if (block.type === "divider") {
-        rows.push({ type: "divider", section: !!block.section });
-      } else if (block.type === "chips") {
-        rows.push({ type: "chips", label: block.label || "Collection modes", from: block.from || "modes" });
-      } else if (block.type === "suggestions") {
-        rows.push({ type: "suggestions" });
-      } else if (block.type === "preview") {
-        rows.push({ type: "preview" });
-      } else if (block.type === "directive") {
-        rows.push({ type: "directive", directive: block.name });
-      }
-    });
+    try {
+      // A field is recognised by carrying `key`, not by a `type` wrapper — `type` on a field block is
+      // its *control* type ("collection", "number", "rows", …), the same word `heading`/`divider`/
+      // `chips`/`suggestions`/`preview`/`directive`/`paragraph` use for their own kind. Two meanings
+      // for one word would either collide or need a second key nobody could remember the name of.
+      //
+      // **Refuses rather than drops.** A block this loop does not recognise used to fall through
+      // every branch and vanish — no row, no error, nothing on screen. That is how every paragraph in
+      // a real migration attempt disappeared silently: correct-looking JSON, an empty panel section,
+      // and nothing to say why. Same principle as `src/style-scoper.js`'s `url()` rule: a hard error
+      // the author sees is better than output that is quietly wrong.
+      (spec.blocks || []).forEach(function (block, idx) {
+        if (block.key != null) {
+          if (!block.type) {
+            throw new Error("block " + idx + " (\"" + block.key + "\") has no type");
+          }
+          rows.push(panelFieldRow(block, values, idx));
+          return;
+        }
+        if (!PANEL_MARKER_TYPES[block.type]) {
+          throw new Error("block " + idx + " has an unrecognised type: " +
+            (block.type == null ? "(none)" : JSON.stringify(block.type)));
+        }
+        if (block.type === "heading") {
+          var hWhen = panelConditionRules(block.showWhen);
+          var heading = { type: "heading", level: block.level || 1, text: block.text };
+          if (hWhen) heading.showWhenRules = hWhen;
+          rows.push(heading);
+        } else if (block.type === "divider") {
+          rows.push({ type: "divider", section: !!block.section });
+        } else if (block.type === "chips") {
+          var cWhen = panelConditionRules(block.showWhen);
+          var chips = { type: "chips", label: block.label || "Collection modes", from: block.from || "modes" };
+          if (cWhen) chips.showWhenRules = cWhen;
+          rows.push(chips);
+        } else if (block.type === "suggestions") {
+          rows.push({ type: "suggestions" });
+        } else if (block.type === "preview") {
+          rows.push({ type: "preview" });
+        } else if (block.type === "directive") {
+          rows.push({ type: "directive", directive: block.name });
+        } else if (block.type === "paragraph") {
+          var pWhen = panelConditionRules(block.showWhen);
+          var paragraph = { type: "paragraph", text: block.text };
+          if (pWhen) paragraph.showWhenRules = pWhen;
+          rows.push(paragraph);
+        }
+      });
+    } catch (e) {
+      return { rows: [], error: "invalid @PANEL_START: " + e.message };
+    }
     return { rows: rows };
   }
 
