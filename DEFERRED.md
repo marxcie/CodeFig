@@ -287,6 +287,39 @@ tries the sync cache read first and falls through to the same stamp-verified res
 same correctness, cost paid only when the cache misses.
 
 
+## 11. Figma's native group duplication copies a stamp, and now two groups claim one set
+
+**What.** `duplicate-variable-collection.js` (this repo's own script) is not the only way a token
+group gets duplicated — Figma's own Variables panel can duplicate a selection of variables (a
+"group", in the folder sense) natively, no plugin involved. Tested live: stamp a group's
+variables, duplicate the group through Figma's own UI, and the copies carry the **exact same**
+stamp as the originals — same `set` id, same `token`. Two groups (`probe-group` and
+`probe-group 2` in the test) now both claim to be where set `mt7e5wif-ai2i4y7i` lives.
+
+**Consequence.** `findFoundationSet`/`findFoundationSetCached` derive a set's live group from its
+stamps (`deriveSetGroup`), on the assumption that a set's tokens live in exactly one place. With
+two groups stamped identically, a read for either group's name would see the same set id at two
+different addresses — not a crash, but the resolver has no principled way to say which group is
+the "real" one. Whichever `deriveSetGroup` happens to match first wins; the copy's own group is
+functionally indistinguishable from the original until something re-stamps it.
+
+**How it was found.** Asked directly, live in Figma, per this task's own instruction: stamp a
+group, duplicate it through Figma's native UI (not this repo's script), read both copies' stamps.
+
+**Why it was left.** Instructed to log rather than fix. A real fix means either detecting the
+collision (two groups, one set id) and reporting it rather than silently picking one, or
+re-stamping a duplicate the moment it's created — and Figma gives a plugin no signal that a
+native duplicate just happened, so detection would have to be a periodic or on-open scan, not an
+event handler. That's a design question, not a one-line patch.
+
+**Mode duplication has no equivalent leak.** A stamp is per-variable, keyed by token; there is no
+per-mode stamp in this system for a native "Duplicate mode" to carry over. Tested alongside the
+above (`Mode A` → `Mode A 2`, a real new `modeId`) and confirmed to raise nothing comparable — the
+only thing that could go stale is a manifest's own recorded `modeIds`, which already tolerates a
+collection gaining modes it doesn't know about (see `foundationCollectionModes` and the read
+path's own mode-list handling).
+
+
 ## The tone pass over the remaining 77 helper texts
 
 **What.** The copy pass fixed what could be pointed at: 87 Title Case labels, 15 explanations naming a
