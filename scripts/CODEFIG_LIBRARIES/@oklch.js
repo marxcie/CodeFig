@@ -592,18 +592,30 @@ function oklchRamp(spec) {
   /**
    * Which channels have a corner at the middle, decided once.
    *
-   * **No curve is not the same as a smooth one.** A channel with no curve of its own has said nothing about
-   * its shape, so it keeps the three anchors it has always had — measured, dropping the middle there costs
-   * every set in the library its accuracy, because a read leaves chroma empty precisely when the ramp is
-   * too flat to fit and the three anchors are all it has. An *explicit* one-segment curve is different: it
-   * is a statement that the channel runs smoothly from one end to the other, and it cannot pass through a
-   * middle outside its ends however much the anchor insists.
+   * **No curve is not the same as a smooth one — but it is also not the same as no anchor.** A channel
+   * with no curve of its own has said nothing about its *shape*, so when it has a real, measured middle
+   * anchor it keeps the three anchors it has always had — measured, dropping the middle there costs every
+   * set in the library its accuracy, because a read leaves chroma empty precisely when the ramp is too
+   * flat to fit and the three anchors are all it has. But a curve-less channel with no middle *anchor*
+   * either — `skipFit` (`.plans/36-lazy-fit-on-demand.md`), where a fresh read leaves `middle` absent on
+   * purpose rather than inventing one — has said nothing about a middle at all, and treating that silence
+   * as three real anchors ran hue and chroma through zero: `spec.hue.middle`/`spec.chroma.middle` are
+   * `colorsChannel`'s fallback numbers at that point, not a value from the file, and a "no curve, three
+   * anchors" channel took the fallback for the third. `spec.hue.hasMiddle`/`spec.chroma.hasMiddle`
+   * (`colorsChannel`, `@Color Ramp`) is the one place that still knows which case it is — checked before
+   * the fallback ever ran — so this is the only thing that can tell them apart.
+   *
+   * An *explicit* one-segment curve is a third case, unchanged: it is a statement that the channel runs
+   * smoothly from one end to the other, and it cannot pass through a middle outside its ends however much
+   * the anchor insists.
    */
   // `oklchCurveOf` hands back `{ id, points, amount }`, so the coordinates are `.points` — reading `.length`
   // off the wrapper is `undefined`, which is not 10, which quietly took the middle away from *every*
   // channel that had a curve. The whole library went over the accuracy limit and the benchmark said so.
-  var hueHasMiddle = hueCurve ? oklchPointsOf(hueCurve).length === 10 : true;
-  var chromaHasMiddle = chromaCurve ? oklchPointsOf(chromaCurve).length === 10 : true;
+  var hueHasMiddle = hueCurve ? oklchPointsOf(hueCurve).length === 10 : !!(spec.hue && spec.hue.hasMiddle);
+  var chromaHasMiddle = chromaCurve
+    ? oklchPointsOf(chromaCurve).length === 10
+    : !!(spec.chroma && spec.chroma.hasMiddle);
 
   for (var i = 0; i < steps.length; i++) {
     var hueSeg = oklchChannelSpan(i, hueHasMiddle);

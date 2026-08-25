@@ -417,6 +417,11 @@ function colorsMidIndex(steps) {
 
 /** A mode's three anchors for one channel. `chroma` in OKLCH, saturation 0..1 in HSL. */
 function colorsChannel(mode, channel, oklch) {
+  function rawKey(anchor) {
+    var held = mode[anchor] || {};
+    if (channel === 'hue') return oklch ? held.hue : held.hslHue;
+    return oklch ? held[channel] : held.saturation;
+  }
   function at(anchor, fallback) {
     var held = mode[anchor] || {};
     // **Each model reads its own keys.** A hue is not one quantity across models — OKLCH's is a perceptual
@@ -431,10 +436,19 @@ function colorsChannel(mode, channel, oklch) {
       : colorsNumber(held[channel], fallback);
     return raw;
   }
+  // **Present, not merely non-zero.** A middle anchor absent from a fresh, unfitted read (plan 36,
+  // `skipFit`) has to read downstream as "no middle position for this channel" — `oklchRamp`'s
+  // `hueHasMiddle`/`chromaHasMiddle` is where that decision gets made, and it can only tell an absent
+  // anchor apart from a genuinely-measured zero if this says which one it was. `at()` above already
+  // turns either case into the same `fallback` number; this is checked before that happens.
+  var hasMiddle = rawKey('middle') != null;
   if (channel === 'hue') {
-    return { bright: at('bright', 0), middle: at('middle', 0), dark: at('dark', 0) };
+    return { bright: at('bright', 0), middle: at('middle', 0), dark: at('dark', 0), hasMiddle: hasMiddle };
   }
-  return { bright: at('bright', 0.002), middle: at('middle', 0.012), dark: at('dark', 0.006) };
+  return {
+    bright: at('bright', 0.002), middle: at('middle', 0.012), dark: at('dark', 0.006),
+    hasMiddle: hasMiddle
+  };
 }
 
 // ========================================

@@ -123,6 +123,11 @@ function stripRowNoise(row) {
   if (clone.columns) {
     clone.columns = clone.columns.map((c) => {
       const cc = Object.assign({}, c);
+      // `.key`, not `.group`: the old one-liner parser's own anchor groups never set `.group` at
+      // all (only `expandAnchors`, for the new format, does) — `.key` is the one property both
+      // sides use to name the position ("bright" / "middle" / "dark"), checked before `cc.group`
+      // is deleted below.
+      const isMiddleGroup = cc.type === 'group' && cc.key === 'middle';
       delete cc.raw;
       delete cc.group;
       if (cc.helper !== undefined) cc.helper = normaliseHelper(cc.helper);
@@ -131,6 +136,10 @@ function stripRowNoise(row) {
           const g = Object.assign({}, gc);
           delete g.raw;
           if (g.helper !== undefined) g.helper = normaliseHelper(g.helper);
+          // Not a gap: an example placeholder on the middle anchor read as a value in a field that
+          // can genuinely be empty (confirmed live) — the new reader no longer writes one there.
+          // Bright and dark are untouched; only middle's own fields lose it.
+          if (isMiddleGroup) delete g.placeholder;
           return g;
         });
       }

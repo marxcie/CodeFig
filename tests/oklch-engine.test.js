@@ -425,8 +425,12 @@ test('HSL carries saturation, and cannot ask a lightness for more colour than it
   const rows = E.oklchRamp({
     steps: steps, ladder: ladder, curve: shape,
     middleIndex: 7, model: 'hsl',
-    hue: { bright: 97.5, middle: 105.5, dark: 145 },
-    chroma: { bright: 0.667, middle: 0.195, dark: 0.353 }
+    // `hasMiddle: true` — a real, measured middle anchor, same as `colorsChannel` reports for one.
+    // Without it `oklchRamp` now reads a curve-less channel's middle as absent rather than assumes
+    // it, which is the whole point of the flag; this fixture wants the three-anchor behaviour it
+    // was already asserting on.
+    hue: { bright: 97.5, middle: 105.5, dark: 145, hasMiddle: true },
+    chroma: { bright: 0.667, middle: 0.195, dark: 0.353, hasMiddle: true }
   });
 
   // The real ceiling: a saturation over 1 is asking a lightness for more colour than it has.
@@ -462,8 +466,8 @@ test('HSL carries saturation, and cannot ask a lightness for more colour than it
   // OKLCH is untouched: its chroma is already absolute, which is why it never had this.
   const okl = E.oklchRamp({
     steps: steps, ladder: ladder, curve: 'linear', middleIndex: 7, model: 'oklch',
-    hue: { bright: 97.5, middle: 105.5, dark: 145 },
-    chroma: { bright: 0.01, middle: 0.05, dark: 0.02 }
+    hue: { bright: 97.5, middle: 105.5, dark: 145, hasMiddle: true },
+    chroma: { bright: 0.01, middle: 0.05, dark: 0.02, hasMiddle: true }
   });
   assert.equal(Math.round(okl[7].C * 1000) / 1000, 0.05, 'the OKLCH middle stopped being its chroma anchor');
 });

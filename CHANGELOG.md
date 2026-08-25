@@ -114,6 +114,19 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **A channel with no middle anchor of its own generated through zero instead of running bright to
+  dark.** Fitting a lightness curve gives a mode a middle *position*; hue and saturation, still
+  unfitted after plan 36's on-demand fit, read that absent middle through the same numeric fallback
+  a genuinely-measured near-zero would use — 0° hue, ~0 saturation — which is grey, generated right
+  under the fitted lightness curve's own middle step. `colorsChannel` now reports whether a middle
+  was actually present, checked before the fallback substitution, and `oklchRamp` consults that
+  instead of assuming one exists whenever no curve does (safe before the on-demand fit existed,
+  wrong after it). Verified against the live preview: a real 10-point middle-anchored lightness
+  curve with hue and saturation left empty now generates a healthy saturated green through the
+  middle step rather than a grey one.
+- **The middle anchor's placeholder text (`eg. 12`) read as a value in an empty field.** Suppressed
+  for the middle position only — bright and dark keep theirs, since those already hold something
+  by the time a curve exists to bend.
 - **Selecting a collection in the Colors panel took about three seconds.** The read walked every variable in
   the collection with its own Figma API call, once per panel mode, plus a second full walk to count mode
   differences for the mode chips — `(M+1)×V` sequential round trips for `M` modes and `V` variables. It now

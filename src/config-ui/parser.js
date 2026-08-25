@@ -1069,7 +1069,13 @@
           key: field.key, label: field.labels[position], type: field.type || "number",
           labelSpelled: true
         };
-        var placeholder = perPosition(field.placeholders, position);
+        // **Not for `middle`.** Bright and dark are always real — a read fills them the moment
+        // there is a collection to read, so an example placeholder there is inert decoration. The
+        // middle position is the one that can genuinely have nothing in it (an unfitted mode,
+        // `.plans/36-lazy-fit-on-demand.md`), and an example number in a greyed box next to a real
+        // one reads as data, not as a prompt — confirmed live: "eg. 12" in the middle box was read
+        // as a value. An empty field stays visibly empty instead.
+        var placeholder = position === "middle" ? null : perPosition(field.placeholders, position);
         if (placeholder != null) col.placeholder = placeholder;
         var fieldWhen = panelConditionRules(field.showWhen);
         if (fieldWhen) col.showWhen = fieldWhen;
