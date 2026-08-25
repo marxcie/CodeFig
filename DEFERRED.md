@@ -1188,6 +1188,41 @@ gets its own plan.
 
 ---
 
+## The on-demand fit hangs, not always, and not fully explained
+
+**What.** Selecting *Estimated original* on a real collection (`color - lime`, 16 steps, group
+`lime`) sometimes leaves the fit never landing — confirmed by waiting 85+ seconds against a
+baseline (`colorsAnchorFits` measured at 549-719ms for this ramp size, `.plans/36`) two orders of
+magnitude smaller. It is not always: one fit completed live, mid-investigation, with real 10-point
+coordinates. It got worse, not better, across repeated attempts in the same session.
+
+**Ruled out, each timed directly against `color - lime`:** `getLocalVariablesAsync`/
+`getLocalVariableCollectionsAsync` (5-8ms for 269 variables, 15 collections — not a file-scale
+problem), `oklchFromRgb`/`oklchHslFromHex` (0ms standalone on this collection's own RGB values —
+not the colour maths), `colorsAnchorFits` (never reached under `skipFit: true`, so not implicated
+in *that* path's hang), and a missing cross-file import (`oklchFromRgb` explicitly added
+alongside `colorsRecognise` — still hangs, so incomplete imports are not the explanation either).
+
+**Not ruled out, and not explained.** A bare `getVariableByIdAsync` call — the same one that
+returned correctly earlier in the session — hung on repeat, which is consistent with the
+already-known per-id loop (`colorsRecognise` falls back to it when no index is passed, matching
+this file's own "seven places" entry above). But `colorsRecognise` called *with* a pre-built
+index and `skipFit: true` — which by inspection has no remaining `await` at all on that path —
+also hung, and nothing found by reading the source explains that one. Ruled out as an artefact of
+the test harness itself: a trivial `console.log` job dispatched immediately afterward, at the same
+job count, returned instantly.
+
+**Why it is left.** Distinguishing "a bug in this codebase" from "this session's Figma process
+has degraded after a very long day of testing" needs a clean state this investigation could not
+produce — closing and reopening Figma itself, not just the plugin, then repeating the exact same
+timed calls. That is the next diagnostic step, not a code change.
+
+**The safety net, not the fix.** The curve control's own 6-second timeout (this pass) means a
+stuck fit no longer freezes anything the user can see — but the estimate itself still does not
+reliably arrive, and the feature is only as usable as that.
+
+---
+
 ## Habits worth keeping
 
 Not deferred work — patterns that repeatedly paid off, recorded so they survive.

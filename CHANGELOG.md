@@ -21,6 +21,10 @@ a plain statement of the new default.
 
 ### Added
 
+- **Configuration code shows a migrated script's `@PANEL_START` spec, read-only, above the values
+  it explains** — a script with no `@PANEL_START` shows exactly what it always has. A second,
+  genuinely non-editable pane rather than one shared buffer: the values editor still writes back
+  exactly as before, so nothing about saving a config changed.
 - **A tab can be named for the model it is showing, and can take itself off the bar.** `#>Hue{colorModel=hsl}`
   carries the same `{…}` condition a column does, and **two tab markers written next to each other are one
   tab under two names** — captioned by the first whose condition holds, sharing one panel. A tab with nothing
@@ -138,6 +142,20 @@ a plain statement of the new default.
   group name**, instead of silently reporting it as a clean load. Recovery itself already worked;
   the panel just never said which happened. A genuinely duplicated collection has no manifest and
   no stamps to recover from — see `DEFERRED.md` #10.
+- **An unfitted mode's middle anchor wrote as zeros, not as absent, and generated wrong colours.**
+  Plan 36 leaves `middle` out of a fresh read on purpose, so the curve editor's own em-dash
+  mechanism has something to disable. `collectRows` (`renderer.js`) collected it anyway: every
+  number part still renders (blank, not zeroed), and reading each part back regardless turned an
+  unparsable `""` into `0` — so a mode nobody had fitted came back
+  `middle: {hue: 0, hslHue: 0, chroma: 0, saturation: 0}`, and a lightness curve interpolating
+  bright → that "anchor" → dark read as grey through the middle of a real ramp. A group with no
+  pre-existing value and every part still blank is no longer collected at all; a group that already
+  had one, or that someone has actually typed into, still is. New tests cover both the group-level
+  regression and a real form built from a post-read state end to end, the class of test — read,
+  then serialize what the form collects — that was missing.
+- **Selecting *Estimated original* could disable the curve control forever** if the fit it asked
+  for never answered. It now gives up after 6 seconds, re-enables itself, and says so (a status,
+  not help, per the `ux-copy` skill) rather than leaving the dropdown looking broken.
 
 ### Developer
 
