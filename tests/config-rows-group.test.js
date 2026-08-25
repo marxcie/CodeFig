@@ -116,6 +116,64 @@ test('a group reads back nested, and an edit lands in the part that was edited',
   assert.equal(typeof after[1].middle.chroma, 'number');
 });
 
+test('a group with no value at all writes nothing back, not zeros for every part', () => {
+  // Plan 36: an unfitted mode's `middle` anchor is deliberately absent from a read, so the existing
+  // `curveHasMiddle` mechanism (renderer.js) has something to disable with an em dash — `bright`/
+  // `dark` are real, from the read; `middle` never was. Regression, found live: every number part
+  // still renders (`buildRowCell` sets a blank `""` for a missing value, not `"0"`), and `collectRows`
+  // read each part back through `readRowCellInto` regardless, whose number branch turns an
+  // unparsable `""` into `0` — right for a field a person actually cleared, wrong for one nothing
+  // ever filled. A group with nothing in it came back `{hue: 0, hslHue: 0, chroma: 0, saturation: 0}`,
+  // and a lightness curve interpolating bright → that "anchor" → dark reads as grey through the
+  // middle of the ramp.
+  const block = [
+    'modes: [',
+    '  { name: "Granite", bright: { hue: 250, chroma: 0.002 }, dark: { hue: 275, chroma: 0.006 } }',
+    '], // @rows: name:text=Mode|bright:{hue:number=Hue|chroma:number=Chroma}=Bright' +
+      '|middle:{hue:number=Hue|chroma:number=Chroma}=Middle' +
+      '|dark:{hue:number=Hue|chroma:number=Chroma}=Dark @tabs @label: Modes'
+  ].join('\n');
+  const { host, schema } = renderBlock(block);
+
+  const middleHue = host.querySelector('[data-row-field="middle.hue"]');
+  assert.equal(middleHue.value, '', 'the middle cell rendered zeroed rather than blank');
+
+  const out = renderer.collectRows(host.querySelector('[data-rows-field="modes"]'), rowsField(schema));
+  assert.equal('middle' in out[0], false, 'a middle nobody filled was written back as an object of zeros');
+  assert.deepEqual(out[0].bright, { hue: 250, chroma: 0.002 }, 'bright did not survive alongside the fix');
+  assert.deepEqual(out[0].dark, { hue: 275, chroma: 0.006 }, 'dark did not survive alongside the fix');
+});
+
+test('a group is still collected once a part is genuinely typed into', () => {
+  const block = [
+    'modes: [',
+    '  { name: "Granite", bright: { hue: 250, chroma: 0.002 } }',
+    '], // @rows: name:text=Mode|bright:{hue:number=Hue|chroma:number=Chroma}=Bright' +
+      '|middle:{hue:number=Hue|chroma:number=Chroma}=Middle @tabs @label: Modes'
+  ].join('\n');
+  const { host, schema } = renderBlock(block);
+  host.querySelector('[data-row-field="middle.hue"]').value = '264';
+  const out = renderer.collectRows(host.querySelector('[data-rows-field="modes"]'), rowsField(schema));
+  assert.equal(out[0].middle.hue, 264, 'a genuinely typed value was dropped along with the fix above');
+});
+
+test('a group with a pre-existing value keeps collecting even if every part is now blank', () => {
+  // The fix must not learn a new way to lose data: a group that already held a value keeps
+  // collecting on every subsequent read, even where a part reads back blank (someone cleared it),
+  // exactly as every other cell in this file already behaves.
+  const block = [
+    'modes: [',
+    '  { name: "Granite", middle: { hue: 264, chroma: 0.012 } }',
+    '], // @rows: name:text=Mode' +
+      '|middle:{hue:number=Hue|chroma:number=Chroma}=Middle @tabs @label: Modes'
+  ].join('\n');
+  const { host, schema } = renderBlock(block);
+  host.querySelector('[data-row-field="middle.hue"]').value = '';
+  const out = renderer.collectRows(host.querySelector('[data-rows-field="modes"]'), rowsField(schema));
+  assert.ok('middle' in out[0], 'a group that already had a value stopped collecting once cleared');
+  assert.equal(out[0].middle.hue, 0, 'a cleared number cell should still collect as 0, not survive as the old value');
+});
+
 test('a key the group does not render is carried through, not dropped', () => {
   // The same rule the flat collector has: the panel may only overwrite what it actually shows. A config
   // holding a key this build has no column for must survive a form interaction.

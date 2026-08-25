@@ -50,7 +50,11 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
+const shim = require('./dom-shim.js');
+const { document } = shim.install();
+
 const parser = require('../src/config-ui/parser.js');
+const renderer = require('../src/config-ui/renderer.js');
 const {
   COLORS_PANEL_SPEC, COLORS_VALUES_BLOCK, innerPanelSpec, PRE_MIGRATION_COLORS_ROWS_BLOCK
 } = require('./fixtures/colors-panel-spec.js');
@@ -447,4 +451,54 @@ test('parse() reports drift on load, not only on save', () => {
 
   const clean = newParseColors();
   assert.strictEqual(clean.driftWarning, null, 'agreeing regions should report no drift');
+});
+
+/**
+ * The test that was missing. `oldParseColors`/`newParseColors` above compare what a *read* produces
+ * against a hand-authored fixture — neither runs the panel through a rebuild, so neither could have
+ * caught a value the form materialises that the read never produced. This does: parse a realistic
+ * post-read state (bright/dark anchors real, `middle` absent, every curve `[]` — exactly what a
+ * `skipFit` read leaves, `.plans/36-lazy-fit-on-demand.md`), build the real form, collect it back,
+ * and serialize. Before the `collectRows` group fix (`renderer.js`), this failed: a mode with no
+ * `middle` came back `{hue: 0, hslHue: 0, chroma: 0, saturation: 0}`, and a curve interpolating
+ * bright → that "anchor" → dark reads as grey through the middle of a real ramp — the wrong-colour
+ * report this test exists to keep from shipping again.
+ */
+test('round-trip: an unfitted mode\'s middle anchor stays absent through a real form round trip', () => {
+  var postReadValues = [
+    '  collectionName: "color - lime",',
+    '  group: "",',
+    '  steps: "25, 50, 950",',
+    '  colorModel: "hsl",',
+    '  curve: [],',
+    '  lightness: {},',
+    '  modes: [',
+    '    {',
+    '      name: "Lime-1",',
+    '      curve: [], chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [],',
+    '      seed: { hex: "#FAFAFA", placement: "25", lock: false },',
+    '      bright: { hue: 120, hslHue: 118, chroma: 0.01, saturation: 4, lightness: 98 },',
+    '      dark: { hue: 122, hslHue: 120, chroma: 0.02, saturation: 6, lightness: 4 }',
+    '    }',
+    '  ]',
+  ].join('\n');
+
+  var schema = parser.parse(postReadValues, innerPanelSpec(COLORS_PANEL_SPEC));
+  assert.ok(!schema.error, 'the fixture failed to parse: ' + schema.error);
+
+  var host = document.createElement('div');
+  renderer.buildForm(schema, host);
+  var api = renderer.attachListeners(host, schema, function () {});
+
+  var collected = api.getValues();
+  assert.equal('middle' in collected.modes[0], false,
+    'the round trip materialised a middle anchor the read never produced: ' +
+      JSON.stringify(collected.modes[0].middle));
+  assert.deepEqual(collected.modes[0].bright,
+    { hue: 120, hslHue: 118, chroma: 0.01, saturation: 4, lightness: 98 });
+  assert.deepEqual(collected.modes[0].dark,
+    { hue: 122, hslHue: 120, chroma: 0.02, saturation: 6, lightness: 4 });
+
+  var output = parser.serialize(schema, collected);
+  assert.doesNotMatch(output, /middle:/, 'the serialized block gained a middle key nothing put there');
 });

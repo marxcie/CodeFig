@@ -1572,7 +1572,7 @@
     return found.type + "|" + found.ease;
   }
 
-  function buildCurvePresetSelect(allowOriginal, estimated) {
+  function buildCurvePresetSelect(allowOriginal, estimated, awaitable) {
     var sel = document.createElement("select");
     sel.className = "config-ui-curve__preset";
     function add(value, text, into) {
@@ -1582,10 +1582,13 @@
       (into || sel).appendChild(o);
     }
     if (allowOriginal) add("original", "Original");
-    // **Only when there is one.** *Estimated original* names the curve fitted to the ramp already in the
-    // file, so on a collection with no ramp it would name nothing — and an option that cannot mean anything
-    // is worse than a missing one.
-    if (estimated) add("estimated", "Estimated original");
+    // **Shown whenever there is one, or whenever asking for one is possible.** *Estimated original* names
+    // the curve fitted to the ramp already in the file. `estimated` is true once that fit has run;
+    // `awaitable` is true for a per-mode curve cell, where selecting the option *before* a fit exists is
+    // itself the request for one (see `requestEstimate` below) — the dropdown is where a person goes to
+    // ask, not just where the answer shows up once it already has one. Neither true — a scale field with
+    // no fitting mechanism at all — and the option would name nothing, so it stays off.
+    if (estimated || awaitable) add("estimated", "Estimated original");
     add("custom", "Custom");
     add("linear|none", "Linear");
     for (var f = 1; f < CURVE_PRESET_FAMILIES.length; f++) {
@@ -1726,7 +1729,12 @@
     // shape", so selecting it hides the handles and selecting anything else reveals them. Nothing has to
     // remember whether you clicked, because the curve says.
     var estimate = curveBaselineFor(baselineKey);
-    var preset = buildCurvePresetSelect(allowOriginal, estimate);
+    // A per-mode cell's baseline key is `modes[<index>].<column key>` (`buildRowCell`'s caller, above) —
+    // the shape nothing else produces, since a top-level field's own key never has a `[N].` in it. That is
+    // what tells this control apart from Colors' own collection-scope curve, or a Spacing/Typography scale
+    // curve, neither of which has a mode to fit.
+    var isPerModeCurve = typeof baselineKey === "string" && /\[\d+\]\./.test(baselineKey);
+    var preset = buildCurvePresetSelect(allowOriginal, estimate, isPerModeCurve);
     head.appendChild(preset);
     var toggle = document.createElement("button");
     toggle.type = "button";
@@ -2670,12 +2678,75 @@
       }
     }
 
+    /**
+     * **The dropdown is where a person goes to ask for the estimate, not just where it shows up once
+     * there is one.** Before this, *Estimated original* only appeared after a fit had already run —
+     * backwards, since a fit runs from opening a channel tab, and the whole point of the option is to be
+     * the thing someone reaches for. Selecting it on an unfitted mode is now itself one of the fit's
+     * triggers, alongside opening a tab (`.plans/36-lazy-fit-on-demand.md`).
+     *
+     * A fit takes ~700ms-1s, real work, not a redraw — so the control has to say it is busy rather than
+     * sit still. Disabling `preset` and relabelling the option in place does that with no extra element:
+     * a disabled dropdown that still reads "Estimating original…" is the status, not a separate line
+     * competing for space in an already-narrow row cell.
+     *
+     * `awaitingEstimate` also guards re-entrancy — the host's own `_modeFitted` claims the fit
+     * immediately, before it resolves, so a second selection while the first is still in flight here
+     * would otherwise fire a second, redundant request event.
+     */
+    var awaitingEstimate = false;
+    var estimateTimeout = null;
+    // Generous over the ~700ms-1s a real fit takes (`.plans/36-lazy-fit-on-demand.md`'s own measured
+    // numbers) so this only ever fires on a genuine stall, never on an ordinary one.
+    var ESTIMATE_TIMEOUT_MS = 6000;
+    var estimatedOption = preset.querySelector('option[value="estimated"]');
+    /**
+     * **A control that asks must be able to stop asking.** The first version disabled the dropdown and
+     * waited for `config-ui-curve-refresh` to say the fit landed — with nothing that says it never
+     * will, a stall upstream (an auto-import that never resolves, the exact failure this shipped
+     * against) freezes the control forever. This is the backstop: whatever the cause, the person gets
+     * their control back, told plainly what happened and what to try, not a dropdown that quietly
+     * stopped responding.
+     */
+    function clearEstimateWait(timedOut) {
+      awaitingEstimate = false;
+      if (estimateTimeout) { clearTimeout(estimateTimeout); estimateTimeout = null; }
+      preset.disabled = false;
+      if (estimatedOption) estimatedOption.textContent = "Estimated original";
+      preset.title = timedOut ? "No estimate arrived. Try again, or pick a curve." : "";
+    }
+    function requestEstimate() {
+      if (awaitingEstimate) return;
+      awaitingEstimate = true;
+      preset.disabled = true;
+      preset.title = "";
+      if (estimatedOption) estimatedOption.textContent = "Estimating original…";
+      // The host owns the fit (a real network round trip through the sandbox) and the row addressing
+      // that finds which mode this is — the same reasons `onChannelOpen` is a callback rather than
+      // something this file does itself. `evt.target` is `wrap`, so the host can find the row the same
+      // way `onChannelOpen`'s click delegation already does.
+      wrap.dispatchEvent(new Event("config-ui-request-estimate", { bubbles: true }));
+      estimateTimeout = setTimeout(function () {
+        if (!awaitingEstimate) return;
+        clearEstimateWait(true);
+        setPoints(wrap.getAttribute("data-curve-value"), { quiet: true });
+      }, ESTIMATE_TIMEOUT_MS);
+      if (estimateTimeout && typeof estimateTimeout.unref === "function") estimateTimeout.unref();
+    }
+
     preset.addEventListener("change", function () {
       var choice = preset.value;
       if (choice === "original") return setPoints([]);
-      // Selecting it puts the estimate back. It is the file's own shape, so this is the way back after an
-      // edit — the values survive because they are re-derived from the collection, not held by the control.
-      if (choice === "estimated") return setPoints(estimate ? estimate.slice() : []);
+      if (choice === "estimated") {
+        // Selecting it puts the estimate back. It is the file's own shape, so this is the way back after
+        // an edit — the values survive because they are re-derived from the collection, not held by the
+        // control.
+        if (estimate) return setPoints(estimate.slice());
+        // No fit yet for this mode, and this cell can ask for one — the only case the option is shown
+        // without an estimate already in hand (see `buildCurvePresetSelect`'s `awaitable`).
+        if (isPerModeCurve) return requestEstimate();
+        return setPoints([]);
+      }
       if (choice === "custom") {
         // **Custom on a straight line is still a shape.** Storing the straight coordinates is what gives it
         // handles to drag — picking *Custom* and getting nothing to grab was a choice that did nothing.
@@ -3068,8 +3139,17 @@
      *
      * Both are the same fix: re-run the draw on a signal the form sends after it is assembled and after
      * every change. Quiet, so redrawing never looks like an edit.
+     *
+     * **Also where a pending estimate resolves.** `estimate` was read once, at build time, from
+     * whatever baseline existed then — for a cell awaiting its own first fit, that was nothing. The host
+     * publishes the new one into the same map this control already reads (`curveBaselineFor`), then fires
+     * this same signal (`applyQuickFit`, `src/ui.html`) — so re-reading it here, on every refresh rather
+     * than only for a cell that was waiting, is what lets the answer reach a value that has to be asked
+     * for after the control was already built, not only a value redrawn after a change already known.
      */
     wrap.addEventListener("config-ui-curve-refresh", function () {
+      estimate = curveBaselineFor(baselineKey);
+      if (awaitingEstimate && estimate) clearEstimateWait(false);
       setPoints(wrap.getAttribute("data-curve-value"), { quiet: true });
     });
 
@@ -3964,15 +4044,31 @@
         // two groups both holding a `hue` would otherwise collide on the first one found.
         if (column.type === "group") {
           var was = row[column.key];
-          var nested = (was && typeof was === "object") ? was : {};
+          var hadValue = !!(was && typeof was === "object");
+          var nested = hadValue ? was : {};
           var collected = {};
           for (var key in nested) collected[key] = nested[key];
+          // **A group nothing ever filled is not a group of zeros.** An unfitted mode's `middle`
+          // anchor (Hue's, Saturation's, Chroma's — plan 36 leaves it absent on a read, on purpose)
+          // has no pre-existing value and every part's input is still genuinely blank — `""`, what
+          // `buildRowCell` sets a number field to for a `null`/`undefined` value, not what a real
+          // read ever produces. Reading each part back regardless (`readRowCellInto`'s number branch
+          // turns an unparsable `""` into `0`, which is right for a field a person actually cleared)
+          // used to write that `0` into every part unconditionally, so a group with nothing in it
+          // came back as `{hue: 0, hslHue: 0, chroma: 0, saturation: 0}` — the exact zeroed anchor
+          // that made the generator interpolate through grey. `anyPartHasContent` is true the moment
+          // either the group already had a value, or one of its cells holds anything at all — so a
+          // deliberately-cleared field still collects (matching every other cell's rule below: the
+          // panel may only overwrite what it actually shows, and a cleared field was shown).
+          var anyPartHasContent = hadValue;
           (column.columns || []).forEach(function (part) {
             var partEl = rowEl.querySelector('[data-row-field="' + column.key + "." + part.key + '"]');
             if (!partEl) return;
+            if (String(partEl.value) !== "") anyPartHasContent = true;
             readRowCellInto(collected, part, partEl);
           });
-          row[column.key] = collected;
+          if (anyPartHasContent) row[column.key] = collected;
+          else delete row[column.key];
           return;
         }
         var el = rowEl.querySelector('[data-row-field="' + column.key + '"]');
@@ -4048,7 +4144,7 @@
     }
   }
 
-  function attachListeners(container, schema, onChange, onChannelOpen) {
+  function attachListeners(container, schema, onChange, onChannelOpen, onRequestEstimate) {
     if (!onChange || typeof onChange !== "function") return;
 
     /**
@@ -4438,6 +4534,22 @@
       // needs a fit at all, and which mode it is, are questions only the host's own session state and
       // the row's own `name` cell can answer.
       if (typeof onChannelOpen === "function") onChannelOpen(rowEl);
+    });
+
+    /**
+     * **Selecting *Estimated original* before a fit exists, the other trigger.** `buildCurveControl`
+     * dispatches this instead of calling the host directly for the same reason `onChannelOpen` is a
+     * callback and not a function this file owns: the fit is a real network round trip through the
+     * sandbox, and which mode `rowEl` names is a question only the host's session state answers.
+     * `evt.target` is the curve control's own wrapper, so the host can clear *that* control's disabled,
+     * "Estimating…" state directly if it turns out there is nothing to fit yet (no mode name typed, most
+     * likely) — the request would otherwise leave the control waiting for a refresh that never comes.
+     */
+    container.addEventListener("config-ui-request-estimate", function (evt) {
+      var rowEl = evt.target && typeof evt.target.closest === "function"
+        ? evt.target.closest("[data-row-index]") : null;
+      if (!rowEl) return;
+      if (typeof onRequestEstimate === "function") onRequestEstimate(rowEl, evt.target);
     });
 
     applyVisibility();

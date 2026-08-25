@@ -1221,3 +1221,123 @@ test('the node’s kind is read once, at the start of the drag', () => {
   assert.doesNotMatch(source, /function applyMove\([\s\S]{0,600}bezierNodeIsSmooth/,
     'the node kind is re-read inside the move, so a mirrored drag would flip it');
 });
+
+/**
+ * *Estimated original*, before a fit exists — the dropdown is where a person asks for one, not just
+ * where it shows up once there already is one. Shipped once without ever being clicked, live, on a
+ * real collection; it froze. These are the two things a click-through cannot exercise on its own but
+ * a unit test can pin exactly: the option always being there for a per-mode cell, and the control
+ * always getting itself back.
+ */
+test('a per-mode curve cell always offers Estimated original, even unfitted', () => {
+  const wrap = renderer.buildCurveControl({}, [], undefined, 'modes[0].curve');
+  const preset = wrap.querySelector('.config-ui-curve__preset');
+  const opt = preset.querySelector('option[value="estimated"]');
+  assert.ok(opt, 'the option is missing entirely for an unfitted per-mode cell');
+  assert.equal(opt.textContent, 'Estimated original');
+});
+
+test('the collection-scope curve does not offer an estimate it has no way to fetch', () => {
+  // `baselineKey` for the OKLCH/Lightness collection-scope curve is a bare field name (`"curve"`),
+  // never `modes[N].curve` — there is no row, so no `requestQuickFit` this control could ask for.
+  const wrap = renderer.buildCurveControl({ allowOriginal: true }, [], undefined, 'curve');
+  const preset = wrap.querySelector('.config-ui-curve__preset');
+  assert.equal(preset.querySelector('option[value="estimated"]'), null,
+    'a field with no fitting mechanism offered Estimated original anyway');
+});
+
+test('selecting Estimated original before a fit exists disables the control and asks for one', () => {
+  const wrap = renderer.buildCurveControl({}, [], undefined, 'modes[0].curve');
+  const preset = wrap.querySelector('.config-ui-curve__preset');
+  let requested = 0;
+  wrap.addEventListener('config-ui-request-estimate', () => { requested++; });
+
+  preset.value = 'estimated';
+  preset.dispatch('change', { bubbles: true });
+
+  assert.equal(requested, 1, 'selecting the option did not ask the host for a fit');
+  assert.equal(preset.disabled, true, 'the control did not disable itself while waiting');
+  assert.equal(preset.querySelector('option[value="estimated"]').textContent, 'Estimating original…',
+    'nothing said the control was busy');
+
+  // A second selection while the first is still in flight must not fire a second request — the host's
+  // own `_modeFitted` claims the row immediately, and a redundant event here would race it.
+  preset.dispatch('change', { bubbles: true });
+  assert.equal(requested, 1, 'a second selection while waiting queued a second request');
+});
+
+test('the control re-enables the moment the fit lands, however the host answers', () => {
+  const wrap = renderer.buildCurveControl({}, [], undefined, 'modes[0].curve');
+  const preset = wrap.querySelector('.config-ui-curve__preset');
+  preset.value = 'estimated';
+  preset.dispatch('change', { bubbles: true });
+  assert.equal(preset.disabled, true);
+
+  // The host's own signal for "a fit finished, re-read whatever changed" — `applyQuickFit`
+  // (`src/ui.html`) publishes the fitted curve into the same baseline map this control reads
+  // (`curveBaselineFor`) and *then* sets `data-curve-value` and dispatches this event, for every
+  // curve field of the mode it just fitted, not only the one that asked.
+  renderer.setCurveBaselines({ 'modes[0].curve': [0.3, 0.2, 0.7, 0.8] });
+  try {
+    wrap.setAttribute('data-curve-value', JSON.stringify([0.3, 0.2, 0.7, 0.8]));
+    wrap.dispatchEvent(new Event('config-ui-curve-refresh'));
+
+    assert.equal(preset.disabled, false, 'the control stayed disabled after the fit landed');
+    assert.equal(preset.value, 'estimated', 'the landed curve was not offered as the selection');
+    assert.equal(preset.querySelector('option[value="estimated"]').textContent, 'Estimated original',
+      'the busy label was not restored');
+    assert.equal(preset.title, '', 'a stale status message was left on a control that succeeded');
+  } finally {
+    // `curveBaselines` is module-level state, shared by every curve control built in this process —
+    // left set, a later test's unfitted cell would find a baseline nothing gave it.
+    renderer.setCurveBaselines({});
+  }
+});
+
+test('a control that never hears back re-enables itself instead of freezing', () => {
+  // The bug this exists for: shipped having only ever been confirmed to *ask* — the report was a
+  // frozen dropdown, on a real collection, because whatever it was waiting on never answered. A
+  // control that can get stuck must not be allowed to, regardless of why the answer never came.
+  //
+  // The mock captures the callback without invoking it, so the "still waiting" state is a real
+  // observation and not one collapsed by a synchronous mock into the same tick as the request.
+  const realSetTimeout = global.setTimeout;
+  let firedWith = null;
+  let pending = null;
+  global.setTimeout = (fn, ms) => { firedWith = ms; pending = fn; return { unref() {} }; };
+  try {
+    const wrap = renderer.buildCurveControl({}, [], undefined, 'modes[0].curve');
+    const preset = wrap.querySelector('.config-ui-curve__preset');
+    preset.value = 'estimated';
+    preset.dispatch('change', { bubbles: true });
+
+    assert.ok(firedWith > 0, 'requestEstimate did not set a real timeout at all');
+    assert.equal(preset.disabled, true, 'the control did not disable itself while genuinely waiting');
+
+    pending();
+    assert.equal(preset.disabled, false, 'the control stayed disabled once its own timeout fired');
+  } finally {
+    global.setTimeout = realSetTimeout;
+  }
+});
+
+test('a timed-out estimate re-enables the control, says what happened, and never lies about the curve', () => {
+  const realSetTimeout = global.setTimeout;
+  global.setTimeout = (fn) => { fn(); return { unref() {} }; };
+  try {
+    const wrap = renderer.buildCurveControl({}, [], undefined, 'modes[0].curve');
+    const preset = wrap.querySelector('.config-ui-curve__preset');
+    preset.value = 'estimated';
+    preset.dispatch('change', { bubbles: true });
+
+    assert.equal(preset.disabled, false, 'the control is still disabled after its own timeout fired');
+    assert.match(preset.title, /estimate/i, 'nothing says an estimate was asked for and never arrived');
+    assert.match(preset.title, /try again|pick/i, 'the message says what happened but not what to do');
+    assert.equal(preset.querySelector('option[value="estimated"]').textContent, 'Estimated original',
+      'the busy label was left showing after giving up');
+    // No estimate ever arrived, so the curve must not have been rewritten to claim one did.
+    assert.deepEqual(JSON.parse(wrap.getAttribute('data-curve-value')), []);
+  } finally {
+    global.setTimeout = realSetTimeout;
+  }
+});
