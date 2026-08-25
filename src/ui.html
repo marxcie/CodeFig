@@ -103,6 +103,12 @@
               <div class="config-no-form" id="configNoForm" style="display: none;"></div>
             </div>
             <div class="tab-content" id="tabConfigCode">
+              <!-- A migrated script's @PANEL_START, read-only, shown above the values it explains.
+                   Hidden entirely for a script with no second region — see currentPanelSpecText(). -->
+              <div class="config-panel-spec-container" id="configPanelSpecContainer" style="display: none;">
+                <div class="config-panel-spec-label">Panel spec — read-only</div>
+                <textarea id="codePanelSpec" readonly></textarea>
+              </div>
               <div class="config-code-container" id="configCodeContainer">
                 <textarea id="codeConfig" placeholder="// Configuration section"></textarea>
               </div>
@@ -530,6 +536,46 @@
         });
       }
 
+      /**
+       * **The spec pane, read-only.** `@PANEL_START` is never editable from this tab — a shared buffer
+       * with `configEditor` would let its JSON-in-comments text get spliced verbatim into
+       * `@CONFIG_START`'s span the moment someone typed into Configuration code (`writeConfigBlockText`
+       * and `mergeConfigIntoMain`'s Configuration-code branch both take whatever `configEditor.getValue()`
+       * holds and put it there unparsed). A second, genuinely read-only pane sidesteps that: nothing here
+       * writes back, so neither of those functions needed to change at all, and a script with no
+       * `@PANEL_START` gets no second pane — `updateConfigPanelSpecPane`, below, is the only thing that
+       * shows or hides it.
+       */
+      const codePanelSpecTextarea = document.getElementById('codePanelSpec');
+      const configPanelSpecContainer = document.getElementById('configPanelSpecContainer');
+      let panelSpecEditor = null;
+      if (codePanelSpecTextarea) {
+        panelSpecEditor = CodeMirror.fromTextArea(codePanelSpecTextarea, {
+          mode: 'javascript',
+          theme: 'default',
+          lineNumbers: true,
+          indentUnit: 2,
+          tabSize: 2,
+          lineWrapping: true,
+          readOnly: true,
+          gutters: ['CodeMirror-linenumbers'],
+          scrollbarStyle: 'native'
+        });
+      }
+
+      /** Shown, and filled, only when the open script has one — hidden entirely otherwise. */
+      function updateConfigPanelSpecPane() {
+        if (!panelSpecEditor || !configPanelSpecContainer) return;
+        const specText = currentPanelSpecText();
+        if (specText) {
+          panelSpecEditor.setValue(specText);
+          configPanelSpecContainer.style.display = '';
+          panelSpecEditor.refresh();
+        } else {
+          configPanelSpecContainer.style.display = 'none';
+        }
+      }
+
       let configUIInstance = null;
       /** The values as last seen, so a change can be attributed to a field. */
       /**
@@ -788,6 +834,18 @@
               curveRamps: _curveRamps,
               // A channel tab opening for a mode that has never been fitted — see `requestQuickFit`.
               onChannelOpen: function (rowEl) { requestQuickFit(rowEl); },
+              // Selecting *Estimated original* before a fit exists — the dropdown's own request for one,
+              // alongside opening a tab. Same trigger, same guard (`_modeFitted`); `requestQuickFit`
+              // claims the row synchronously the moment it actually starts a fit, so checking the flag
+              // right after calling it tells this apart from the one real way the request can go
+              // nowhere — no mode name typed yet, so there is nothing to ask the file about. Without this,
+              // that control would sit disabled and reading "Estimating original…" forever, waiting for a
+              // refresh event `requestQuickFit` was never going to send.
+              onRequestEstimate: function (rowEl, wrapEl) {
+                var rowIndex = rowEl.getAttribute('data-row-index');
+                requestQuickFit(rowEl);
+                if (!_modeFitted[rowIndex] && wrapEl) wrapEl.dispatchEvent(new Event('config-ui-curve-refresh'));
+              },
               onChange: function (values, opts) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
                 // thing that asks. Every other edit is an answer, not a question.
@@ -1197,6 +1255,7 @@
         if (tabName === 'configCode' && scriptHasConfig) {
           if (configCodeContainer) configCodeContainer.style.display = 'block';
           if (configEditor) configEditor.setValue(currentConfigBlock());
+          updateConfigPanelSpecPane();
         }
 
         // One preview, moved to whichever config tab is showing: it belongs beside the thing you
@@ -1424,6 +1483,8 @@
         if (structureChanged && nextHasUI && isConfigTab(currentTab)) {
           initConfigUI(next.configContent || '');
         }
+
+        if (structureChanged) updateConfigPanelSpecPane();
 
         if (currentTab === 'docs' && !nextHasDocs) switchTab('source');
         else if (isConfigTab(currentTab) && !nextHasConfig) switchTab('source');
@@ -1792,6 +1853,7 @@
           if (scriptHasConfig && configEditor && !scriptHasUIConfig) {
             configEditor.setValue(parsedSections.configContent || '');
           }
+          updateConfigPanelSpecPane();
           if (scriptHasDocs && docsRendererEl) {
             renderSimpleMarkdown(parsedSections.docContent || '');
           }
@@ -1799,6 +1861,7 @@
             code.refresh();
             code.setSize(null, '100%');
             if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
+            if (panelSpecEditor) { panelSpecEditor.refresh(); panelSpecEditor.setSize(null, '100%'); }
           }, 10);
         }
         // First view: Configuration if script has config, otherwise Script
@@ -4190,6 +4253,8 @@
           currentScript = null;
           code.setValue('');
           if (configEditor) configEditor.setValue('');
+          if (panelSpecEditor) panelSpecEditor.setValue('');
+          if (configPanelSpecContainer) configPanelSpecContainer.style.display = 'none';
           if (configUIInstance) { configUIInstance.destroy(); configUIInstance = null; }
           originalCode = '';
           scriptHasDocs = false;
@@ -4231,6 +4296,8 @@
           currentScript = null;
           code.setValue('');
           if (configEditor) configEditor.setValue('');
+          if (panelSpecEditor) panelSpecEditor.setValue('');
+          if (configPanelSpecContainer) configPanelSpecContainer.style.display = 'none';
           if (configUIInstance) { configUIInstance.destroy(); configUIInstance = null; }
           originalCode = '';
           scriptHasDocs = false;
@@ -5729,6 +5796,10 @@
             // The curve editor's coordinate field — the paste path a person uses, so setting a curve from
             // the terminal exercises the parse and the redraw rather than going round them.
             if (inner === 'text') return cell.querySelector('.config-ui-curve__text');
+            // The preset dropdown itself — added so *Estimated original*'s two states (already fitted,
+            // versus asking for one) could be driven and read from the terminal at all, the same reason
+            // `channel:<name>` exists above.
+            if (inner === 'preset') return cell.querySelector('.config-ui-curve__preset');
             // The editor's two buttons. Named suffixes rather than a free-form selector, for the reason the
             // whole addressing scheme exists — and without them the shape toggle was the one part of this
             // control that could not be driven, and therefore the one part that could not be verified.
@@ -5806,7 +5877,13 @@
             return Promise.resolve({
               text: currentConfigBlock(),
               hasUiConfig: !!scriptHasUIConfig,
-              script: currentScript ? currentScript.name : null
+              script: currentScript ? currentScript.name : null,
+              // The read-only spec pane above Configuration code's values — shown, and holding this
+              // text, only for a script that has one. `panelSpecEditor.getValue()`, not
+              // `currentPanelSpecText()` again: this is what the pane actually displays, so a test
+              // that only checked the source of truth could pass while the pane itself showed nothing.
+              panelSpecShown: !!(configPanelSpecContainer && configPanelSpecContainer.style.display !== 'none'),
+              panelSpecText: panelSpecEditor ? panelSpecEditor.getValue() : null
             });
 
           case 'writeConfig': {

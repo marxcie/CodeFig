@@ -654,9 +654,35 @@
         flex-direction: column;
         min-height: 0;
       }
-      
+
       .config-code-container .CodeMirror {
         flex: 1;
+      }
+
+      /* The @PANEL_START pane above Configuration code's values — read-only, so it takes a bounded
+         share of the tab rather than competing with the editor underneath for space. */
+      .config-panel-spec-container {
+        flex: 0 0 auto;
+        max-height: 38%;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .config-panel-spec-label {
+        flex: 0 0 auto;
+        padding: var(--space-xs) var(--space-md);
+        font-size: var(--font-size-small);
+        color: var(--text-secondary);
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .config-panel-spec-container .CodeMirror {
+        flex: 1;
+        min-height: 0;
+        background: var(--bg-secondary);
       }
       
       /* Documentation rendered view (markdown) */
