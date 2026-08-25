@@ -1221,6 +1221,60 @@ timed calls. That is the next diagnostic step, not a code change.
 stuck fit no longer freezes anything the user can see — but the estimate itself still does not
 reliably arrive, and the feature is only as usable as that.
 
+**Update, a later session, with a clean state this time.** Timed the same call directly —
+`foundationColorsAutoImport('color - lime', 'lime', ['Lime-1'], 'hsl')`, properly imported this
+time (`@Color Ramp` alongside `@Foundation`; a prior attempt's missing import was real but not the
+cause) — three times via `figma:run --file`, right after a reload: **1159ms, 1156ms, 1185ms**,
+matching the baseline above and not accumulating. So the fit itself is not the degradation.
+
+Then the same request through the actual product path — a channel tab opened on a mode nothing
+had touched, immediately post-reload: **never returned.** Repeated on a second, independently
+fresh mode: **never returned.** Waited past 90 seconds on each, with and without concurrent
+bridge polling (ruled that out specifically — a request left completely alone for 20s quiet
+behaved identically to one polled every 1.5s). So: **identical code, dispatched two different
+ways, one always finishes in ~1.2s and the other has now never once finished** across every retry
+this session, immediately after every reload, with no exception thrown and no warm-up needed.
+
+**What was ruled out this pass, each tested directly rather than assumed:**
+- **A stuck shared mutex from an earlier failed request.** `runSilentSnippet`'s `silentRunInFlight`
+  gates every on-demand fit, live preview refresh and auto-import — one lost answer parks it
+  `true` forever, since it only clears on that answer's own `CONFIG_LOAD_RESULT`. Real, and worth
+  fixing regardless (see below), but not sufficient on its own: a *second*, independently fresh
+  row's request, given a full 20+ seconds after the first one for any such lock to have cleared,
+  also never returned.
+- **An uncaught rejection silently eaten.** The dispatched snippet is an unguarded
+  `(async function () { await ...; codefigConfigLoadResult(...); })()` — it returns before its
+  `await` settles, so a throw inside it never reaches the synchronous `try/catch` in `code.ts`.
+  Wrapped it in its own `try`/`catch` reporting to `codefigConfigLoadResult({ error })`. Made no
+  difference — the request still never answers, which means whatever is wrong is not a thrown
+  exception; the promise genuinely never settles, one way or the other.
+- **The CLI's own bridge polling starving the plugin's event loop.** Triggered a request, then
+  touched nothing for 20 seconds. Same result as polling throughout.
+
+**What was not ruled out, and is the shape of the remaining mystery:** the only remaining
+structural difference between the working call and the hanging one is *how the `RUN` message was
+sent* — `post('RUN', { code, silent: true })` directly from a live UI event (`onChannelOpen`/
+`onRequestEstimate`) versus `post('RUN', { code })` from the job queue's `_codefigQueueStart`.
+Reading `code.ts`'s `RUN` handler end to end, `silent` only gates `forwardToConsoleBridge` calls
+and the notify/InfoPanel surface — nothing that should affect whether an `await` inside the
+executed function ever resolves. Also unexplained: `requestAutoImport`'s snippet is the *same*
+unguarded-async-IIFE shape, dispatched through the *same* `silent: true` path, and it works
+reliably every time (confirmed live, repeatedly, with real recognised colours) — it just always
+passes `skipFit: true`. So the working/hanging split lines up exactly with skipFit, not with
+silent-vs-not and not with any theory above. Finding out why needs an unconditional (not
+`!silentRun`-gated) checkpoint log inside `code.ts`'s `RUN` handler — a temporary, throwaway
+change to see which specific `await` the promise is parked on — which needs a build-reload cycle
+this pass did not spend on top of the three already spent confirming the shape of the mystery.
+
+**Shipped anyway, because they are correct independent of root cause:**
+- `SILENT_RUN_TIMEOUT_MS` (20s) in `runSilentSnippet` — a token-guarded watchdog that releases
+  `silentRunInFlight` if nothing answers, so one lost request degrades to "this one estimate never
+  arrives" instead of "nothing on this panel works again until reload."
+- The `try`/`catch` above, and `_modeFitted`/`_quickFitInFlight` release on a caught error — so a
+  fit that *does* throw fails a retry-able row instead of claiming it forever.
+- Neither makes an on-demand fit actually land. **Say plainly: on a real collection, in this
+  environment, across every attempt made this pass, it did not.**
+
 ---
 
 ## Habits worth keeping

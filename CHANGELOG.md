@@ -127,6 +127,17 @@ a plain statement of the new default.
 - **The middle anchor's placeholder text (`eg. 12`) read as a value in an empty field.** Suppressed
   for the middle position only — bright and dark keep theirs, since those already hold something
   by the time a curve exists to bend.
+- **A curve control that gave up after 6 seconds gave up on the interface, not the request.** The
+  fit it started kept running and could still write into whichever tab was open when it eventually
+  landed — so a slow estimate looked like it failed twice, then silently wrote into the wrong
+  place. Each request is now tagged, and a timed-out control's tag is marked abandoned so a late
+  answer is dropped rather than applied.
+- **A lost silent-run answer used to disable every future on-demand fit, live preview refresh and
+  auto-import for the rest of the session.** They share one dispatch lock that only cleared on that
+  answer's own arrival; a request that never answered left it claimed forever. It now self-releases
+  after 20 seconds, and a fit that throws (rather than never answering) now fails its own row
+  instead of claiming it permanently. Neither makes a hung estimate land — see `DEFERRED.md`, "The
+  on-demand fit hangs, not always, and not fully explained," for what is still unresolved.
 - **Selecting a collection in the Colors panel took about three seconds.** The read walked every variable in
   the collection with its own Figma API call, once per panel mode, plus a second full walk to count mode
   differences for the mode chips — `(M+1)×V` sequential round trips for `M` modes and `V` variables. It now

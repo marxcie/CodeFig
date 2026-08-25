@@ -2730,6 +2730,12 @@
         if (!awaitingEstimate) return;
         clearEstimateWait(true);
         setPoints(wrap.getAttribute("data-curve-value"), { quiet: true });
+        // **Giving the control back is not the same as stopping the request.** There is no
+        // cancellation API for the silent run this asked for, so the request itself keeps going —
+        // this says so, rather than leaving a stale answer free to land, unasked for, into whatever
+        // is on screen when it eventually does. `onAbandonEstimate` marks it to be dropped on
+        // arrival; see `src/ui.html`'s `abandonQuickFit`.
+        wrap.dispatchEvent(new Event("config-ui-abandon-estimate", { bubbles: true }));
       }, ESTIMATE_TIMEOUT_MS);
       if (estimateTimeout && typeof estimateTimeout.unref === "function") estimateTimeout.unref();
     }
@@ -4144,7 +4150,7 @@
     }
   }
 
-  function attachListeners(container, schema, onChange, onChannelOpen, onRequestEstimate) {
+  function attachListeners(container, schema, onChange, onChannelOpen, onRequestEstimate, onAbandonEstimate) {
     if (!onChange || typeof onChange !== "function") return;
 
     /**
@@ -4550,6 +4556,19 @@
         ? evt.target.closest("[data-row-index]") : null;
       if (!rowEl) return;
       if (typeof onRequestEstimate === "function") onRequestEstimate(rowEl, evt.target);
+    });
+
+    /**
+     * **The control gave up; the request did not.** Fired only from the timeout path in
+     * `buildCurveControl` — the fit the row asked for is still running with no way to cancel it, so
+     * this tells the host to drop the answer instead of applying it wherever it lands, and to let a
+     * later, real retry ask again rather than sitting behind a claim nothing will ever resolve.
+     */
+    container.addEventListener("config-ui-abandon-estimate", function (evt) {
+      var rowEl = evt.target && typeof evt.target.closest === "function"
+        ? evt.target.closest("[data-row-index]") : null;
+      if (!rowEl) return;
+      if (typeof onAbandonEstimate === "function") onAbandonEstimate(rowEl, evt.target);
     });
 
     applyVisibility();

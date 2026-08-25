@@ -846,6 +846,12 @@
                 requestQuickFit(rowEl);
                 if (!_modeFitted[rowIndex] && wrapEl) wrapEl.dispatchEvent(new Event('config-ui-curve-refresh'));
               },
+              // The control's own timeout gave the interface back; the fit it started is still
+              // running, uncancellable, and would otherwise still write in whenever it lands. This is
+              // where that answer gets marked to be dropped rather than applied — see `abandonQuickFit`.
+              onAbandonEstimate: function (rowEl) {
+                abandonQuickFit(rowEl.getAttribute('data-row-index'));
+              },
               onChange: function (values, opts) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
                 // thing that asks. Every other edit is an answer, not a question.
@@ -2001,6 +2007,18 @@
       // `configLoadInFlight` and belonged to the import button; auto-import and the live preview
       // borrowed it, and now that the button is gone they are the only users.
       let silentRunInFlight = false;
+      let _silentRunToken = 0;
+      // **A lock nobody was ever going to release.** `requestQuickFit` and `requestAutoImport` both
+      // send an `(async function () { await ...; window.codefigConfigLoadResult(...); })()` with no
+      // `catch` — the IIFE returns before the `await` settles, so the outer `try/catch` in `code.ts`
+      // (which only wraps the synchronous call that builds the promise) never sees a rejection inside
+      // it. Confirmed live: a fresh on-demand fit, right after a reload, on a mode nothing had touched,
+      // never returned in over ninety seconds — while the identical call finished in 1.16s run
+      // directly, so the fit itself is not the slow part. Whatever it is, one lost answer used to wedge
+      // every future preview, auto-import and fit for the rest of the session, because they all wait on
+      // this one flag. This does not fix whatever throws or hangs; it stops one bad answer from
+      // disabling the panel until reload.
+      const SILENT_RUN_TIMEOUT_MS = 20000;
 
       /**
        * Does the open script declare fields that can be loaded from the file? Cheap parse only,
@@ -2033,6 +2051,16 @@
           return false;
         }
         silentRunInFlight = true;
+        const token = ++_silentRunToken;
+        // Self-heal, not a fix for whatever went wrong — see the comment on `SILENT_RUN_TIMEOUT_MS`.
+        // Token-guarded so this cannot clear a *later* run's flag if one already started normally.
+        setTimeout(function () {
+          if (silentRunInFlight && token === _silentRunToken) {
+            debugError('A silent run did not answer within ' + SILENT_RUN_TIMEOUT_MS +
+              'ms; releasing the lock so the panel can try again.');
+            silentRunInFlight = false;
+          }
+        }, SILENT_RUN_TIMEOUT_MS);
         post('RUN', { code: resolved, silent: true });
         return true;
       }
@@ -2367,6 +2395,30 @@
        */
       let _modeFitted = {};
       let _quickFitSeq = 0;
+      /**
+       * **A timed-out control and a still-running fit are two different things, and only one of them
+       * used to be tracked.** The curve control's own 6-second timeout gives the *interface* back —
+       * disables nothing, shows a real status — but the silent run it started keeps going regardless,
+       * because there is no cancellation API for it in the sandbox. Left alone, that answer still
+       * arrives, still passes `quickFitSeq === _quickFitSeq` (nothing newer had reason to bump it), and
+       * `applyQuickFit` still writes it — into whatever tab happens to be open by then. Reported live:
+       * Estimate on Lightness timed out twice, Estimate on Saturation timed out and read as Linear, and
+       * switching back to Lightness "worked" only because the *original* request had finally landed.
+       *
+       * `_quickFitInFlight` remembers which request a row is currently waiting on; `_quickFitAbandoned`
+       * marks a request the control gave up on. The result handler drops an abandoned answer instead of
+       * applying it — "tag the request and drop the answer on arrival," since the request itself cannot
+       * be cancelled. `_modeFitted` is cleared alongside so a later, genuine retry can ask again rather
+       * than sitting behind a claim nothing will ever resolve.
+       */
+      let _quickFitInFlight = {};
+      let _quickFitAbandoned = {};
+      function abandonQuickFit(rowIndex) {
+        var seq = _quickFitInFlight[rowIndex];
+        if (seq != null) _quickFitAbandoned[seq] = true;
+        delete _quickFitInFlight[rowIndex];
+        delete _modeFitted[rowIndex];
+      }
       function rememberCurveBaselines(config) {
         _curveBaselines = {};
         if (!config) return;
@@ -2920,15 +2972,28 @@
         // while the first fit is still in flight must not queue a second, redundant search.
         _modeFitted[rowIndex] = true;
         var seq = ++_quickFitSeq;
+        _quickFitInFlight[rowIndex] = seq;
 
+        // **`try`/`catch` around the whole body, on purpose.** This IIFE returns before its `await`
+        // settles, so the synchronous `try/catch` in `code.ts` — which only wraps the call that
+        // builds the promise — never sees a rejection that happens after that. Without this, a
+        // thrown error here does not fail loudly; it vanishes, `codefigConfigLoadResult` never
+        // fires, and `silentRunInFlight` stays claimed for the rest of the session (the watchdog
+        // above recovers the lock either way, but recovering the lock is not the same as this
+        // request ever answering).
         var started = runSilentSnippet(scriptImportLines().concat([
           '@import { foundationColorsAutoImport } from "@Foundation"',
           '(async function () {',
-          '  var found = await foundationColorsAutoImport(' +
+          '  try {',
+          '    var found = await foundationColorsAutoImport(' +
             JSON.stringify(collection) + ', ' + JSON.stringify(group == null ? '' : group) + ', ' +
             JSON.stringify([modeName]) + ', ' + JSON.stringify(colorModelInConfig()) + ');',
-          '  window.codefigConfigLoadResult({ quickFit: found, quickFitSeq: ' + seq +
+          '    window.codefigConfigLoadResult({ quickFit: found, quickFitSeq: ' + seq +
             ', quickFitRowIndex: ' + JSON.stringify(rowIndex) + ' });',
+          '  } catch (e) {',
+          '    window.codefigConfigLoadResult({ error: (e && e.message) || String(e), quickFitSeq: ' + seq +
+            ', quickFitRowIndex: ' + JSON.stringify(rowIndex) + ' });',
+          '  }',
           '})();'
         ]).join('\n'));
 
@@ -2936,12 +3001,14 @@
         // `requestAutoImport` uses, and the claim above is released so the retry can re-claim it.
         if (!started) {
           delete _modeFitted[rowIndex];
+          delete _quickFitInFlight[rowIndex];
           setTimeout(function () { requestQuickFit(rowEl); }, 400);
         }
       }
 
       /** Applies one mode's on-demand fit straight into its row's own curve controls — no form rebuild. */
       function applyQuickFit(found, rowIndex) {
+        delete _quickFitInFlight[rowIndex];
         var rowEl = configUIContainer &&
           configUIContainer.querySelector('[data-row-index="' + rowIndex + '"]');
         if (!rowEl || !found || !found.config || !found.config.modes || !found.config.modes[0]) return;
@@ -5337,6 +5404,13 @@
               silentRunInFlight = false;
               if (data.error) {
                 debugError('A silent run failed: ' + data.error);
+                // A failed fit must not leave its row permanently claimed — `_modeFitted` exists to
+                // stop a redundant search while one is in flight, not to lock a row out after the
+                // one search it tried has already failed.
+                if (data.quickFitRowIndex !== undefined) {
+                  delete _quickFitInFlight[data.quickFitRowIndex];
+                  delete _modeFitted[data.quickFitRowIndex];
+                }
                 return;
               }
               if (data.autoImport !== undefined) {
@@ -5382,7 +5456,10 @@
                 return;
               }
               if (data.quickFit !== undefined) {
-                if (data.quickFitSeq === _quickFitSeq) {
+                // Dropped rather than applied when the control that asked has since timed out and
+                // moved on — `abandonQuickFit`'s whole reason to exist. The request itself cannot be
+                // cancelled, so this is where a late answer stops mattering.
+                if (data.quickFitSeq === _quickFitSeq && !_quickFitAbandoned[data.quickFitSeq]) {
                   applyQuickFit(data.quickFit, data.quickFitRowIndex);
                 }
                 return;

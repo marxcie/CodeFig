@@ -1341,3 +1341,41 @@ test('a timed-out estimate re-enables the control, says what happened, and never
     global.setTimeout = realSetTimeout;
   }
 });
+
+test('a timeout tells the host to drop the answer when it eventually lands, not just gives up the UI', () => {
+  // Márton's repro, reduced to its cause: the control's own timeout gave the interface back while the
+  // fit it asked for kept running with no way to cancel it, and a stale answer landed later into
+  // whatever tab was open by then. Giving up on screen and telling the host to disregard the answer
+  // are two different things, and only the first used to happen.
+  const realSetTimeout = global.setTimeout;
+  global.setTimeout = (fn) => { fn(); return { unref() {} }; };
+  try {
+    const wrap = renderer.buildCurveControl({}, [], undefined, 'modes[0].curve');
+    let abandoned = 0;
+    wrap.addEventListener('config-ui-abandon-estimate', () => { abandoned++; });
+    const preset = wrap.querySelector('.config-ui-curve__preset');
+    preset.value = 'estimated';
+    preset.dispatch('change', { bubbles: true });
+    assert.equal(abandoned, 1, 'the timeout gave up on screen without telling the host to drop the answer');
+  } finally {
+    global.setTimeout = realSetTimeout;
+  }
+});
+
+test('a successful estimate never fires the abandon signal', () => {
+  const wrap = renderer.buildCurveControl({}, [], undefined, 'modes[0].curve');
+  let abandoned = 0;
+  wrap.addEventListener('config-ui-abandon-estimate', () => { abandoned++; });
+  const preset = wrap.querySelector('.config-ui-curve__preset');
+  preset.value = 'estimated';
+  preset.dispatch('change', { bubbles: true });
+
+  renderer.setCurveBaselines({ 'modes[0].curve': [0.3, 0.2, 0.7, 0.8] });
+  try {
+    wrap.setAttribute('data-curve-value', JSON.stringify([0.3, 0.2, 0.7, 0.8]));
+    wrap.dispatchEvent(new Event('config-ui-curve-refresh'));
+    assert.equal(abandoned, 0, 'a fit that actually landed was treated as abandoned anyway');
+  } finally {
+    renderer.setCurveBaselines({});
+  }
+});
