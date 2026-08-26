@@ -150,16 +150,19 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // sits, and on a near-neutral the two disagree by more than 30 degrees — so it carries two curves too.
   var hueSource = oklch ? mode.hueCurve : mode.hslHueCurve;
   var hueCurve = Array.isArray(hueSource) ? bezierNormalise(hueSource) : [];
+  var hueAnchors = colorsChannel(mode, 'hue', oklch);
+  var chromaAnchors = colorsChannel(mode, 'chroma', oklch);
 
   var rows = oklchRamp({
     steps: steps, ladder: ladder, curve: walked, chromaCurve: chromaCurve, hueCurve: hueCurve,
     middleIndex: placementIndex,
     model: oklch ? 'oklch' : 'hsl',
-    hue: colorsChannel(mode, 'hue', oklch),
-    chroma: colorsChannel(mode, 'chroma', oklch)
+    hue: hueAnchors,
+    chroma: chromaAnchors
   });
 
-  // Original is not a curve, so it cannot be eased into place — the steps it covers are simply the file's.
+  // Original is not a curve, so it cannot be eased into place — the lightness it covers is simply the
+  // file's.
   //
   // **A guard, not a fallthrough — `.plans/36-lazy-fit-on-demand.md`.** `held` is re-derived live on
   // every load (`config.existing` is never saved), so it is absent whenever the address no longer
@@ -173,6 +176,25 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // Not caught: the same length with the collection's own steps renamed or reordered since. `held` is
   // positional, not keyed by step name, so that case still substitutes by index rather than by name.
   // Narrower than "changed," worth a real fix if it turns out to matter, not solved here.
+  //
+  // **Decoupled per channel, and "touched" is asked, not stored.** This used to overwrite `rows[oi]`
+  // completely — hue and chroma included — so a mode stuck on Original (which is any freshly-read mode
+  // today, since the on-demand fit that would replace it is parked, `DEFERRED.md`) showed the file's
+  // colours verbatim no matter what its own Hue or Saturation curve said: typing a new hue, dragging a
+  // handle, none of it could ever appear in the swatch while Lightness stayed Original. Confirmed live,
+  // driving the real plugin: setting a mode's hue anchors to blue and pink left the preview unchanged lime
+  // green until Lightness alone was moved off Original.
+  //
+  // But hue and chroma cannot simply *always* fall through to the ramp's own generation either: an
+  // untouched read gives them only two or three real anchors, so between those the ramp interpolates
+  // rather than reproducing the file's own per-step values — and doing that unconditionally un-quiets
+  // every fresh load, the exact "twelve of sixteen steps changed, nobody can see it" failure this
+  // mechanism exists to prevent. So each channel asks the same question Lightness already answers with
+  // `segments.original`: does its own bright/dark anchor still match what the file actually holds there?
+  // Untouched, they match exactly (a read fills them from those exact rows) and the channel takes the
+  // file's real per-step value, same as before. Edited — a typed hue, a dragged end — they no longer
+  // match, and the channel takes whatever the ramp generated from the edit. No flag survives between
+  // calls; every load asks the file fresh.
   var originalUnavailable = null;
   if (segments.original) {
     if (!held) {
@@ -180,13 +202,35 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
     } else if (held.length !== steps.length) {
       originalUnavailable = 'mismatched';
     } else {
+      var HUE_EPSILON = 0.05, CHROMA_EPSILON = 0.0005;
+      var brightReal = read(held[0]);
+      var darkReal = read(held[held.length - 1]);
+      var hueTouched = !brightReal || !darkReal ||
+        Math.abs(hueAnchors.bright - brightReal.H) > HUE_EPSILON ||
+        Math.abs(hueAnchors.dark - darkReal.H) > HUE_EPSILON;
+      var chromaTouched = !brightReal || !darkReal ||
+        Math.abs(chromaAnchors.bright - brightReal.C) > CHROMA_EPSILON ||
+        Math.abs(chromaAnchors.dark - darkReal.C) > CHROMA_EPSILON;
+      var toHex = oklch ? oklchToHex : oklchHslToHex;
       for (var oi = 0; oi < rows.length; oi++) {
         var wasHex = held[oi];
         if (!wasHex) continue;
         var seenIt = read(wasHex);
         if (!seenIt) continue;
-        rows[oi] = { step: rows[oi].step, hex: oklchNormaliseHex(wasHex), L: seenIt.L, C: seenIt.C,
-          H: seenIt.H, chroma: seenIt.C, clamped: false };
+        var row = rows[oi];
+        if (!hueTouched && !chromaTouched) {
+          // Neither channel differs from the file, so the file's own hex is used verbatim — a round trip
+          // through the colour maths would be numerically the same value but is not guaranteed to be the
+          // same *byte*, and "Original reproduces the file exactly" is the property a quiet load depends on.
+          rows[oi] = { step: row.step, hex: oklchNormaliseHex(wasHex), L: seenIt.L, C: seenIt.C,
+            H: seenIt.H, chroma: seenIt.C, clamped: false };
+          continue;
+        }
+        var useH = hueTouched ? row.H : seenIt.H;
+        var useC = chromaTouched ? row.C : seenIt.C;
+        var fit = toHex(seenIt.L, useC, useH);
+        rows[oi] = { step: row.step, hex: fit.hex, rgb: fit.rgb, L: seenIt.L, C: useC, H: useH,
+          clamped: fit.clamped, chroma: fit.chroma };
       }
     }
   }
@@ -823,9 +867,18 @@ function colorsChangeCaption(entry, made) {
   return count + ' would change, by up to ' + worst + ' of 255';
 }
 
-/** Bright at the first step, Dark at the last, Middle over the step the seed landed on. */
+/**
+ * Bright at the first step, Dark at the last, Middle over the step the seed landed on.
+ *
+ * **Middle always lands somewhere — nearest-by-lightness when nothing is named — whether or not the
+ * curve actually bends there.** A plain two-anchor curve has no middle *point*, only the placement
+ * a seed always gets, so marking it the same way as a genuine middle claims a shape that is not
+ * there. Dimmed rather than dropped, the same treatment the curve editor's own middle box gets when
+ * its curve has none: the label still says where the seed landed, just not as loudly.
+ */
 function colorsAnchorStrip(made, steps) {
   var last = steps.length - 1;
+  var hasMiddle = Array.isArray(made.curve) && made.curve.length === 10;
   var out = ['<div class="color-ramp-preview-anchors">'];
   for (var i = 0; i < steps.length; i++) {
     if (i === 0) {
@@ -835,7 +888,8 @@ function colorsAnchorStrip(made, steps) {
       out.push('<span class="color-ramp-preview-anchor color-ramp-preview-anchor--end">Dark' +
         '<span class="color-ramp-preview-anchor-mark"></span></span>');
     } else if (i === made.placementIndex) {
-      out.push('<span class="color-ramp-preview-anchor color-ramp-preview-anchor--middle">Middle' +
+      out.push('<span class="color-ramp-preview-anchor color-ramp-preview-anchor--middle" data-shown="' +
+        (hasMiddle ? 'true' : 'false') + '">Middle' +
         '<span class="color-ramp-preview-anchor-mark"></span></span>');
     } else {
       out.push('<span></span>');

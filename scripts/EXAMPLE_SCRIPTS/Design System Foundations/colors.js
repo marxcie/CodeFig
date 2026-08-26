@@ -88,7 +88,7 @@
 // than a ReferenceError swallowed by a caller's try/catch.
 @import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
 @import { bezierAt, bezierNormalise, bezierFromEase, bezierWithMiddle, bezierWithoutMiddle, bezierParse, bezierFormat, bezierEaseName, bezierJoin, bezierSplit, bezierThrough, bezierFitRamp } from "@Bezier"
-@import { oklchFromHex, oklchHslFromHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare, oklchDistance } from "@OKLCH"
+@import { oklchFromHex, oklchHslFromHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare, oklchDistance, oklchToHex, oklchHslToHex } from "@OKLCH"
 @import { colorsPlaceholderSteps, colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel, colorsCurve, colorsFitCurve, colorsFitChromaCurve, colorsFitHueCurve, colorsBestAnchor, colorsAnchorFits, colorsSharedLadder, colorsLightnessOf, colorsGenerateMode, colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsChangeCaption, colorsStrip, colorsAlignment, colorsTolerance, colorsEscapeHtml, colorsPct } from "@Color Ramp"
 
 // ========================================
@@ -176,7 +176,13 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 //             showWhen: { colorModel: "hsl" },
 //             helper: "The same, for HSL — a different angle from OKLCH's, so a different curve." },
 //           { type: "anchors", positions: ["bright", "middle", "dark"],
-//             disabledWhen: { hueCurve: "original" },
+//             // Both, not just OKLCH's: whichever model is not the active one sits hidden and
+//             // untouched, so it never has anything but "original" — checking only `hueCurve` read
+//             // that permanent "original" as the answer in HSL mode regardless of what `hslHueCurve`
+//             // actually held, and disabled Hue's start and end no matter what preset was picked.
+//             // AND-semantics on multiple keys (`conditionsHold`) makes "both original" mean "the
+//             // one that's actually showing has no curve", which is the question this was asking.
+//             disabledWhen: { hueCurve: "original", hslHueCurve: "original" },
 //             fields: [
 //               { key: "hue", showWhen: { colorModel: "oklch" },
 //                 labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },

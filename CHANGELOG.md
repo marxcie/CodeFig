@@ -114,6 +114,47 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Dragging a handle on an untouched curve did nothing, on every fresh Hue, Saturation or Chroma
+  field.** `draw()` positions every handle from the *implied* Linear shape when nothing is stored
+  yet (`effectivePoints`), but the drag itself read the raw, empty stored value and indexed straight
+  into it — a one- or two-number result is not a curve `bezierNormalise` recognises, so it was
+  discarded back to empty on every frame, settle included. The handle visibly moved for exactly one
+  frame and the drag wrote nothing, which is indistinguishable from a handle that does not drag at
+  all. Reading `effectivePoints` the same way `draw()` already does fixes it; a new test drags a
+  handle on a field that starts empty and checks the result is a real, stored four-number curve —
+  every existing drag test started from a curve with real points already, which is why none of them
+  caught this.
+- **The Middle label above the generated swatches read the same as Bright and Dark even when the
+  curve had no middle point** — a seed always lands on a nearest step, whether or not the curve bends
+  there. Dimmed now, the same 0.45 opacity the curve editor's own middle box already uses when its
+  curve has none, so the label still says where the seed landed without claiming a shape that is not
+  there.
+- **Editing a mode's Hue or Saturation had no visible effect at all, as long as its Lightness curve
+  was still Original** — which is every freshly-read mode today, since the on-demand fit that would
+  replace it is parked. `colorsGenerateMode` substituted the *whole* per-step colour with the file's
+  own hex whenever Lightness was Original, hue and chroma included, so no edit to either could ever
+  reach the swatch: confirmed live, driving the real plugin, moving a mode's hue anchors to blue and
+  pink left the preview unchanged lime green until Lightness alone was moved off Original. Each
+  channel now decides for itself: Original substitutes only the lightness a step actually measures
+  in the file, and Hue/Saturation keep whatever their own curve and anchors generated — but only once
+  those differ from the file's own bright and dark, so an untouched mode still reproduces the file
+  byte for byte and a fresh load stays quiet. `oklchToHex`/`oklchHslToHex` recompose the hex from the
+  blend; `oklchNormaliseHex` still handles the fully-untouched case verbatim, avoiding a colour-maths
+  round trip where none is needed. Measured against all sixteen real sets in `bench:colors`: no
+  change, because every one of them already carries a fitted curve rather than sitting on Original.
+- **Dragging a curve handle could do nothing, or undo itself, because opening the channel tab had
+  already asked for an on-demand fit that landed later, mid-drag, and overwrote the curve
+  unconditionally.** Confirmed live: the request itself was not hung — it answered correctly, empty
+  for that channel — but nothing checked whether the row had been touched since it was asked.
+  Opening a channel tab no longer starts a fit request, alongside the dropdown's own "Estimated
+  original" option already being parked; `requestQuickFit` and its safeguards are untouched and
+  come back with a one-line revert once the dispatch bug behind the hang (`DEFERRED.md`) is found.
+- **Dragging a curve handle looked unresponsive, and could snap back to the preset it started on.**
+  Every frame of the drag re-ran the live preview, which flushed the pending edit into the config
+  editor first — two CodeMirror rewrites of the largest config block in the plugin, up to eight
+  times a second (`DEFERRED.md`, "The preview flushed the config text on every frame of a drag").
+  The preview now overlays the form's own live values onto the last real parse instead, and never
+  touches the editor during a drag at all.
 - **A channel with no middle anchor of its own generated through zero instead of running bright to
   dark.** Fitting a lightness curve gives a mode a middle *position*; hue and saturation, still
   unfitted after plan 36's on-demand fit, read that absent middle through the same numeric fallback
@@ -127,6 +168,56 @@ a plain statement of the new default.
 - **The middle anchor's placeholder text (`eg. 12`) read as a value in an empty field.** Suppressed
   for the middle position only — bright and dark keep theirs, since those already hold something
   by the time a curve exists to bend.
+- **Hue's start and end anchors stayed disabled in HSL mode no matter which curve was picked.** The
+  anchors block disabled itself on `hueCurve` alone; that curve is OKLCH's, sits hidden and untouched
+  while the panel is in HSL, and so never held anything but "no curve yet" — which is what the block
+  read regardless of what `hslHueCurve`, the one actually showing, held. Naming both models' curves
+  fixes it: the anchors disable only while neither has a shape.
+- **Adding a middle point left its input empty and its own reading (added last round) an em dash.**
+  It now shows the curve's own value at that position — a real number, not an invented one, since
+  the split point `bezierWithMiddle` creates is exactly `bezierAt(pts, 0.5)` — as a placeholder, never
+  a value, so nothing here can be mistaken for an anchor nobody set. Applies to Lightness's own
+  middle box and to Hue/Saturation/Chroma's adopted one.
+- **Picking *Custom* on an untouched preset undid itself.** The label is derived from the curve's own
+  coordinates on every redraw, so choosing it without changing anything left the points matching the
+  preset they already were, and the dropdown snapped straight back. *Custom* is now hidden from the
+  list until a real edit makes it true — dragging a handle still switches to it automatically, the
+  same as before.
+- **The Lightness curve's own middle box read as caption and input side by side instead of
+  stacked**, unlike Hue and Saturation's adopted middle box beside it. Not a missing class: the
+  first fix added `.config-ui-rows-group-part`'s flex-column styling to the *same* element that
+  already carries `.config-ui-curve__anchor`, and `.config-ui-curve__anchors .config-ui-curve__anchor
+  { display: block }`'s two-class selector always wins over a one-class `display: flex` on the same
+  element, whichever order the rules are written in. The adopted anchors avoid this because their
+  stacker is a separate inner element that never also carries `.config-ui-curve__anchor` — found by
+  comparing the two boxes' real DOM live in a browser. Lightness's own middle box now nests the same
+  way.
+- **The range/gradient strip beside a curve showed the whole channel, compressed toward the edges
+  once zoomed, instead of the zoomed slice.** `rangeStops` kept every token's colour on the strip and
+  clamped an out-of-window one to whichever edge it was nearest, so the full spectrum stayed visible
+  at every zoom level. It now drops a token outside the window, and interpolates the colour exactly
+  at each edge between whichever two tokens bracket it — the strip shows only what the window
+  actually contains, stretched to fill it, matching the chart's own axis at every zoom level. The
+  bracket that used to mark the window on top of the whole-channel bar (`.config-ui-curve__range-window`)
+  is gone along with it — there is nothing left for it to mark once the strip *is* the window.
+- **The range scale next to a curve could show the whole channel instead of the zoomed range, and
+  zooming past a certain point made it jump back to the wide view on every redraw** — not only the
+  gradient strip above, but the tick labels and the zoom mark itself, since all three read the same
+  latched window. `axisView`'s safety net (`rampIsOffscreen`) reopens the window when a read makes
+  the whole ramp fall outside it — necessary, since recognition can refill both ends far from the old
+  view. Its three samples went through `unitToValue`, which collapses to one constant when a
+  channel's two ends are equal, *regardless of the curve's real shape* — an ordinary case (Lightness
+  aside, most channels pin both ends and put the movement in the middle). Zoom to a window that
+  excludes that constant, which is the legitimate point of a middle the ends don't hold, and every
+  sample reads as off screen — discarding the window on every single draw, not only while dragging.
+  Falls back to the actual ends and middle field for that case, the same three anchors the window
+  opens on in the first place, so the two can no longer disagree.
+- **Zooming a curve's range stuttered and occasionally jumped**, because the zoom mark's own drag
+  handler had no `requestAnimationFrame` coalescing — unlike shape and pan dragging, which got this
+  exact fix earlier for the same reason (a trackpad's `pointermove` outruns the screen's paint rate).
+  Every raw pointer event forced a synchronous `draw()` — a full SVG teardown and rebuild plus a
+  layout read — on top of its own extra `getBoundingClientRect()` call per event. The rect is now
+  read once, on `pointerdown`, and the last position wins per animation frame, same as the other drag.
 - **A curve control that gave up after 6 seconds gave up on the interface, not the request.** The
   fit it started kept running and could still write into whichever tab was open when it eventually
   landed — so a slow estimate looked like it failed twice, then silently wrote into the wrong

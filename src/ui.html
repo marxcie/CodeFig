@@ -832,18 +832,19 @@
               container: configUIContainer,
               curveBaselines: _curveBaselines,
               curveRamps: _curveRamps,
-              // A channel tab opening for a mode that has never been fitted — see `requestQuickFit`.
-              onChannelOpen: function (rowEl) { requestQuickFit(rowEl); },
-              // Selecting *Estimated original* before a fit exists — the dropdown's own request for one,
-              // alongside opening a tab. Same trigger, same guard (`_modeFitted`); `requestQuickFit`
-              // claims the row synchronously the moment it actually starts a fit, so checking the flag
-              // right after calling it tells this apart from the one real way the request can go
-              // nowhere — no mode name typed yet, so there is nothing to ask the file about. Without this,
-              // that control would sit disabled and reading "Estimating original…" forever, waiting for a
-              // refresh event `requestQuickFit` was never going to send.
+              // **Parked, alongside the dropdown option, not called at all.** This was the other half
+              // of the same problem `ESTIMATE_REQUEST_PARKED` (renderer.js) addresses: `requestQuickFit`
+              // has no way to know a person has since picked a preset or dragged a handle, so whenever
+              // its answer eventually lands it overwrites the curve unconditionally — confirmed live,
+              // dragging a Hue handle: the curve's own stored value read `[]` on every frame of the
+              // drag, because a fit that landed moments earlier had come back empty for that channel
+              // and `applyQuickFit` wrote it in regardless of what was on screen by then. Hiding the
+              // dropdown option stopped a person from *asking* for this; opening a tab was still asking
+              // for it automatically. `requestQuickFit`, the tags, and the watchdog all stay — this is
+              // the one-line revert alongside that one, once the dispatch bug is found.
+              onChannelOpen: function (rowEl) {},
               onRequestEstimate: function (rowEl, wrapEl) {
                 var rowIndex = rowEl.getAttribute('data-row-index');
-                requestQuickFit(rowEl);
                 if (!_modeFitted[rowIndex] && wrapEl) wrapEl.dispatchEvent(new Event('config-ui-curve-refresh'));
               },
               // The control's own timeout gave the interface back; the fit it started is still
@@ -851,6 +852,9 @@
               // where that answer gets marked to be dropped rather than applied — see `abandonQuickFit`.
               onAbandonEstimate: function (rowEl) {
                 abandonQuickFit(rowEl.getAttribute('data-row-index'));
+              },
+              onMiddlePointAdded: function (rowEl, wrapEl) {
+                populateMiddleAnchorFromCurve(rowEl, wrapEl);
               },
               onChange: function (values, opts) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
@@ -2500,6 +2504,16 @@
       // the file's values, so there is no difference to draw. Ask the question, do not store the answer —
       // the same conclusion the Apply banner reached.
 
+      /**
+       * **The last config a real parse produced**, kept only so a live drag has something to overlay
+       * its own values onto without paying for a parse of its own. Written every time the text path
+       * below actually runs (i.e. whenever there is no pending live edit to overlay instead) — never
+       * from the overlay branch itself, or a fast drag frame's own overlay would become the base the
+       * *next* frame overlays onto, drifting from what the text actually says with nothing to correct
+       * it until the drag ends and the text path runs again for real.
+       */
+      let _lastParsedConfig = null;
+
       function requestConfigPreview() {
         _previewTimer = null;
         // The wait starts again from here, so the next burst of edits gets its own full allowance.
@@ -2508,8 +2522,23 @@
         const fn = scriptPreviewFunction(currentScript.code || '');
         if (!fn) return;
 
-        const readBlock = window.CodeFigConfigUI && window.CodeFigConfigUI.parseConfigBlockObject;
-        const config = readBlock ? readBlock(currentConfigBlock()) : null;
+        var config;
+        // **A live drag overlays its own values onto the last real parse, and never touches the text
+        // at all.** `currentConfigBlock()` flushes the pending edit into CodeMirror first — two
+        // `setValue()` calls on the largest config block in the plugin, run up to 8 times a second
+        // while a handle is being dragged (`DEFERRED.md`, "The preview flushes the config text on
+        // every frame of a drag"). Confirmed live: the console showed this whole silent-run cycle
+        // firing back to back while a handle was held down, and the handle did not visibly move —
+        // the main thread was busy running it, not idle waiting for a frame. `getValues()` only
+        // carries what the form renders, so it overlays onto the last full parse rather than standing
+        // in for one; a key the form has no control for survives from whichever parse last set it.
+        if (_configSyncPending && configUIInstance && _lastParsedConfig) {
+          config = Object.assign({}, _lastParsedConfig, configUIInstance.getValues());
+        } else {
+          const readBlock = window.CodeFigConfigUI && window.CodeFigConfigUI.parseConfigBlockObject;
+          config = readBlock ? readBlock(currentConfigBlock()) : null;
+          if (config) _lastParsedConfig = config;
+        }
         if (!config) {
           // Mid-edit text is unparseable constantly. Holding the last good render beats blinking
           // the picture out on every keystroke.
@@ -3036,6 +3065,69 @@
         if (found.config.curve && found.config.curve.length) {
           _curveBaselines.curve = found.config.curve.slice();
         }
+      }
+
+      /**
+       * **A duplicate of `oklchLerpHue` (`@oklch.js`), on purpose.** Three lines, used for exactly one
+       * thing — a sensible starting number for a middle anchor a person just asked to exist, not a
+       * generation-time calculation — so a build step to share it with the sandbox would be more
+       * machinery than the one call site is worth. Keep it byte-for-byte identical if either changes.
+       */
+      function hueLerp(a, b, u) {
+        var delta = ((b - a + 540) % 360) - 180;
+        return (a + delta * u + 360) % 360;
+      }
+
+      /**
+       * **Adding a middle point to a curve gives the *shape* a corner; the channel's own middle
+       * *value* is a separate cell this control never sees.** Left empty, it read as the channel's
+       * fallback of zero — hue 0°, saturation/chroma ~0 — which is grey, generated right under the
+       * point someone just asked to bend. This reads the curve's own progress at the new middle (the
+       * exact on-curve point `bezierWithMiddle` just split at, so nothing about the curve's shape or
+       * the ramp it was already drawing changes) and turns it into a real value by interpolating the
+       * row's own bright and dark ends — the same question `oklchChannelAt`/`oklchLerpHue` answer at
+       * generation time, asked once here for a starting number instead of on every step.
+       *
+       * **Never overwrites a value that is already there.** A middle anchor with a real number in it —
+       * typed, or landed from an earlier fit — said something; this only fills a field that was empty,
+       * the same reason `applyQuickFit` never touches a value a person has already given it.
+       *
+       * **A no-op for every curve with no such sibling**, which is every curve outside Colors —
+       * Spacing, Radius and Typography's own `curve` field, and Colors' own collection-scope OKLCH
+       * curve, have no `middle.<channel>` cell in their row at all, so the lookup below simply finds
+       * nothing and returns. Nothing about their behaviour can change here by construction.
+       */
+      function populateMiddleAnchorFromCurve(rowEl, wrapEl) {
+        var curveKey = wrapEl && wrapEl.getAttribute('data-row-field');
+        if (!curveKey) return;
+        var channel = curveKey.replace(/Curve$/, '');
+        if (!channel || channel === curveKey) return;
+        var middleInput = rowEl.querySelector('[data-row-field="middle.' + channel + '"]');
+        if (!middleInput || String(middleInput.value || '').trim() !== '') return;
+        var brightInput = rowEl.querySelector('[data-row-field="bright.' + channel + '"]');
+        var darkInput = rowEl.querySelector('[data-row-field="dark.' + channel + '"]');
+        if (!brightInput || !darkInput) return;
+        var bright = Number(brightInput.value);
+        var dark = Number(darkInput.value);
+        if (!isFinite(bright) || !isFinite(dark)) return;
+        var points;
+        try {
+          points = JSON.parse(wrapEl.getAttribute('data-curve-value') || '[]');
+        } catch (e) {
+          return;
+        }
+        // Index 5 is the middle handle's own y — `bezierNormalise([X.l1, Y.l1, X.l2, Y.l2, X.m, Y.m, …])`
+        // in `bezierWithMiddle` — the curve's progress fraction at the point it was just split on.
+        if (!Array.isArray(points) || points.length !== 10) return;
+        var fraction = points[5];
+        if (typeof fraction !== 'number' || !isFinite(fraction)) return;
+        var isHue = channel === 'hue' || channel === 'hslHue';
+        var value = isHue ? hueLerp(bright, dark, fraction) : bright + (dark - bright) * fraction;
+        var decimals = channel === 'chroma' ? 4 : 1;
+        var rounded = Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
+        middleInput.value = String(rounded);
+        middleInput.dispatchEvent(new Event('input', { bubbles: true }));
+        middleInput.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
       /**
@@ -5736,7 +5828,7 @@
       function _codefigUiCommandNames() {
         return ['selectScript', 'listScripts', 'readConfig', 'writeConfig', 'readInfoPanel',
           'readPreview', 'readTabs', 'readForm', 'switchTab', 'setField', 'clickControl',
-          'readModeIntents', 'readAutoImport'];
+          'dragControl', 'readModeIntents', 'readAutoImport'];
       }
 
       /** Resolvers waiting for a form change to be folded into the config. */
@@ -5887,6 +5979,16 @@
                 if (!buttons[b].classList.contains('config-ui-curve__toggle--shape')) return buttons[b];
               }
               return null;
+            }
+            // **The draggable pieces, for `dragControl` only.** Named the same way as `shape`/`middle`
+            // above, for the same reason: a click can already reach these, and a drag none of them,
+            // which made three real bugs ("dragging a handle after picking a preset does nothing",
+            // "the zoom marker doesn't move the plot") unverifiable except by a person's own mouse.
+            if (inner === 'zoom') return cell.querySelector('.config-ui-curve__zoom-mark');
+            if (inner === 'end-from') return cell.querySelector('[data-curve-end="from"]');
+            if (inner === 'end-to') return cell.querySelector('[data-curve-end="to"]');
+            if (inner.indexOf('handle-') === 0) {
+              return cell.querySelector('[data-curve-index="' + inner.slice(7) + '"]');
             }
             var options = cell.querySelectorAll('input[type="radio"]');
             for (var o = 0; o < options.length; o++) {
@@ -6230,6 +6332,57 @@
               clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
             }).then(function (how) {
               return { settled: how, text: currentConfigBlock() };
+            });
+          }
+
+          case 'dragControl': {
+            if (!a.name || !a.part) throw new Error('dragControl needs { name, part }');
+            // **An allow-list of exactly the curve editor's own draggable pieces**, addressed the same
+            // way `clickControl`'s `<cell>:shape`/`<cell>:middle` are — for the same reason that whole
+            // scheme exists: a command that can build its own selector is a short step from one that
+            // can reach Run. Added because three real bugs (a handle not moving after a preset is
+            // picked, the zoom marker not moving the plot, dragging an end) were reported from a
+            // person's own mouse and had no way to be driven or verified from the terminal at all.
+            if (!/:(zoom|end-from|end-to|handle-\d+)$/.test(String(a.part || ''))) {
+              throw new Error('dragControl accepts <cell>:zoom, <cell>:end-from, <cell>:end-to, or ' +
+                '<cell>:handle-<n> — not "' + a.part + '"');
+            }
+            var draggable = uiControlTarget(a.name, a.part, a.index);
+            if (!draggable) throw new Error('No "' + a.part + '" on control "' + a.name + '"');
+            var dx = Number(a.dx) || 0;
+            var dy = Number(a.dy) || 0;
+            // **The zoom marker's own pointer listeners are on itself; a handle's and an end's are
+            // delegated on the canvas.** Dispatching `pointerdown` on the piece and letting it bubble
+            // is what makes `evt.target` resolve to it inside that delegated listener — the same path
+            // `clickControl`'s dispatch above already relies on for a plain click.
+            var isZoomMark = draggable.classList && draggable.classList.contains('config-ui-curve__zoom-mark');
+            var moveTarget = isZoomMark ? draggable
+              : (typeof draggable.closest === 'function' ? draggable.closest('.config-ui-curve__canvas') : null);
+            if (!moveTarget) throw new Error('That draggable piece has no canvas to drag across');
+            var rect = typeof draggable.getBoundingClientRect === 'function'
+              ? draggable.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+            var x0 = rect.left + rect.width / 2, y0 = rect.top + rect.height / 2;
+            return actAndSettle(function () {
+              draggable.dispatchEvent(new PointerEvent('pointerdown', {
+                bubbles: true, cancelable: true, clientX: x0, clientY: y0, pointerId: 1
+              }));
+              moveTarget.dispatchEvent(new PointerEvent('pointermove', {
+                bubbles: true, cancelable: true, clientX: x0 + dx, clientY: y0 + dy, pointerId: 1
+              }));
+              moveTarget.dispatchEvent(new PointerEvent('pointerup', {
+                bubbles: true, cancelable: true, clientX: x0 + dx, clientY: y0 + dy, pointerId: 1
+              }));
+            }).then(function (how) {
+              // The rect actually measured, and the curve/zoom state after — so a drag that landed
+              // nowhere shows *where it started from* rather than leaving that to be guessed at.
+              var curveWrap = typeof draggable.closest === 'function'
+                ? draggable.closest('.config-ui-curve') : null;
+              return {
+                settled: how, text: currentConfigBlock(),
+                rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                curveValue: curveWrap ? curveWrap.getAttribute('data-curve-value') : null,
+                curveView: curveWrap ? curveWrap.getAttribute('data-curve-view') : null
+              };
             });
           }
 

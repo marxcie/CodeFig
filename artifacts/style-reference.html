@@ -1107,7 +1107,7 @@
                   <div class="config-ui-curve__head">
                     <select class="config-ui-curve__preset" value="original">
                       <option value="original" selected>Original</option>
-                      <option value="custom">Custom</option>
+                      <option value="custom" hidden>Custom</option>
                       <option value="linear|none">Linear</option>
                       <optgroup label="Sine">
                         <option value="sine|in">Sine · easeIn</option>
@@ -1324,7 +1324,6 @@
                     </div>
                     <div class="config-ui-curve__range">
                       <div class="config-ui-curve__range-fill" data-shown="false"></div>
-                      <div class="config-ui-curve__range-window" data-shown="true" style="top: 0%; height: 88.9%"></div>
                     </div>
                   </div>
                   <div class="config-ui-curve__anchors">
@@ -1332,9 +1331,11 @@
                       <span class="config-ui-rows-group-label">Bright</span>
                       <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.bright" value="98">
                     </label>
-                    <label class="config-ui-curve__anchor config-ui-curve__anchor--middle">
-                      <span class="config-ui-rows-group-label">Middle</span>
-                      <input type="text" class="config-ui-input config-ui-input--number" data-curve-middle="true" disabled value="—">
+                    <label class="config-ui-curve__anchor config-ui-curve__anchor--middle" data-shown="false">
+                      <span class="config-ui-rows-group-part">
+                        <span class="config-ui-rows-group-label">Middle</span>
+                        <input type="text" class="config-ui-input config-ui-input--number" data-curve-middle="true" disabled placeholder="75.3" value="">
+                      </span>
                     </label>
                     <label class="config-ui-rows-group-part config-ui-curve__anchor config-ui-curve__anchor--end">
                       <span class="config-ui-rows-group-label">Dark</span>
@@ -1382,8 +1383,7 @@
                         <div class="config-ui-curve config-ui-curve--growth" data-curve-growth-value="1.5" data-curve-value="[]" data-row-field="curve">
                           <div class="config-ui-curve__head">
                             <select class="config-ui-curve__preset" value="linear|none">
-                              <option value="estimated">Estimated original</option>
-                              <option value="custom">Custom</option>
+                              <option value="custom" hidden>Custom</option>
                               <option value="linear|none" selected>Linear</option>
                               <optgroup label="Sine">
                                 <option value="sine|in">Sine · easeIn</option>

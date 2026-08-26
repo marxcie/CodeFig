@@ -62,6 +62,8 @@ const COMMANDS = {
   switchTab: 'open a tab — name=configUI|configCode|docs|source',
   setField: 'type into a control — name=<field> value=<...> [part=<cell|new|option|chip|chip-add>] [index=<n>]',
   clickControl: 'press part of a control — name=<field> part=add|remove|tab|chip-remove [index=<n>]',
+  dragControl: 'drag a curve editor piece — name=<field> part=<cell>:zoom|end-from|end-to|handle-<n> ' +
+    'dx=<px> dy=<px> [index=<n>]',
   readAutoImport: 'what auto-import last did — requested, refused, source, summary, note',
   readModeIntents: 'what a Run would do to the collection\'s modes — renames, removals, additions',
 };

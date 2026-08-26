@@ -130,6 +130,14 @@ function stripRowNoise(row) {
       const isMiddleGroup = cc.type === 'group' && cc.key === 'middle';
       delete cc.raw;
       delete cc.group;
+      // Not a gap: Hue's anchors used to disable on `hueCurve` alone, which read as always-original
+      // in HSL mode since the OKLCH curve it names sits hidden and untouched there — disabling the
+      // anchors no matter what the curve actually showing held (confirmed live: Hue's start and end
+      // stayed disabled regardless of preset). Fixed after the migration by naming both models'
+      // curves; the frozen pre-migration fixture predates the fix and only ever had the one.
+      if (Array.isArray(cc.disabledWhen)) {
+        cc.disabledWhen = cc.disabledWhen.filter((rule) => rule.field !== 'hslHueCurve');
+      }
       if (cc.helper !== undefined) cc.helper = normaliseHelper(cc.helper);
       if (cc.columns) {
         cc.columns = cc.columns.map((gc) => {
@@ -150,6 +158,29 @@ function stripRowNoise(row) {
 }
 
 const UNREPRESENTABLE_TOP_LEVEL_TYPES = new Set(['blank', 'lineBreak', 'directive']);
+
+test('Hue\'s anchors disable only while neither model\'s curve has a shape, not on hueCurve alone', () => {
+  // A positive assertion, not just the differential above: `stripRowNoise` tolerates this rule being
+  // absent (it filters `hslHueCurve` out before comparing, so a revert would still diff clean) — this
+  // is the one check that actually fails if the fix regresses. Confirmed live: naming only `hueCurve`
+  // read as always-original in HSL mode, since the OKLCH curve it names sits hidden and untouched
+  // there, and Hue's start/end stayed disabled no matter what preset was picked for the curve
+  // actually showing.
+  // Tabs are a flat marker followed by their own columns as siblings, not a container — the same
+  // shape the old parser has always produced (`expandColumnsList`'s un-nesting), which is why this
+  // walks forward from the marker rather than reading a `columns` property off it.
+  const modesColumns = newParseColors().rows.find((r) => r.type === 'field' && r.name === 'modes').columns;
+  const hueTabAt = modesColumns.findIndex((c) => c.type === 'tab' && c.text === 'Hue');
+  assert.ok(hueTabAt !== -1, 'the Hue tab marker was not found');
+  const nextTabAt = modesColumns.findIndex((c, i) => i > hueTabAt && c.type === 'tab');
+  const hueColumns = modesColumns.slice(hueTabAt + 1, nextTabAt === -1 ? undefined : nextTabAt);
+  const brightGroup = hueColumns.find((c) => c.type === 'group' && c.key === 'bright');
+  assert.ok(brightGroup, 'Hue\'s bright anchor group was not found between the Hue and next tab markers');
+  assert.ok(Array.isArray(brightGroup.disabledWhen), 'Hue\'s bright anchor lost its disabledWhen rule entirely');
+  const fields = brightGroup.disabledWhen.map((rule) => rule.field).sort();
+  assert.deepEqual(fields, ['hslHueCurve', 'hueCurve'],
+    'expected both models\' curves named, got: ' + JSON.stringify(fields));
+});
 
 test('colors.js: the new reader matches the old parser row-by-row, in full', () => {
   const oldRows = oldParseColors().rows

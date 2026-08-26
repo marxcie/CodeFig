@@ -169,6 +169,32 @@ test('clickControl still cannot reach anything but a config control', () => {
   // same class as typing in the fields — and it cannot reach a run.
 });
 
+test('dragControl is an allow-list of exactly the curve editor\'s own draggable pieces', () => {
+  const body = commandBody('dragControl');
+  const guard = body.match(/if \(!(\/[^/]*\/)\.test\(String\(a\.part \|\| ''\)\)\) \{/);
+  assert.ok(guard, 'the allow-list regex is gone — dragControl is accepting any part');
+  const re = new RegExp(guard[1].slice(1, -1));
+  ['zoom', 'end-from', 'end-to', 'handle-0', 'handle-9'].forEach((ok) => {
+    assert.ok(re.test('curve:' + ok), '"' + ok + '" should be draggable and the allow-list rejects it');
+  });
+  // Nothing that is not one of the curve editor's own pieces — the same reason `clickControl`'s
+  // allow-list stays one: a part accepted because it was not recognised is a part that can eventually
+  // reach Run.
+  ['add', 'remove', 'tab', 'chip-remove', 'card', 'shape', 'middle', 'handle', 'handle-'].forEach((bad) => {
+    assert.ok(!re.test('curve:' + bad), '"' + bad + '" should not be draggable but the allow-list accepts it');
+  });
+});
+
+test('dragControl reports the rect it measured and the curve state after, not just success', () => {
+  // A drag that lands nowhere and a drag that was never dispatched onto real geometry look identical
+  // from `{ settled }` alone — this is what turned "did the drag even reach the handle" from a guess
+  // into a number worth reading, the first time this command was used against a real collection.
+  const body = commandBody('dragControl');
+  assert.match(body, /rect:\s*\{\s*left:\s*rect\.left/, 'the measured rect must come back, not just success');
+  assert.match(body, /curveValue:/, 'the curve\'s own value after the gesture must come back');
+  assert.match(body, /curveView:/, 'the zoom window after the gesture must come back');
+});
+
 test('a radio takes its option by value, not the first input of the group', () => {
   // `uiControlTarget` falls back to `flat[0]` when nothing matches `part`, and a radio's value was then
   // read as a boolean. So `setField name=colorModel value=oklch` unchecked HSL, selected nothing, and

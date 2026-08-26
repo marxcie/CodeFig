@@ -176,6 +176,28 @@ test('drift and the strip are driven by one comparison', () => {
     'the comparison happens in more than one place, so the banner and the strip can disagree');
 });
 
+test('the Middle anchor above the swatches is dimmed when the curve has no middle point', () => {
+  // A seed always lands on a nearest step, whether or not the curve bends there — this is the same
+  // "dim rather than drop" treatment the curve editor's own middle box gets when its curve has none.
+  const withMiddle = E.colorsAlignment(configFor(null)); // default fixture: joined lower/upper, ten anchors
+  assert.equal(withMiddle.modes[0].made.curve.length, 10, 'fixture no longer has a middle point');
+  const shownHtml = E.colorsStrip(withMiddle.modes[0], withMiddle.steps);
+  assert.match(shownHtml, /color-ramp-preview-anchor--middle" data-shown="true"/,
+    'a genuine middle point should not be dimmed');
+
+  const noMiddle = E.colorsAlignment(configFor(null, { curve: [0.4, 0, 0.7, 0.55] }));
+  assert.equal(noMiddle.modes[0].made.curve.length, 4, 'fixture unexpectedly has a middle point');
+  const dimmedHtml = E.colorsStrip(noMiddle.modes[0], noMiddle.steps);
+  assert.match(dimmedHtml, /color-ramp-preview-anchor--middle" data-shown="false"/,
+    'a plain two-anchor curve has no middle point to mark this loudly');
+
+  // Original (the file's own steps) has no curve at all, so it is dimmed the same way.
+  const original = E.colorsAlignment(configFor(ASH, { curve: [] }));
+  const originalHtml = E.colorsStrip(original.modes[0], original.steps);
+  assert.match(originalHtml, /color-ramp-preview-anchor--middle" data-shown="false"/,
+    'Original has no curve, so it has no middle point either');
+});
+
 test('a preview slot and its strip agree on a key that survives an unnamed mode', () => {
   // The regression that made the whole colour scale vanish. The slot was keyed by `rowLabel`, which falls back
   // to "Row 1" for an entry with no name, while the preview knew that mode as `""` — so nothing matched and
@@ -299,10 +321,12 @@ test('Original is the file\'s ramp, and picking a curve replaces it', () => {
   const steps = ['50', '300', '950'];
   const hexes = ['#FAFAFA', '#7C8381', '#111517'];
   const existing = { Ash: hexes };
+  // `hslHue`, not `hue` — `colorsChannel` reads the model's own key, and matching the file's real bright
+  // and dark exactly is what keeps Hue and Saturation untouched, so the whole ramp reproduces verbatim.
   const anchors = {
-    bright: { hue: 168, saturation: 3, lightness: 98 },
-    middle: { hue: 168, saturation: 3, lightness: 45 },
-    dark: { hue: 200, saturation: 15, lightness: 7 }
+    bright: { hslHue: 0, saturation: 0, lightness: 98 },
+    middle: { hslHue: 168, saturation: 3, lightness: 45 },
+    dark: { hslHue: 200, saturation: 15, lightness: 7 }
   };
 
   const original = ctx.colorsAlignment({
@@ -373,6 +397,54 @@ test('a mode on Original keeps the file, and any curve at all replaces it', () =
   }));
   assert.notDeepEqual(easeIn.modes[0].made.rows.map((r) => r.hex), rows.map((r) => r.hex),
     'easeIn and easeInOut produced the same ramp — the easing is not reaching the ladder');
+});
+
+test('editing Hue while Lightness stays on Original shows up in the swatch', () => {
+  /**
+   * Márton, driving the real plugin: moved a mode's hue to blue at one end and pink at the other, and the
+   * swatch stayed the file's lime green. Reproduced live through the dev bridge: setting `bright.hslHue`
+   * and `dark.hslHue` directly, with the Lightness curve left on Original (the state every freshly-read
+   * mode is in, since the on-demand fit that would replace it is parked), left the preview completely
+   * unchanged — moving the *Lightness* curve off Original was the only thing that made it respond. Hue and
+   * Saturation have their own curves; Original's job is the ramp's lightness, not a claim on channels it
+   * says nothing about.
+   */
+  const ctx = load();
+  const steps = ['25', '50', '75', '100', '150', '200', '250', '300',
+    '350', '400', '500', '600', '700', '800', '900', '950'];
+  const lime = ['#F5FFF0', '#EEFFE5', '#E0FFD1', '#D3FFBD', '#BEFF9E', '#AAFF80', '#9CF76E', '#7DEE44',
+    '#5AE515', '#4AB017', '#378311', '#1F5C00', '#164200', '#113300', '#0A1F00', '#091A00'];
+  const read = ctx.oklchHslFromHex;
+  const config = {
+    colorModel: 'hsl', steps: steps.join(', '), existing: { 'Lime-1': lime },
+    modes: [{
+      name: 'Lime-1', curve: [], chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [],
+      seed: { hex: '', placement: '', lock: false },
+      bright: { hslHue: read(lime[0]).H, saturation: 100, lightness: 97.1 },
+      dark: { hslHue: read(lime[15]).H, saturation: 100, lightness: 5.1 }
+    }]
+  };
+
+  // Untouched: the mode reproduces the file exactly, same as any fresh, unedited read.
+  const untouched = ctx.colorsGenerateMode(config, config.modes[0], steps, null);
+  assert.deepEqual(untouched.rows.map((r) => r.hex), lime, 'an unedited mode should still reproduce the file');
+
+  // Editing the hue ends, and nothing else, moves the whole ramp toward blue and pink — the swatch Márton
+  // could not get to change.
+  const edited = JSON.parse(JSON.stringify(config));
+  edited.modes[0].bright.hslHue = 220;
+  edited.modes[0].dark.hslHue = 348;
+  const made = ctx.colorsGenerateMode(edited, edited.modes[0], steps, null);
+  assert.notDeepEqual(made.rows.map((r) => r.hex), lime, 'editing hue had no visible effect — the original bug');
+
+  const hues = made.rows.map((r) => read(r.hex).H);
+  assert.ok(Math.abs(hues[0] - 220) < 1, 'the bright end did not move to the new hue, at ' + hues[0]);
+  assert.ok(Math.abs(hues[15] - 348) < 1, 'the dark end did not move to the new hue, at ' + hues[15]);
+
+  // Lightness is still Original and still exact — decoupled, not abandoned.
+  const lightness = made.rows.map((r) => Math.round(r.L * 1000) / 1000);
+  const fileLightness = lime.map((hex) => Math.round(read(hex).L * 1000) / 1000);
+  assert.deepEqual(lightness, fileLightness, 'lightness drifted from the file even though it is untouched');
 });
 
 test('the ladder and the ramp kink at the same step when placement moves the middle', () => {
@@ -511,13 +583,26 @@ test('the curve is the collection\'s in OKLCH and the mode\'s in HSL', () => {
 
   // A shared Original puts every mode on the file's own steps at once — which is what makes an OKLCH load
   // as quiet as an HSL one.
+  //
+  // **Each mode's own hue and chroma, not the one `anchors` object above.** Hue and chroma stay quiet only
+  // when a mode's bright and dark anchors match what that mode's own file actually holds there — real,
+  // per-mode, since two files rarely share a hue. Reusing one `anchors` object for both would ask each
+  // mode's Hue to reproduce a colour that is not its own, which is not what a real two-mode read does and
+  // not the case this asserts.
   const file = { A: ['#FAFAFA', '#7C8381', '#111517'], B: ['#F8FDF5', '#ADC3A6', '#0B1710'] };
+  const anchorsFor = (bright, dark) => ({
+    bright: { hue: bright.H, chroma: bright.C, lightness: 98 },
+    middle: { hue: 110, chroma: 0.05, lightness: 50 },
+    dark: { hue: dark.H, chroma: dark.C, lightness: 5 }
+  });
+  const anchorsA = anchorsFor(ctx.oklchFromHex(file.A[0]), ctx.oklchFromHex(file.A[2]));
+  const anchorsB = anchorsFor(ctx.oklchFromHex(file.B[0]), ctx.oklchFromHex(file.B[2]));
   const quiet = ctx.colorsAlignment({
     colorModel: 'oklch', steps: steps.join(', '), existing: file,
     lightness: { bright: 98, middle: 50, dark: 5 },
     lower: { family: 'original', easing: 'inout', amount: 100 },
     upper: { family: 'original', easing: 'inout', amount: 100 },
-    modes: [Object.assign({ name: 'A' }, anchors), Object.assign({ name: 'B' }, anchors)]
+    modes: [Object.assign({ name: 'A' }, anchorsA), Object.assign({ name: 'B' }, anchorsB)]
   });
   assert.deepEqual(quiet.modes.map((m) => m.changed.length), [0, 0],
     'a shared Original still reports changes');
@@ -531,7 +616,7 @@ test('the curve is the collection\'s in OKLCH and the mode\'s in HSL', () => {
     colorModel: 'oklch', steps: steps.join(', '), existing: file,
     lightness: { bright: 98, middle: 50, dark: 5 },
     lower: curved, upper: curved,
-    modes: [Object.assign({ name: 'A' }, anchors), Object.assign({ name: 'B' }, anchors)]
+    modes: [Object.assign({ name: 'A' }, anchorsA), Object.assign({ name: 'B' }, anchorsB)]
   });
   assert.ok(applied.modes[0].changed.length > 0 && applied.modes[1].changed.length > 0,
     'the shared curve reached neither mode');

@@ -13,6 +13,7 @@
     var onChannelOpen = (opts && opts.onChannelOpen) || null;
     var onRequestEstimate = (opts && opts.onRequestEstimate) || null;
     var onAbandonEstimate = (opts && opts.onAbandonEstimate) || null;
+    var onMiddlePointAdded = (opts && opts.onMiddlePointAdded) || null;
 
     // The listeners `attachListeners` puts on the container, so a re-render can take the previous set off.
     // Without this they accumulate and every keystroke does the work of every render that came before it.
@@ -40,7 +41,8 @@
           : null,
         onChannelOpen,
         onRequestEstimate,
-        onAbandonEstimate
+        onAbandonEstimate,
+        onMiddlePointAdded
       );
       getV = attached.getValues;
       applyV = attached.applyVisibility;

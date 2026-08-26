@@ -3010,6 +3010,13 @@
         border-top: 4.5px solid currentColor;
       }
 
+      /* A seed always lands somewhere; a curve does not always bend there. Dimmed rather than dropped,
+         the same 0.45 the curve editor's own middle box uses when its curve has none — the text and the
+         triangle both, since the triangle is `currentColor` and opacity reaches the whole label as one. */
+      .color-ramp-preview-anchor--middle[data-shown="false"] {
+        opacity: 0.45;
+      }
+
       .color-ramp-preview-card {
         display: flex;
         flex-direction: column;
@@ -3833,24 +3840,6 @@
       }
 
       .config-ui-curve__range-fill[data-shown="false"] { visibility: hidden; }
-
-      /* The plot's slice, marked on the whole channel. A bracket rather than a fill: the colours under it
-         are the thing being pointed at, so covering them would defeat the point. */
-      .config-ui-curve__range {
-        position: relative;
-      }
-
-      .config-ui-curve__range-window {
-        position: absolute;
-        left: -2px;
-        right: -2px;
-        border: 1.5px solid var(--text-primary);
-        border-radius: 3px;
-        pointer-events: none;
-        box-shadow: 0 0 0 1.5px var(--bg-primary);
-      }
-
-      .config-ui-curve__range-window[data-shown="false"] { display: none; }
 
       /* --- the value axis: a curve bound to two ends, with a rail to zoom it -------------------
          Its own classes throughout. `.config-ui-curve__plot-wrap` is every curve's plot box and

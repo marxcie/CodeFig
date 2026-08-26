@@ -23,25 +23,28 @@ something else.
 their documentation, so bringing it back is a revert rather than a rewrite. Anything reviving it should
 also answer the question that killed it: what do the anchor boxes show, given the config stores lightness.
 
-## The preview flushes the config text on every frame of a drag
+## The preview flushed the config text on every frame of a drag — fixed
 
 `scheduleConfigPreview` has a 120ms maximum wait so the colour strip redraws while a curve handle is being
 dragged — without it a plain debounce was reset by every frame and the strip only caught up when the
 pointer stopped.
 
-The preview reads the config block, and `currentConfigBlock()` flushes `_configSyncPending`, so a drag now
-rewrites the config editor roughly eight times a second. That is what the live-deferral was built to
-avoid: two CodeMirror `setValue` calls per rewrite, on the panel with the largest config block in the
-plugin.
+The preview used to read the config block, and `currentConfigBlock()` flushes `_configSyncPending`, so a
+drag rewrote the config editor roughly eight times a second: two CodeMirror `setValue` calls per rewrite,
+on the panel with the largest config block in the plugin.
 
-It is bounded — `requestConfigPreview` declines while a silent run is in flight and reschedules — and
-`colorsPreviewHtml` itself measures 0.6ms in Figma, so the drawing is not the cost. Not chased because
-nothing has felt slow since, and the alternative is a real change: feed the preview from the form's values
-rather than from the text. The values are not a drop-in replacement — `getValues` only carries what the
-form renders, while the block also holds keys no control shows — so it would need the values overlaid on
-the last parsed config rather than used alone.
+"Not chased because nothing has felt slow since" stopped being true: Márton dragging a Hue handle on
+`color - lime` produced a Chrome console log of this exact silent-run cycle firing back to back, and the
+handle did not visibly move — the main thread was busy running it, not idle waiting for a frame he could
+see. Fixed the way this entry already named: `requestConfigPreview` now overlays `configUIInstance
+.getValues()` onto `_lastParsedConfig` (the last text parse, cached only on that path — never from the
+overlay itself, or one drag frame's overlay would become the base the next frame overlays onto and drift
+from what the text actually says) whenever a live edit is pending, and never touches CodeMirror during a
+drag at all. The real parse path — typing, a commit, anything not live — is unchanged.
 
-**How it was found:** measured while fixing the strip not updating during a drag, rather than reported.
+**How it was found:** measured while fixing the strip not updating during a drag, rather than reported —
+and reported for real, later, as "the handles don't move," from the cost this entry had already written
+down and left unchased.
 
 ## 1. `matchPattern`'s `caseSensitive` option has never worked
 
@@ -1274,6 +1277,71 @@ this pass did not spend on top of the three already spent confirming the shape o
   fit that *does* throw fails a retry-able row instead of claiming it forever.
 - Neither makes an on-demand fit actually land. **Say plainly: on a real collection, in this
   environment, across every attempt made this pass, it did not.**
+
+**Parked, a later session still.** Four passes in, the mystery is unlocalised and the visible cost
+is real: a control that asks and never answers reads as broken, worse than a control that does not
+ask at all. *Estimated original* is no longer offered on a per-mode curve cell —
+`ESTIMATE_REQUEST_PARKED` in `buildCurvePresetSelect` (`src/config-ui/renderer.js`) — while the
+option that applies a fit *already in hand* (`estimated`, no request involved) is untouched, since
+that path never goes near the hang. Un-parking is flipping that one flag back once the mystery
+above is solved, not a rewrite: `requestQuickFit`, the tags, and the watchdog were left exactly as
+built, and the tests that exercise them now drive `preset.value = 'estimated'` directly rather than
+through a dropdown option, so they keep covering the mechanism with nothing left to click.
+
+**The next step, so it does not have to be re-derived.** An unconditional (not `!silentRun`-gated)
+checkpoint log inside `code.ts`'s `RUN` handler — one line before the function runs, one after each
+`await` a quick-fit snippet makes, forwarded to the console bridge regardless of `silent` — run
+once, live, on `color - lime`, to see which specific `await` the promise is parked on. That is a
+temporary, throwaway change: add it, reload, trigger one on-demand fit, read `figma-console.log`,
+then take it back out.
+
+**Update, a later session again: the request was never the bug — landing unconditionally is.**
+Parking the dropdown only closed the half of this a person could *ask* for. Opening a channel tab
+still asked automatically (`onChannelOpen`), and confirmed live: a request made when a tab opened
+landed successfully (not hung — this one specific answer was correct, empty for that channel) a
+few seconds later, while a handle was already being dragged on a curve the person had since picked
+a preset for. `applyQuickFit` writes its answer in unconditionally, with no way to know the row has
+been touched since the request went out — so `applyMove`'s own read of the curve's stored value
+came back `[]` on every subsequent drag frame, because the "answer" that landed was exactly that,
+for that channel. Chrome DevTools console access (via a browser-automation MCP, once the right
+frame context was found — the desktop app's plugin UI shows up as "Shim Plugin Iframe
+(plugin-sandbox)" in the context dropdown, and there were two, one presumably stale) is what made
+this traceable at all — `figma-console.log` cannot see a silent run by design. `onChannelOpen` is
+now also a no-op. Same one-line reverts as before; `requestQuickFit` itself was never the problem.
+
+**Update, a later session again: what looked like a dead handle was a dead swatch.** After the
+`onChannelOpen` fix above, Márton reported dragging still did nothing — but the repro that followed
+("moved the hue handles to blue and pink, the scale didn't change") turned out to be a completely
+separate bug one level downstream: `colorsGenerateMode`'s Original substitution overwrote hue and
+chroma along with lightness, so the swatch — the one place an edit would be visible — stayed pinned
+to the file regardless of what Hue or Saturation said, for as long as Lightness stayed Original
+(every freshly-read mode, since the fit above is still parked). Fixed, decoupled per channel; see
+the `CHANGELOG.md` entry. Reproduced and verified live through the dev bridge (`setField`,
+`dragControl` with `--allow-stale`) rather than waiting for a fresh reload, per Márton's own
+instruction to keep working without one.
+
+**Update, a later session again: a third bug, found the same way — drive it live, don't guess.**
+Márton, after both fixes above: "well, it still doesn't work in Figma." Repeated the exact
+`setField`/`dragControl` repro on a *fresh* build (not `--allow-stale` this time — the plugin had
+reloaded) rather than assuming the two fixes already covered it. The swatch fix held: setting
+`bright.hslHue`/`dark.hslHue` moved Lime-1's preview from lime to blue/magenta with Lightness still
+on Original, no workaround needed. But `dragControl` on a fresh Hue handle left `hslHueCurve` at
+`[]` — the drag never wrote anything, on the current build, not a stale one. Root cause, found by
+reading `applyMove` and `draw()` side by side rather than by guessing from the symptom: `draw()`
+positions every handle from `effectivePoints(stored)` — the *implied* Linear shape a field draws
+when nothing is stored yet, which is the state of every untouched Hue, Saturation or Chroma field —
+but `applyMove` read the *raw* stored value again, `[]`, and wrote `pts[dragging] = at.x` into an
+empty array. A one- or two-number result is not a recognisable curve, so `bezierNormalise` discarded
+it right back to `[]` on the very next read, every frame, settle included. Fixed by having
+`applyMove` read `effectivePoints` the same way `draw()` does; see `CHANGELOG.md`. This is very
+likely the actual, original "dragging a handle does nothing" report from the start of this whole
+thread — the other two fixes were real, confirmed bugs in their own right, but neither explains a
+handle failing to move on a field nobody has touched yet, which is exactly this. `dragControl`'s own
+diagnostic fields (`curveValue`/`curveView` coming back `null`) turned out to be a red herring
+either way — the dragged element is detached from the tree by the redraw `setPoints` triggers before
+the diagnostic reads it back, `closest()` on a detached node finds nothing, and that has nothing to
+do with whether the drag itself landed. Read `text` (the real config block), not those fields, when
+checking a drag result through this command.
 
 ---
 

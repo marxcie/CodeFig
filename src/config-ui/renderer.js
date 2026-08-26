@@ -1582,13 +1582,27 @@
       (into || sel).appendChild(o);
     }
     if (allowOriginal) add("original", "Original");
-    // **Shown whenever there is one, or whenever asking for one is possible.** *Estimated original* names
-    // the curve fitted to the ramp already in the file. `estimated` is true once that fit has run;
-    // `awaitable` is true for a per-mode curve cell, where selecting the option *before* a fit exists is
-    // itself the request for one (see `requestEstimate` below) — the dropdown is where a person goes to
-    // ask, not just where the answer shows up once it already has one. Neither true — a scale field with
-    // no fitting mechanism at all — and the option would name nothing, so it stays off.
-    if (estimated || awaitable) add("estimated", "Estimated original");
+    // **`estimated` (a fit already in hand) is unaffected and still offers the option — applying it
+    // is a plain assignment (`setPoints(estimate.slice())`), no request, nothing to hang.**
+    //
+    // **`awaitable` — asking for a fit that does not exist yet — is parked, not removed.** That
+    // selection is itself the request (`requestEstimate`, below), and the request does not reliably
+    // answer (`DEFERRED.md`, "The on-demand fit hangs, not always, and not fully explained": the
+    // identical computation finishes in ~1.2s through the job queue and has not landed once through
+    // this live dispatch path across many attempts). A control that never answers is worse than one
+    // that is not there. `awaitable` still arrives here and still means what it always did, so
+    // restoring this is a one-line revert once the dispatch bug is found — `requestQuickFit`, the
+    // tags, and the watchdog all stay, and stay exercised directly in tests via `preset.value =
+    // 'estimated'` rather than through an option nobody can click.
+    var ESTIMATE_REQUEST_PARKED = true;
+    if (estimated || (awaitable && !ESTIMATE_REQUEST_PARKED)) add("estimated", "Estimated original");
+    // **Hidden until it is true, not a choice that undoes itself.** Picking *Custom* on an untouched
+    // preset changed nothing about the points, so `setPoints`'s own label — derived from the
+    // coordinates, the same rule that lets an edit fall back to *Custom* on its own — snapped straight
+    // back to whatever preset those points already matched. That read as the dropdown reverting the
+    // instant you picked the option. `hidden`, not absent: the option still exists for `setPoints` to
+    // select once a drag genuinely makes the curve custom, the same technique the collection and mode
+    // pickers use for their own "New…" placeholder.
     add("custom", "Custom");
     add("linear|none", "Linear");
     for (var f = 1; f < CURVE_PRESET_FAMILIES.length; f++) {
@@ -1810,7 +1824,6 @@
     var zoomMark = null;
     var zoomTrack = null;
     var rangeFill = null;
-    var rangeWindow = null;
     if (field.ends) {
       var line = document.createElement("div");
       line.className = "config-ui-curve__chartline";
@@ -1841,9 +1854,6 @@
       rangeFill = document.createElement("div");
       rangeFill.className = "config-ui-curve__range-fill";
       rangeCol.appendChild(rangeFill);
-      rangeWindow = document.createElement("div");
-      rangeWindow.className = "config-ui-curve__range-window";
-      rangeCol.appendChild(rangeWindow);
       line.appendChild(rangeCol);
     } else {
       wrap.appendChild(plot);
@@ -1886,6 +1896,24 @@
     if (field.ends && !field.ends.mid) {
       var middleCell = document.createElement("label");
       middleCell.className = "config-ui-curve__anchor config-ui-curve__anchor--middle";
+      /**
+       * **The actual stacker is an inner wrapper, kept off the outer cell on purpose.**
+       *
+       * The adopted anchors either side of this one nest three levels deep: an outer cell (its own
+       * caption hidden by `.config-ui-curve__anchors > .config-ui-rows-cell > .config-ui-rows-cell-label`),
+       * a `.config-ui-rows-group` for the pair of alternate-model fields one position can hold, and a
+       * `.config-ui-rows-group-part` *inside that* — the thing whose `flex-direction: column` is what
+       * stacks a caption over its input. Confirmed live, in a browser, by diffing the two DOM trees:
+       * the adopted middle's part carries `.config-ui-rows-group-part` alone, never `.config-ui-curve__anchor`.
+       * Putting both classes on the same element — what this used to do — loses the column layout to
+       * `.config-ui-curve__anchors .config-ui-curve__anchor { display: block }`, which is two classes
+       * against `.config-ui-rows-group-part`'s one and wins by specificity regardless of source order.
+       * So `.config-ui-curve__anchor`/`--middle` (grid position, the `data-shown` dimming) stay on the
+       * outer label, and the flex column that actually stacks caption over input lives one level in,
+       * on an element that class never reaches.
+       */
+      var middlePart = document.createElement("span");
+      middlePart.className = "config-ui-rows-group-part";
       var middleCap = document.createElement("span");
       // **The same caption class the adopted cells use.** Its two neighbours are group *parts*, whose
       // captions are `config-ui-rows-group-label` at 10px; this one was a cell label at 12px, so Middle
@@ -1897,8 +1925,9 @@
       middleBox.type = "text";
       middleBox.className = "config-ui-input config-ui-input--number";
       middleBox.setAttribute("data-curve-middle", "true");
-      middleCell.appendChild(middleCap);
-      middleCell.appendChild(middleBox);
+      middlePart.appendChild(middleCap);
+      middlePart.appendChild(middleBox);
+      middleCell.appendChild(middlePart);
       anchorRow.appendChild(middleCell);
     }
     if (anchorRow) wrap.appendChild(anchorRow);
@@ -2094,12 +2123,29 @@
      *
      * Three samples rather than the two ends, because zooming in on the middle legitimately puts both ends
      * outside — and that view must survive.
+     *
+     * **Equal ends are a separate case.** `unitToValue` maps a curve's 0..1 height onto `a.from..a.to`, and
+     * when the two are the same number that map is degenerate — every sample comes back as that one constant
+     * *regardless of the curve's real shape*, the exact channel `axisView`'s own comment calls out ("a
+     * channel whose ends match has its whole shape in the middle"). Zooming to a window that excludes that
+     * constant then reads as the whole ramp being offscreen on every single redraw, and the window keeps
+     * getting discarded and reopened wide — which is the "range scale doesn't match the zoom" and "zoom
+     * jumps between ranges" reports. Falling back to the same three anchors `axisView` opens the window on
+     * (`a.from`, `a.to`, and the middle field when the channel has one) keeps the two in agreement instead
+     * of one asking the curve and the other asking the field.
      */
     function rampIsOffscreen(a, lo, hi) {
-      var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
-      var at = [0, 0.5, 1].map(function (x) {
-        return unitToValue(a, B ? B.bezierAt(pts, x) : x);
-      });
+      var at;
+      if (Math.abs(a.to - a.from) < 1e-9) {
+        at = [a.from, a.to];
+        var mid = field.ends && field.ends.mid ? endValue("mid") : null;
+        if (mid !== null) at.push(mid);
+      } else {
+        var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
+        at = [0, 0.5, 1].map(function (x) {
+          return unitToValue(a, B ? B.bezierAt(pts, x) : x);
+        });
+      }
       return at.every(function (v) { return v > hi; }) || at.every(function (v) { return v < lo; });
     }
 
@@ -2290,11 +2336,33 @@
        */
       var stored = curveValueOf(wrap.getAttribute("data-curve-value"));
       var curveHasMiddle = stored.length === 10;
+      /**
+       * **Where the curve already sits at the midpoint, before anyone has added an anchor there.**
+       * `bezierWithMiddle(pts, 0.5)`'s own split point is *solved* to land at x=0.5 — see its `bezierSolve`
+       * call — so the y it would produce there is exactly `bezierAt(pts, 0.5)`, the curve's ordinary
+       * eased value at the halfway point. Reading that without a real anchor is the "useful even before
+       * you add a middle point" number Márton asked for. Written to `placeholder`, never `.value` — a
+       * disabled field's value is still what `collectRows` reads, and this is a measurement, not an
+       * anchor nobody set.
+       */
+      function derivedMiddleText() {
+        if (!B || !stored.length) return "";
+        var value = unitToValue(a, B.bezierAt(stored, 0.5));
+        // **Rounded against the channel, the same reason `setEndValue` is.** A tenth reads fine for a
+        // lightness or a hue and rounds a chroma straight to 0 — `0..0.4`'s thousandth keeps four useful
+        // digits, and a channel with no declared range still gets the one-decimal read this box always
+        // showed before there was anything to derive.
+        var span = field.range ? Math.abs(field.range.hi - field.range.lo) : 10;
+        var quantum = Math.pow(10, Math.floor(Math.log((span || 10) / 1000) / Math.LN10));
+        var rounded = parseFloat((Math.round(value / quantum) * quantum).toPrecision(12), 10);
+        return String(rounded);
+      }
       // An adopted middle is greyed rather than hidden: it keeps its value, and it comes back the moment
       // the curve grows a middle point again.
       var midCell = field.ends.mid ? endCell("mid") : null;
       if (midCell) {
         midCell.disabled = !curveHasMiddle;
+        midCell.placeholder = curveHasMiddle ? "" : derivedMiddleText();
         var midWrap = typeof midCell.closest === "function"
           ? midCell.closest(".config-ui-curve__anchor") : null;
         if (midWrap) midWrap.setAttribute("data-shown", curveHasMiddle ? "true" : "false");
@@ -2303,9 +2371,16 @@
         var held = stored;
         var hasMiddle = curveHasMiddle;
         middleBox.disabled = !hasMiddle;
+        // **Placeholder, not `.value`, for the derived reading** \u2014 the same reason the adopted case
+        // above uses it: this box has no field behind it to be collected, but treating "no anchor" and
+        // "measured, not set" the same way here keeps the two middle boxes behaving alike.
+        middleBox.placeholder = hasMiddle ? "" : derivedMiddleText();
+        var middleWrap = typeof middleBox.closest === "function"
+          ? middleBox.closest(".config-ui-curve__anchor") : null;
+        if (middleWrap) middleWrap.setAttribute("data-shown", hasMiddle ? "true" : "false");
         if (typeof document === "undefined" || document.activeElement !== middleBox) {
           middleBox.value = hasMiddle
-            ? String(Math.round(unitToValue(a, held[5]) * 10) / 10) : "\u2014";
+            ? String(Math.round(unitToValue(a, held[5]) * 10) / 10) : "";
         }
       }
       if (rangeFill) {
@@ -2313,18 +2388,6 @@
         rangeFill.style.background = stops
           ? "linear-gradient(to bottom, " + stops.join(", ") + ")" : "";
         rangeFill.setAttribute("data-shown", stops ? "true" : "false");
-      }
-      // Where the plot's slice sits in the whole channel. Derived from the window on every draw, so it
-      // cannot describe a view the chart is not showing.
-      if (rangeWindow) {
-        var whole = a.hi - a.lo;
-        var view = axisView(a);
-        var top = whole > 0 ? ((a.hi - view.hi) / whole) * 100 : 0;
-        var bottom = whole > 0 ? ((a.hi - view.lo) / whole) * 100 : 100;
-        rangeWindow.style.top = Math.max(0, Math.min(100, top)) + "%";
-        rangeWindow.style.height = Math.max(1.5, Math.min(100, bottom - top)) + "%";
-        // Nothing to mark when the window is the channel.
-        rangeWindow.setAttribute("data-shown", (bottom - top) < 99 ? "true" : "false");
       }
     }
 
@@ -2335,13 +2398,51 @@
      * the bar is the blend between those two colours, which is what the ramp does there.
      *
      * Positions run top-down because a CSS gradient does and the axis does not: the window's high value is
-     * at the top of the plot. Stops outside the window are kept rather than dropped, with their positions
-     * clamped, so the colour at the edge is the one the ramp actually has there instead of the nearest
-     * token's.
+     * at the top of the plot. **Cropped to the window, not clamped to its edges.** Clamping kept every
+     * token's colour somewhere on the strip — compressed toward the edges once zoomed — so the full
+     * spectrum stayed visible instead of the zoomed slice, which is the "wrong" behaviour in Márton's own
+     * reference images. A token outside the window is dropped instead, and the colour exactly at each edge
+     * is interpolated between whichever two tokens bracket it, the same linear blend a CSS gradient already
+     * does between any two stops — so the strip shows only what the window actually contains, stretched to
+     * fill it, and the correlation with the chart's own axis numbers holds at every zoom level.
      */
+    function hexToRgb(hex) {
+      var m = /^#?([0-9a-f]{6})$/i.exec(hex);
+      if (!m) return null;
+      var n = parseInt(m[1], 16);
+      return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    }
+    function lerpHex(h1, h2, t) {
+      var a = hexToRgb(h1), b = hexToRgb(h2);
+      if (!a || !b) return t < 0.5 ? h1 : h2;
+      return "#" + [a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t]
+        .map(function (c) {
+          var byte = Math.max(0, Math.min(255, Math.round(c)));
+          return (byte < 16 ? "0" : "") + byte.toString(16);
+        }).join("");
+    }
+    function hexAt(points, last, value) {
+      if (value <= points[0].value) return points[0].hex;
+      if (value >= points[last].value) return points[last].hex;
+      for (var k = 1; k <= last; k++) {
+        if (value <= points[k].value) {
+          var p0 = points[k - 1], p1 = points[k];
+          var t = p1.value === p0.value ? 0 : (value - p0.value) / (p1.value - p0.value);
+          return lerpHex(p0.hex, p1.hex, t);
+        }
+      }
+      return points[last].hex;
+    }
     /**
-     * **The bar is a picture of the channel**, built from `@ramp` — a CSS colour with `$` where the axis
+     * **The bar is a picture of the window**, built from `@ramp` — a CSS colour with `$` where the axis
      * value goes and `~key` for a sibling field.
+     *
+     * **The window, not the whole channel.** This used to draw the whole channel and mark the zoomed
+     * window on top of it with a bracket, on the reasoning that a hue ramp travelling one degree is a
+     * solid block of colour otherwise. Márton reversed that: the strip has to correlate with the chart's
+     * own numbers on the left at every zoom level, the same way the chart itself does — zoom to hue
+     * 90..100 and the strip shows hue 90..100, stretched to fill the same height, not the whole wheel
+     * with a sliver bracketed near one edge.
      *
      * Sampled at eleven points across the window and handed to the browser, which does the mixing. So no
      * colour maths lives here: the only other way to draw a hue wheel is a second copy of `@oklch.js`
@@ -2354,12 +2455,7 @@
      */
     function templateStops(a) {
       if (!field.ramp) return null;
-      // **The whole channel, not the window.** A bar showing only what the plot shows is a second copy of
-      // the plot's own range — and on a hue ramp travelling one degree it is a solid block of one colour,
-      // which tells you nothing about where that degree sits on the wheel. The window is drawn *onto* it
-      // instead, so the bar answers "where in the channel am I" while the chart answers "what happens
-      // across it".
-      var w = { lo: a.lo, hi: a.hi }, span = w.hi - w.lo;
+      var w = axisView(a), span = w.hi - w.lo;
       if (!(span > 0)) return null;
       var out = [];
       for (var i = 0; i <= 10; i++) {
@@ -2398,19 +2494,21 @@
       var w = axisView(a), span = w.hi - w.lo;
       if (!(span > 0)) return null;
       var last = hexes.length - 1;
-      var out = [];
+      var points = [];
       for (var i = 0; i <= last; i++) {
-        var value = unitToValue(a, B ? B.bezierAt(pts, i / last) : i / last);
-        var at = Math.min(100, Math.max(0, ((w.hi - value) / span) * 100));
-        out.push(hexes[i] + " " + Math.round(at * 10) / 10 + "%");
+        points.push({ value: unitToValue(a, B ? B.bezierAt(pts, i / last) : i / last), hex: hexes[i] });
       }
-      // A gradient's stops have to ascend. A ramp that runs uphill in value runs downhill in position, so
-      // one of the two orders is always backwards — and the wrong one paints the bar inside out.
-      var ascending = true;
-      for (var k = 1; k < out.length; k++) {
-        if (parseFloat(out[k].split(" ")[1], 10) < parseFloat(out[k - 1].split(" ")[1], 10)) ascending = false;
-      }
-      return ascending ? out : out.reverse();
+      // Sorted by value, not token order — the boundary lookup below walks a straight line, whichever
+      // direction the ramp itself runs.
+      points.sort(function (p, q) { return p.value - q.value; });
+      var kept = points.filter(function (p) { return p.value > w.lo && p.value < w.hi; });
+      kept.reverse(); // descending, to match the window's high value sitting at the top of the strip.
+      var out = [{ value: w.hi, hex: hexAt(points, last, w.hi) }]
+        .concat(kept, [{ value: w.lo, hex: hexAt(points, last, w.lo) }]);
+      return out.map(function (p) {
+        var at = Math.min(100, Math.max(0, ((w.hi - p.value) / span) * 100));
+        return p.hex + " " + Math.round(at * 10) / 10 + "%";
+      });
     }
 
     function draw() {
@@ -2648,7 +2746,12 @@
       var label = (estimate && sameCurve(pts, estimate)) ? "estimated" : curveLabelFor(effectivePoints(pts));
       // The dropdown *reads* the curve. Selecting an option it does not contain leaves a `<select>` blank,
       // so *Custom* is a real option rather than a placeholder.
-      preset.value = label === "original" && !allowOriginal ? "custom" : label;
+      var resolved = label === "original" && !allowOriginal ? "custom" : label;
+      // **Offered only once it is true.** Picking it while the points still match a named preset
+      // changed nothing to pick — see the note on `add("custom", ...)` above.
+      var customOption = preset.querySelector('option[value="custom"]');
+      if (customOption) customOption.hidden = resolved !== "custom";
+      preset.value = resolved;
       if (!preset.value) preset.value = "custom";
 
       // The middle-point button only means something once there is a shape to split.
@@ -2768,7 +2871,17 @@
       if (!B) return;
       var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
       if (!pts.length) return;
-      setPoints(pts.length === 10 ? B.bezierWithoutMiddle(pts) : B.bezierWithMiddle(pts, 0.5));
+      if (pts.length === 10) {
+        setPoints(B.bezierWithoutMiddle(pts));
+        return;
+      }
+      setPoints(B.bezierWithMiddle(pts, 0.5));
+      // **The curve now has a middle position; the channel's own middle *value* is a different cell
+      // this control cannot see.** `bright.hue`/`middle.hue`/`dark.hue` live in sibling row cells this
+      // curve knows nothing about — so the host, which can see the whole row, is asked to fill the
+      // sibling in from what the curve and the row's own ends already say, the same reason
+      // `onChannelOpen` and `onRequestEstimate` are callbacks and not something this file does itself.
+      wrap.dispatchEvent(new Event("config-ui-middle-point-added", { bubbles: true }));
     });
 
     // **Only on a real edit.** The field is redrawn from the curve on every change, so reacting to that
@@ -2943,7 +3056,15 @@
         setPoints(wrap.getAttribute("data-curve-value"), { live: true });
         return;
       }
-      var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
+      // **The same points the handle was drawn from, not the raw stored value.** `draw()` positions every
+      // handle from `effectivePoints(stored)` — the implied Linear shape when nothing is stored yet, which
+      // is the state of every untouched Hue, Saturation or Chroma field. Reading the raw (empty) value here
+      // instead indexed into `[]`: `pts[dragging] = at.x` on an empty array produces a one- or two-element
+      // result, not a valid four- or ten-number curve, and `curveValueOf`/`bezierNormalise` discards
+      // anything that shape on the very next read — so the handle visibly moved for a frame and then the
+      // drag, and every frame after it, wrote nothing. Confirmed live: dragging a fresh Hue handle left
+      // `hslHueCurve` at `[]` through the whole gesture, settle included.
+      var pts = effectivePoints(curveValueOf(wrap.getAttribute("data-curve-value"))).slice();
       // **A shape handle is dragged in the unit square, not on the canvas.** In growth mode the drawing is
       // lifted by the growth, so the pointer's height has to be divided back out or bending a slow-growing
       // scale would fling the handle off the top.
@@ -3056,23 +3177,41 @@
      */
     if (zoomMark && zoomTrack) {
       var zoomDragging = false;
+      var zoomBox = null;
+      // Same coalescing as the shape handle above: a trackpad's pointermove outruns paint, and each one of
+      // these used to force a layout read (`getBoundingClientRect`) *and* a full `draw()` teardown/rebuild.
+      // The rect is read once, on `pointerdown` — it does not move while a drag holding it is in progress.
+      var zoomFrame = null;
+      var zoomQueuedF = null;
+      function applyZoom(f) {
+        setZoom(CURVE_ZOOM_MIN * Math.pow(CURVE_ZOOM_MAX / CURVE_ZOOM_MIN, f));
+      }
       zoomMark.addEventListener("pointerdown", function (evt) {
         zoomDragging = true;
+        zoomBox = zoomTrack.getBoundingClientRect();
         if (zoomMark.setPointerCapture) zoomMark.setPointerCapture(evt.pointerId);
         if (zoomMark.focus) zoomMark.focus();
         evt.preventDefault();
         evt.stopPropagation();
       });
       zoomMark.addEventListener("pointermove", function (evt) {
-        if (!zoomDragging) return;
-        var box = zoomTrack.getBoundingClientRect();
-        if (!box.height) return;
-        var f = 1 - Math.min(1, Math.max(0, (evt.clientY - box.top) / box.height));
-        setZoom(CURVE_ZOOM_MIN * Math.pow(CURVE_ZOOM_MAX / CURVE_ZOOM_MIN, f));
+        if (!zoomDragging || !zoomBox || !zoomBox.height) return;
+        var f = 1 - Math.min(1, Math.max(0, (evt.clientY - zoomBox.top) / zoomBox.height));
+        if (typeof requestAnimationFrame !== "function") { applyZoom(f); return; }
+        zoomQueuedF = f;
+        if (zoomFrame !== null) return;
+        zoomFrame = requestAnimationFrame(function () {
+          zoomFrame = null;
+          if (zoomQueuedF !== null) { applyZoom(zoomQueuedF); zoomQueuedF = null; }
+        });
       });
       function zoomRelease(evt) {
         if (!zoomDragging) return;
         zoomDragging = false;
+        zoomBox = null;
+        if (zoomFrame !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(zoomFrame);
+        zoomFrame = null;
+        if (zoomQueuedF !== null) { applyZoom(zoomQueuedF); zoomQueuedF = null; }
         if (zoomMark.releasePointerCapture && evt.pointerId != null) {
           try { zoomMark.releasePointerCapture(evt.pointerId); } catch (err) { /* already gone */ }
         }
@@ -4150,7 +4289,7 @@
     }
   }
 
-  function attachListeners(container, schema, onChange, onChannelOpen, onRequestEstimate, onAbandonEstimate) {
+  function attachListeners(container, schema, onChange, onChannelOpen, onRequestEstimate, onAbandonEstimate, onMiddlePointAdded) {
     if (!onChange || typeof onChange !== "function") return;
 
     /**
@@ -4569,6 +4708,20 @@
         ? evt.target.closest("[data-row-index]") : null;
       if (!rowEl) return;
       if (typeof onAbandonEstimate === "function") onAbandonEstimate(rowEl, evt.target);
+    });
+
+    /**
+     * **A middle point just appeared on the curve with no value of its own.** Only the host can see
+     * this curve's sibling `bright.*`/`middle.*`/`dark.*` cells in the same row — a control outside any
+     * row (Spacing, Radius, Typography's own `curve` field, or Colors' collection-scope OKLCH curve)
+     * has no such siblings, and `closest("[data-row-index]")` finding nothing there is exactly the
+     * backward-compatible no-op those controls need.
+     */
+    container.addEventListener("config-ui-middle-point-added", function (evt) {
+      var rowEl = evt.target && typeof evt.target.closest === "function"
+        ? evt.target.closest("[data-row-index]") : null;
+      if (!rowEl) return;
+      if (typeof onMiddlePointAdded === "function") onMiddlePointAdded(rowEl, evt.target);
     });
 
     applyVisibility();

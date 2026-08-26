@@ -71,6 +71,46 @@ test("an empty curve is Original where that exists, and the straight ramp where 
     "but the field reads the line it draws");
 });
 
+test("dragging a handle on an untouched (empty, implied-Linear) curve writes a real shape", () => {
+  /**
+   * **Every Hue, Saturation or Chroma field starts here.** Nothing chosen yet is stored as `[]` and drawn
+   * as Linear — `draw()` builds the handles from `effectivePoints([])`, the implied straight line, not
+   * from the empty stored value. `applyMove` used to read the raw stored value again: `pts[dragging] =
+   * at.x` on `[]` produces a one- or two-number result, which is not a recognisable curve shape, and
+   * `curveValueOf`/`bezierNormalise` discards it right back to `[]` on the very next read — so the handle
+   * moved on screen for exactly one frame and the drag, settle included, wrote nothing. Confirmed live,
+   * driving the real plugin: dragging a fresh Hue handle left `hslHueCurve` at `[]` through the whole
+   * gesture. This is the "dragging a handle does nothing" report, reproduced at the unit level for the
+   * first time — every existing drag test in this file starts from a curve that already has real stored
+   * points, which is why none of them caught it.
+   */
+  const source = [
+    "// @UI_CONFIG_START",
+    'var a = { bright: 98.2, dark: 9.6 }; // @group: bright:number=B|dark:number=D @label: Ends',
+    'var c = []; // @curve @ends: a.bright..a.dark @range: 0..100 @label: L',
+    "// @UI_CONFIG_END",
+  ].join("\n");
+  const schema = parser.parse(source);
+  const container = document.createElement("div");
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+  const wrap = container.querySelector(".config-ui-curve");
+  assert.deepEqual(JSON.parse(wrap.getAttribute("data-curve-value")), [],
+    "the fixture should start on the implied default, not an already-real curve");
+
+  const svg = container.querySelector(".config-ui-curve__canvas");
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  const handle = container.querySelector('[data-curve-index="0"]');
+  assert.ok(handle, "an implied-Linear curve should still draw a handle to drag");
+  svg.dispatch("pointerdown", { target: handle, clientX: 33, clientY: 67, pointerId: 1 });
+  svg.dispatch("pointermove", { clientX: 60, clientY: 20, pointerId: 1 });
+  svg.dispatch("pointerup", { clientX: 60, clientY: 20, pointerId: 1 });
+
+  const after = JSON.parse(wrap.getAttribute("data-curve-value"));
+  assert.equal(after.length, 4, "the drag did not turn the implied line into a real, stored curve");
+  assert.ok(Math.abs(after[0] - 0.6) < 0.02, "the dragged handle's x did not move to where the pointer went");
+});
+
 test("the draggable points are the handles plus the middle anchor", () => {
   // Two-point: two handles, and the end anchors are drawn but fixed — a scale curve that started anywhere
   // but the start would not be a scale curve, so there is nothing to offer there.
@@ -107,6 +147,29 @@ test("the dropdown reads the curve back, and says Custom once it is not a preset
   nudged[0] += 0.05;
   const after = build({}, nudged);
   assert.equal(after.preset.value, "custom");
+});
+
+test("Custom is not offered in the list until the curve genuinely is one", () => {
+  // Picking it while the points still match Linear changed nothing to pick — the label is derived
+  // from the coordinates on every redraw, so it snapped straight back to Linear. That read as the
+  // dropdown reverting the instant the option was chosen. Hiding the option until it is true removes
+  // the choice that undoes itself; dragging a handle still switches to it automatically.
+  const linear = build({}, B.bezierFromEase("linear", "none", 1));
+  assert.equal(linear.preset.value, "linear|none");
+  assert.equal(
+    linear.wrap.querySelector('option[value="custom"]').hidden, true,
+    "Custom is offered while the curve still matches Linear"
+  );
+
+  // One nudge off — the same "not a preset any more" edit the earlier test uses.
+  const nudged = linear.points().slice();
+  nudged[0] += 0.05;
+  const edited = build({}, nudged);
+  assert.equal(edited.preset.value, "custom", "a real edit did not switch the dropdown to Custom");
+  assert.equal(
+    edited.wrap.querySelector('option[value="custom"]').hidden, false,
+    "Custom stayed hidden once the curve genuinely became one"
+  );
 });
 
 test("Original is offered only when the script asks for it", () => {
@@ -745,7 +808,10 @@ test("the colour bar is drawn from the tokens, at the values the curve puts them
   assert.equal(fill.getAttribute("data-shown"), "true");
 
   const stops = fill.style.background.replace(/^linear-gradient\(to bottom, |\)$/g, "").split(", ");
-  assert.equal(stops.length, hexes.length, "one stop per token");
+  // Not one-per-token any more: the window opens with 10% air past the outermost tokens (`axisView`'s
+  // own comment), so the strip now also carries the two boundary stops that crop it to that window —
+  // duplicating the extreme tokens' colours at the very top and bottom rather than dropping them.
+  assert.ok(stops.length >= hexes.length, "fewer stops than tokens: " + stops.length);
   hexes.forEach((hex) => {
     assert.ok(stops.some((s) => s.indexOf(hex) === 0), hex + " is not on the bar");
   });
@@ -756,6 +822,42 @@ test("the colour bar is drawn from the tokens, at the values the curve puts them
     assert.ok(v >= 0 && v <= 100, "a stop is off the bar at " + v + "%");
     if (i) assert.ok(v >= at[i - 1], "stops are out of order: " + at.join(", "));
   });
+
+  renderer.setCurveRamps({});
+});
+
+test("a zoomed window crops the strip to itself, interpolating the colour exactly at each edge", () => {
+  // Clamping used to keep every token's colour on the strip somewhere, compressed toward the edges once
+  // zoomed — the "wrong" behaviour in Márton's reference images. Cropped, a token outside the window is
+  // gone, and the edge is the blend between whichever two tokens bracket it, not either token verbatim.
+  const hexes = ["#FAFAFA", "#D0CFD6", "#A3A1AF", "#69677A", "#2B2A32", "#0A090B"];
+  renderer.setCurveRamps({ lc: hexes });
+  // `[]` is the identity curve, so the six tokens land at exactly 98, 82.2, 66.4, 50.6, 34.8, 19 on the
+  // 98..19 ends below — no curve-shape guesswork about which land inside a 40..70 window.
+  const form = axisForm([]);
+  form.wrap.setAttribute("data-curve-view", "40,70");
+  form.wrap.dispatchEvent(new Event("config-ui-curve-refresh"));
+
+  const fill = form.container.querySelector(".config-ui-curve__range-fill");
+  const stops = fill.style.background.replace(/^linear-gradient\(to bottom, |\)$/g, "").split(", ");
+
+  // The tokens nearest the two ends (~98 and ~19) are well outside 40..70 and must be gone.
+  assert.ok(!stops.some((s) => s.indexOf(hexes[0]) === 0), hexes[0] + " should have been cropped out");
+  assert.ok(!stops.some((s) => s.indexOf(hexes[5]) === 0), hexes[5] + " should have been cropped out");
+  // The tokens inside the window survive.
+  assert.ok(stops.some((s) => s.indexOf(hexes[2]) === 0), hexes[2] + " should still be on the bar");
+  assert.ok(stops.some((s) => s.indexOf(hexes[3]) === 0), hexes[3] + " should still be on the bar");
+
+  // The window's own edges are exactly the strip's ends, in a colour that is a real blend rather than
+  // either neighbour verbatim.
+  const first = stops[0].split(" ");
+  const last = stops[stops.length - 1].split(" ");
+  assert.equal(parseFloat(first[1], 10), 0, "the window's high edge is not at the top of the strip");
+  assert.equal(parseFloat(last[1], 10), 100, "the window's low edge is not at the bottom of the strip");
+  assert.notEqual(first[0], hexes[1]);
+  assert.notEqual(first[0], hexes[2]);
+  assert.notEqual(last[0], hexes[3]);
+  assert.notEqual(last[0], hexes[4]);
 
   renderer.setCurveRamps({});
 });
@@ -816,12 +918,40 @@ test('the middle box is the curve\'s middle handle, in the channel\'s units', ()
   assert.ok(Math.abs((2 + (96 - 2) * at) - 60) < 0.05, 'typing 60 put the anchor at ' + (2 + 94 * at));
 });
 
-test('with no middle point the box has nothing to be a view of, and says so', () => {
+test('the middle box\'s caption and input stack, matching the adopted anchors either side of it', () => {
+  // **Confirmed live, in a browser, by diffing the two DOM trees.** The adopted case (Hue/Saturation's
+  // own middle) nests three levels deep: an outer cell, a `.config-ui-rows-group`, and — the thing
+  // that actually stacks a caption over its input — a `.config-ui-rows-group-part` that never also
+  // carries `.config-ui-curve__anchor`. Putting both classes on the one element this control builds
+  // by hand loses the column layout to `.config-ui-curve__anchors .config-ui-curve__anchor { display:
+  // block }`, which outranks `.config-ui-rows-group-part`'s own rule by specificity — read as caption
+  // and input sitting side by side instead of stacked, which is what shipped and was reported live.
+  const form = anchoredForm();
+  const outer = form.middle.closest('.config-ui-curve__anchor--middle');
+  assert.ok(outer, 'the middle box has no .config-ui-curve__anchor--middle ancestor at all');
+  assert.equal(
+    outer.classList.contains('config-ui-rows-group-part'), false,
+    'the stacking class sits on the same element as .config-ui-curve__anchor and loses to its ' +
+      'display: block override — it belongs one level further in'
+  );
+  const stacker = form.middle.closest('.config-ui-rows-group-part');
+  assert.ok(stacker, 'no ancestor carries the class that actually stacks caption over input');
+  assert.notEqual(stacker, outer, 'the stacking wrapper must be a separate element from the outer anchor');
+});
+
+test('with no middle point the box is disabled and reads the curve\'s own value as a placeholder', () => {
+  // **Disabled, not empty.** The curve still has a shape between its ends, and where it sits at the
+  // midpoint is a real, useful number to read off — Márton: "it's actually a useful information...
+  // to measure the curve" — it is just not an anchor anyone set. `placeholder`, not `.value`: nothing
+  // here is a value `collectRows` could mistake for one.
   const form = anchoredForm();
   form.wrap.querySelector('.config-ui-curve__toggle').dispatch('click', { bubbles: true });
   assert.equal(form.points().length, 4, 'the middle point was not removed');
   assert.equal(form.middle.disabled, true);
-  assert.equal(form.middle.value, '—', 'a number here would be one the curve does not hold');
+  assert.equal(form.middle.value, '', 'a real value here would be one the curve does not hold');
+  const shown = Number(form.middle.placeholder);
+  assert.ok(isFinite(shown), 'no derived reading was shown at all: "' + form.middle.placeholder + '"');
+  assert.ok(shown > 2 && shown < 96, 'the derived reading, ' + shown + ', is outside the channel\'s own span');
 });
 
 test('a channel with a real middle adopts it; one without gets a view of the handle', () => {
@@ -853,6 +983,27 @@ test('a channel with a real middle adopts it; one without gets a view of the han
 
   // And the two-key form still builds its own, because there is nothing to adopt.
   assert.equal(anchoredForm().container.querySelectorAll('[data-curve-middle]').length, 1);
+});
+
+test('an adopted middle with no anchor of its own shows the curve\'s reading, not a blank box', () => {
+  const source = [
+    '// @UI_CONFIG_START',
+    'var modes = [{ name: "G", bright: { chroma: 0.02 }, dark: { chroma: 0.05 }, ' +
+      'cc: [0.4, 0.2, 0.6, 0.8] }]; // @rows: name:text=Mode|#>Saturation|' +
+      'cc:curve(ends:bright.chroma..middle.chroma..dark.chroma, range:0..0.4)=Chroma curve|' +
+      'bright:{chroma:number=Start}=B|middle:{chroma:number=Middle}=M|dark:{chroma:number=End}=D @blocks',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+  const middle = container.querySelector('[data-row-field="middle.chroma"]');
+  assert.equal(middle.disabled, true);
+  assert.equal(middle.value, '', 'a real value would be an anchor nobody set');
+  const shown = Number(middle.placeholder);
+  assert.ok(isFinite(shown) && shown > 0.02 && shown < 0.05,
+    'no derived reading shown between the ends: "' + middle.placeholder + '"');
 });
 
 
@@ -911,6 +1062,37 @@ test('a channel whose ends match still has an axis', () => {
   // The window opens on all three anchors, so the middle is inside it rather than off the bottom.
   const values = ticks.map((t) => parseFloat(t, 10));
   assert.ok(Math.min.apply(null, values) < 90, 'the window ignored the middle: ' + ticks.join(' '));
+});
+
+test('zooming past the constant ends of an equal-ends channel keeps the window, on every redraw', () => {
+  /**
+   * `rampIsOffscreen`'s three samples go through `unitToValue`, which collapses to one constant —
+   * `a.from` — for every sample when the two ends are equal, regardless of the curve's real shape. Zoom
+   * to a window that excludes that constant (legitimate: the whole point of a middle on an equal-ends
+   * channel is a value the ends don't hold) and every one of those samples reads as off the bottom, so
+   * `axisView` decided the *whole ramp* was off screen and reopened the wide window it had just been
+   * zoomed away from — reported as "the range doesn't match the zoom" and "it jumps between ranges",
+   * because this fires on every draw, not only while dragging.
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var a = { bright: 100, middle: 83.2, dark: 100 }; ' +
+      '// @group: bright:number=Start|middle:number=Middle|dark:number=End @label: Ends',
+    'var sc = [0.4, 0.3, 0.6, 0.7]; // @curve @ends: a.bright..a.middle..a.dark @range: 0..100 @label: S',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  const wrap = container.querySelector('.config-ui-curve');
+  // Excludes both ends (100) but keeps the middle (83.2) in view.
+  wrap.setAttribute('data-curve-view', '78,90');
+  wrap.dispatchEvent(new Event('config-ui-curve-refresh'));
+
+  assert.equal(wrap.getAttribute('data-curve-view'), '78,90',
+    'the zoomed window was discarded and reopened wide, even though the middle is still in it');
 });
 
 test('zoom reads as how much of the channel is on screen', () => {
@@ -1107,12 +1289,13 @@ test('the coordinate field shares the preset row on a charted curve', () => {
     'a scale editor should keep its field under the plot');
 });
 
-test('the bar shows the whole channel, with the window bracketed on it', () => {
+test('the bar shows the zoomed window, matching the chart\'s own axis at every zoom level', () => {
   /**
-   * It showed the *window*, which on a hue ramp travelling one degree is a solid block of one colour — it
-   * told you nothing about where that degree sits on the wheel. Márton: show the whole channel with the
-   * window marked on it instead. The bar answers "where in the channel am I"; the chart answers "what
-   * happens across it".
+   * Reversed from an earlier decision to show the whole channel with the window bracketed on it: Márton
+   * wants the strip to correlate with the chart's left-hand axis numbers exactly, the way the chart
+   * itself does — zoom to hue 90..100 and the strip shows hue 90..100, stretched to fill the same height,
+   * not the whole wheel with a sliver marked near one edge. There is no separate bracket element any
+   * more; the strip itself is the window.
    */
   const source = [
     '// @UI_CONFIG_START',
@@ -1130,17 +1313,13 @@ test('the bar shows the whole channel, with the window bracketed on it', () => {
   const stops = container.querySelector('.config-ui-curve__range-fill').style.background;
   const values = (stops.match(/hsl\((-?[\d.]+)/g) || []).map((m) => parseFloat(m.slice(4), 10));
   assert.ok(values.length > 2, 'no gradient: ' + stops.slice(0, 80));
-  // Top of the bar is the channel's ceiling, bottom its floor — 360 down to 0, not 110 down to 100.
-  assert.ok(Math.abs(values[0] - 360) < 1, 'the bar starts at ' + values[0] + ', not the top of the channel');
-  assert.ok(Math.abs(values[values.length - 1]) < 1, 'the bar ends at ' + values[values.length - 1]);
+  // The window opens on the ends (100..110) with 10% air, clamped to the channel — 99..111, not 0..360.
+  assert.ok(Math.abs(values[0] - 111) < 1, 'the bar starts at ' + values[0] + ', not the window\'s own top');
+  assert.ok(Math.abs(values[values.length - 1] - 99) < 1,
+    'the bar ends at ' + values[values.length - 1] + ', not the window\'s own bottom');
 
-  // And the ten degrees the ramp occupies are bracketed, near the bottom of a 0..360 bar.
-  const win = container.querySelector('.config-ui-curve__range-window');
-  assert.equal(win.getAttribute('data-shown'), 'true', 'a window inside the channel should be marked');
-  assert.ok(parseFloat(win.style.height, 10) < 15,
-    'the bracket should be a small part of the channel, not ' + win.style.height);
-  assert.ok(parseFloat(win.style.top, 10) > 60,
-    'a ramp around 100 of 360 belongs low on the bar, not at ' + win.style.top);
+  assert.equal(container.querySelector('.config-ui-curve__range-window'), null,
+    'the window is no longer bracketed separately now that the strip itself is cropped to it');
 });
 
 /** The slope either side of the join, as a ratio. 1 is a smooth node; anything else is a corner. */
@@ -1223,18 +1402,18 @@ test('the node’s kind is read once, at the start of the drag', () => {
 });
 
 /**
- * *Estimated original*, before a fit exists — the dropdown is where a person asks for one, not just
- * where it shows up once there already is one. Shipped once without ever being clicked, live, on a
- * real collection; it froze. These are the two things a click-through cannot exercise on its own but
- * a unit test can pin exactly: the option always being there for a per-mode cell, and the control
- * always getting itself back.
+ * *Estimated original* is parked (`ESTIMATE_PARKED` in `buildCurvePresetSelect`), not removed: the
+ * request it made does not reliably answer (`DEFERRED.md`, "The on-demand fit hangs, not always, and
+ * not fully explained") — a control that never answers is worse than one that is not there. The
+ * dispatch mechanism below (`requestQuickFit`, the tags, the watchdog) stays and stays tested, driven
+ * directly through `preset.value = 'estimated'` rather than through an option nobody can click, so
+ * un-parking is a one-line revert rather than a rewrite.
  */
-test('a per-mode curve cell always offers Estimated original, even unfitted', () => {
+test('a per-mode curve cell does not offer Estimated original while it is parked', () => {
   const wrap = renderer.buildCurveControl({}, [], undefined, 'modes[0].curve');
   const preset = wrap.querySelector('.config-ui-curve__preset');
-  const opt = preset.querySelector('option[value="estimated"]');
-  assert.ok(opt, 'the option is missing entirely for an unfitted per-mode cell');
-  assert.equal(opt.textContent, 'Estimated original');
+  assert.equal(preset.querySelector('option[value="estimated"]'), null,
+    'the option is offered while the dispatch bug behind it is still open — see DEFERRED.md');
 });
 
 test('the collection-scope curve does not offer an estimate it has no way to fetch', () => {
@@ -1257,8 +1436,6 @@ test('selecting Estimated original before a fit exists disables the control and 
 
   assert.equal(requested, 1, 'selecting the option did not ask the host for a fit');
   assert.equal(preset.disabled, true, 'the control did not disable itself while waiting');
-  assert.equal(preset.querySelector('option[value="estimated"]').textContent, 'Estimating original…',
-    'nothing said the control was busy');
 
   // A second selection while the first is still in flight must not fire a second request — the host's
   // own `_modeFitted` claims the row immediately, and a redundant event here would race it.
@@ -1284,8 +1461,6 @@ test('the control re-enables the moment the fit lands, however the host answers'
 
     assert.equal(preset.disabled, false, 'the control stayed disabled after the fit landed');
     assert.equal(preset.value, 'estimated', 'the landed curve was not offered as the selection');
-    assert.equal(preset.querySelector('option[value="estimated"]').textContent, 'Estimated original',
-      'the busy label was not restored');
     assert.equal(preset.title, '', 'a stale status message was left on a control that succeeded');
   } finally {
     // `curveBaselines` is module-level state, shared by every curve control built in this process —
@@ -1333,8 +1508,6 @@ test('a timed-out estimate re-enables the control, says what happened, and never
     assert.equal(preset.disabled, false, 'the control is still disabled after its own timeout fired');
     assert.match(preset.title, /estimate/i, 'nothing says an estimate was asked for and never arrived');
     assert.match(preset.title, /try again|pick/i, 'the message says what happened but not what to do');
-    assert.equal(preset.querySelector('option[value="estimated"]').textContent, 'Estimated original',
-      'the busy label was left showing after giving up');
     // No estimate ever arrived, so the curve must not have been rewritten to claim one did.
     assert.deepEqual(JSON.parse(wrap.getAttribute('data-curve-value')), []);
   } finally {

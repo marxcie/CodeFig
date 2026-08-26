@@ -85,7 +85,7 @@ const COLORS_PANEL_SPEC = [
   '//             showWhen: { colorModel: "hsl" },',
   '//             helper: "The same, for HSL — a different angle from OKLCH\'s, so a different curve." },',
   '//           { type: "anchors", positions: ["bright", "middle", "dark"],',
-  '//             disabledWhen: { hueCurve: "original" },',
+  '//             disabledWhen: { hueCurve: "original", hslHueCurve: "original" },',
   '//             fields: [',
   '//               { key: "hue", showWhen: { colorModel: "oklch" },',
   '//                 labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },',
