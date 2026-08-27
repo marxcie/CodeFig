@@ -3232,31 +3232,39 @@
         var channel = curveKey.replace(/Curve$/, '');
         if (!channel || channel === curveKey) return;
         var middleInput = rowEl.querySelector('[data-row-field="middle.' + channel + '"]');
-        if (!middleInput || String(middleInput.value || '').trim() !== '') return;
-        var brightInput = rowEl.querySelector('[data-row-field="bright.' + channel + '"]');
-        var darkInput = rowEl.querySelector('[data-row-field="dark.' + channel + '"]');
-        if (!brightInput || !darkInput) return;
-        var bright = Number(brightInput.value);
-        var dark = Number(darkInput.value);
-        if (!isFinite(bright) || !isFinite(dark)) return;
-        var fraction = detail && typeof detail.fraction === 'number' && isFinite(detail.fraction)
-          ? detail.fraction
-          : null;
-        if (fraction === null) {
-          var points;
-          try {
-            points = JSON.parse(wrapEl.getAttribute('data-curve-value') || '[]');
-          } catch (e) {
-            return;
+        if (!middleInput) return;
+        // **Replace when the toggle asked for it.** Adding a middle after a 2-point overshoot must
+        // overwrite a leftover field (e.g. 200° from exploring the peak) — the old "never overwrite"
+        // guard left the chart at ~100° and generation at 200°, which is the cyan spike.
+        var replace = !!(detail && detail.replace);
+        if (!replace && String(middleInput.value || '').trim() !== '') return;
+        var value;
+        if (detail && typeof detail.value === 'number' && isFinite(detail.value)) {
+          value = detail.value;
+        } else {
+          var brightInput = rowEl.querySelector('[data-row-field="bright.' + channel + '"]');
+          var darkInput = rowEl.querySelector('[data-row-field="dark.' + channel + '"]');
+          if (!brightInput || !darkInput) return;
+          var bright = Number(brightInput.value);
+          var dark = Number(darkInput.value);
+          if (!isFinite(bright) || !isFinite(dark)) return;
+          var fraction = detail && typeof detail.fraction === 'number' && isFinite(detail.fraction)
+            ? detail.fraction
+            : null;
+          if (fraction === null) {
+            var points;
+            try {
+              points = JSON.parse(wrapEl.getAttribute('data-curve-value') || '[]');
+            } catch (e) {
+              return;
+            }
+            if (!Array.isArray(points) || points.length !== 10) return;
+            fraction = points[5];
+            if (typeof fraction !== 'number' || !isFinite(fraction)) return;
           }
-          // Index 5 is the middle handle's own y — `bezierNormalise([X.l1, Y.l1, X.l2, Y.l2, X.m, Y.m, …])`
-          // in `bezierWithMiddle` — the curve's progress fraction at the point it was just split on.
-          if (!Array.isArray(points) || points.length !== 10) return;
-          fraction = points[5];
-          if (typeof fraction !== 'number' || !isFinite(fraction)) return;
+          var isHue = channel === 'hue' || channel === 'hslHue';
+          value = isHue ? hueLerp(bright, dark, fraction) : bright + (dark - bright) * fraction;
         }
-        var isHue = channel === 'hue' || channel === 'hslHue';
-        var value = isHue ? hueLerp(bright, dark, fraction) : bright + (dark - bright) * fraction;
         var decimals = channel === 'chroma' ? 4 : 1;
         var rounded = Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
         middleInput.value = String(rounded);

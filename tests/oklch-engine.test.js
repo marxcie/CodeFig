@@ -472,6 +472,24 @@ test('HSL carries saturation, and cannot ask a lightness for more colour than it
   assert.equal(Math.round(okl[7].C * 1000) / 1000, 0.05, 'the OKLCH middle stopped being its chroma anchor');
 });
 
+test('an explicit empty channel curve ignores the middle anchor at the placement step', () => {
+  // Linear / Original stores `[]` on the mode. The panel draws a straight line; generation must not read
+  // a leftover middle field of 0 — the curve has no middle *point*.
+  const steps = ['25', '50', '75', '100', '150', '200', '250', '300',
+    '350', '400', '500', '600', '700', '800', '900', '950'];
+  const shape = E.bezierJoin(E.bezierFromEase('sine', 'in', 1), E.bezierFromEase('sine', 'out', 1),
+    7 / (steps.length - 1), 0.5);
+  const ladder = E.oklchLadder({ bright: 0.976, middle: 0.708, dark: 0.067 }, shape, steps);
+  const rows = E.oklchRamp({
+    steps: steps, ladder: ladder, curve: shape,
+    middleIndex: 7, model: 'hsl', chromaCurve: [], hueCurve: [],
+    hue: { bright: 100, middle: 0, dark: 99.2, hasMiddle: false },
+    chroma: { bright: 1, middle: 0, dark: 0.984, hasMiddle: false }
+  });
+  assert.ok(rows[7].C > 0.9,
+    'middle step saturation must stay near the ends, not drop to the leftover anchor: ' + rows[7].C);
+});
+
 test('a blend amount moves between linear and the curve, and cannot break the ramp', () => {
   // **The menu was 0% or 100% and the useful values are in between.** An easing's departure from linear is a
   // fraction of the range it spans, so sine easeOut is 5.5 lightness points across a 27-point segment and 13.3

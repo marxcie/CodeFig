@@ -38,15 +38,22 @@ test('hueLerp matches oklchLerpHue exactly, including the wrap-around case', () 
   assert.equal(Math.round(hueLerp(10, 350, 0.5) * 10) / 10, 0);
 });
 
-test('populateMiddleAnchorFromCurve never overwrites a middle anchor that already has a value', () => {
+test('populateMiddleAnchorFromCurve never overwrites a middle anchor unless the toggle asked to replace', () => {
   const fn = extractFunction(UI, 'populateMiddleAnchorFromCurve');
   assert.ok(fn, 'populateMiddleAnchorFromCurve not found — did it get renamed?');
+  assert.match(fn, /detail\.replace/, 'must honour replace from the add-middle toggle');
   assert.match(
     fn,
-    /middleInput\.value[\s\S]{0,40}!==\s*['"]{2}[\s\S]{0,10}return/,
-    'a non-empty middle anchor must stop this before it computes anything, the same rule ' +
-      'applyQuickFit follows for a value a person already gave it'
+    /!replace[\s\S]{0,80}middleInput\.value[\s\S]{0,40}!==\s*['"]{2}[\s\S]{0,10}return/,
+    'a non-empty middle without replace must stop before computing — same rule as before for ' +
+      'ordinary fills; replace is only for Add middle point after an overshoot edit'
   );
+});
+
+test('populateMiddleAnchorFromCurve prefers detail.value from the pre-split curve when present', () => {
+  const fn = extractFunction(UI, 'populateMiddleAnchorFromCurve');
+  assert.ok(fn, 'populateMiddleAnchorFromCurve not found — did it get renamed?');
+  assert.match(fn, /detail\.value/, 'must read the channel value computed before the split');
 });
 
 test('populateMiddleAnchorFromCurve is a no-op when the row has no matching sibling cells', () => {
@@ -104,14 +111,18 @@ test('the middle field is filled from the curve\'s real height at the split, not
   assert.ok(heightIdx < splitIdx,
     'the real height must be read before bezierWithMiddle runs — after it, the corner is already margin-clamped');
   assert.ok(detailIdx > splitIdx, 'the real height must be attached to the event fired after the split');
+  assert.match(body, /value:\s*valueAtSplit/, 'must pass the pre-split channel value, not only a unit height');
+  assert.match(body, /replace:\s*true/, 'must ask the host to overwrite a leftover middle field');
 });
 
-test('populateMiddleAnchorFromCurve prefers the passed-through fraction over the post-split corner', () => {
+test('populateMiddleAnchorFromCurve prefers detail.value, then detail.fraction, then the post-split corner', () => {
   const fn = extractFunction(UI, 'populateMiddleAnchorFromCurve');
   assert.ok(fn, 'populateMiddleAnchorFromCurve not found — did it get renamed?');
+  const valueIdx = fn.indexOf('detail.value');
   const detailIdx = fn.indexOf('detail.fraction');
   const points5Idx = fn.indexOf('points[5]');
-  assert.ok(detailIdx !== -1, 'must read detail.fraction — the curve\'s real, pre-split height');
+  assert.ok(valueIdx !== -1, 'must read detail.value — the channel value from the pre-split curve');
+  assert.ok(detailIdx !== -1, 'must read detail.fraction as fallback');
   assert.ok(points5Idx > detailIdx,
     'points[5] must only be a fallback, tried after detail.fraction, for a caller that predates it');
 });

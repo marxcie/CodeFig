@@ -3708,6 +3708,13 @@
         width: var(--curve-col-w);
       }
 
+      /* `display: flex` above beats the UA `[hidden] { display: none }` (same specificity, later rule),
+         so a flat equal-ends axis that sets `.hidden = true` still painted and stayed draggable. */
+      .config-ui-curve__zoom[hidden],
+      .config-ui-curve__range[hidden] {
+        display: none;
+      }
+
       .config-ui-curve__zoom-step {
         flex: 0 0 16px;
         width: var(--curve-col-w);

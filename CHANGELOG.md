@@ -127,6 +127,36 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **A Hue / Saturation / Chroma middle above or below both ends finally agrees across chart, field,
+  and swatch.** The chart used a single-span `bright → dark` map for every handle height; generation
+  already used two spans (`bright → middle → dark`) with the middle *field* as a real colour. Typing
+  200° with ends near 100° updated the field and spiked the preview, while the handle stayed flat at
+  ~100°. The shared curve control now draws and drags through `valueAlongRamp` — the same two-segment
+  pacing `oklchChannelAt` uses — so the middle handle sits on the typed colour, the path arches through
+  it, and `pts[5]` stays pacing-only. Adding a middle after a 2-point overshoot writes the pre-split
+  channel value into the field (and replaces a leftover) instead of `hueLerp`ing a unit height between
+  equal ends. Equal ends with no middle draw a **horizontal** line at the pin on the full channel
+  range (Saturation 100…100 at the top of 0…100), and end grips sit on the field values — not on a
+  synthetic 90→110 diagonal from `effectiveGap`. **Zoom on equal ends no longer resets every redraw**
+  (a latched narrow window was discarded whenever it showed less than 75% of the channel), and
+  **dragging an end off a pinned channel no longer reopens a tight window** — zoom and endpoints are
+  independent again. Hue value mapping on two-anchor curves uses the short arc (`axisHueDelta`) like
+  generation, not a raw degree subtraction. **Equal ends on the flat Linear preset** stay
+  horizontal until a handle bends the curve, then `effectiveGap` mapping draws a two-point overshoot
+  arch (100 → 50 → 100) with handles always visible; the disabled middle field shows a **derived
+  estimate** from `valueAlongRamp`, not a stale leftover value.   **Zoom centres on the pin**, uses
+  **whole-number ticks**, and caps at roughly two step spacings on Colors channels. Zoom on equal ends
+  with a real middle anchor (lime saturation `100 … 83 … 100`) centres on the dip, not the pin alone.
+- **Dragging a Hue / Saturation / Chroma handle no longer jumps the curve mid-gesture.** Overshoot
+  channels always map drags on the value axis; switching out of shape-space the moment a handle left
+  `[0, 1]` rewrote the same pointer position as channel hundreds in storage (`cubic-bezier(…, 125, …)`).
+- **Linear / Original (`[]`) channel curves no longer consult a leftover middle anchor at generation.**
+  The panel drew a straight line while the preview greyed out the placement step — a middle field left at
+  0 from an earlier explore drove saturation there even though the curve had no middle point.
+- **Dragging a Hue middle across the short arc no longer draws vertical spikes on the chart.** The
+  path wrapped every sample into [0, 360) and connected across the 0° discontinuity (100° → 290°
+  short-way) — a polyline spike the swatch strip never showed. Adjacent samples that jump more than
+  180° now start a new subpath instead of drawing a vertical line.
 - **A curve could visibly drag to a dramatic value and the swatch would barely move — the axis and the
   colour math were reading two different scales for the same stored number.** `axisView` (the window a
   curve is drawn against) and `effectiveGap` (the drag-sensitivity floor two fixes above this one)

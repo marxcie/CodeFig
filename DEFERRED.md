@@ -1346,7 +1346,60 @@ checking a drag result through this command.
 
 ---
 
-## A middle anchor cannot be dragged below both ends, or above both
+## ~~A middle anchor cannot be dragged below both ends, or above both~~ — CLOSED
+
+Fixed in the two-segment axis pass: when `curveHasRealMiddle()`, the chart maps through
+`valueAlongRamp` (bright → middle → dark, same shape as `oklchSegmentAt` / `oklchChannelAt`) instead
+of `unitToValue`'s single span. Typing or dragging a Hue middle of 200° with ends near 100° moves the
+handle there; generation and the chart agree. See `CHANGELOG.md` [Unreleased] Fixed.
+
+## ~~The zoom and range controls stay visible, but do nothing, on a flat equal-ends curve~~ — CLOSED (honest horizontal)
+
+Equal ends + no middle open on the full declared channel with a **horizontal** line at the pin
+(generation ignores curve height when ends match). End grips use field values. Zoom/range stay.
+
+## Add middle does not produce a mirrored / symmetric bezier — deferred, not urgent
+
+**What.** After "Add middle point" on a 2-point curve, De Casteljau preserves the existing shape
+(handles land where the subdivision puts them), not a mirrored pair like
+`cubic-bezier(a,b,c,d) m,m cubic-bezier(1-c,1-d,1-a,1-b)`. Márton expected the latter; can live
+with the former. Saturation already feels smooth because equal ends + De Casteljau stay near the
+pin; Hue feels worse when overshoot + short-arc wrap interact with the split.
+
+**What fixing it involves.** Optional post-split remirror of tangent handles (or a separate
+"symmetric middle" action) without changing the evaluated path enough to surprise generation —
+or accept De Casteljau as correct and document it.
+
+## Hue short-arc through 0° still looks gappy on the chart — known
+
+When Bright≈Dark≈100° and Middle≈290°, generation takes the short arc through 0° for each half.
+A linear axis must either spike, gap (path break), or dip below 0 in continuous space — Pomax /
+any cubic library does not remove that. Path break avoids the spike; the gap is honest.
+
+---
+
+## sRGB / Display P3 gamut toggle — required, not started
+
+**What.** Colors today always fits into **sRGB by reducing chroma only**. Márton needs a mode switch
+between sRGB and Display P3 — required product work, not optional polish. It changes the gamut clamp
+when a colour is realized (`oklch → RGB`), and eventually which color space Figma variables are
+written in. It does **not** change the curve editor's axis / middle model.
+
+**Why it was left (for now).** Landed after the two-segment curve-axis fix on purpose: different
+surface, easy to conflate with chart bugs, and `bench:colors` already gates sRGB matching. Do not
+mark this optional or bury it under "nice to have."
+
+**What fixing it involves.** A panel control (collection- or script-level) choosing the fit gamut;
+`@oklch.js` (and the write path when it lands) honouring P3's larger chroma ceiling; regression via
+`bench:colors` plus P3 fixtures; keep chroma-only fit (never move L/H). Gamut-*relative* chroma
+curves stay rejected (DEFERRED above).
+
+---
+
+## A middle anchor cannot be dragged below both ends, or above both — SUPERSEDED
+
+See CLOSED entry above. Kept momentarily so search hits still resolve; delete on the next DEFERRED
+sweep if preferred.
 
 **What.** Márton: a curve with an added middle point "has no sharp corners, but the middle still
 acts weirdly" — investigated and fixed (`CHANGELOG.md`: the toggle was splitting at a flat 0.5
@@ -1412,20 +1465,9 @@ future investigation can reintroduce the pattern cheaply rather than needing the
 around indefinitely. Left in place for now because the acceptance pass below is not done and the same
 probe will very likely be read again before it is.
 
-## The zoom and range controls stay visible, but do nothing, on a flat equal-ends curve
+## ~~The zoom and range controls stay visible, but do nothing, on a flat equal-ends curve~~ — CLOSED
 
-**What.** The fix documented above (equal ends, no middle, drawn in shape-space) means `axisView`,
-`zoomOf` and the `data-curve-view` window are simply never consulted for that one shape — `toView`
-bypasses them. The zoom buttons and the zoom slider beside the chart are still built and shown
-whenever `field.ends` exists, `axisIsFlat` or not, so a person can click zoom on a plain Saturation
-curve and watch nothing happen. Not incorrect (no wrong number, no crash) — just a control that looks
-like it should do something and quietly doesn't.
-
-**What it would take.** Hoist `zoomCol`/`rangeCol` (currently local to the constructor, not kept on
-the closure) to closure-scoped variables the way `zoomTrack`/`zoomMark`/`rangeFill` already are, and
-toggle a hidden state on them from `draw()` once `flatAx` is known. Small, not done — the display and
-middle-point-add bugs were the reported symptoms; this is the cosmetic loose end noticed while fixing
-them, not something anyone has complained about yet.
+Equal ends keep zoom/range (synthetic window). See `CHANGELOG.md` [Unreleased].
 
 ## Acceptance pass on the curve editor: not started
 

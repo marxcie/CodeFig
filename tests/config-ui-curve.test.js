@@ -1208,7 +1208,8 @@ test('an adopted middle is disabled when the curve has no middle point', () => {
 
   const mid = container.querySelector('[data-row-field="middle.chroma"]');
   assert.equal(mid.disabled, true, 'a one-segment curve does not travel through a middle');
-  assert.equal(mid.value, '0.25', 'and it keeps its value, so it comes back intact');
+  assert.equal(mid.value, '', 'stale middle values clear when there is no anchor');
+  assert.ok(parseFloat(mid.placeholder, 10) > 0, 'the estimate reads from the curve instead');
 
   // Give the curve a middle point and the box is live again.
   container.querySelector('.config-ui-curve__toggle').dispatch('click', { bubbles: true });
@@ -1272,9 +1273,8 @@ test('the three boxes and the three points are one set of values, both ways', ()
    * Márton: *"when I change the numbers in the input fields, the chart points move, when I move a chart
    * point, the same number change in the input field."*
    *
-   * The two ends need nothing — `axis()` reads their fields on every draw, so editing one moves the chart
-   * already. The **middle** is the one that has to be wired by hand in both directions, because the anchor
-   * lives in the curve and the value lives in a field, and neither reads the other.
+   * With a real middle the field *is* the colour at the corner (`valueAlongRamp`); `pts[5]` is only
+   * pacing. Typing moves the handle on the value axis; dragging the handle writes the field.
    */
   const withMiddle = B.bezierWithMiddle([0.4, 0.2, 0.6, 0.8]);
   const source = [
@@ -1292,25 +1292,26 @@ test('the three boxes and the three points are one set of values, both ways', ()
 
   const wrap = container.querySelector('.config-ui-curve');
   const mid = container.querySelector('[data-row-field="middle.chroma"]');
-  const anchorValue = () => {
-    const u = JSON.parse(wrap.getAttribute('data-curve-value'))[5];
-    return 0.02 + (0.05 - 0.02) * u;
-  };
-
-  // field → chart
-  mid.value = '0.04';
-  mid.dispatch('input', { bubbles: true });
-  assert.ok(Math.abs(anchorValue() - 0.04) < 1e-4, 'typing did not move the anchor: ' + anchorValue());
-
-  // chart → field
   const svg = wrap.querySelector('.config-ui-curve__canvas');
   svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+
+  // field → chart: handle Y tracks the typed middle on the value axis
+  mid.value = '0.04';
+  mid.dispatch('input', { bubbles: true });
+  const cyHigh = parseFloat(wrap.querySelector('[data-curve-index="4"]').getAttribute('cy'));
+  mid.value = '0.025';
+  mid.dispatch('input', { bubbles: true });
+  const cyLow = parseFloat(wrap.querySelector('[data-curve-index="4"]').getAttribute('cy'));
+  assert.ok(cyLow > cyHigh + 5,
+    'typing a lower middle must move the handle down the chart: ' + cyHigh + ' → ' + cyLow);
+
+  // chart → field
   const anchor = wrap.querySelector('[data-curve-index="4"]');
   svg.dispatch('pointerdown', { target: anchor, clientX: 50, clientY: 50, pointerId: 1 });
   svg.dispatch('pointermove', { clientX: 50, clientY: 25, pointerId: 1 });
   svg.dispatch('pointerup', { clientX: 50, clientY: 25, pointerId: 1 });
-  assert.ok(Math.abs(parseFloat(mid.value, 10) - anchorValue()) < 1e-3,
-    'the field and the anchor disagree after a drag: ' + mid.value + ' vs ' + anchorValue());
+  assert.ok(parseFloat(mid.value, 10) > 0.03,
+    'dragging the middle handle up must raise the field: ' + mid.value);
 });
 
 test('the coordinate field shares the preset row on a charted curve', () => {
@@ -1590,22 +1591,11 @@ test('a successful estimate never fires the abandon signal', () => {
   }
 });
 
-test('typing a middle value the curve has no room for leaves the curve alone', () => {
+test('typing a middle value above both ends leaves pacing alone and moves the handle on the value axis', () => {
   /**
-   * **A field typed a value the curve cannot express as a position, without corrupting the curve to try.**
-   *
-   * Márton, live: typed 293.5 into a Hue curve's middle field, with the ends at 100 and 99.2 — a value
-   * nowhere between them, exactly what `@overshoot` exists to allow. The listener that moves the anchor
-   * for a typed number (`adoptEnds`, renderer.js) used to force it there anyway: `valueToUnit` turned
-   * 293.5 into a curve-space fraction around -242, `Math.min(1, Math.max(0, …))` flattened that straight
-   * to 0, and the curve's own middle anchor silently snapped to the plot floor — which is exactly the
-   * `atMiddle = 0` case `@bezier.js` documents as collapsing an entire half of the generated ramp to one
-   * repeated hue. The field kept the typed number throughout; only the curve moved, to a place nobody
-   * asked it to.
-   *
-   * The fix: a typed value that maps outside [0,1] has no on-curve position to move to, so the curve's
-   * shape is left exactly where it was. The field still holds whatever was typed — decoupled, which is
-   * the whole reason `middle.<channel>` exists as a cell of its own.
+   * **Two-segment axis:** a Hue middle of 293.5° with ends near 100° is a real colour endpoint, not
+   * an out-of-range pacing height. The curve's `pts[5]` stays put (generation still divides by it);
+   * the field holds 293.5; the handle sits at that value on the chart.
    */
   const startCurve = [0.185, 0, 0.3425, 0.25, 0.5, 0.5, 0.6575, 0.75, 0.815, 1];
   const source = [
@@ -1623,19 +1613,17 @@ test('typing a middle value the curve has no room for leaves the curve alone', (
 
   const wrap = container.querySelector('.config-ui-curve');
   const middle = container.querySelector('[data-row-field="a.middle"]');
+  const svg = wrap.querySelector('.config-ui-curve__canvas');
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
 
   middle.value = '293.5';
   middle.dispatch('input', { bubbles: true });
 
   assert.equal(middle.value, '293.5', 'the typed value must not be reverted');
   const pts = JSON.parse(wrap.getAttribute('data-curve-value'));
-  assert.equal(pts[5], startCurve[5], 'the curve\'s own middle anchor must not move for a value it cannot reach');
-
-  // A value the curve *can* reach still moves the anchor, exactly as before.
-  middle.value = '99.8';
-  middle.dispatch('input', { bubbles: true });
-  const movedPts = JSON.parse(wrap.getAttribute('data-curve-value'));
-  assert.notEqual(movedPts[5], startCurve[5], 'an in-range value must still move the anchor');
+  assert.equal(pts[5], startCurve[5], 'pacing height must not move for a middle-colour edit');
+  const cy = parseFloat(wrap.querySelector('[data-curve-index="4"]').getAttribute('cy'));
+  assert.ok(cy < 30, 'handle must sit near the top for middle=293.5, cy=' + cy);
 });
 
 test('adding a middle point stays visible-dim-free even though the anchor cell is shared with a hidden model', () => {
@@ -1745,11 +1733,13 @@ test('a curve whose ends sit a normal distance apart drags exactly as before —
 });
 
 test('a curve whose ends sit a normal distance apart drags exactly as before — Hue with no far middle', () => {
-  // Bright 100, dark 99.2 — Lime's own real hslHue gap, 0.8° on a 0..360 range, and nothing else
-  // pulling the window wide. `effectiveGap` must not react to a small gap on its own, only to a small
-  // gap under a window a distant middle has forced open — this fixture has no middle at all.
-  const dragged = dragHandle0To(dragSensitivityForm({ bright: 100, dark: 99.2, range: [0, 360] }), 50, 0);
-  assert.ok(Math.abs(dragged[1] - -0.1) < 1e-4, 'Hue (no middle) drag sensitivity moved: ' + dragged[1]);
+  // Lime's hslHue gap (100°, 99.2°) is narrow — shape handles stay visible; drag uses shape space
+  // while the preset is still flat linear, then value-axis mapping once the curve bends.
+  const narrow = dragSensitivityForm({ bright: 100, dark: 99.2, range: [0, 360] });
+  assert.ok(narrow.container.querySelectorAll('.config-ui-curve__handle').length > 0);
+  const dragged = dragHandle0To(dragSensitivityForm({ bright: 100, dark: 80, range: [0, 360] }), 50, 0);
+  assert.ok(dragged[1] < -0.05,
+    'Hue drag must move the handle off linear: ' + dragged[1]);
 });
 
 test('a near-equal-ends channel with a real middle point far from both ends gets a bounded, not a wild, drag', () => {
@@ -1785,66 +1775,171 @@ test('a near-equal-ends channel with a real middle point far from both ends gets
 });
 
 test("a middle field left over from a removed middle point does not widen a two-anchor curve's window or drag", () => {
-  /**
-   * The actual reported shape: Lime's real Hue gap (100°, 99.2°), a plain two-anchor curve, and "Hue
-   * middle" still holding a value from an earlier, since-removed middle point (0°, in the live trace
-   * this reproduces). `oklchRamp` never reads that field for a curve this shape — `hueHasMiddle` is
-   * `false` the moment the curve has no third anchor, independent of what the field says — so a
-   * window or a drag sensitivity that still widens for it shows the person a value nothing downstream
-   * will produce. Confirmed live: a drag that read as reaching 360° on the axis generated a ramp that
-   * moved by 15°, because the axis used the leftover field and generation did not.
-   *
-   * With the field excluded, this curve's spread is just its own 0.8° gap, so the drag should read
-   * exactly what the un-floored math would — no floor to speak of, because nothing here is asking for
-   * a spread wider than the gap.
-   */
+  const narrow = dragSensitivityForm({ bright: 100, dark: 99.2, mid: 0, range: [0, 360] });
+  assert.ok(narrow.container.querySelectorAll('.config-ui-curve__handle').length > 0);
   const plain = dragHandle0To(
-    dragSensitivityForm({ bright: 100, dark: 99.2, mid: 0, range: [0, 360] }), 50, 0);
-  assert.ok(Math.abs(plain[1] - -0.1) < 1e-4,
-    'a leftover middle field widened a two-anchor curve\'s drag sensitivity: ' + plain[1]);
+    dragSensitivityForm({ bright: 100, dark: 80, mid: 0, range: [0, 360] }), 50, 0);
+  assert.ok(Math.abs(plain[1]) > 0.05,
+    'leftover middle field must not freeze the shape handles: ' + plain[1]);
 });
 
-test('a channel pinned exactly at its own range ceiling draws its untouched default preset inside the chart, with no impossible value on the axis', () => {
+test('a channel pinned at its range ceiling still opens a value axis with zoom and ticks', () => {
   /**
-   * **Márton, live: Saturation at 100…100, nothing dragged yet — the curve line was out of the frame
-   * completely; and after a first fix, still "out of range… 110 saturation?".** The first attempt
-   * widened the window to fit an ordinary handle's height, which does put it on screen but does so by
-   * inventing a "106.67% saturation" tick — a number the field's own declared range says cannot
-   * exist. The reason a value axis produces this at all: with equal ends and no real middle,
-   * `oklchLerp`/`oklchLerpHue` interpolate the two ends linearly, and a straight line between two
-   * identical numbers is that number regardless of how the curve paces getting there — there is no
-   * real value for a handle's height to mean here. `toView`/`fromView` now draw this one shape in the
-   * curve's own `[0,1]` square instead (`axisIsFlat`) — the same space a curve with no axis at all
-   * already uses — so the handle lands on screen without a fabricated number attached to it.
+   * Equal ends + no middle: generation ignores handle height. The chart shows a **horizontal** line
+   * at the pin on the full declared range (0…100), with zoom/range — not a synthetic 90–110 diagonal.
    */
   const form = dragSensitivityForm({ bright: 100, dark: 100, range: [0, 100] });
-  const farHandle = form.container.querySelector('[data-curve-index="2"]');
-  const cy = parseFloat(farHandle.getAttribute('cy'));
-  assert.ok(cy >= -1 && cy <= 101,
-    'the untouched preset\'s own handle drew outside the visible chart: cy=' + cy);
+  const path = form.container.querySelector('.config-ui-curve__path');
+  assert.ok(path, 'path missing');
+  const ys = [];
+  (path.getAttribute('d') || '').replace(/[ML]\s*([\d.+-]+)\s+([\d.+-]+)/g, function (_, x, y) {
+    ys.push(parseFloat(y, 10));
+    return _;
+  });
+  assert.ok(ys.length > 2, 'path should be sampled');
+  const spread = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+  assert.ok(spread < 1.5, 'pinned equal ends must draw horizontal, Y spread=' + spread);
+  // Pin at ceiling of 0…100 → near the top of the chart.
+  assert.ok(ys[0] < 15, '100 on a 0…100 chart sits near the top, y=' + ys[0]);
+  const zoom = form.container.querySelector('.config-ui-curve__zoom');
+  const range = form.container.querySelector('.config-ui-curve__range');
+  assert.ok(zoom && !zoom.hidden, 'zoom must stay for equal ends');
+  assert.ok(range && !range.hidden, 'range strip must stay for equal ends');
   const ticks = Array.from(form.container.querySelectorAll('.config-ui-curve__tick'));
-  assert.equal(ticks.length, 0,
-    'a flat, middle-less channel must not label its axis with a value nothing can produce: ' +
-    ticks.map((t) => t.textContent).join(', '));
+  assert.ok(ticks.length > 0, 'equal ends must still label the value axis');
+  // End grips sit on the field value, not on a synthetic 110.
+  const ends = form.container.querySelectorAll('.config-ui-curve__axis-end');
+  assert.equal(ends.length, 2);
+  const ey0 = parseFloat(ends[0].getAttribute('cy'));
+  const ey1 = parseFloat(ends[1].getAttribute('cy'));
+  assert.ok(Math.abs(ey0 - ey1) < 1, 'both ends at the same pin height');
+  assert.ok(Math.abs(ey0 - ys[0]) < 2, 'end grips sit on the horizontal path');
 });
 
-test('dragging the middle anchor writes its field from the value the curve actually settles on, not the raw pre-margin one', () => {
+test('dragging a Hue middle across the short arc does not put a wrap spike in the path', () => {
   /**
-   * **Márton, live: dragging a Hue middle anchor wrote 87.13°/86.39°/87.06° to the "Hue middle"
-   * field, while the chart's own corner clamped to something else entirely a moment later.** The
-   * drag handler (`applyMove`, renderer.js) read the middle field straight off the raw pointer
-   * conversion — `pts[5]` before `bezierNormalise`'s own `[0.001, 0.999]` margin on the middle
-   * anchor's height had run on it — so the field and the curve could disagree about the very drag
-   * that just happened. Reproduced here with the same shape: a near-equal-ends channel (0.8° gap)
-   * with a real middle field set far away (300°), which floors `effectiveGap` small enough that an
-   * ordinary drag converts to a raw middle height far outside the margin. The field must read back
-   * exactly what `unitToValue` of the curve's own, already-clamped `pts[5]` would — never the number
-   * a mid-drag frame only briefly held.
+   * 100° → 290° short-way crosses 0°. Connecting wrapped samples with a line drew a vertical spike
+   * while the swatch strip stayed smooth. The path must break (`M`) across that wrap instead.
    */
   const form = dragSensitivityForm({
-    bright: 100, dark: 99.2, mid: 300, range: [0, 360],
+    bright: 100, dark: 99.2, mid: 290, range: [0, 360],
     curve: B.bezierWithMiddle([0.37, 0, 0.63, 1], 0.5)
   });
+  const path = form.container.querySelector('.config-ui-curve__path');
+  assert.ok(path, 'path missing');
+  const d = path.getAttribute('d') || '';
+  assert.ok((d.match(/M/g) || []).length >= 2,
+    'path must break at the hue wrap (expected a second M), d=' + d.slice(0, 120));
+  const ys = [];
+  d.replace(/[ML]\s*([\d.+-]+)\s+([\d.+-]+)/g, function (_, x, y) {
+    ys.push(parseFloat(y, 10));
+    return _;
+  });
+  // Within one subpath, adjacent samples stay close; ignore the jump at an M by scanning runs.
+  const parts = d.split(/(?=M)/);
+  parts.forEach(function (part) {
+    const pys = [];
+    part.replace(/[ML]\s*([\d.+-]+)\s+([\d.+-]+)/g, function (_, x, y) {
+      pys.push(parseFloat(y, 10));
+      return _;
+    });
+    for (let i = 1; i < pys.length; i++) {
+      assert.ok(Math.abs(pys[i] - pys[i - 1]) < 25,
+        'subpath still has a spike: jump ' + Math.abs(pys[i] - pys[i - 1]) + ' in ' + part.slice(0, 80));
+    }
+  });
+  const midField = form.container.querySelector('[data-row-field="a.middle"]');
+  assert.equal(parseFloat(midField.value, 10), 290);
+  const handle = form.container.querySelector('[data-curve-index="4"]');
+  const cy = parseFloat(handle.getAttribute('cy'));
+  assert.ok(cy < 40, 'wrapped middle 290° must sit near the top of the chart, cy=' + cy);
+});
+
+test('zoom and range columns stay visible when ends are equal', () => {
+  const form = dragSensitivityForm({ bright: 100, dark: 100, range: [0, 100] });
+  const zoom = form.container.querySelector('.config-ui-curve__zoom');
+  const range = form.container.querySelector('.config-ui-curve__range');
+  assert.ok(zoom && !zoom.hidden, 'zoom must show on equal ends');
+  assert.ok(range && !range.hidden, 'range strip must show on equal ends');
+});
+
+test('zooming in on pinned equal ends keeps the window across redraws', () => {
+  const form = dragSensitivityForm({ bright: 100, dark: 100, range: [0, 100] });
+  const wrap = form.container.querySelector('.config-ui-curve');
+  wrap.setAttribute('data-curve-view', '95,100');
+  wrap.dispatchEvent(new Event('config-ui-curve-refresh'));
+  assert.equal(wrap.getAttribute('data-curve-view'), '95,100',
+    'a narrow zoom on 100…100 was discarded on redraw');
+});
+
+test('dragging an end off a pinned channel does not reset the latched zoom window', () => {
+  const form = dragSensitivityForm({ bright: 100, dark: 100, range: [0, 100] });
+  const wrap = form.container.querySelector('.config-ui-curve');
+  wrap.setAttribute('data-curve-view', '0,100');
+  const end = form.container.querySelector('[data-curve-end="to"]');
+  form.svg.dispatch('pointerdown', { target: end, clientX: 100, clientY: 10, pointerId: 1 });
+  form.svg.dispatch('pointermove', { clientX: 100, clientY: 30, pointerId: 1 });
+  form.svg.dispatch('pointerup', { clientX: 100, clientY: 30, pointerId: 1 });
+  assert.equal(wrap.getAttribute('data-curve-view'), '0,100',
+    'leaving a pinned channel must not reopen a tight window under the end drag');
+});
+
+test('zoom in on pinned saturation at 100 stays around the pin without resetting', () => {
+  const form = dragSensitivityForm({ bright: 100, dark: 100, range: [0, 100] });
+  const wrap = form.container.querySelector('.config-ui-curve');
+  const stepIn = form.container.querySelector('[data-curve-zoom="in"]');
+  stepIn.dispatchEvent(new Event('click', { bubbles: true }));
+  const held = wrap.getAttribute('data-curve-view');
+  assert.ok(held, 'zoom in must latch a window');
+  const parts = held.split(',').map(parseFloat);
+  assert.ok(parts[1] >= 99, 'zoom on 100…100 must keep the pin in view, got ' + held);
+  assert.ok(parts[1] - parts[0] < 100, 'zoom in must narrow the window, got ' + held);
+});
+
+test('color curve axis ticks are whole numbers', () => {
+  const form = dragSensitivityForm({ bright: 98, dark: 9.6, range: [0, 100] });
+  const ticks = Array.from(form.container.querySelectorAll('.config-ui-curve__tick'));
+  assert.ok(ticks.length > 0);
+  ticks.forEach(function (t) {
+    const n = parseFloat(t.textContent, 10);
+    assert.ok(Number.isFinite(n));
+    assert.equal(String(n), t.textContent.trim(),
+      'tick must be a whole number, got ' + t.textContent);
+  });
+});
+
+test('near-equal ends keep shape handles visible on the flat Linear preset', () => {
+  const form = dragSensitivityForm({ bright: 100, dark: 99.2, range: [0, 360] });
+  assert.ok(form.container.querySelectorAll('.config-ui-curve__handle').length > 0,
+    'shape handles must stay visible so a two-point overshoot arch can be authored');
+});
+
+test('derived middle placeholder matches valueAlongRamp at the plot midpoint', () => {
+  const form = dragSensitivityForm({
+    bright: 100, dark: 100, mid: 0, range: [0, 360],
+    curve: [0.37, 1.5, 0.63, 1.5]
+  });
+  const midCell = form.container.querySelector('[data-row-field="a.middle"]');
+  assert.ok(midCell, 'middle cell missing');
+  assert.equal(midCell.value, '', 'leftover middle value must clear when there is no anchor');
+  var ph = parseFloat(midCell.placeholder, 10);
+  assert.ok(ph > 40 && ph < 160,
+    'derived middle must match the bent curve on the chart, not a stale field: ' + midCell.placeholder);
+});
+
+test('dragging the middle anchor writes the channel value under the pointer, not a single-span map of pts[5]', () => {
+  /**
+   * **Two-segment axis:** the middle handle is the colour at the corner. Dragging it to the top of
+   * the chart writes the window's high value into the middle field and leaves `pts[5]` (pacing)
+   * alone. The old single-span path forced the field through `unitToValue(pts[5])` after a margin
+   * clamp, which pinned a Hue middle of 300° back near 100° on the chart while generation still
+   * used 300° — the cyan-spike disagreement.
+   */
+  const form = dragSensitivityForm({
+    bright: 100, dark: 99.2, mid: 200, range: [0, 360],
+    curve: B.bezierWithMiddle([0.37, 0, 0.63, 1], 0.5)
+  });
+  const ptsBefore = form.points().slice();
   const handle = form.container.querySelector('[data-curve-index="4"]');
   form.svg.dispatch('pointerdown', { target: handle, clientX: 50, clientY: 50, pointerId: 1 });
   form.svg.dispatch('pointermove', { clientX: 50, clientY: 0, pointerId: 1 });
@@ -1852,15 +1947,33 @@ test('dragging the middle anchor writes its field from the value the curve actua
 
   const pts = form.points();
   assert.ok(pts[5] >= 0.001 && pts[5] <= 0.999,
-    'the curve\'s own middle anchor must stay inside its margin: ' + pts[5]);
-  // The drag pushes the raw candidate far below the margin, so the corner clamps hard to its floor
-  // (0.001) — a hair's breadth from `bright`. The field has to land there too: near 100, not the
-  // ~320 the unclamped candidate read as before the field write moved after normalisation.
-  assert.ok(pts[5] < 0.01, 'fixture assumption broke: expected the corner to clamp to its floor, got ' + pts[5]);
+    'pacing height must stay inside its margin: ' + pts[5]);
+  assert.ok(Math.abs(pts[5] - ptsBefore[5]) < 1e-6,
+    'dragging the middle colour must not rewrite pacing pts[5]: was ' + ptsBefore[5] + ', now ' + pts[5]);
   const midField = form.container.querySelector('[data-row-field="a.middle"]');
   const fieldValue = parseFloat(midField.value, 10);
-  assert.ok(Math.abs(fieldValue - 100) < 1,
-    'the middle field read the pre-margin candidate instead of the clamped curve: ' + fieldValue);
+  // Top of the chart is the top of the window opened on [99.2, 100, 200] — well above both ends.
+  assert.ok(fieldValue > 150,
+    'middle field must follow the pointer on the value axis, got ' + fieldValue);
+});
+
+test('typing a Hue middle above both ends moves the handle there without rewriting the curve shape', () => {
+  const form = dragSensitivityForm({
+    bright: 100, dark: 99.2, mid: 100, range: [0, 360],
+    curve: B.bezierWithMiddle([0.37, 0, 0.63, 1], 0.5)
+  });
+  const midField = form.container.querySelector('[data-row-field="a.middle"]');
+  const ptsBefore = form.points().slice();
+  midField.value = '200';
+  midField.dispatchEvent(new Event('input', { bubbles: true }));
+  const handle = form.container.querySelector('[data-curve-index="4"]');
+  const cy = parseFloat(handle.getAttribute('cy'));
+  // Window opens on ~[90, 210]; 200° sits near the top of a 190px chart.
+  assert.ok(cy < 40, 'handle should sit near the top for middle=200, cy=' + cy);
+  const pts = form.points();
+  assert.deepEqual(Array.from(pts), Array.from(ptsBefore),
+    'typing the middle colour must not rewrite curve coordinates');
+  assert.equal(midField.value, '200');
 });
 
 test("getValues() keeps an overshoot curve's real height instead of clamping it back to [0,1]", () => {

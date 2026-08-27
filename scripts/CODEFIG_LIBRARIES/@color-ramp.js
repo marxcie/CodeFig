@@ -156,8 +156,22 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // sits, and on a near-neutral the two disagree by more than 30 degrees — so it carries two curves too.
   var hueSource = oklch ? mode.hueCurve : mode.hslHueCurve;
   var hueCurve = Array.isArray(hueSource) ? bezierNormalise(hueSource, true) : [];
+  var hueKey = oklch ? 'hueCurve' : 'hslHueCurve';
+  var satKey = oklch ? 'chromaCurve' : 'saturationCurve';
   var hueAnchors = colorsChannel(mode, 'hue', oklch);
   var chromaAnchors = colorsChannel(mode, 'chroma', oklch);
+  /**
+   * **An explicit `[]` on a channel means Linear / Original — one segment, no middle point.** The UI
+   * draws that through `effectivePoints`; generation used to still read `middle.saturation: 0` left from
+   * an earlier explore and grey out the placement step. Only a key *absent* from the mode keeps the
+   * read-time three-anchor fallback (`oklchRamp`'s `hasMiddle` when `oklchCurveOf` is null).
+   */
+  if (hueKey in mode && hueCurve.length !== 10) {
+    hueAnchors = Object.assign({}, hueAnchors, { hasMiddle: false });
+  }
+  if (satKey in mode && chromaCurve.length !== 10) {
+    chromaAnchors = Object.assign({}, chromaAnchors, { hasMiddle: false });
+  }
 
   var rows = oklchRamp({
     steps: steps, ladder: ladder, curve: walked, chromaCurve: chromaCurve, hueCurve: hueCurve,
