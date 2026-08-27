@@ -555,10 +555,23 @@ function oklchRamp(spec) {
     return { from: 'bright', to: 'dark', t: last === 0 ? 1 : index / last };
   }
   /** Progress within a channel's own span — renormalised per half only when there are halves. */
+  // **Clamped to `[0,1]` unless the curve itself says otherwise.** `hueCurve`/`chromaCurve` carry
+  // `overshoot` on their own `.points` (`bezierNormalise`, `@Bezier`) when the field that produced them
+  // opted in — Colors' own Hue, Saturation and Chroma curves, never Lightness, which does not reach this
+  // function at all (its ladder is built separately, in `oklchLadder`). A borrowed schedule (`ramCurve`,
+  // when a channel has no curve of its own) is the lightness curve's, which never opts in — so a channel
+  // without its own curve keeps the old, clamped pacing exactly as before.
   function oklchChannelAt(curve, index, hasMiddle, atMiddle) {
+    var overshoot = !!(curve && curve.points && curve.points.overshoot);
+    // Finite still matters even with overshoot allowed — a malformed curve should not hand NaN or
+    // Infinity onward into a colour. Only the *range* restriction is what overshoot lifts.
+    function clamp(v) {
+      if (typeof v !== 'number' || !isFinite(v)) return 0;
+      return overshoot ? v : (v < 0 ? 0 : v > 1 ? 1 : v);
+    }
     var g = oklchEaseAt(curve, last === 0 ? 1 : index / last);
-    if (!hasMiddle) return oklchClamp01(g);
-    return oklchClamp01(index <= middle
+    if (!hasMiddle) return clamp(g);
+    return clamp(index <= middle
       ? (atMiddle > 1e-9 ? g / atMiddle : 1)
       : (atMiddle < 1 - 1e-9 ? (g - atMiddle) / (1 - atMiddle) : 1));
   }

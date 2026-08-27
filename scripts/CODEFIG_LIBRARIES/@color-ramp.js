@@ -144,12 +144,18 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // **The curve for the model in play.** Chroma and saturation are different quantities — one absolute, one
   // already a fraction of what the lightness holds — so a curve fitted to one describes nothing about the
   // other. They are stored separately for the same reason the hue anchors are.
+  // **`overshoot: true`, unconditionally.** This function is Colors' own, and hue and chroma are the two
+  // channels a ramp legitimately peaks or dips past both its own ends on — a hue that reads the same at
+  // both ends with a real, different hue in the middle cannot be expressed any other way, since
+  // `oklchLerpHue`/`oklchLerp` interpolate the two ends linearly and a straight line between two equal
+  // numbers is that number regardless of pacing. Lightness never reaches this: its ladder is built
+  // separately, in `oklchLadder`, and does not opt in. See `@Bezier`'s `bezierNormalise`.
   var chromaSource = oklch ? mode.chromaCurve : mode.saturationCurve;
-  var chromaCurve = Array.isArray(chromaSource) ? bezierNormalise(chromaSource) : [];
+  var chromaCurve = Array.isArray(chromaSource) ? bezierNormalise(chromaSource, true) : [];
   // Hue is a different angle in each model — OKLCH's is perceptual, HSL's is where the maximum channel
   // sits, and on a near-neutral the two disagree by more than 30 degrees — so it carries two curves too.
   var hueSource = oklch ? mode.hueCurve : mode.hslHueCurve;
-  var hueCurve = Array.isArray(hueSource) ? bezierNormalise(hueSource) : [];
+  var hueCurve = Array.isArray(hueSource) ? bezierNormalise(hueSource, true) : [];
   var hueAnchors = colorsChannel(mode, 'hue', oklch);
   var chromaAnchors = colorsChannel(mode, 'chroma', oklch);
 
@@ -205,10 +211,19 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
       var HUE_EPSILON = 0.05, CHROMA_EPSILON = 0.0005;
       var brightReal = read(held[0]);
       var darkReal = read(held[held.length - 1]);
-      var hueTouched = !brightReal || !darkReal ||
+      // **The curve's own shape is a touched-ness signal too, not just the anchors.** Checking bright/
+      // dark alone missed the case Márton hit live: a mode whose anchors happen to still match the file
+      // (auto-import filled them and nobody retyped them) but whose *curve* has a real, deliberately-
+      // shaped overshoot — the anchors said "untouched" and the whole channel fell back to the file's
+      // verbatim hue, so the swatch never moved no matter how the curve was dragged. `hueCurve`/
+      // `chromaCurve` are `[]` only for a channel nobody has given a shape to at all (plan 36's lazy
+      // read); the moment a preset is picked or a handle is dragged, one of the two questions below
+      // must say so, even if the endpoints this particular drag happened to leave behind still agree
+      // with the file.
+      var hueTouched = !brightReal || !darkReal || hueCurve.length > 0 ||
         Math.abs(hueAnchors.bright - brightReal.H) > HUE_EPSILON ||
         Math.abs(hueAnchors.dark - darkReal.H) > HUE_EPSILON;
-      var chromaTouched = !brightReal || !darkReal ||
+      var chromaTouched = !brightReal || !darkReal || chromaCurve.length > 0 ||
         Math.abs(chromaAnchors.bright - brightReal.C) > CHROMA_EPSILON ||
         Math.abs(chromaAnchors.dark - darkReal.C) > CHROMA_EPSILON;
       var toHex = oklch ? oklchToHex : oklchHslToHex;

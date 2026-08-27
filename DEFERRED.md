@@ -597,8 +597,9 @@ without an `explicit` control reads a real spacing set and reports a scale nobod
 
 **The hazard while both are open.** The panel now shows every mode the collection has, and the ones it
 adds carry a *copy of a neighbouring mode's* settings. Running Spacing would write those over the file's
-real ladder (200/120/80/48/… in Desktop-large). The note under Group says the values are a starting
-point; that is a sentence, not a guard.
+real ladder (200/120/80/48/… in Desktop-large). Nothing on screen says so: the auto-import note that used
+to render under Group (whatever it said was never a guard, only a sentence) was removed at Márton's
+request, so there is now no warning of any kind here, guard or otherwise.
 
 ---
 
@@ -1342,6 +1343,108 @@ either way — the dragged element is detached from the tree by the redraw `setP
 the diagnostic reads it back, `closest()` on a detached node finds nothing, and that has nothing to
 do with whether the drag itself landed. Read `text` (the real config block), not those fields, when
 checking a drag result through this command.
+
+---
+
+## A middle anchor cannot be dragged below both ends, or above both
+
+**What.** Márton: a curve with an added middle point "has no sharp corners, but the middle still
+acts weirdly" — investigated and fixed (`CHANGELOG.md`: the toggle was splitting at a flat 0.5
+instead of the real middle step, a genuine discontinuity in generation). But a second, deeper
+report survives that fix: "I can't make a curve like [a U-shape — bright and dark both near 100,
+middle dipping to ~50]" on a channel whose two ends are equal or close. That one is not the split
+bug. It is a real limit in the curve editor's own axis model, not yet touched.
+
+**Why.** `unitToValue(a, u) = a.from + (a.to - a.from) * u` is how the renderer's whole axis — the
+plotted line, the drag mechanics, the tick labels, the range strip — turns a curve's own 0..1
+height into the channel's real value. It assumes the value at any point on the plot lies between
+`bright` and `dark`, linearly. Generation does not share that assumption once a middle point
+exists: `oklchRamp` treats `bright → middle` and `middle → dark` as two independent spans
+(`oklchSegmentAt`, `@oklch.js`), each interpolated against the *field's* own value at each end,
+with the curve consulted only for pacing within a span, never for the span's own endpoints. A real
+dip — middle below both ends, or a peak above both — is completely expressible in that model. It
+is not expressible in the renderer's, because `unitToValue` can only ever answer a number between
+`bright` and `dark`. Dragging the middle handle calls exactly this function
+(`applyMove`'s `dragging === 4` branch, `setEndValue("mid", unitToValue(a, pts[5]))`), so the
+written value is clamped to `[min(bright,dark), max(bright,dark)]` by construction — the handle
+cannot be pulled past either end, however far the pointer moves.
+
+**Confirmed, not guessed:** read `applyMove`, `toView`/`fromView`, `axisView`'s window and
+`rangeStops` — all six call sites share this one `unitToValue`, so this is not a bug in the drag
+handler alone; the whole chart (line, ticks, range strip, drag) is built on an axis that has no
+room for a value outside the two ends.
+
+**What it would take.** The axis needs a real two-segment mode once a middle point (or a real,
+independently-typed `middle.<channel>` value) exists — `unitToValue`/`valueToUnit`/`toView`/`fromView`
+each becoming aware of a genuine third anchor, in the same shape `oklchSegmentAt` already answers
+for generation, rather than a single linear span. That is a cross-cutting change to most of
+`buildCurveControl`, not a targeted fix, and it has not been started. The split-position fix in
+this pass is real and independent of it — it corrects where the corner *is*; this is about what
+range the corner is *allowed to reach*.
+
+**Still open as of this entry.** A later pass in the same investigation fixed a related-but-distinct
+bug — a plain two-anchor curve with equal ends and *no* middle point drawing off-chart, or showing an
+impossible value like "106.67% saturation" (`CHANGELOG.md`, `axisIsFlat`) — by drawing that one shape
+in the curve's own `[0,1]` square instead of inventing a value scale for it. That fix does not touch
+this entry: the moment a middle point exists (`curveHasRealMiddle()` true), `axisIsFlat` is false by
+definition and the same `unitToValue` single-span limit described above still applies, unchanged. Do
+not mark this entry resolved on the strength of the flat-axis fix — they read as the same complaint
+("the curve won't do what I'm dragging it to") but are different code paths.
+
+---
+
+## Curve-editor probe instrumentation is live in shipped-adjacent code, on by default
+
+**What.** `window.CODEFIG_PROBE = true` and `window.codefigProbe(tag, data)` in `src/ui.html`, plus
+six call sites tagged `// PROBE:` (`curve:setPoints`, `curve:drag`, `curve:midInput`, `curve:axis` in
+`src/config-ui/renderer.js`'s curve control; `preview:request`/`preview:result` in `src/ui.html`'s
+preview path) — added during the curve-editor investigation this entry's neighbours document, to pull
+exact axis/window/handle data out of a live session via `figma-console.log` instead of guessing from
+screenshots. It is dev-bridge-gated (`_codefigBridgeFetch`, dev builds only, same guard
+`tests/ui-dev-guard.test.js` checks) so it never reaches a production build, but it is **on by
+default** in the current tree and posts a line to the console log on every curve redraw, drag frame,
+and preview request — noisy, and easy to forget about once the investigation that needed it is done.
+
+**What it would take.** Once the curve-editor work in this area is settled (the acceptance pass this
+file's neighbouring entries still call for), flip `CODEFIG_PROBE` back to `false` or remove the call
+sites entirely — they were reusable-by-design (`codefigProbe` is generic, not curve-specific) so a
+future investigation can reintroduce the pattern cheaply rather than needing these exact six kept
+around indefinitely. Left in place for now because the acceptance pass below is not done and the same
+probe will very likely be read again before it is.
+
+## The zoom and range controls stay visible, but do nothing, on a flat equal-ends curve
+
+**What.** The fix documented above (equal ends, no middle, drawn in shape-space) means `axisView`,
+`zoomOf` and the `data-curve-view` window are simply never consulted for that one shape — `toView`
+bypasses them. The zoom buttons and the zoom slider beside the chart are still built and shown
+whenever `field.ends` exists, `axisIsFlat` or not, so a person can click zoom on a plain Saturation
+curve and watch nothing happen. Not incorrect (no wrong number, no crash) — just a control that looks
+like it should do something and quietly doesn't.
+
+**What it would take.** Hoist `zoomCol`/`rangeCol` (currently local to the constructor, not kept on
+the closure) to closure-scoped variables the way `zoomTrack`/`zoomMark`/`rangeFill` already are, and
+toggle a hidden state on them from `draw()` once `flatAx` is known. Small, not done — the display and
+middle-point-add bugs were the reported symptoms; this is the cosmetic loose end noticed while fixing
+them, not something anyone has complained about yet.
+
+## Acceptance pass on the curve editor: not started
+
+**What.** Every fix logged in `CHANGELOG.md` under this investigation (axis/generation agreement,
+drag-sensitivity flooring, the monotonicity reset, the flat-axis shape-space switch, the
+middle-point-add value fix) was verified against the *specific reported curve* — real numbers pulled
+from `figma-console.log`, replayed through a standalone Node harness, or pinned in a new test. None of
+it has been checked as a **sweep**: every preset × every channel (Hue, hslHue, Saturation, Chroma,
+Lightness) × every model (OKLCH, HSL) × both curve shapes (2-anchor, 3-anchor) × both directions
+(equal ends, unequal ends), confirming the chart, the range strip, and the generated swatches all
+agree with each other and with the numbers in the anchor boxes. Nothing has surfaced a new bug this
+way — it just hasn't been done, and the density of related-but-distinct bugs found so far (five
+separate, independently-confirmed issues in one investigation) makes it likely there is at least one
+more waiting in a combination nobody has looked at directly yet.
+
+**What it would take.** A pass through the live plugin (or `figma:run`/`figma:ui` driven from the
+terminal) exercising each combination above once, comparing the chart's own drawn curve against
+`colorsGenerateMode`'s real output for the same config — the same ground-truth method used for every
+fix in this investigation, just applied systematically instead of per-report.
 
 ---
 

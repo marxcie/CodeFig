@@ -21,6 +21,19 @@ a plain statement of the new default.
 
 ### Added
 
+- **A Hue, Saturation or Chroma curve can now peak above or dip below both of its own ends** — a
+  Hue that reads the same at both ends with a real, different hue in the middle, for instance,
+  which cannot be expressed any other way: `oklchLerpHue`/`oklchLerp` interpolate the two ends
+  linearly, and a straight line between two equal numbers is that number regardless of how the
+  curve paces getting there. Dragging a handle past the edge of the plot used to clamp its height
+  to exactly the ceiling or floor, wherever the pointer actually went — confirmed live, a dragged
+  Hue handle landed at exactly `y = 1`. The overshoot protection that stops a handle leaving the
+  *plot box* is unchanged and still applies; only the restriction to the *range between the two
+  ends* is lifted, and only for these three channels — Lightness and every curve outside Colors
+  (Spacing, Radius, Typography's own scale curves, which share the same underlying shape) keep
+  exactly the range they always had. Also fixes the generation-side half of the same limitation: a
+  curve's pacing was clamped a second time when it was turned into a colour, so even a display that
+  correctly showed the overshoot would not have reached the swatch.
 - **Configuration code shows a migrated script's `@PANEL_START` spec, read-only, above the values
   it explains** — a script with no `@PANEL_START` shows exactly what it always has. A second,
   genuinely non-editable pane rather than one shared buffer: the values editor still writes back
@@ -114,6 +127,140 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **A curve could visibly drag to a dramatic value and the swatch would barely move — the axis and the
+  colour math were reading two different scales for the same stored number.** `axisView` (the window a
+  curve is drawn against) and `effectiveGap` (the drag-sensitivity floor two fixes above this one)
+  both widen for a middle value on `field.ends.mid` — a property of the *field definition*, present
+  for Hue whether or not the curve currently has a third anchor. A plain two-anchor curve with a
+  "Hue middle" field still holding a value from an earlier, since-removed middle point had that stale
+  value pulled into the window and the drag floor regardless — stretching the axis and the handle's
+  own readout to include it, while `oklchRamp` never reads that field for a curve this shape at all
+  (`hueHasMiddle`/`chromaHasMiddle` is `false` the moment the curve has no real middle anchor,
+  independent of what the field says). Reproduced directly from a live trace: a drag that read as
+  reaching 360° on the axis generated a ramp that moved by 15°, because the axis used the leftover
+  field and generation did not. Both now ask `curveHasRealMiddle` — the curve's own length, the same
+  question generation asks — before including the field at all; three existing tests whose fixtures
+  paired a two-anchor curve with a middle *field* (testing the axis, not this distinction) were
+  updated to use a real middle *point*, and a new test pins the leftover-field case directly.
+- **Adding a middle point to a curve already dragged into a real overshoot bulge looked like it reset
+  the curve instead of splitting it.** De Casteljau's subdivision reproduces the original curve
+  exactly, tangent handles included — sound for an ordinary curve, and the wrong answer for a handle
+  built for the curve's full width landing in a segment the split just narrowed to a sliver: the
+  margin `bezierNormalise` (`@Bezier`) holds a tangent handle to, around a corner that split can land
+  almost anywhere, held the inherited handle regardless, so it settled on the margin's own edge —
+  indistinguishable from a curve drawn that way on purpose. Confirmed against the exact reported
+  shape: a two-handle Hue curve dragged to `[0.157, -9.969, 0.709, -9.969]`, split at the real
+  16-step middle fraction, landed both new handles precisely on their clamp boundaries. `bezierWithMiddle`
+  now checks each half against that same margin before committing to it, and gives a half that would
+  not survive a plain linear pace between the corner and its far anchor instead of a value clamped to
+  the margin's edge — the same clean shape a fresh split already shows on a curve with no handles yet.
+  Two tests cover it: the existing "splits an already-overshooting curve" fixture, re-verified against
+  the reset rather than the clamp, and a new one reproducing the exact reported curve directly; both
+  confirmed failing against the old clamp-in-place behaviour.
+- **An overshoot curve could drag, draw and evaluate exactly right and still never reach the swatch
+  or the config block — the root of "the chart doesn't change" across several rounds of this
+  investigation.** Every fix above this one corrected something real, and none of them could have
+  worked on their own, because the curve widget and the code that *saves* what it holds read two
+  different functions. `buildCurveControl` shadows `curveValueOf` with a copy that already threads
+  `field.overshoot` through — confirmed by a live trace, this half was always correct, which is why
+  the chart itself looked right while dragging. `getValues()`/`collectRows()` — what actually runs
+  when the config block is written and, via the same call during a live drag, what the preview is
+  built from — read a curve's value back out through the *module-level* `curveValueOf` instead,
+  outside any one control's closure and with no `field.overshoot` to default to, so it silently
+  clamped every Y coordinate back into `[0,1]` the instant the curve was collected. A curve could
+  overshoot beautifully on screen and write a flattened, ordinary shape into both the live preview
+  and the eventual `RUN`. Both collection paths — a `@rows` cell (`readRowCellInto`, colors.js's own
+  Hue/Saturation/Chroma curves) and a field-level curve (`getValues()`'s own `data-curve-field`
+  sweep, Lightness's collection-scope curve) — now pass their column's own `overshoot` through
+  explicitly. Two new tests reproduce each path directly and pin the collected value to the curve's
+  real, unclamped shape; both confirmed failing before this fix.
+- **A curve handle on a near-equal-ends channel with a middle set far from both ends read as frozen
+  for most of a drag and then jumped — reproduced directly from a live trace and fixed at the pixel
+  conversion, not the generation math.** `unitToValue`/`valueToUnit` (`renderer.js`) scale a drag
+  against `bright − dark`; sound while the two are a normal distance apart, and the one place it broke
+  down is a small gap under a window that still has to widen to show a middle far from both — Lime's
+  own Hue, 100° and 99.2°, with a middle explored out to 200°. The window and the gap are then divided
+  through the same handful of pixels, and nearly every pointer position landed past the range
+  `bezierNormalise`'s own margins hold a curve to — only a hairline band near the ends read as
+  anything else, which is exactly "can't move it, then it resets." Fixed with one function,
+  `effectiveGap`, reused by both conversions: the gap is floored to `spread ÷ 10` — the same three
+  anchors' own spread, not a fixed worst case — so a channel with no middle, or one whose middle sits
+  close to its ends (every Lightness, Chroma and ordinary Saturation curve checked against
+  `bench:colors`' own real sets), has a spread equal to its own gap and gets that gap back unchanged.
+  Confirmed on both sides: three new tests pin Lightness, Chroma and a plain near-equal Hue curve to
+  their exact pre-fix drag numbers, and a fourth reproduces the reported curve directly and asserts
+  the drag it produces is bounded rather than the ≈140× amplification the same numbers hand-derive to
+  without the floor. Also absorbs the old "equal ends divide by zero" case for free — a spread of
+  exactly 0 falls back to the field's own declared range instead of needing a separate check.
+- **Clicking into a field, right after picking a collection, lost focus a moment later on its own.**
+  Auto-import resolves asynchronously and writes whatever it read the moment it lands —
+  `writeConfigBlockText` is the one place that happens, and it rebuilds the whole Configuration UI
+  form from scratch on every write so the two never disagree. That rebuild empties and re-creates
+  every field's DOM node, focused one included, and the browser has no way to know the freshly-built
+  Group field is "the same" one the caret was just in. Márton: *"I click into the field, see the
+  blinking cursor, then the focus disappears."* Removing the auto-import note that used to render
+  under Group (above) looked related because both fire from the same write, but the note was never
+  the cause. `projectConfigIntoForm` now remembers which field had the caret by name — `data-field`,
+  or `data-row-field` plus its row — the same way it already remembers which mode tab was open by
+  name rather than by element, and returns focus (and the caret's own position) to the rebuilt
+  field's equivalent once the rebuild finishes.
+- **An overshoot Hue curve could look right on the chart and never reach the swatch.** The channel
+  the overshoot fix above landed for was still being ignored in one real case: a mode whose
+  `bright`/`dark` anchor values happened to still equal the file's own — auto-import had filled
+  them and nobody had retyped either end — read as untouched by the anchor-only check that decides
+  whether Original substitutes the file's colour or the curve's, so the whole channel fell back to
+  the file's verbatim per-step hue regardless of how dramatically the curve itself had been
+  reshaped. Confirmed live: a Hue curve dragged into a large overshoot bulge, swatch unchanged.
+  `hueTouched`/`chromaTouched` now also treat a real, non-empty curve as touched in its own right,
+  not only a retyped anchor.
+- **A curve with a middle point could generate a ramp with one flat half and the other reading
+  hues in the hundreds of degrees, with no sharp corner anywhere on the chart to explain it.**
+  `oklchRamp` paces each half by dividing the curve's own height by its height *at* the middle
+  anchor (`atMiddle`) — sound only while that height sits away from 0 and 1, since a value right on
+  either boundary turns the division into a constant or a near-infinite ratio. Two paths could land
+  it there once curves could overshoot: typing a value into a Hue/Saturation/Chroma middle field
+  that the curve had no on-curve position for used to force the anchor to the nearest boundary
+  instead of leaving it alone (confirmed live: typing 293.5° with both ends near 100° pinned the
+  curve's own corner to `y = 0`), and splitting an already-overshooting curve inherited whatever
+  height the original curve happened to have at the split point, unclamped. `bezierNormalise`
+  (`@Bezier`) now holds the middle anchor's own height to `[0.001, 0.999]` regardless of overshoot —
+  the same margin its `x` already had, and for the same reason — and the renderer leaves the curve's
+  shape untouched when a typed value has nowhere on it to go, since that is exactly what the
+  `middle.<channel>` field is for. A curve already corrupted by the old behaviour needs reshaping by
+  hand; the fix stops new corruption, not undoes what a prior session already stored.
+- **A curve with a middle point could still generate a swatch strip of unrelated pinks, blues and
+  greens with no corner on the chart to explain it, even on a curve that had never touched 0 or 1.**
+  The margin above stops the *corner* from landing exactly on a boundary; it does nothing about a
+  *tangent* handle several times taller than the tiny segment it bends — and `oklchRamp`'s division
+  amplifies a handle's height by `1 / atMiddle`, so a handle at `y = 1` next to a corner at
+  `y = 0.01` reads as a progress of 100, a hundred-fold loop around the hue wheel from one step to
+  the next. Reproduced and fixed at the unit level directly against the reported curve: `bezierAt`
+  read a smooth, single bulge as the wild oscillation the swatch strip showed. `bezierNormalise`
+  (`@Bezier`) now holds each tangent handle to two spans' worth beyond its own segment's edges —
+  generous enough that no ordinary overshoot curve (the "easeOutBack" shape used throughout this
+  file's own tests, checked directly) is affected — which bounds what the division can produce to
+  `[-2, 3]` regardless of how small the segment is, in place of the unbounded ratio an untouched
+  handle could reach. `bench:colors` unchanged; every set already fits well inside that range.
+- **A curve's own middle anchor read as disabled but dimmed like it wasn't, or the other way
+  round, whenever the channel's Hue and hslHue (or Chroma and Saturation) curves shared a
+  bright/middle/dark cell.** `@showWhen` shows one model's curve at a time, and both share the same
+  cell — `refreshCurveControls` redraws every *other* curve right after the one just edited, so
+  clicking *Add middle point* correctly enabled the field and then the hidden twin's own redraw
+  (still two anchors, no middle of its own) immediately dimmed the shared cell back down. The field
+  itself was genuinely usable throughout; only the dimming disagreed with it. The write that dims a
+  curve's shared anchor cell now only happens while that curve is the one actually on screen, the
+  same guard `adoptEnds` already uses to decide which of the two gets to touch the cell at all.
+- **A curve with a middle point could generate a ramp that jumped, even with no sharp corners on
+  screen.** "Add middle point" split every curve at a flat 0.5 — but generation paces each half
+  against `index / last` up to the channel's real middle *step* (the seed's placement, or
+  `colorsMidIndex`), which for an even step count is essentially never 0.5 exactly: a 16-step ramp
+  turns at step 7 of 15, 0.467. Between the two positions, the drawn curve had already crossed into
+  its second segment while generation was still pacing the first half's approach to the middle — a
+  discontinuity nowhere visible in the chart, which only draws the shape that was actually stored.
+  The toggle now asks the host for the real middle step before splitting (`config-ui-middle-point-position`,
+  a synchronous, mutable-detail event — the same pattern `onChannelOpen`/`onRequestEstimate` use for
+  anything only the host's row context can answer) and falls back to 0.5 when nothing answers, which
+  is exactly right for a channel with no seed placement to disagree with it.
 - **Dragging a handle on an untouched curve did nothing, on every fresh Hue, Saturation or Chroma
   field.** `draw()` positions every handle from the *implied* Linear shape when nothing is stored
   yet (`effectivePoints`), but the drag itself read the raw, empty stored value and indexed straight
@@ -271,9 +418,81 @@ a plain statement of the new default.
 - **Selecting *Estimated original* could disable the curve control forever** if the fit it asked
   for never answered. It now gives up after 6 seconds, re-enables itself, and says so (a status,
   not help, per the `ux-copy` skill) rather than leaving the dropdown looking broken.
+- **Adding a middle point, or dragging a curve that already had one, could still generate a rainbow
+  of unrelated hues with no sharp corner on the chart to explain it — the margin above bounds a
+  tangent handle's own *magnitude*, and says nothing about a segment that is not *monotone*.**
+  Clamping each of a segment's two handles independently, each to its own safe span, can still leave
+  both sitting on the same boundary — confirmed live: a segment inherited from an already-wild
+  two-anchor curve settled at `[-0.002, -0.002]`, both handles below the segment's own starting
+  anchor, a dip before a rise rather than a bulge. `oklchRamp` turns that segment's own height into a
+  0..1 progress by dividing by the corner's; a non-monotone height divided this way does not read as
+  "went a bit further than expected", it reads as the hue wheel spinning past and landing somewhere
+  unrelated. Reproduced against the exact reported curve — a two-handle Hue curve dragged to `[0.157,
+  -9.969, 0.709, -9.969]`, split at the real 16-step fraction — which previously generated
+  `100° → 327.6° → 240.2° → … → 275.9° → 99.2°` and now generates a smooth
+  `100° → 125.4° → … → 277.9° (the anchor, exactly) → … → 99.2°`. `bezierNormalise` (`@Bezier`) now
+  checks each segment for monotonicity on every call, not only at the moment a middle point is
+  first added, so a curve that passes once and is dragged further on a later frame gets the same
+  correction. The first attempt used a strict, zero-tolerance check and broke a legitimate,
+  pre-existing shape: "easeOutBack"-style curves intentionally overshoot past their target and
+  settle back, which is non-monotone by design — caught by the project's own regression suite
+  (1121/1122, not by further live testing) the moment the strict version landed. Replaced with a
+  scale-invariant tolerance: the largest backtrack below any height already reached, measured in the
+  segment's own local unit square, has to exceed one full local span before the segment gives up on
+  its inherited shape in favour of a plain linear pace between its two real anchors — the working
+  overshoot bounces at about a third of a span, the reported chaotic segment at close to one and a
+  half.
+- **A channel pinned exactly at its own range ceiling (or floor) — equal ends, no middle point —
+  drew its plain, untouched default preset completely off the chart, no dragging needed; and once
+  moved on screen, read as an impossible value.** Márton, live: Saturation at 100…100, nothing
+  edited yet, the curve line out of the frame entirely, and then — after a first attempt widened
+  the window to fit it — "still outside of range, 110 saturation?" The reason a value axis produces
+  either symptom: with equal ends and no real middle, `oklchLerp`/`oklchLerpHue` interpolate the
+  two ends linearly, and a straight line between two identical numbers is that number regardless of
+  how the curve paces getting there (the same fact the equal-ends overshoot feature already rests
+  on) — there is no real value for a handle's height to mean here, so any scale invented for it
+  produces a number nothing downstream can produce and the field's own declared range cannot hold.
+  `toView`/`fromView` (`renderer.js`) now draw and drag this one shape — a two-anchor curve with
+  equal, middle-less ends — in the curve's own `[0,1]` square instead (`axisIsFlat`), the same space
+  a curve with no axis at all already uses, rather than inventing a value scale for it. Every other
+  shape (real values, or a real middle) is unchanged.
+- **Dragging a curve's middle anchor could write a wildly wrong number into its own "middle"
+  field, while the chart's own corner settled somewhere sane a moment later.** Márton, live:
+  dragging a Hue middle anchor wrote 87.13°/86.39°/87.06° to the "Hue middle" field. The drag
+  handler (`applyMove`, `renderer.js`) read the field straight off the raw pointer conversion —
+  `pts[5]` before `bezierNormalise`'s own `[0.001, 0.999]` margin on the middle anchor's height had
+  run on it — so the field and the curve could disagree about the very drag that just happened.
+  That field feeds `axisView`, `effectiveGap` and `rampIsOffscreen` everywhere else in the control,
+  so one drag frame seeding it with a number the curve never actually stored corrupted every
+  window and drag-sensitivity calculation after it — very likely the largest single cause of
+  three-point curves reading as "a mess" through this investigation. `pts` is now normalised
+  through the control's own `curveValueOf` one line earlier, before the field write rather than
+  after, so the field can never read a number the curve itself does not hold.
+- **Adding a middle point to a curve already dragged into an overshoot never placed it where the
+  curve visibly was — confirmed by Márton, live: "even though we have the data, the middle point
+  field proves that."** `populateMiddleAnchorFromCurve` (`src/ui.html`) filled the new "middle"
+  field from `points[5]`, the split corner's own height — always held to `[0.001, 0.999]` by
+  `bezierNormalise` because generation divides by it — so the fill always read as a tame,
+  in-between value, even when the curve had clearly overshot past bright or dark right at that x.
+  The toggle's click handler (`renderer.js`) now reads the curve's real, unclamped height at the
+  chosen split point with `bezierAt` *before* calling `bezierWithMiddle`, and passes it through the
+  `config-ui-middle-point-added` event, so the field reflects where the curve actually was rather
+  than where the split's own safety margin left the corner. `points[5]` remains as a fallback for a
+  caller that predates this.
 
 ### Developer
 
+- **`window.codefigProbe(tag, data)`, a generic, opt-in trace for chasing a UI discrepancy live.**
+  Off unless `window.CODEFIG_PROBE` is set (on for now, while the Colors curve editor investigation
+  below is active); every call is one `[PROBE][tag]` JSON line in `figma-console.log`. Added because
+  several rounds of screenshot-and-report on the curve editor's overshoot/middle-point bugs cost more
+  turns than the bugs themselves — a screenshot shows the symptom, never the sequence of internal
+  state that produced it. Four call sites tagged `// PROBE:` — `curve:setPoints` and `curve:drag`/
+  `curve:midInput` in `renderer.js`'s curve control, `preview:request`/`preview:result` around the
+  config preview's own sequence-numbered round trip in `ui.html` — are what exists today; the utility
+  itself is generic, so another panel with the same kind of "looks wrong and is hard to catch
+  mid-change" problem can call it directly. Meant to leave cleanly: delete the `codefigProbe`
+  definition and every `// PROBE:`-tagged line once whatever it was chasing is confirmed fixed.
 - **`src/import-resolver.js` can resolve and extract across a package's members, opt-in.**
   `findScript`'s new third argument and `extractFunctions`'s new fifth argument are both no-ops
   when omitted — every existing script keeps resolving exactly as before, confirmed by the full
@@ -307,6 +526,10 @@ a plain statement of the new default.
 
 ### Removed
 
+- **The auto-import status note under Group within collection.** It reported what a read did or
+  did not find, updating on every address change; Márton asked for it to go. `readAutoImport`
+  (`npm run figma:ui`) still carries the same text — nothing about diagnosing a stalled or empty
+  read from the terminal changed, only the on-screen copy.
 - **The "OKLCH scale not applied to ..." banner.** Its *Apply OKLCH scale* button had no handler and had not
   had one for some time: pressing it did nothing. Each mode's own strip already names what changes and by
   how much, which is the same fact at a grain you can act on.

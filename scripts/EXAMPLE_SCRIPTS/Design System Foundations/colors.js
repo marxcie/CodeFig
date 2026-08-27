@@ -165,12 +165,12 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 //             helper: "On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder." }
 //         ] },
 //         { type: "tab", names: [{ text: "Hue" }], columns: [
-//           { key: "hueCurve", type: "curve", label: "Hue curve",
+//           { key: "hueCurve", type: "curve", label: "Hue curve", overshoot: true,
 //             ramp: "oklch(70% ~bright.chroma $)",
 //             ends: "bright.hue..middle.hue..dark.hue", range: [0, 360],
 //             showWhen: { colorModel: "oklch" },
 //             helper: "How the hue travels between the ends. Worth least on a cool palette and most on a warm one — amber crosses 49 degrees and needs its own timing. Empty on a near-grey, where a measured hue is rounding rather than a value." },
-//           { key: "hslHueCurve", type: "curve", label: "Hue curve",
+//           { key: "hslHueCurve", type: "curve", label: "Hue curve", overshoot: true,
 //             ramp: "hsl($ ~bright.saturation% 50%)",
 //             ends: "bright.hslHue..middle.hslHue..dark.hslHue", range: [0, 360],
 //             showWhen: { colorModel: "hsl" },
@@ -198,12 +198,12 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 //             { text: "Chroma", showWhen: { colorModel: "oklch" } }
 //           ],
 //           columns: [
-//             { key: "chromaCurve", type: "curve", label: "Chroma curve",
+//             { key: "chromaCurve", type: "curve", label: "Chroma curve", overshoot: true,
 //               ramp: "oklch(70% $ ~bright.hue)",
 //               ends: "bright.chroma..middle.chroma..dark.chroma", range: [0, 0.4],
 //               showWhen: { colorModel: "oklch" },
 //               helper: "How fast the colour arrives, as opposed to the lightness. A designed palette usually rises to its most colourful step and falls, on its own timing." },
-//             { key: "saturationCurve", type: "curve", label: "Saturation curve",
+//             { key: "saturationCurve", type: "curve", label: "Saturation curve", overshoot: true,
 //               ramp: "hsl(~bright.hslHue $% 50%)",
 //               ends: "bright.saturation..middle.saturation..dark.saturation", range: [0, 100],
 //               showWhen: { colorModel: "hsl" },

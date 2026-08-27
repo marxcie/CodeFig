@@ -230,6 +230,37 @@
           headers: { 'Content-Type': 'text/plain; charset=utf-8' }
         });
       }
+
+      /**
+       * **A probe, not a permanent feature.** Built for chasing the Colors curve editor's
+       * discrepancies (curve data vs. what the handle drew vs. what the swatch actually showed) across
+       * several screenshot-and-report rounds, which cost more turns than the bug itself — the
+       * screenshots showed the symptom but never the sequence of internal state that produced it.
+       * Written generically enough that another panel with the same problem — a control that looks
+       * wrong and a value that is hard to catch mid-change — can call `window.codefigProbe` too,
+       * without a bridge of its own.
+       *
+       * Off by default. Toggle from the browser console, no rebuild needed:
+       * `window.CODEFIG_PROBE = true`. Every call becomes one `[PROBE][tag]` line in
+       * `figma-console.log` — `grep '\[PROBE\]'` isolates a session's trace from the rest of the log,
+       * and a JSON body means the numbers can be `jq`'d rather than read off a screenshot by eye.
+       *
+       * **To remove**: delete this block and every call site tagged `// PROBE:` above it — each is
+       * one line, added for exactly this investigation and meant to leave cleanly once it is done.
+       */
+      // On by default while this investigation is active — set to `false` (or toggle from the
+      // console, `window.CODEFIG_PROBE = false`) to quiet it without removing the calls.
+      window.CODEFIG_PROBE = true;
+      window.codefigProbe = function (tag, data) {
+        if (!window.CODEFIG_PROBE) return;
+        var line;
+        try { line = JSON.stringify(data); } catch (e) { line = String(data); }
+        _codefigBridgeFetch('', {
+          method: 'POST',
+          body: '[PROBE][' + tag + '] ' + line + '\n',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
+      };
       window.onerror = function(msg, url, line, col, err) {
         uiDebugLog('window.onerror:', msg, 'at', line + ':' + col, err ? err.stack : '');
         try {
@@ -806,6 +837,43 @@
           if (!target.getAttribute('data-chips-field')) return;
           applyChipOperation(target);
         });
+        // Asked synchronously, before "Add middle point" splits the curve — see the comment on the
+        // dispatch in `renderer.js`. `e.detail` is mutable and read back the instant `dispatchEvent`
+        // returns, which is what lets a listener answer a question without a round trip.
+        configUIContainer.addEventListener('config-ui-middle-point-position', function (e) {
+          if (!e.detail) return;
+          var rowEl = e.target && typeof e.target.closest === 'function'
+            ? e.target.closest('[data-row-index]') : null;
+          if (!rowEl) return;
+          var fraction = middlePlacementFraction(rowEl);
+          if (typeof fraction === 'number' && isFinite(fraction)) e.detail.fraction = fraction;
+        });
+      }
+
+      /**
+       * **Where `colorsGenerateMode` would put the middle step, for the one thing "Add middle point"
+       * needs before generation ever runs: which fraction across the plot to split at.** Mirrors the
+       * common, no-seed-hex case: the named placement when one is typed and still in the step list,
+       * `colorsMidIndex` otherwise. A locked seed's own re-anchored placement is a real read only the
+       * sandbox can do; falling back to the nearby index instead of that exact step is a narrower gap
+       * than always splitting at 0.5 regardless of where the ramp actually turns.
+       */
+      function middlePlacementFraction(rowEl) {
+        var stepsField = configUIContainer && configUIContainer.querySelector('[data-field="steps"]');
+        var raw = stepsField ? String(stepsField.value || '') : '';
+        var seen = {};
+        var steps = raw.split(',').map(function (s) { return s.trim(); }).filter(function (s) {
+          if (!s || seen[s]) return false;
+          seen[s] = true;
+          return true;
+        });
+        var last = steps.length - 1;
+        if (last <= 0) return null;
+        var placementField = rowEl.querySelector('[data-row-field="seed.placement"]');
+        var wanted = placementField ? String(placementField.value || '').trim() : '';
+        var index = wanted ? steps.indexOf(wanted) : -1;
+        if (index < 0) index = Math.floor(last / 2);
+        return index / last;
       }
 
       function initConfigUI(configCode) {
@@ -853,8 +921,8 @@
               onAbandonEstimate: function (rowEl) {
                 abandonQuickFit(rowEl.getAttribute('data-row-index'));
               },
-              onMiddlePointAdded: function (rowEl, wrapEl) {
-                populateMiddleAnchorFromCurve(rowEl, wrapEl);
+              onMiddlePointAdded: function (rowEl, wrapEl, detail) {
+                populateMiddleAnchorFromCurve(rowEl, wrapEl, detail);
               },
               onChange: function (values, opts) {
                 // Choosing a Collection and Group *is* the instruction to load, so that is the only
@@ -1310,6 +1378,8 @@
         // click having gone to the wrong mode. Chip edits do the same thing. The tab is remembered by
         // *name* rather than index, because the rebuild may have added, removed or reordered them.
         const wasShowing = activeModeName();
+        // The same idea, for whichever field had the caret — see `captureFieldFocus`.
+        const hadFocus = captureFieldFocus();
 
         if (configCodeContainer) configCodeContainer.style.display = 'none';
 
@@ -1389,6 +1459,7 @@
           configLastAddress = null;
         }
         restoreActiveMode(wasShowing);
+        restoreFieldFocus(hadFocus);
         syncChipsToPanelState();
         scheduleFileModes(0);
         scheduleGroupDetection();
@@ -1432,6 +1503,59 @@
         }
         // The mode is gone — removed, or renamed by the very edit that caused this rebuild. The first
         // tab is then the right answer, and it is already active.
+      }
+
+      /**
+       * **Which field had the caret, by name — the same reason `wasShowing` remembers the mode tab by
+       * name rather than by element.** `projectConfigIntoForm` empties `configUIContainer` and rebuilds
+       * it from scratch on *every* programmatic write, auto-import included — so a field open under the
+       * pointer is a real DOM node one tick and a different, if identical-looking, one the next. The
+       * browser has no idea the new node is "the same" field, so focus simply lands nowhere.
+       *
+       * Márton, live: click into Group right after picking a collection, watch the caret blink, and it
+       * is gone — because the auto-import that address just started resolves a moment later, writes the
+       * block it read, and that write is exactly what triggers the rebuild. Removing the note that used
+       * to render under Group (a separate, already-fixed complaint) changed nothing here, because the
+       * note was never the cause — the rebuild underneath it always was, note or no note.
+       *
+       * `data-field` names the top-level fields (Group among them); `data-row-field` plus the row it
+       * lives in names a mode's own cells. Anything else — a button, a chip, a curve handle — has no
+       * stable name across a rebuild and is left alone rather than guessed at.
+       */
+      function captureFieldFocus() {
+        var active = document.activeElement;
+        if (!active || !configUIContainer || !configUIContainer.contains(active)) return null;
+        var selector = null;
+        if (active.getAttribute && active.getAttribute('data-field')) {
+          selector = '[data-field="' + active.getAttribute('data-field') + '"]';
+        } else if (active.getAttribute && active.getAttribute('data-row-field')) {
+          var rowEl = typeof active.closest === 'function' ? active.closest('[data-row-index]') : null;
+          var rowIndex = rowEl ? rowEl.getAttribute('data-row-index') : null;
+          var rowField = active.getAttribute('data-row-field');
+          selector = rowIndex !== null
+            ? '[data-row-index="' + rowIndex + '"] [data-row-field="' + rowField + '"]'
+            : '[data-row-field="' + rowField + '"]';
+        }
+        if (!selector) return null;
+        var caret = { selector: selector, start: null, end: null };
+        if (typeof active.selectionStart === 'number') {
+          caret.start = active.selectionStart;
+          caret.end = active.selectionEnd;
+        }
+        return caret;
+      }
+
+      /** The other half of `captureFieldFocus` — find the rebuilt field by the same name and land the
+       *  caret back where it was. A field that no longer exists (removed, or the rebuild left it
+       *  unmounted) is silently not restored, the same "gone" case `restoreActiveMode` accepts. */
+      function restoreFieldFocus(caret) {
+        if (!caret || !configUIContainer) return;
+        var el = configUIContainer.querySelector(caret.selector);
+        if (!el || typeof el.focus !== 'function') return;
+        el.focus();
+        if (caret.start !== null && typeof el.setSelectionRange === 'function') {
+          try { el.setSelectionRange(caret.start, caret.end); } catch (e) { /* not a text selection */ }
+        }
       }
 
       let structureSyncTimeout = null;
@@ -2554,6 +2678,12 @@
         const forPreview = held ? Object.assign({}, config, { existing: held }) : config;
 
         const seq = ++_previewSeq;
+        // PROBE: the exact config a preview request was built from, and the sequence it went out
+        // under — pairs with the `preview:result` probe below to catch a stale answer landing after
+        // a newer request, and with the curve editor's own probes to catch a request built from a
+        // config that had not caught up with the handle yet.
+        window.codefigProbe('preview:request', { seq: seq, modes: forPreview && forPreview.modes,
+          colorModel: forPreview && forPreview.colorModel });
         const started = runSilentSnippet(
           buildPreviewSnippet(currentScript.code || '', fn, forPreview, configPreviewDomain(), seq));
         // Busy is not a failure: another silent run is in flight and the next edit will ask again.
@@ -2661,7 +2791,6 @@
         scheduleConfigPreview();
       }
 
-      /** The note under Group, which is where the answer belongs. */
       /**
        * Why an address came back with nothing, in one line.
        *
@@ -2695,25 +2824,15 @@
           '. The values below are the ones already in the block.';
       }
 
+      /**
+       * **Recorded, not shown.** This used to render as a note under the Group field — Márton asked for it
+       * to go. `lastAutoImport.note` (set by every caller alongside this) still carries the same text for
+       * `npm run figma:ui -- readAutoImport`, so a stalled or empty read is still diagnosable from the
+       * terminal; it is only the on-screen copy under Group that is gone.
+       */
       function setAutoImportNote(text) {
-        var container = document.getElementById('configUIContainer');
-        if (!container) return;
-        var groupField = container.querySelector('[data-field="group"]');
-        var wrap = groupField && groupField.closest ? groupField.closest('.config-ui-field') : null;
         var existing = document.getElementById('autoImportNote');
-        if (!text) {
-          if (existing) existing.remove();
-          return;
-        }
-        var note = existing;
-        if (!note) {
-          note = document.createElement('div');
-          note.id = 'autoImportNote';
-          note.className = 'config-ui-field-note';
-        }
-        note.textContent = text;
-        if (wrap && note.parentNode !== wrap) wrap.appendChild(note);
-        else if (!wrap && note.parentNode !== container) container.appendChild(note);
+        if (existing) existing.remove();
       }
 
       function scheduleAutoImport() {
@@ -3088,6 +3207,16 @@
        * row's own bright and dark ends — the same question `oklchChannelAt`/`oklchLerpHue` answer at
        * generation time, asked once here for a starting number instead of on every step.
        *
+       * **`detail.fraction`, read before the split, not the corner's own height after it.**
+       * `bezierWithMiddle` holds the new corner to `[0.001, 0.999]` — sound for the corner, which
+       * generation divides by, and the wrong number for this fill on a curve already dragged into an
+       * overshoot: the corner's own height has already been margin-clamped by the time this runs, so
+       * deriving the field from it (the original approach, `points[5]`) always reads a tame,
+       * in-between number even when the curve visibly overshot past bright or dark at that x.
+       * `detail.fraction` is `bezierAt` on the *pre-split* curve — the real, unclamped height —
+       * passed through by the toggle's own click handler (`renderer.js`) before it calls
+       * `bezierWithMiddle` at all. `points[5]` is kept as the fallback for a caller that predates it.
+       *
        * **Never overwrites a value that is already there.** A middle anchor with a real number in it —
        * typed, or landed from an earlier fit — said something; this only fills a field that was empty,
        * the same reason `applyQuickFit` never touches a value a person has already given it.
@@ -3097,7 +3226,7 @@
        * curve, have no `middle.<channel>` cell in their row at all, so the lookup below simply finds
        * nothing and returns. Nothing about their behaviour can change here by construction.
        */
-      function populateMiddleAnchorFromCurve(rowEl, wrapEl) {
+      function populateMiddleAnchorFromCurve(rowEl, wrapEl, detail) {
         var curveKey = wrapEl && wrapEl.getAttribute('data-row-field');
         if (!curveKey) return;
         var channel = curveKey.replace(/Curve$/, '');
@@ -3110,17 +3239,22 @@
         var bright = Number(brightInput.value);
         var dark = Number(darkInput.value);
         if (!isFinite(bright) || !isFinite(dark)) return;
-        var points;
-        try {
-          points = JSON.parse(wrapEl.getAttribute('data-curve-value') || '[]');
-        } catch (e) {
-          return;
+        var fraction = detail && typeof detail.fraction === 'number' && isFinite(detail.fraction)
+          ? detail.fraction
+          : null;
+        if (fraction === null) {
+          var points;
+          try {
+            points = JSON.parse(wrapEl.getAttribute('data-curve-value') || '[]');
+          } catch (e) {
+            return;
+          }
+          // Index 5 is the middle handle's own y — `bezierNormalise([X.l1, Y.l1, X.l2, Y.l2, X.m, Y.m, …])`
+          // in `bezierWithMiddle` — the curve's progress fraction at the point it was just split on.
+          if (!Array.isArray(points) || points.length !== 10) return;
+          fraction = points[5];
+          if (typeof fraction !== 'number' || !isFinite(fraction)) return;
         }
-        // Index 5 is the middle handle's own y — `bezierNormalise([X.l1, Y.l1, X.l2, Y.l2, X.m, Y.m, …])`
-        // in `bezierWithMiddle` — the curve's progress fraction at the point it was just split on.
-        if (!Array.isArray(points) || points.length !== 10) return;
-        var fraction = points[5];
-        if (typeof fraction !== 'number' || !isFinite(fraction)) return;
         var isHue = channel === 'hue' || channel === 'hslHue';
         var value = isHue ? hueLerp(bright, dark, fraction) : bright + (dark - bright) * fraction;
         var decimals = channel === 'chroma' ? 4 : 1;
@@ -5541,6 +5675,15 @@
                 return;
               }
               if (data.preview !== undefined) {
+                // PROBE: what actually landed, and whether it was current or a stale answer this
+                // dropped — the direct answer to "what does the colour chart show", since the swatch
+                // hexes are pulled straight out of the HTML that either does or does not get drawn.
+                var probeHexes = typeof data.preview === 'string'
+                  ? (data.preview.match(/background:#[0-9a-fA-F]{6}/g) || [])
+                    .map(function (m) { return m.slice(11); })
+                  : [];
+                window.codefigProbe('preview:result', { seq: data.previewSeq, current: _previewSeq,
+                  accepted: data.previewSeq === _previewSeq, hexes: probeHexes });
                 if (data.previewSeq === _previewSeq) {
                   renderConfigPreview(data.preview);
                   renderConfigSuggestions(data.suggestions);

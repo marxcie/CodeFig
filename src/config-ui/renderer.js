@@ -1473,16 +1473,30 @@
    * `[]` and there is nothing to undo — and `Linear` and `Custom` can be told apart, which a fold would
    * have made impossible.
    */
-  function curveCollected(raw) {
-    return curveValueOf(raw);
+  function curveCollected(raw, overshoot) {
+    return curveValueOf(raw, overshoot);
   }
 
-  /** Numbers in, always: a stored string, a stored array, or nothing at all. */
-  function curveValueOf(raw) {
+  /**
+   * Numbers in, always: a stored string, a stored array, or nothing at all.
+   *
+   * **`overshoot` has to be passed in here, not read off `raw`.** `raw` is `data-curve-value`'s own
+   * text — a fresh `JSON.stringify` of the control's points — and `JSON.stringify`/`JSON.parse` carry
+   * none of an array's own properties, `.overshoot` included. Every caller inside a curve control's own
+   * closure has a *field*-scoped `curveValueOf` that already threads `field.overshoot` through
+   * (`buildCurveControl`); this module-level one is what `getValues()`/`collectRows()` use to read a
+   * curve's value back out for the config block and the preview — outside any one control's closure,
+   * so it never had `field.overshoot` to read until a caller hands it one. Omitted, it defaults to
+   * `false`, and every Y coordinate an overshoot channel is holding gets silently clamped back into
+   * [0,1] — confirmed live: a curve that dragged, drew, and evaluated correctly wrote flattened control
+   * points into both the preview and the eventual config text, which read as "the chart doesn't
+   * reflect the curve" for a reason that had nothing to do with `oklchRamp`'s own math.
+   */
+  function curveValueOf(raw, overshoot) {
     var B = curveLib();
     if (!B) return Array.isArray(raw) ? raw.slice() : [];
-    if (typeof raw === "string") return B.bezierParse(raw) || [];
-    return B.bezierNormalise(raw);
+    if (typeof raw === "string") return B.bezierParse(raw, overshoot) || [];
+    return B.bezierNormalise(raw, overshoot);
   }
 
   var CURVE_PRESET_FAMILIES = [
@@ -1689,6 +1703,21 @@
   function buildCurveControl(field, value, growthSeed, baselineKey) {
     var B = curveLib();
     var allowOriginal = !!field.allowOriginal;
+    var allowOvershoot = !!field.overshoot;
+    /**
+     * **Shadows the module-level `curveValueOf` for the rest of this control, on purpose.** Every read of
+     * `data-curve-value` inside this function — draw, drag, the axis, the range strip, arrow keys, the
+     * text field — goes through this same name, so there is exactly one place that has to know this
+     * field's own `overshoot` setting rather than fifteen call sites that each have to remember to pass
+     * it. `setPoints` re-normalises through this shadow on every write too, which is what makes the drag
+     * mechanics safe even where an intermediate `.slice()` elsewhere in this file drops the array's own
+     * `overshoot` marker — the field-level flag here is the one that is never lost.
+     */
+    function curveValueOf(raw) {
+      if (!B) return Array.isArray(raw) ? raw.slice() : [];
+      if (typeof raw === "string") return B.bezierParse(raw, allowOvershoot) || [];
+      return B.bezierNormalise(raw, allowOvershoot);
+    }
     // The sibling cell holding the growth ratio, named by `curve(growth:<key>)`. Looked up **lazily**, at
     // draw time: the control is built before it is in the document, and the ratio is edited from two places
     // — the handle here and the number field beside it — so reading it fresh each render is what keeps the
@@ -2030,7 +2059,28 @@
             if (!isFinite(typed)) return;
             var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
             if (pts.length !== 10) return;
-            var want = Math.min(1, Math.max(0, valueToUnit(a, typed)));
+            var want = valueToUnit(a, typed);
+            /**
+             * **A value with no on-curve position leaves the curve alone.** `want` is only meaningful as
+             * the anchor's own pacing when it lands inside the segment the anchor can actually occupy —
+             * `pts[5]` is never allowed outside [0,1] (`bezierNormalise`, `@Bezier`: the height every
+             * generation divides by, not a value of its own). Forcing an out-of-range `want` in here used
+             * to clamp straight to 0 or 1 — confirmed live: typing a Hue middle far past both ends left the
+             * field holding the typed number and the curve's own corner pinned to the bottom of the plot,
+             * so half the ramp collapsed to one hue and the other half read numbers with no relationship to
+             * the curve on screen. A value out here is exactly what `middle.<channel>` is for — the field
+             * keeps it, undisturbed; only the curve's shape declines to pretend it has a position for it.
+             */
+            // PROBE: the typed value and what it converts to — `want` outside [0,1] is exactly the
+            // "no on-curve position" case the comment above describes; this is what confirms whether
+            // that path is the one actually firing for a given report.
+            if (typeof window !== "undefined" && window.codefigProbe) {
+              window.codefigProbe("curve:midInput", {
+                field: (field && field.name) || wrap.getAttribute("data-row-field") || null,
+                typed: typed, want: want, axis: a, applied: want >= 0 && want <= 1
+              });
+            }
+            if (want < 0 || want > 1) return;
             // Only when it actually moves: this also fires on the `input` a drag dispatches, and writing
             // back what the drag just wrote would fight the pointer.
             if (Math.abs(pts[5] - want) < 1e-6) return;
@@ -2080,6 +2130,42 @@
     }
 
     /**
+     * **Does the curve itself have a middle anchor — not just a field that is allowed to hold one?**
+     * `field.ends.mid` names a field the schema declares (Hue's "Hue middle" among them) and exists
+     * whether or not the curve currently has a third anchor to go with it; a fresh two-anchor curve, or
+     * one that had its middle point removed, leaves that field's own last value sitting there, read
+     * and unused. Every place below that widens the axis or floors a drag to make room for "the
+     * middle" has to ask this first — generation itself only ever consults the field once the curve's
+     * own length says there is a real anchor for it to belong to (`hueHasMiddle`/`chromaHasMiddle`,
+     * `@OKLCH`), and a window or a drag sensitivity computed as if that anchor existed when it does not
+     * shows a value nothing downstream will produce. Confirmed live: a two-anchor Hue curve, no middle
+     * point, with "Hue middle" still holding 0° from an earlier edit — the axis widened to include it,
+     * a drag that reached the top of that widened window read as 360°, and the generated ramp (which
+     * has no idea a middle field exists for a curve this shape) moved by 15°. What was drawn and what
+     * was generated were reading two different scales for the same stored number.
+     */
+    function curveHasRealMiddle() {
+      return curveValueOf(wrap.getAttribute("data-curve-value")).length === 10;
+    }
+
+    /**
+     * **A channel with equal ends and no real middle has no value for a handle's height to mean.**
+     * `oklchLerp`/`oklchLerpHue` interpolate the two ends linearly, and a straight line between two
+     * identical numbers is that number regardless of how the curve paces getting there — the same
+     * fact the equal-ends overshoot feature already rests on. Every value this shape's handles could
+     * be given `effectiveGap`'s floor invents a scale for is provably never read by generation, so
+     * scaling a handle's height against it only ever produces a number with nothing behind it —
+     * confirmed live: a plain, untouched preset (0.37, 1 — nothing dragged) read as "106.67%
+     * saturation" on an axis pinned at 100, a value the field's own declared range says cannot exist.
+     * `toView`/`fromView` ask here and draw this one shape in the curve's own [0,1] square instead —
+     * the same space a curve with no `ends` at all already uses — rather than inventing a value that
+     * generation will never produce and the field's own range cannot hold.
+     */
+    function axisIsFlat(a) {
+      return !!a && !curveHasRealMiddle() && Math.abs(a.to - a.from) <= 1e-9;
+    }
+
+    /**
      * **The window on the axis** — what slice of the channel the plot is showing.
      *
      * **Its own state, not derived from the ends.** It used to be computed from them, which meant dragging
@@ -2101,12 +2187,34 @@
        * middle, and a window derived from the ends alone is a line with nothing above or below it.
        */
       var seen = [a.from, a.to];
-      var mid = field.ends.mid ? endValue("mid") : null;
+      var mid = curveHasRealMiddle() ? endValue("mid") : null;
       if (mid !== null) seen.push(mid);
       var low = Math.min.apply(null, seen), high = Math.max.apply(null, seen);
-      // A tenth of the span for air, and a fortieth of the channel when there is no span at all.
-      var air = (high - low) * 0.1 || (a.hi - a.lo) / 40 || 1;
-      var opened = { lo: Math.max(a.lo, low - air), hi: Math.min(a.hi, high + air) };
+      /**
+       * **A channel with no real spread and no real middle has nothing for a tenth-of-span air to be a
+       * tenth of** — every anchor this function can see sits on the same point. Falling back to a fixed
+       * fraction of the whole channel (`(a.hi-a.lo)/40`, independent of what the chart actually draws a
+       * handle against) used to leave the window four times narrower than `effectiveGap`'s own fallback
+       * — the number `toView`/`unitToValue` actually scale a handle's height by. Confirmed live:
+       * Saturation pinned at 100 with the plain, untouched default preset (0.333, 0.667 — no drag, no
+       * overshoot) computed handle values of 103/107 and drew them 130–270px above a 190px chart,
+       * because the window never had a chance to include what the axis was actually going to place
+       * there. Falling back to `effectiveGap`'s own magnitude instead means an ordinary, untouched
+       * curve's full [0,1] height always lands inside the window that opens for it, by construction
+       * rather than by two independently-tuned constants agreeing by luck.
+       *
+       * **Not clipped to the field's own declared range in this one case.** A channel pinned exactly at
+       * its ceiling (or floor) has no real room on that side to show anything in — clipping there
+       * collapses the window back to a sliver and reproduces the same bug from the other direction.
+       * The declared range still bounds every other case (a channel with real values, or a real
+       * middle, stays inside it); only a channel with nothing else to show gets a window that follows
+       * the synthetic scale it is actually being drawn against instead.
+       */
+      var flat = high - low <= 1e-9;
+      var air = flat ? (Math.abs(effectiveGap(a)) || 1) : (high - low) * 0.1;
+      var opened = flat
+        ? { lo: low - air, hi: high + air }
+        : { lo: Math.max(a.lo, low - air), hi: Math.min(a.hi, high + air) };
       // **Latched the first time it is asked for.** Derived every draw, it followed the ends — so dragging
       // one rescaled the axis under your finger. Written down once, it stays where the user left it.
       wrap.setAttribute("data-curve-view", opened.lo + "," + opened.hi);
@@ -2138,7 +2246,7 @@
       var at;
       if (Math.abs(a.to - a.from) < 1e-9) {
         at = [a.from, a.to];
-        var mid = field.ends && field.ends.mid ? endValue("mid") : null;
+        var mid = curveHasRealMiddle() ? endValue("mid") : null;
         if (mid !== null) at.push(mid);
       } else {
         var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
@@ -2150,25 +2258,60 @@
     }
 
     /**
-     * A curve's own 0..1 and the channel's value are the same fact in two units — unless the two ends hold
-     * the same value, and then the curve has no span to be a fraction of. Everything lands on the one
-     * value, and `valueToUnit` answers 0 rather than dividing by zero and drawing at infinity.
+     * **The gap a drag divides by, never thinner than a fraction of what the chart is actually
+     * showing.** `unitToValue`/`valueToUnit` convert between a curve's own 0..1 and the channel's real
+     * value by scaling against `a.to - a.from` — sound while the two ends are a normal distance apart,
+     * and the one place it breaks is a near-equal-ends channel with a real middle far from both: the
+     * *window* still has to widen to show that middle (`axisView`, called for the same three anchors
+     * here, not for the window it opens — no re-entrancy into it), so the same pixel range that shows
+     * the middle also has to divide through the tiny end-to-end gap. Drag through a gap of 0.8° under
+     * a spread that reaches 100°+ for the middle and one pixel moves the stored curve by more than its
+     * own end-to-end span — confirmed live: a handle read as frozen for most of a drag and then jumped,
+     * because nearly every pointer position landed past the range `bezierNormalise`'s own margins hold
+     * a curve to, and only a thin band read as anything else.
+     *
+     * **Scaled to what *this* control is actually spreading over, not a fixed worst case.** A channel
+     * with no real middle *anchor* (`curveHasRealMiddle`, above — a two-anchor curve, whatever the
+     * field's own leftover value says), or one whose middle sits close to its ends — Lightness,
+     * Chroma, every real Saturation curve measured against `bench:colors`' own sets — has a spread
+     * equal to its own gap, so the floor (`spread / SPREAD_DAMPING`) sits at or below the real gap and
+     * `Math.max` hands back `a.to - a.from` unchanged. Widening only happens for the shape that caused
+     * it: a real middle anchor set far from a tiny gap widens the spread these three anchors describe,
+     * which is exactly the case that needs a coarser floor. `SPREAD_DAMPING` is one constant, reused
+     * for every curve — "the whole spread is never allowed to feel more than ten times as sensitive as
+     * the gap it divides by" — not a threshold that asks whether this particular field looks like the
+     * reported bug.
+     *
+     * **A spread of exactly 0 — bright, dark and middle (when there is one) all on the same value — has
+     * nothing for `/ SPREAD_DAMPING` to scale, so it falls back to the field's own declared range
+     * instead of dividing by it.** The `> 1e-9` here is the same finite-difference epsilon the rest of
+     * this file already uses to tell "genuinely zero" apart from merely small (`mx`'s and `my`'s own
+     * margins in `@bezier.js` are the same idea) — not a second guess at the reported bug, which this
+     * branch cannot even see: it fires for a flat, untouched curve regardless of which channel it
+     * belongs to, replacing the old "reads as a flat 0" dead end with a real, if coarse, floor.
      */
-    function unitToValue(a, u) { return a.from + (a.to - a.from) * u; }
-    function valueToUnit(a, v) {
+    var SPREAD_DAMPING = 10;
+    function effectiveGap(a) {
       var span = a.to - a.from;
-      return Math.abs(span) < 1e-9 ? 0 : (v - a.from) / span;
+      var seen = [a.from, a.to];
+      var mid = curveHasRealMiddle() ? endValue("mid") : null;
+      if (mid !== null && isFinite(mid)) seen.push(mid);
+      var spread = Math.max.apply(null, seen) - Math.min.apply(null, seen);
+      var floor = (spread > 1e-9 ? spread : axisBaseSpan(a)) / SPREAD_DAMPING;
+      return Math.abs(span) >= floor ? span : (span < 0 ? -1 : 1) * floor;
     }
+    function unitToValue(a, u) { return a.from + effectiveGap(a) * u; }
+    function valueToUnit(a, v) { return (v - a.from) / effectiveGap(a); }
 
     function toView(x, y) {
       var a = axis();
-      if (!a) return { x: x * W, y: (1 - y) * H };
+      if (!a || axisIsFlat(a)) return { x: x * W, y: (1 - y) * H };
       var w = axisView(a);
       return { x: x * W, y: (1 - (unitToValue(a, y) - w.lo) / (w.hi - w.lo)) * H };
     }
     function fromView(vx, vy) {
       var a = axis();
-      if (!a) return { x: vx / W, y: 1 - vy / H };
+      if (!a || axisIsFlat(a)) return { x: vx / W, y: 1 - vy / H };
       return { x: vx / W, y: valueToUnit(a, valueFromView(vy)) };
     }
     /**
@@ -2363,7 +2506,21 @@
       if (midCell) {
         midCell.disabled = !curveHasMiddle;
         midCell.placeholder = curveHasMiddle ? "" : derivedMiddleText();
-        var midWrap = typeof midCell.closest === "function"
+        /**
+         * **The dimming wrapper is shared; this control's answer only counts while it is the one on
+         * screen.** Hue and hslHue (`@showWhen`, one model at a time) bind to the *same* bright/middle/dark
+         * cell — `adoptEnds` already refuses to adopt it while hidden, for the reason on that check. This
+         * needs the identical guard: `refreshCurveControls` redraws every *other* curve right after the one
+         * just edited, so clicking *Add middle point* on the visible curve set `data-shown="true"` and the
+         * very next line was the hidden twin's own redraw — still no middle point of its own — setting it
+         * straight back to `"false"` on the one shared node both curves' `.disabled` boxes sit inside.
+         * Confirmed live: the field itself was correctly enabled and typable, and stayed dimmed at 0.45
+         * opacity regardless, because the box and its dimming were never read from the same curve twice in
+         * a row. `midCell.disabled` above is unaffected — it addresses this curve's own field by name, never
+         * the twin's — so only the *shared* write needs the check.
+         */
+        var visible = typeof plot.getClientRects !== "function" || !!plot.getClientRects().length;
+        var midWrap = visible && typeof midCell.closest === "function"
           ? midCell.closest(".config-ui-curve__anchor") : null;
         if (midWrap) midWrap.setAttribute("data-shown", curveHasMiddle ? "true" : "false");
       }
@@ -2526,6 +2683,10 @@
         "class": "config-ui-curve__plot", x: 0, y: 0, width: W, height: H
       }));
       var ax = axis();
+      // A flat channel draws in the curve's own [0,1] square (`toView`), the same space a curve with no
+      // axis at all already uses — so it needs the same "nothing to clip" treatment as that curve, not
+      // the windowed-slice clip below built for a real value scale.
+      var flatAx = !!(ax && axisIsFlat(ax));
       /**
        * **A windowed axis has a curve that leaves the box, and the box has to cut it off.**
        *
@@ -2535,7 +2696,7 @@
        * over the coordinate field, over the next curve down the form, over whatever happened to be there.
        * Clipping the line and leaving the handles unclipped is the only combination that gets both right.
        */
-      if (ax) {
+      if (ax && !flatAx) {
         var clip = curveSvgEl("clipPath", { id: clipId });
         clip.appendChild(curveSvgEl("rect", { x: 0, y: 0, width: W, height: H }));
         svg.appendChild(clip);
@@ -2553,7 +2714,7 @@
       [25, 50, 75].forEach(function (at) {
         svg.appendChild(curveSvgEl("line", {
           "class": "config-ui-curve__grid", x1: at / 100 * W, y1: 0, x2: at / 100 * W, y2: H }));
-        if (!ax) {
+        if (!ax || flatAx) {
           svg.appendChild(curveSvgEl("line", {
             "class": "config-ui-curve__grid", x1: 0, y1: at / 100 * H, x2: W, y2: at / 100 * H }));
         }
@@ -2569,8 +2730,9 @@
       }));
       // **Horizontal lines at round values, labelled.** A grid at 25/50/75 percent of an arbitrary window
       // says nothing; a line at 80 and a line at 60 say where you are. Rounded to whatever tenth, unit or
-      // ten keeps the count near four, so the labels never crowd.
-      if (ax) {
+      // ten keeps the count near four, so the labels never crowd. Skipped for a flat channel — there is
+      // no value scale to label, only the plain shape grid above.
+      if (ax && !flatAx) {
         var w = axisView(ax);
         var span = w.hi - w.lo;
         var raw = span / 4;
@@ -2619,9 +2781,9 @@
        * diagonals across the panel and dropped handles onto whatever was below it. The *ramp* is clipped to
        * the frame; the *grips* to the frame plus their own radius, so one on the boundary is whole.
        */
-      var ramp = ax ? curveSvgEl("g", { "clip-path": "url(#" + clipId + ")" }) : svg;
-      var grips = ax ? curveSvgEl("g", { "clip-path": "url(#" + clipId + "-grip)" }) : svg;
-      if (ax) svg.appendChild(ramp);
+      var ramp = ax && !flatAx ? curveSvgEl("g", { "clip-path": "url(#" + clipId + ")" }) : svg;
+      var grips = ax && !flatAx ? curveSvgEl("g", { "clip-path": "url(#" + clipId + "-grip)" }) : svg;
+      if (ax && !flatAx) svg.appendChild(ramp);
       ramp.appendChild(curveSvgEl("path", { "class": "config-ui-curve__path", d: d }));
 
       /**
@@ -2654,6 +2816,19 @@
       }
 
       var handles = showShape ? handlesOf(pts) : [];
+      // PROBE: the axis, window and every handle's real value and pixel position on this draw — the
+      // ground truth needed to tell "the handle is far outside the window because the window never
+      // widened to show it" apart from "the pixel math itself disagrees with the stored numbers".
+      if (typeof window !== "undefined" && window.codefigProbe && ax) {
+        window.codefigProbe("curve:axis", {
+          field: (field && field.name) || wrap.getAttribute("data-row-field") || null,
+          pts: pts, axis: ax, window: axisView(ax), curveHasRealMiddle: curveHasRealMiddle(),
+          effectiveGap: effectiveGap(ax),
+          handles: handles.map(function (h) {
+            return { index: h.index, x: h.x, y: h.y, value: unitToValue(ax, h.y * lift), px: toView(h.x, h.y * lift) };
+          })
+        });
+      }
       handles.forEach(function (h) {
         var to = tetherFor(pts, h.index);
         var at = toView(h.x, h.y * lift);
@@ -2669,7 +2844,7 @@
       // The origin is always fixed. The far end is the **growth handle** in growth mode — dragging it is how
       // you set the ratio — and a fixed anchor in the bounded one.
       // Grips last, so one sitting on top of another is still the one you grab.
-      if (ax) svg.appendChild(grips);
+      if (ax && !flatAx) svg.appendChild(grips);
       var originAt = toView(0, 0);
       if (ax) {
         // **Square, not round — and they move the palette, not the curve.** The three round handles bend the
@@ -2739,6 +2914,17 @@
     function setPoints(next, opts) {
       var pts = curveValueOf(next);
       wrap.setAttribute("data-curve-value", JSON.stringify(pts));
+      // PROBE: every curve-data change funnels through here regardless of source (drag, preset,
+      // typed text, add/remove middle point), so one call catches all of them. `window.codefigProbe`
+      // is a no-op unless `window.CODEFIG_PROBE` is set — see its definition in `src/ui.html`.
+      if (typeof window !== "undefined" && window.codefigProbe) {
+        var probeRow = typeof wrap.closest === "function" ? wrap.closest("[data-row-index]") : null;
+        window.codefigProbe("curve:setPoints", {
+          field: (field && field.name) || wrap.getAttribute("data-row-field") || null,
+          row: probeRow ? probeRow.getAttribute("data-row-index") : null,
+          overshoot: !!(pts && pts.overshoot), pts: Array.from(pts), opts: opts || null
+        });
+      }
       // **`Estimated original` is looked up, not remembered.** It wins over `Custom` when the coordinates
       // *are* the fit — and over a preset name too, because a fit that happens to land on Linear is still
       // the estimate and saying `Linear` would lose where it came from. Change a handle and the numbers stop
@@ -2875,13 +3061,54 @@
         setPoints(B.bezierWithoutMiddle(pts));
         return;
       }
-      setPoints(B.bezierWithMiddle(pts, 0.5));
+      /**
+       * **Split where the ramp actually turns, not always at the plot's own middle.** Generation paces
+       * each half against `index / last` up to the channel's real middle *step* — the seed's placement,
+       * or `colorsMidIndex` when there is none — which for an even step count is essentially never 0.5
+       * exactly (a 16-step ramp turns at step 7 of 15, 0.467). Splitting here at a flat 0.5 put the
+       * curve's own corner at a different horizontal position than the one generation bends at: for every
+       * step between the two, `bezierAt` was already reading the *second* segment while generation still
+       * treated it as the first half's own progress toward the middle, which is a discontinuity in the
+       * generated ramp that the drawn curve gives no hint of. Only the host can answer where the real
+       * middle step is — the seed placement and the step list are sibling cells this control cannot see —
+       * asked synchronously through a mutable event detail, the same reason `onChannelOpen` and
+       * `onRequestEstimate` are callbacks rather than something this file works out itself. No listener,
+       * or nothing to say, keeps 0.5 — exactly right for a channel with no seed placement to disagree
+       * with it.
+       *
+       * **`Event`, not `CustomEvent` — `detail` attached after, not passed to the constructor.** The
+       * DOM shim's `dispatchEvent` walks the bubble chain by hand and assigns `e.target` itself, which
+       * throws on a real `CustomEvent` (read-only `target`) the moment a listener further up the chain
+       * re-enters `dispatchEvent`, as this one does mid-click. `setPoints`'s own `ev.codefigLive = true`
+       * is the same pattern already proven against this shim: a plain, mutable property on a plain
+       * `Event`, not a constructor option.
+       */
+      var asked = { fraction: 0.5 };
+      var askEvt = new Event("config-ui-middle-point-position", { bubbles: true });
+      askEvt.detail = asked;
+      wrap.dispatchEvent(askEvt);
+      var at = typeof asked.fraction === "number" && isFinite(asked.fraction) &&
+        asked.fraction > 0 && asked.fraction < 1 ? asked.fraction : 0.5;
+      /**
+       * **The curve's real height at the split, read before the split — not the corner's own height
+       * after it.** `bezierWithMiddle` holds the new corner to `[0.001, 0.999]` because `oklchRamp`
+       * divides by it; sound for the corner, and the wrong number for the host's field fill below,
+       * which wants *where this point on the curve actually was* — for a curve already dragged into
+       * an overshoot, that can be well past 1 or below 0, and the margin-clamped corner has already
+       * lost it. `pts` here is still the pre-split, two-anchor curve — `bezierAt` reads its real,
+       * unclamped height, exactly what the field fill needs to place the middle where the curve
+       * visibly already was, not where the split's own safety margin left the corner.
+       */
+      var realHeightAtSplit = B.bezierAt(pts, at);
+      setPoints(B.bezierWithMiddle(pts, at));
       // **The curve now has a middle position; the channel's own middle *value* is a different cell
       // this control cannot see.** `bright.hue`/`middle.hue`/`dark.hue` live in sibling row cells this
       // curve knows nothing about — so the host, which can see the whole row, is asked to fill the
       // sibling in from what the curve and the row's own ends already say, the same reason
       // `onChannelOpen` and `onRequestEstimate` are callbacks and not something this file does itself.
-      wrap.dispatchEvent(new Event("config-ui-middle-point-added", { bubbles: true }));
+      var addedEvt = new Event("config-ui-middle-point-added", { bubbles: true });
+      addedEvt.detail = { fraction: realHeightAtSplit };
+      wrap.dispatchEvent(addedEvt);
     });
 
     // **Only on a real edit.** The field is redrawn from the curve on every change, so reacting to that
@@ -2911,7 +3138,7 @@
       if (!B) return null;
 
       if (!growthKey) {
-        var only = B.bezierParse(value);
+        var only = B.bezierParse(value, allowOvershoot);
         return only === null ? null : { growth: null, shape: only };
       }
 
@@ -2923,12 +3150,12 @@
           var n = Number(value);
           return isFinite(n) && n > 0 ? { growth: n, shape: null } : null;
         }
-        var loose = B.bezierParse(value);
+        var loose = B.bezierParse(value, allowOvershoot);
         return loose === null ? null : { growth: null, shape: loose };
       }
 
       var head = value.slice(0, at).trim();
-      var shape = B.bezierParse(value.slice(at));
+      var shape = B.bezierParse(value.slice(at), allowOvershoot);
       if (shape === null) return null;
       if (!head) return { growth: null, shape: shape };
       // What precedes the curve has to be *only* a number. Ignoring trailing junk is how a typo becomes a
@@ -3071,6 +3298,16 @@
       var lift = growthKey ? curveGrowthHeight(growthRatio()) : 1;
       pts[dragging] = at.x;
       pts[dragging + 1] = lift > 0 ? at.y / lift : at.y;
+      // PROBE: the raw drag input, before it becomes a stored point — `at.y` is what `fromView`
+      // converted the pointer position into, dividing through the axis's own `from`/`to`. Catches an
+      // amplified drag at its source, distinct from `curve:setPoints` seeing only the result.
+      if (typeof window !== "undefined" && window.codefigProbe) {
+        var probeAxis = axis();
+        window.codefigProbe("curve:drag", {
+          field: (field && field.name) || wrap.getAttribute("data-row-field") || null,
+          dragging: dragging, at: at, axis: probeAxis
+        });
+      }
       /**
        * **A smooth node stays smooth.** The two inner handles are stored independently, so nothing keeps
        * them collinear through the anchor — drag one and the segments still meet at the point but no longer
@@ -3084,6 +3321,20 @@
       if (dragSmooth && pts.length === 10 && (dragging === 2 || dragging === 6) && B) {
         pts = B.bezierMirrorNode(pts, dragging);
       }
+      /**
+       * **Normalised before the middle field reads it, not after.** `pts[5]` at this point is the raw
+       * pointer reading (`fromView`'s own conversion), not yet run through `bezierNormalise`'s own
+       * `[0.001, 0.999]` margin on the middle anchor's height — `setPoints` below does that, but only
+       * after the field write two lines down would already have read the unclamped number. Confirmed
+       * live: dragging a Hue middle anchor wrote 87.13°/86.39°/87.06° to the "Hue middle" field from
+       * raw candidate heights of 16.09/10.55/9.95 — nowhere near the sane, on-chart corner the curve
+       * itself settled at a moment later. That field feeds `axisView`, `effectiveGap` and
+       * `rampIsOffscreen` everywhere else in this control, so one drag frame seeding it with a number
+       * the curve never actually stored corrupted every window and drag-sensitivity calculation after
+       * it. `curveValueOf` here is the same field-scoped normaliser every other read in this control
+       * already goes through — calling it one line earlier is the whole fix.
+       */
+      pts = curveValueOf(pts);
       /**
        * **Dragging the middle anchor writes the middle field**, the same way dragging an end writes its
        * own. The three boxes and the three points on the chart are one set of values seen twice: change
@@ -4254,7 +4505,7 @@
       return;
     }
     if (column.type === "curve") {
-      target[column.key] = curveCollected(el.getAttribute("data-curve-value"));
+      target[column.key] = curveCollected(el.getAttribute("data-curve-value"), !!column.overshoot);
       // **A growth curve writes two keys from one cell.** The growth has no field of its own any more — one
       // idea, one control — but it keeps its own name in the config so the block still reads
       // `ratio: 1.5` beside `curve: []` rather than hiding a second number inside the first.
@@ -4351,7 +4602,7 @@
         for (var ci = 0; ci < rows.length; ci++) {
           if (rows[ci].type === "field" && rows[ci].name === n) { owner = rows[ci]; break; }
         }
-        vals[n] = curveCollected(wrap.getAttribute("data-curve-value"));
+        vals[n] = curveCollected(wrap.getAttribute("data-curve-value"), !!(owner && owner.overshoot));
       });
       container.querySelectorAll("[data-group-field]").forEach(function (wrap) {
         var groupName = wrap.getAttribute("data-group-field");
@@ -4721,7 +4972,7 @@
       var rowEl = evt.target && typeof evt.target.closest === "function"
         ? evt.target.closest("[data-row-index]") : null;
       if (!rowEl) return;
-      if (typeof onMiddlePointAdded === "function") onMiddlePointAdded(rowEl, evt.target);
+      if (typeof onMiddlePointAdded === "function") onMiddlePointAdded(rowEl, evt.target, evt.detail);
     });
 
     applyVisibility();

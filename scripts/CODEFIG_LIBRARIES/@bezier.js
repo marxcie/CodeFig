@@ -92,8 +92,14 @@ function bezierClamp01(v) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+/** Finite, full stop — the height half of `bezierStore` when overshoot is allowed for this curve. */
+function bezierFinite(v) {
+  return typeof v === 'number' && isFinite(v) ? v : 0;
+}
+
 /**
- * A **coordinate**, in range and settled at six decimals.
+ * A **coordinate**, in range and settled at six decimals — unless it is a handle's own height and this
+ * curve allows overshoot, in which case only finite matters.
  *
  * The rounding is not cosmetic: it is what makes a stored curve, the preset table and `bezierEaseName`
  * agree. A handle dragged across a 200px canvas carries about three useful digits, `1/3` carries infinitely
@@ -106,48 +112,185 @@ function bezierClamp01(v) {
  * ratio: a straight curve stopped being exactly a modular scale, in the one property the replacement was
  * sold on. Found by `tests/scale-models.test.js` measuring the spread of the ratios rather than eyeballing
  * the numbers, which all still looked right.
+ *
+ * **`isY` only matters when `overshoot` is set.** `x` stays clamped regardless — see the comment on
+ * `bezierNormalise` for why that one is load-bearing rather than a preference.
  */
-function bezierStore(v) {
-  var c = bezierClamp01(v);
+function bezierStore(v, isY, overshoot) {
+  var c = (isY && overshoot) ? bezierFinite(v) : bezierClamp01(v);
   return Math.round(c * 1e6) / 1e6;
 }
 
 /**
- * A curve that can be read: every number finite and in range, and every handle's `x` inside the span of
- * the segment it belongs to.
+ * A curve that can be read: every number finite, every handle's `x` inside the span of the segment it
+ * belongs to, and — for most curves — every handle's `y` in range too.
  *
  * The `x` clamp is what makes `bezierAt` single-valued. A handle dragged past its own end anchor folds the
  * curve back on itself, and `y` at that `x` becomes a question with two answers — which shows up not as an
- * error but as a scale that jumps backwards at one step.
+ * error but as a scale that jumps backwards at one step. Nothing about overshoot changes this: `x` clamps
+ * unconditionally, on every curve.
+ *
+ * **`y` is a separate question, and `overshoot` (default off) is the answer.** A cubic bezier has no
+ * mathematical reason for its height to stay in `[0,1]` — only `x` needs it — and a channel whose two ends
+ * can be equal or close (Hue, Saturation, Chroma) has real ramps that peak or dip past both: hue 50 at each
+ * end with a real 100 in the middle is not expressible any other way on a plain two-anchor curve, because
+ * `oklchLerpHue`/`oklchLerp` interpolate `bright` to `dark` linearly and a straight line between two equal
+ * numbers is that number, regardless of how the curve paces getting there. Confirmed live: dragging a Hue
+ * handle toward such a peak clamped at exactly `y = 1`, the ceiling, not wherever the pointer actually was.
+ *
+ * **Off by default, because the same shape is shared by Spacing, Radius and Typography's own scale
+ * curves** (`@scale-models.js`'s `Math.pow(ratio, span * bezierAt(curve, i / span))`), where an overshoot
+ * would let an interior step exceed the scale's own defined ends — a real behaviour change nobody asked
+ * for. Colors' own Hue, Saturation and Chroma curve fields opt in (`field.overshoot`, from the panel
+ * spec); Lightness and every curve outside Colors does not, and keeps exactly the range it always had.
  *
  * Returns a **new** array. Anything unrecognised returns `[]` rather than a guess: a curve nobody can read
  * is a thing to report, and the consumers all have a defined behaviour for no curve.
  */
-function bezierNormalise(curve) {
+function bezierNormalise(curve, overshoot) {
+  // **Explicit wins; otherwise inherited from the array handed in.** `bezierAt`/`bezierSegments`/
+  // `oklchCurveOf` all re-normalise a curve that has already been through here once — a curve control
+  // reads its own stored attribute back on every redraw, and generation re-normalises the same array a
+  // second time inside `oklchCurveOf`. None of those callers know or need to know a field's own
+  // `overshoot` setting; they only have the array this function already produced, so the flag rides on
+  // it (`n.overshoot`, set below) rather than needing to be threaded through every intermediate call.
+  var wants = overshoot !== undefined ? overshoot : !!(curve && curve.overshoot);
   var anchors = bezierAnchorCount(curve);
   if (anchors === 0) return [];
 
   // **Called, not passed.** `curve.map(bezierStore)` is a bare *reference*, and `@import` finds a
   // function's dependencies with `\b(\w+)\s*\(` — so the callee was never injected and the whole Spacing
   // preview died on "bezierStore is not defined", in Figma only. `npm run validate` shares the blind spot.
-  var n = curve.map(function (v) { return bezierStore(v); });
+  //
+  // **Index 5 (the middle anchor's own height) never overshoots, even when the field asked for it.**
+  // Every other Y is a tangent handle — it bends the curve *between* anchors and nothing downstream reads
+  // it as a value. The middle anchor is not a handle: `oklchRamp` divides by the curve's height *at* it
+  // (`atMiddle`, read via `oklchEaseAt` at the anchor's own x) to turn each half into a 0..1 progress —
+  // `g / atMiddle` for the first half, `(g - atMiddle) / (1 - atMiddle)` for the second. That division
+  // is sound only while `atMiddle` sits in a sane, away-from-zero span of [0,1]; once overshoot let it
+  // land at exactly 0 (confirmed live: a dragged Hue handle solved to `my = 0`), the first half collapsed
+  // to a single repeated hue and the second produced hues in the hundreds of degrees — a curve that drew
+  // a smooth bulge and generated a swatch strip with no relationship to it. `mx` was already exempted for
+  // the same reason (every consumer needs it monotonic); `my` is exempted for the reason the whole
+  // per-half scheme exists: it is *pacing*, not a hue or a chroma. The actual value a user wants there —
+  // beyond the ends, past 0 or past 1 — is what `middle.<channel>` is for, a plain number with no such
+  // constraint. `bezierAt`, drawing, and dragging the handle on screen are all unaffected: they only ever
+  // see this returned array, so a handle dragged past the plot's own edge still settles back at [0,1].
+  var n = curve.map(function (v, i) { return bezierStore(v, i % 2 === 1, wants && i !== 5); });
   if (anchors === 2) {
-    // One segment spanning the whole width: both handles live in [0,1], which the clamp already did.
+    // One segment spanning the whole width: both handles live in [0,1] unless overshoot said otherwise.
+    if (wants) n.overshoot = true;
     return n;
   }
 
-  // The middle anchor first — it is what the two spans are measured against. Held off both ends so each
+  // The middle anchor's `x` — it is what the two spans are measured against. Held off both ends so each
   // segment keeps a width to solve across; a zero-width segment has no `x` to invert.
   var mx = n[4];
   if (mx < 0.001) mx = 0.001;
   if (mx > 0.999) mx = 0.999;
   n[4] = mx;
 
+  // The middle anchor's `y` gets the same margin, for the same reason: `oklchRamp` divides by it (or by
+  // `1 - it`), and a value sitting exactly on 0 or 1 is a division that returns a constant for the whole
+  // half rather than a progress. `bezierStore` above already held it to [0,1]; this holds it off the two
+  // ends of that range the same way `mx` is held off the ends of its own.
+  var my = n[5];
+  if (my < 0.001) my = 0.001;
+  if (my > 0.999) my = 0.999;
+  n[5] = my;
+
   n[0] = bezierSpanClamp(n[0], 0, mx);
   n[2] = bezierSpanClamp(n[2], 0, mx);
   n[6] = bezierSpanClamp(n[6], mx, 1);
   n[8] = bezierSpanClamp(n[8], mx, 1);
+
+  /**
+   * **A tangent handle's own overshoot is bounded to its segment's own span, not the full [0,1] box,
+   * once there is a middle anchor to divide by — and a segment that cannot hold its inherited handles
+   * within that bound *and stay monotone* starts over as a plain linear pace, rather than settling for
+   * whatever clamping each handle independently produces.** `oklchRamp` turns each half into a 0..1
+   * progress by dividing the curve's raw height by the corner's — `g / my` below the corner,
+   * `(g - my) / (1 - my)` above it — and that division amplifies whatever a handle overshoots by by
+   * `1 / my` (or `1 / (1 - my)`). Two things can go wrong once `my` sits somewhere small, like 0.001:
+   *
+   * 1. A handle bounded to a full [0,1] swing means nothing: a modest-looking bulge (`y = 1` at one
+   *    control point, the same magnitude the two-anchor case draws every day) divides out to a
+   *    progress of 1000. `bezierClamp` below holds every handle to two spans past the corner either
+   *    way, bounding the *ratio* a division can produce to `[-2, 3]` regardless of how small the
+   *    segment is.
+   * 2. Bounding the ratio is not the same as bounding the *chaos*. Clamping each handle to that range
+   *    independently can still land both of a segment's handles on the same boundary — confirmed
+   *    live: a segment inherited from an already-wild curve settled at `[-0.002, -0.002]`, both
+   *    handles pinned below the segment's own starting anchor. That is not a bulge, it is a dip before
+   *    a rise — non-monotone — and a non-monotone `g` divided by a `my` this small does not read as
+   *    "the curve went a bit further than expected", it reads as the hue wheel spun past and landed
+   *    somewhere unrelated. `bezierMonotoneOrLinear` checks the *clamped* segment for monotonicity —
+   *    scale-invariant, so it is exactly as sensitive whether `my` is 0.5 or 0.001 — and gives up on
+   *    preserving the inherited shape in favour of the same plain linear third-and-two-thirds a fresh
+   *    split without a fixture like this one already shows, rather than a value clamped to a boundary
+   *    that turned out not to describe a real curve.
+   *
+   * One function, checked on every normalise — not only the moment a middle point is added. A curve
+   * that passed this check once and is later dragged further still comes back through here on the very
+   * next frame, so a drag that would produce the same dip-then-rise gets the same correction, not just
+   * the original split.
+   *
+   * Skipped when overshoot was not asked for — those Y's are already in [0,1] from the per-element
+   * store above, a tighter bound than this one, so re-checking them here would only ever be a no-op.
+   */
+  if (wants) {
+    var seg1 = bezierMonotoneOrLinear(n[0], n[1], n[2], n[3], 0, 0, mx, my);
+    n[0] = seg1[0]; n[1] = seg1[1]; n[2] = seg1[2]; n[3] = seg1[3];
+    var seg2 = bezierMonotoneOrLinear(n[6], n[7], n[8], n[9], mx, my, 1, 1);
+    n[6] = seg2[0]; n[7] = seg2[1]; n[8] = seg2[2]; n[9] = seg2[3];
+  }
+  if (wants) n.overshoot = true;
   return n;
+}
+
+/**
+ * **One segment, held to a safe span and checked for monotonicity — the shared decision both halves of
+ * `bezierNormalise` make.** `(x1,y1)` and `(x2,y2)` are the segment's own tangent handles; `(x0,y0)` and
+ * `(x3,y3)` are its anchors (always `(0,0)` and `(mx,my)`, or `(mx,my)` and `(1,1)`). Returns the
+ * handles unchanged when they already fit — two spans past the anchor's own height each way, `[y0 -
+ * 2·(y3-y0), y0 + 3·(y3-y0)]` — *and* the resulting segment is monotone; a plain linear pace between
+ * the two anchors otherwise, which is always both.
+ *
+ * Scale-invariant on purpose: rescaling the segment into its own `[0,1]` unit square before checking —
+ * `bezierIsMonotone` — is what makes this exactly as strict for a corner at `my = 0.001` as for one at
+ * `my = 0.5`, rather than a margin that happens to bound the ratio without ever asking whether the ratio
+ * it allows still traces a sane curve.
+ */
+function bezierMonotoneOrLinear(x1, y1, x2, y2, x0, y0, x3, y3) {
+  var spanX = x3 - x0, spanY = y3 - y0;
+  var loY = y0 + -2 * spanY, hiY = y0 + 3 * spanY;
+  var withinMargin = y1 >= Math.min(loY, hiY) && y1 <= Math.max(loY, hiY) &&
+    y2 >= Math.min(loY, hiY) && y2 <= Math.max(loY, hiY);
+  var local = [(x1 - x0) / spanX, (y1 - y0) / spanY, (x2 - x0) / spanX, (y2 - y0) / spanY];
+  local.overshoot = true;
+  var n = bezierNormalise(local, true);
+  // The largest drop below any height already reached, sampled the same way `bezierIsMonotone` does —
+  // 0 for a curve that never backtracks, and otherwise how far it backtracks, in units of the
+  // segment's own local span (which is why the anchors are always `(0,0)` and `(1,1)` here: this is
+  // scale-invariant, not a distance in real coordinates).
+  //
+  // **A tolerance, not a strict gate — the easing families this whole feature exists to allow
+  // (`easeOutBack` among them) are non-monotone by design, and `bezierIsMonotone`'s own zero-tolerance
+  // rejects every one of them.** Checked against both fixtures directly: `easeOutBack`'s own bounce
+  // backtracks by about a third of the segment's height (0.33) and is exactly the shape this margin
+  // exists to let through; the reported chaotic segment backtracks by more than the segment's *entire*
+  // height (1.39) — not a gentle overshoot settling back, but the curve reversing across most of its own
+  // span. One span is the line between them: a backtrack that never exceeds what the segment climbed in
+  // the first place reads as an ordinary easing; a backtrack larger than the climb itself is a different
+  // kind of shape, one this division was never going to make sense of.
+  var previous = -Infinity, violation = 0;
+  for (var i = 0; i <= 64; i++) {
+    var v = bezierAt(n, i / 64);
+    if (v < previous) violation = Math.max(violation, previous - v);
+    previous = Math.max(previous, v);
+  }
+  if (withinMargin && violation <= 1) return [x1, y1, x2, y2];
+  return [x0 + spanX / 3, y0 + spanY / 3, x0 + spanX * 2 / 3, y0 + spanY * 2 / 3];
 }
 
 function bezierSpanClamp(v, lo, hi) {
@@ -159,6 +302,9 @@ function bezierSpanClamp(v, lo, hi) {
  *
  * Absolute rather than per-segment-normalised on purpose: the editor draws in this space, `bezierAt`
  * solves in it, and a segment that carried its own 0-to-1 frame would need converting at both.
+ *
+ * No `overshoot` parameter of its own — `bezierNormalise(curve)` inherits it from `curve.overshoot`,
+ * which is already set correctly by whoever produced this array (see the comment there).
  */
 function bezierSegments(curve) {
   var n = bezierNormalise(curve);
@@ -269,7 +415,16 @@ function bezierWithMiddle(curve, at) {
   }
   var X = split(seg.x0, seg.x1, seg.x2, seg.x3);
   var Y = split(seg.y0, seg.y1, seg.y2, seg.y3);
-  return bezierNormalise([X.l1, Y.l1, X.l2, Y.l2, X.m, Y.m, X.r1, Y.r1, X.r2, Y.r2]);
+  // A fresh array literal, not derived from `curve` by reference — `overshoot` has to be threaded
+  // through explicitly here or the split loses it, however the original curve was normalised.
+  //
+  // De Casteljau reproduces the original curve exactly, tangent handles included — sound for an
+  // ordinary curve, and not for a segment whose inherited handle sits far outside what the new corner
+  // can safely divide by. Nothing special-cased here for that: `bezierNormalise` checks every segment
+  // it is handed for exactly this on every call, split or otherwise (`bezierMonotoneOrLinear`), so a
+  // half that cannot survive the split gets the same plain linear reset a direct drag would.
+  return bezierNormalise([X.l1, Y.l1, X.l2, Y.l2, X.m, Y.m, X.r1, Y.r1, X.r2, Y.r2],
+    !!(curve && curve.overshoot));
 }
 
 /**
@@ -320,6 +475,9 @@ function bezierNodeIsSmooth(curve) {
  * fits the recogniser works to produce.
  */
 function bezierMirrorNode(curve, moved) {
+  // Captured before `.slice()`, which copies the ten numbers but not properties riding on the array —
+  // `c.overshoot` would otherwise read `undefined` on every line below, however `curve` was normalised.
+  var overshoot = curve && curve.overshoot;
   var c = bezierNormalise(curve).slice();
   if (c.length !== 10) return c;
   var other = moved === 2 ? 6 : 2;
@@ -330,7 +488,7 @@ function bezierMirrorNode(curve, moved) {
   var otherLen = Math.sqrt(Math.pow(c[other] - mx, 2) + Math.pow(c[other + 1] - my, 2));
   c[other] = mx - (dx / len) * otherLen;
   c[other + 1] = my - (dy / len) * otherLen;
-  return bezierNormalise(c);
+  return bezierNormalise(c, overshoot);
 }
 
 function bezierWithoutMiddle(curve) {
@@ -348,12 +506,14 @@ function bezierWithoutMiddle(curve) {
   var k1 = lead > 0 ? 1 / lead : 1;
   var k2 = tail > 0 ? 1 / tail : 1;
 
+  // A fresh array literal — same reason `bezierWithMiddle` threads `overshoot` explicitly rather than
+  // relying on it riding along by reference.
   return bezierNormalise([
     first.x1 * k1,
     first.y1 * k1,
     1 + (second.x2 - 1) * k2,
     1 + (second.y2 - 1) * k2
-  ]);
+  ], curve && curve.overshoot);
 }
 
 // ============================================================================
@@ -854,9 +1014,12 @@ function bezierSplit(curve) {
  *
  * → an array, or `null` for anything that is not a curve. Null rather than a partial read: a field that
  * accepted three numbers and filled in the fourth would be guessing at the shape of someone's paste.
+ *
+ * `overshoot`, explicit — the numbers parsed here are a fresh array with nothing to inherit it from, so
+ * unlike `bezierNormalise`'s own default this cannot fall back to a property already on the input.
  */
-function bezierParse(text) {
-  if (Array.isArray(text)) return bezierAnchorCount(text) ? bezierNormalise(text) : null;
+function bezierParse(text, overshoot) {
+  if (Array.isArray(text)) return bezierAnchorCount(text) ? bezierNormalise(text, overshoot) : null;
   if (typeof text !== 'string') return null;
   var body = text.trim();
   if (!body) return [];
@@ -880,7 +1043,7 @@ function bezierParse(text) {
     nums.push(v);
   }
   if (!bezierAnchorCount(nums)) return null;
-  return bezierNormalise(nums);
+  return bezierNormalise(nums, overshoot);
 }
 
 /**

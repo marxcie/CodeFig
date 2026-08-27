@@ -447,6 +447,87 @@ test('editing Hue while Lightness stays on Original shows up in the swatch', () 
   assert.deepEqual(lightness, fileLightness, 'lightness drifted from the file even though it is untouched');
 });
 
+test('a Hue curve with an overshoot shape reaches a hue beyond both its own ends', () => {
+  /**
+   * Márton: a Hue curve should be able to peak above (or dip below) both its own ends, the same way a
+   * plain CSS `cubic-bezier()` easing can — a 2-point curve does not need a formal middle point for this,
+   * only a shape whose height genuinely leaves `[0,1]`. `colorsGenerateMode` opts every Hue/Saturation/
+   * Chroma curve into `bezierNormalise`'s `overshoot` unconditionally (it is Colors' own function, and
+   * Lightness never reaches this code path at all — its ladder is built separately).
+   */
+  const ctx = load();
+  const steps = ['25', '50', '75', '100', '150', '200', '250', '300',
+    '350', '400', '500', '600', '700', '800', '900', '950'];
+  const lime = ['#F5FFF0', '#EEFFE5', '#E0FFD1', '#D3FFBD', '#BEFF9E', '#AAFF80', '#9CF76E', '#7DEE44',
+    '#5AE515', '#4AB017', '#378311', '#1F5C00', '#164200', '#113300', '#0A1F00', '#091A00'];
+  const read = ctx.oklchHslFromHex;
+  const config = {
+    colorModel: 'hsl', steps: steps.join(', '), existing: { 'Lime-1': lime },
+    modes: [{
+      name: 'Lime-1', curve: [], chromaCurve: [], saturationCurve: [],
+      hueCurve: [], hslHueCurve: [0.34, 1.56, 0.64, 1], // a well-known overshoot ("easeOutBack") shape
+      seed: { hex: '', placement: '', lock: false },
+      bright: { hslHue: 50, saturation: 100, lightness: 97.1 },
+      dark: { hslHue: 80, saturation: 100, lightness: 5.1 }
+    }]
+  };
+
+  const made = ctx.colorsGenerateMode(config, config.modes[0], steps, null);
+  const hues = made.rows.map((r) => read(r.hex).H);
+  // A loose tolerance at the ends: bright sits at 97% lightness, where R, G and B are all near white and
+  // a hue read back through 8-bit rounding is genuinely noisy — this is not what the test is checking.
+  assert.ok(Math.abs(hues[0] - 50) < 5, 'the bright end drifted far from 50, at ' + hues[0]);
+  assert.ok(Math.abs(hues[15] - 80) < 5, 'the dark end drifted far from 80, at ' + hues[15]);
+  assert.ok(hues.some((h) => h > 82), 'no step read meaningfully past 80 — the overshoot never reached ' +
+    'the ramp: ' + hues.map((h) => h.toFixed(1)).join(', '));
+
+  // Without overshoot (Lightness's own path, which never opts in) the same shape could never leave
+  // [bright, dark] — checked directly against the library rather than assumed.
+  const B = ctx;
+  const clamped = B.bezierNormalise([0.34, 1.56, 0.64, 1]);
+  for (let i = 0; i <= 15; i++) assert.ok(B.bezierAt(clamped, i / 15) <= 1 + 1e-9);
+});
+
+test('a Hue curve is not ignored just because its anchors still agree with the file', () => {
+  /**
+   * Márton, live: dragged a Hue handle into a dramatic overshoot bulge and the swatch never moved. The
+   * anchors (`bright.hslHue`/`dark.hslHue`) happened to still equal the file's own bright and dark hue —
+   * auto-import had filled them and nothing had retyped either end — so `hueTouched`'s anchor-only check
+   * read the channel as untouched and substituted the file's verbatim per-step hue for every row,
+   * regardless of what the curve now said. The curve's own shape is a touched-ness signal in its own
+   * right now: a real, non-empty `hslHueCurve` counts as touched even when the endpoints it happens to
+   * leave behind still agree with the file.
+   */
+  const ctx = load();
+  const steps = ['25', '50', '75', '100', '150', '200', '250', '300',
+    '350', '400', '500', '600', '700', '800', '900', '950'];
+  const lime = ['#F5FFF0', '#EEFFE5', '#E0FFD1', '#D3FFBD', '#BEFF9E', '#AAFF80', '#9CF76E', '#7DEE44',
+    '#5AE515', '#4AB017', '#378311', '#1F5C00', '#164200', '#113300', '#0A1F00', '#091A00'];
+  const read = ctx.oklchHslFromHex;
+  const bright = read(lime[0]);
+  const dark = read(lime[15]);
+  const config = {
+    colorModel: 'hsl', steps: steps.join(', '), existing: { 'Lime-1': lime },
+    modes: [{
+      name: 'Lime-1', curve: [], chromaCurve: [], saturationCurve: [], hueCurve: [],
+      // The anchors match the file exactly — an anchor-only check would call this mode untouched.
+      hslHueCurve: [0.34, 1.56, 0.64, 1], // a well-known overshoot ("easeOutBack") shape, not a flat line
+      seed: { hex: '', placement: '', lock: false },
+      bright: { hslHue: bright.H, saturation: 100, lightness: bright.L * 100 },
+      dark: { hslHue: dark.H, saturation: 100, lightness: dark.L * 100 }
+    }]
+  };
+
+  const made = ctx.colorsGenerateMode(config, config.modes[0], steps, null);
+  const hues = made.rows.map((r) => read(r.hex).H);
+  const fileHues = lime.map((hex) => read(hex).H);
+
+  // If the curve were being ignored, every hue would match the file's own (the exact bug reported).
+  const matchesFileEverywhere = hues.every((h, i) => Math.abs(h - fileHues[i]) < 1);
+  assert.equal(matchesFileEverywhere, false,
+    'the generated hues matched the file at every step — the curve had no effect, the reported bug');
+});
+
 test('the ladder and the ramp kink at the same step when placement moves the middle', () => {
   // `base` was built before the placement was known, so it used `oklchLadder`'s own default middle —
   // `floor(last/2)` — while `oklchRamp` interpolates hue and chroma around `placementIndex`. Set *Token

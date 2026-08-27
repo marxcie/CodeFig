@@ -111,6 +111,32 @@ test("dragging a handle on an untouched (empty, implied-Linear) curve writes a r
   assert.ok(Math.abs(after[0] - 0.6) < 0.02, "the dragged handle's x did not move to where the pointer went");
 });
 
+test("a handle's own height can leave [0,1] only when the field opts in with overshoot", () => {
+  /**
+   * Márton: a Hue curve should be able to peak above (or dip below) both its own ends, the way a plain
+   * CSS `cubic-bezier()` can — the height clamp had no mathematical reason to exist, only x does (it is
+   * what keeps `bezierAt` single-valued). Off by default, because the same control is shared by Spacing,
+   * Radius and Typography's own scale curves, where an overshoot would let an interior step exceed the
+   * scale's own defined ends — a real behaviour change nobody asked for there.
+   */
+  function dragFarAboveThePlot(field) {
+    const c = build(field, [0.5, 0.8, 0.5, 0.2]);
+    const svg = c.svg;
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+    const handle = c.handles()[0];
+    svg.dispatch("pointerdown", { target: handle, clientX: 50, clientY: 20, pointerId: 1 });
+    svg.dispatch("pointermove", { clientX: 50, clientY: -80, pointerId: 1 });
+    svg.dispatch("pointerup", { clientX: 50, clientY: -80, pointerId: 1 });
+    return c.points()[1];
+  }
+
+  const withoutOvershoot = dragFarAboveThePlot({});
+  assert.ok(withoutOvershoot <= 1, "without opting in, a handle must still clamp to the plot's own box");
+
+  const withOvershoot = dragFarAboveThePlot({ overshoot: true });
+  assert.ok(withOvershoot > 1, "opted in, the handle's real height should survive: " + withOvershoot);
+});
+
 test("the draggable points are the handles plus the middle anchor", () => {
   // Two-point: two handles, and the end anchors are drawn but fixed — a scale curve that started anywhere
   // but the start would not be a scale curve, so there is nothing to offer there.
@@ -1043,12 +1069,19 @@ test('a channel whose ends match still has an axis', () => {
    * is an ordinary shape for a ramp that stays vivid at both extremes. `axis()` bailed when the two ends
    * were equal, and took everything with it: no ticks, no zoom, no colour bar, no draggable ends. The whole
    * Saturation tab looked unimplemented.
+   *
+   * The curve carries a real middle point (ten numbers), not just a field that names one — `axisView`
+   * only widens for a middle the curve itself has an anchor for (`curveHasRealMiddle`), the same
+   * question generation asks (`oklchRamp`'s `hueHasMiddle`/`chromaHasMiddle`: the curve decides, once
+   * it has a shape at all). A plain two-anchor curve here would be a middle field generation already
+   * ignores, and the window ignoring it too would be agreement, not the bug this test exists for.
    */
   const source = [
     '// @UI_CONFIG_START',
     'var a = { bright: 100, middle: 83.2, dark: 100 }; ' +
       '// @group: bright:number=Start|middle:number=Middle|dark:number=End @label: Ends',
-    'var sc = [0.4, 0.3, 0.6, 0.7]; // @curve @ends: a.bright..a.middle..a.dark @range: 0..100 @label: S',
+    'var sc = ' + JSON.stringify(B.bezierWithMiddle([0.4, 0.3, 0.6, 0.7], 0.5)) +
+      '; // @curve @ends: a.bright..a.middle..a.dark @range: 0..100 @label: S',
     '// @UI_CONFIG_END',
   ].join('\n');
   const schema = parser.parse(source);
@@ -1073,12 +1106,16 @@ test('zooming past the constant ends of an equal-ends channel keeps the window, 
    * `axisView` decided the *whole ramp* was off screen and reopened the wide window it had just been
    * zoomed away from — reported as "the range doesn't match the zoom" and "it jumps between ranges",
    * because this fires on every draw, not only while dragging.
+   *
+   * The curve carries a real middle point, for the same reason the test above does — a plain
+   * two-anchor curve's middle field is one `axisView`/`rampIsOffscreen` now ignore on purpose.
    */
   const source = [
     '// @UI_CONFIG_START',
     'var a = { bright: 100, middle: 83.2, dark: 100 }; ' +
       '// @group: bright:number=Start|middle:number=Middle|dark:number=End @label: Ends',
-    'var sc = [0.4, 0.3, 0.6, 0.7]; // @curve @ends: a.bright..a.middle..a.dark @range: 0..100 @label: S',
+    'var sc = ' + JSON.stringify(B.bezierWithMiddle([0.4, 0.3, 0.6, 0.7], 0.5)) +
+      '; // @curve @ends: a.bright..a.middle..a.dark @range: 0..100 @label: S',
     '// @UI_CONFIG_END',
   ].join('\n');
   const schema = parser.parse(source);
@@ -1551,4 +1588,332 @@ test('a successful estimate never fires the abandon signal', () => {
   } finally {
     renderer.setCurveBaselines({});
   }
+});
+
+test('typing a middle value the curve has no room for leaves the curve alone', () => {
+  /**
+   * **A field typed a value the curve cannot express as a position, without corrupting the curve to try.**
+   *
+   * Márton, live: typed 293.5 into a Hue curve's middle field, with the ends at 100 and 99.2 — a value
+   * nowhere between them, exactly what `@overshoot` exists to allow. The listener that moves the anchor
+   * for a typed number (`adoptEnds`, renderer.js) used to force it there anyway: `valueToUnit` turned
+   * 293.5 into a curve-space fraction around -242, `Math.min(1, Math.max(0, …))` flattened that straight
+   * to 0, and the curve's own middle anchor silently snapped to the plot floor — which is exactly the
+   * `atMiddle = 0` case `@bezier.js` documents as collapsing an entire half of the generated ramp to one
+   * repeated hue. The field kept the typed number throughout; only the curve moved, to a place nobody
+   * asked it to.
+   *
+   * The fix: a typed value that maps outside [0,1] has no on-curve position to move to, so the curve's
+   * shape is left exactly where it was. The field still holds whatever was typed — decoupled, which is
+   * the whole reason `middle.<channel>` exists as a cell of its own.
+   */
+  const startCurve = [0.185, 0, 0.3425, 0.25, 0.5, 0.5, 0.6575, 0.75, 0.815, 1];
+  const source = [
+    '// @UI_CONFIG_START',
+    'var a = { bright: 100, middle: 100, dark: 99.2 }; ' +
+      '// @group: bright:number=Start|middle:number=Middle|dark:number=End @label: Ends',
+    'var sc = ' + JSON.stringify(startCurve) +
+      '; // @curve @ends: a.bright..a.middle..a.dark @range: 0..360 @overshoot @label: Hue',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  const wrap = container.querySelector('.config-ui-curve');
+  const middle = container.querySelector('[data-row-field="a.middle"]');
+
+  middle.value = '293.5';
+  middle.dispatch('input', { bubbles: true });
+
+  assert.equal(middle.value, '293.5', 'the typed value must not be reverted');
+  const pts = JSON.parse(wrap.getAttribute('data-curve-value'));
+  assert.equal(pts[5], startCurve[5], 'the curve\'s own middle anchor must not move for a value it cannot reach');
+
+  // A value the curve *can* reach still moves the anchor, exactly as before.
+  middle.value = '99.8';
+  middle.dispatch('input', { bubbles: true });
+  const movedPts = JSON.parse(wrap.getAttribute('data-curve-value'));
+  assert.notEqual(movedPts[5], startCurve[5], 'an in-range value must still move the anchor');
+});
+
+test('adding a middle point stays visible-dim-free even though the anchor cell is shared with a hidden model', () => {
+  /**
+   * **The box and its dimming used to answer to two different redraws.** Hue and hslHue share one
+   * bright/middle/dark cell (`@showWhen`, one model at a time — the same sharing `'a hidden curve does not
+   * walk off with the anchor boxes'` above exists for). Clicking *Add middle point* on the visible curve set
+   * the shared cell's `data-shown="true"`; `refreshCurveControls` then redrew the *other* (hidden, still
+   * two-anchor) curve right after, whose own `placeColumns` set the same shared attribute back to `"false"`
+   * — so the field was genuinely enabled and typable, and stayed rendered at 0.45 opacity as if it were not.
+   * Márton, live: *"the input field turns active, but its colors still shows it as disabled."*
+   */
+  const source = [
+    '// @UI_CONFIG_START',
+    'var model = "hsl"; // @options: hsl:HSL|oklch:OKLCH @radio @label: Model',
+    'var modes = [{ name: "G", hueCurve: [], hslHueCurve: [], ' +
+      'bright: { hue: 0, hslHue: 100 }, middle: { hue: 0, hslHue: 0 }, dark: { hue: 0, hslHue: 99.2 } }]; ' +
+      '// @rows: name:text=Mode|' +
+      'hueCurve:curve(ends:bright.hue..middle.hue..dark.hue, range:0..360){model=oklch}=Hue curve|' +
+      'hslHueCurve:curve(ends:bright.hslHue..middle.hslHue..dark.hslHue, range:0..360){model=hsl}=Hue curve|' +
+      'bright:{hue:number=Hue start{model=oklch}|hslHue:number=Hue start{model=hsl}}=B|' +
+      'middle:{hue:number=Hue middle{model=oklch}|hslHue:number=Hue middle{model=hsl}}=M|' +
+      'dark:{hue:number=Hue end{model=oklch}|hslHue:number=Hue end{model=hsl}}=D @blocks',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+
+  const curves = container.querySelectorAll('[data-curve-value]');
+  const hueCurve = Array.from(curves).find((w) => w.getAttribute('data-row-field') === 'hueCurve');
+  const hslHueCurve = Array.from(curves).find((w) => w.getAttribute('data-row-field') === 'hslHueCurve');
+  // The shim has no layout, so stand in for "off screen" the way the browser reports it — hsl is selected.
+  [hueCurve, hslHueCurve].forEach((w) => {
+    const plot = w.querySelector('.config-ui-curve__plot-wrap');
+    plot.getClientRects = () => (w === hslHueCurve ? [{ width: 400, height: 190 }] : []);
+  });
+  hslHueCurve.dispatchEvent(new Event('config-ui-curve-refresh'));
+
+  const preset = hslHueCurve.querySelector('.config-ui-curve__preset');
+  preset.value = 'custom';
+  preset.dispatch('change', { bubbles: true });
+  hslHueCurve.querySelector('.config-ui-curve__toggle').dispatch('click', { bubbles: true });
+
+  const midField = container.querySelector('[data-row-field="middle.hslHue"]');
+  assert.equal(midField.disabled, false, 'the field itself must be enabled once the curve has a middle point');
+  const wrap = midField.closest('.config-ui-curve__anchor');
+  assert.equal(wrap.getAttribute('data-shown'), 'true',
+    'the shared cell must not be dimmed once the visible curve has a middle point');
+});
+
+/**
+ * A curve control bound to `ends: a.bright..a.dark` (or `a.bright..a.middle..a.dark`), for testing
+ * how a drag converts into the curve's own stored numbers on a channel with real bright/dark/middle
+ * values — the layer `effectiveGap` (`renderer.js`) lives in, not `@bezier.js`'s own margins.
+ */
+function dragSensitivityForm(opts) {
+  const hasMid = opts.mid !== undefined;
+  const endsSpec = hasMid ? 'a.bright..a.middle..a.dark' : 'a.bright..a.dark';
+  const groupFields = hasMid ? 'bright:number=B|middle:number=M|dark:number=D' : 'bright:number=B|dark:number=D';
+  const varsObj = hasMid
+    ? `{ bright: ${opts.bright}, middle: ${opts.mid}, dark: ${opts.dark} }`
+    : `{ bright: ${opts.bright}, dark: ${opts.dark} }`;
+  const source = [
+    '// @UI_CONFIG_START',
+    `var a = ${varsObj}; // @group: ${groupFields} @label: Ends`,
+    'var c = ' + JSON.stringify(opts.curve || [0.37, 0, 0.63, 1]) +
+      `; // @curve @ends: ${endsSpec} @range: ${opts.range[0]}..${opts.range[1]} @overshoot @label: C`,
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  renderer.attachListeners(container, schema, function () {});
+  const svg = container.querySelector('.config-ui-curve__canvas');
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  return {
+    container, svg,
+    points: () => JSON.parse(container.querySelector('.config-ui-curve').getAttribute('data-curve-value')),
+  };
+}
+
+/** Drag the first handle from `fromY` to `toY` (plot pixels, 0..100) and hand back the stored curve. */
+function dragHandle0To(form, fromY, toY) {
+  const handle = form.container.querySelector('[data-curve-index="0"]');
+  form.svg.dispatch('pointerdown', { target: handle, clientX: 30, clientY: fromY, pointerId: 1 });
+  form.svg.dispatch('pointermove', { clientX: 30, clientY: toY, pointerId: 1 });
+  form.svg.dispatch('pointerup', { clientX: 30, clientY: toY, pointerId: 1 });
+  return form.points();
+}
+
+test('a curve whose ends sit a normal distance apart drags exactly as before — Lightness', () => {
+  // Bright 98, dark 4: a 94-unit gap on a 0..100 range. `effectiveGap`'s floor is this spread over
+  // ten, 9.4 — far below the real 94-unit gap, so `Math.max` hands back the gap unchanged and nothing
+  // about this channel's drag sensitivity is different from before `effectiveGap` existed.
+  const dragged = dragHandle0To(dragSensitivityForm({ bright: 98, dark: 4, range: [0, 100] }), 50, 0);
+  assert.ok(Math.abs(dragged[1] - -0.021277) < 1e-4, 'Lightness drag sensitivity moved: ' + dragged[1]);
+});
+
+test('a curve whose ends sit a normal distance apart drags exactly as before — Chroma', () => {
+  // Bright/dark chroma from a real set (lime), 0.0332 apart on a 0..0.4 range — the floor (0.00332)
+  // sits below it the same way, so this is another curve `effectiveGap` must leave alone.
+  const dragged = dragHandle0To(
+    dragSensitivityForm({ bright: 0.0227, dark: 0.0559, range: [0, 0.4] }), 50, 0);
+  assert.ok(Math.abs(dragged[1] - 1.1) < 1e-4, 'Chroma drag sensitivity moved: ' + dragged[1]);
+});
+
+test('a curve whose ends sit a normal distance apart drags exactly as before — Hue with no far middle', () => {
+  // Bright 100, dark 99.2 — Lime's own real hslHue gap, 0.8° on a 0..360 range, and nothing else
+  // pulling the window wide. `effectiveGap` must not react to a small gap on its own, only to a small
+  // gap under a window a distant middle has forced open — this fixture has no middle at all.
+  const dragged = dragHandle0To(dragSensitivityForm({ bright: 100, dark: 99.2, range: [0, 360] }), 50, 0);
+  assert.ok(Math.abs(dragged[1] - -0.1) < 1e-4, 'Hue (no middle) drag sensitivity moved: ' + dragged[1]);
+});
+
+test('a near-equal-ends channel with a real middle point far from both ends gets a bounded, not a wild, drag', () => {
+  /**
+   * The reported bug, reproduced directly: Lime's real Hue gap (100° bright, 99.2° dark) with a
+   * *real middle point* — the curve carries ten numbers, not just a field holding 200° — a value
+   * nowhere between the ends, which is exactly what forces the window wide. Without a floor, this
+   * same drag reads as unit ≈ −137 (`(210.08 − 100) / −0.8`, hand-derived from `axisView`'s own
+   * window math) — a handle that looks frozen for nearly the whole plot and then jumps, because only
+   * a hairline band near the ends avoids the clamp every other consumer applies. With the floor, the
+   * same drag reads as a bounded, comparatively tame amplification.
+   *
+   * The middle has to be a real anchor on the curve, not only a value in the field: `effectiveGap`
+   * asks `curveHasRealMiddle` the same question generation does, and a two-anchor curve with a
+   * leftover middle field is the *other* bug — a value on screen the ramp never reads — covered by
+   * its own test below rather than this one.
+   *
+   * The split lands `my = 0.5`, so `bezierNormalise`'s own segment margin (`@Bezier`, "two spans"
+   * either way — the fix a few rounds before this one) is the tighter of the two bounds here: it
+   * settles at exactly `-2 · my = -1` before `effectiveGap`'s own floor would have mattered. Both
+   * protections are real and this fixture happens to hit the stricter one first — the point of the
+   * assertion is "bounded", not which layer did the bounding.
+   */
+  const wild = dragHandle0To(
+    dragSensitivityForm({
+      bright: 100, dark: 99.2, mid: 200, range: [0, 360],
+      curve: B.bezierWithMiddle([0.37, 0, 0.63, 1], 0.5)
+    }), 50, 0);
+  assert.ok(Math.abs(wild[1]) < 15,
+    'the floored drag should stay within a small multiple of the gap, not read as ' + wild[1]);
+  assert.ok(Math.abs(wild[1]) > 0.1,
+    'still a real, non-trivial move for a full drag to the top of the plot: ' + wild[1]);
+});
+
+test("a middle field left over from a removed middle point does not widen a two-anchor curve's window or drag", () => {
+  /**
+   * The actual reported shape: Lime's real Hue gap (100°, 99.2°), a plain two-anchor curve, and "Hue
+   * middle" still holding a value from an earlier, since-removed middle point (0°, in the live trace
+   * this reproduces). `oklchRamp` never reads that field for a curve this shape — `hueHasMiddle` is
+   * `false` the moment the curve has no third anchor, independent of what the field says — so a
+   * window or a drag sensitivity that still widens for it shows the person a value nothing downstream
+   * will produce. Confirmed live: a drag that read as reaching 360° on the axis generated a ramp that
+   * moved by 15°, because the axis used the leftover field and generation did not.
+   *
+   * With the field excluded, this curve's spread is just its own 0.8° gap, so the drag should read
+   * exactly what the un-floored math would — no floor to speak of, because nothing here is asking for
+   * a spread wider than the gap.
+   */
+  const plain = dragHandle0To(
+    dragSensitivityForm({ bright: 100, dark: 99.2, mid: 0, range: [0, 360] }), 50, 0);
+  assert.ok(Math.abs(plain[1] - -0.1) < 1e-4,
+    'a leftover middle field widened a two-anchor curve\'s drag sensitivity: ' + plain[1]);
+});
+
+test('a channel pinned exactly at its own range ceiling draws its untouched default preset inside the chart, with no impossible value on the axis', () => {
+  /**
+   * **Márton, live: Saturation at 100…100, nothing dragged yet — the curve line was out of the frame
+   * completely; and after a first fix, still "out of range… 110 saturation?".** The first attempt
+   * widened the window to fit an ordinary handle's height, which does put it on screen but does so by
+   * inventing a "106.67% saturation" tick — a number the field's own declared range says cannot
+   * exist. The reason a value axis produces this at all: with equal ends and no real middle,
+   * `oklchLerp`/`oklchLerpHue` interpolate the two ends linearly, and a straight line between two
+   * identical numbers is that number regardless of how the curve paces getting there — there is no
+   * real value for a handle's height to mean here. `toView`/`fromView` now draw this one shape in the
+   * curve's own `[0,1]` square instead (`axisIsFlat`) — the same space a curve with no axis at all
+   * already uses — so the handle lands on screen without a fabricated number attached to it.
+   */
+  const form = dragSensitivityForm({ bright: 100, dark: 100, range: [0, 100] });
+  const farHandle = form.container.querySelector('[data-curve-index="2"]');
+  const cy = parseFloat(farHandle.getAttribute('cy'));
+  assert.ok(cy >= -1 && cy <= 101,
+    'the untouched preset\'s own handle drew outside the visible chart: cy=' + cy);
+  const ticks = Array.from(form.container.querySelectorAll('.config-ui-curve__tick'));
+  assert.equal(ticks.length, 0,
+    'a flat, middle-less channel must not label its axis with a value nothing can produce: ' +
+    ticks.map((t) => t.textContent).join(', '));
+});
+
+test('dragging the middle anchor writes its field from the value the curve actually settles on, not the raw pre-margin one', () => {
+  /**
+   * **Márton, live: dragging a Hue middle anchor wrote 87.13°/86.39°/87.06° to the "Hue middle"
+   * field, while the chart's own corner clamped to something else entirely a moment later.** The
+   * drag handler (`applyMove`, renderer.js) read the middle field straight off the raw pointer
+   * conversion — `pts[5]` before `bezierNormalise`'s own `[0.001, 0.999]` margin on the middle
+   * anchor's height had run on it — so the field and the curve could disagree about the very drag
+   * that just happened. Reproduced here with the same shape: a near-equal-ends channel (0.8° gap)
+   * with a real middle field set far away (300°), which floors `effectiveGap` small enough that an
+   * ordinary drag converts to a raw middle height far outside the margin. The field must read back
+   * exactly what `unitToValue` of the curve's own, already-clamped `pts[5]` would — never the number
+   * a mid-drag frame only briefly held.
+   */
+  const form = dragSensitivityForm({
+    bright: 100, dark: 99.2, mid: 300, range: [0, 360],
+    curve: B.bezierWithMiddle([0.37, 0, 0.63, 1], 0.5)
+  });
+  const handle = form.container.querySelector('[data-curve-index="4"]');
+  form.svg.dispatch('pointerdown', { target: handle, clientX: 50, clientY: 50, pointerId: 1 });
+  form.svg.dispatch('pointermove', { clientX: 50, clientY: 0, pointerId: 1 });
+  form.svg.dispatch('pointerup', { clientX: 50, clientY: 0, pointerId: 1 });
+
+  const pts = form.points();
+  assert.ok(pts[5] >= 0.001 && pts[5] <= 0.999,
+    'the curve\'s own middle anchor must stay inside its margin: ' + pts[5]);
+  // The drag pushes the raw candidate far below the margin, so the corner clamps hard to its floor
+  // (0.001) — a hair's breadth from `bright`. The field has to land there too: near 100, not the
+  // ~320 the unclamped candidate read as before the field write moved after normalisation.
+  assert.ok(pts[5] < 0.01, 'fixture assumption broke: expected the corner to clamp to its floor, got ' + pts[5]);
+  const midField = form.container.querySelector('[data-row-field="a.middle"]');
+  const fieldValue = parseFloat(midField.value, 10);
+  assert.ok(Math.abs(fieldValue - 100) < 1,
+    'the middle field read the pre-margin candidate instead of the clamped curve: ' + fieldValue);
+});
+
+test("getValues() keeps an overshoot curve's real height instead of clamping it back to [0,1]", () => {
+  /**
+   * **The control that drags and draws a curve is not the control that saves it.** `buildCurveControl`
+   * shadows `curveValueOf` with a field-scoped version that already threads `field.overshoot` through
+   * (`allowOvershoot`) — so the chart itself, and every drag on it, was always correct. But
+   * `getValues()`/`collectRows()` read a curve's value back out through the *module-level*
+   * `curveValueOf`, outside any one control's closure, which had no `field.overshoot` to read and
+   * defaulted to `false` — silently clamping every Y coordinate back into [0,1] the moment the curve
+   * was collected for the config block or the live preview. A curve could drag, draw and evaluate
+   * exactly right and still write a flattened shape into both — reported live as "the chart doesn't
+   * reflect the curve", for a reason that had nothing to do with the colour maths reading it.
+   */
+  const wild = [0.34, 1.8, 0.64, -0.5];
+  const source = [
+    '// @UI_CONFIG_START',
+    'var a = { bright: 98.2, dark: 9.6 }; // @group: bright:number=B|dark:number=D @label: Ends',
+    'var c = ' + JSON.stringify(wild) +
+      '; // @curve @ends: a.bright..a.dark @range: 0..100 @overshoot @label: L',
+    '// @UI_CONFIG_END',
+  ].join('\n');
+  const schema = parser.parse(source);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  const api = renderer.attachListeners(container, schema, function () {});
+
+  const collected = api.getValues().c;
+  assert.deepEqual(Array.from(collected), wild,
+    'an overshoot curve\'s real height was clamped on collection: ' + JSON.stringify(collected));
+});
+
+test("getValues() keeps an overshoot @rows curve's real height too, not only a field-level one", () => {
+  // Same bug, the other collection path: `readRowCellInto` (a `@rows` cell, not a field-level curve)
+  // reads `column.overshoot` from the panel spec — colors.js's own Hue/Saturation/Chroma curves are
+  // declared exactly this way, via `@PANEL_START`, not the single-field `@curve @overshoot` annotation.
+  const wild = [0.34, 1.8, 0.64, -0.5];
+  const panelSpec = [
+    '// { blocks: [ { key: "modes", type: "rows", columns: [',
+    '//   { key: "name", type: "text", label: "Mode" },',
+    '//   { key: "bright", type: "number", label: "Bright" },',
+    '//   { key: "dark", type: "number", label: "Dark" },',
+    '//   { key: "c", type: "curve", overshoot: true, ends: "bright..dark", range: [0, 100], label: "C" }',
+    '// ] } ] }',
+  ].join('\n');
+  const values = 'modes: [{ name: "M", bright: 98.2, dark: 9.6, c: ' + JSON.stringify(wild) + ' }]';
+  const schema = parser.parse(values, panelSpec);
+  assert.ok(!schema.error, 'fixture panel spec should parse cleanly: ' + schema.error);
+  const container = document.createElement('div');
+  renderer.buildForm(schema, container);
+  const api = renderer.attachListeners(container, schema, function () {});
+
+  const collected = api.getValues().modes[0].c;
+  assert.deepEqual(Array.from(collected), wild,
+    'an overshoot @rows curve\'s real height was clamped on collection: ' + JSON.stringify(collected));
 });

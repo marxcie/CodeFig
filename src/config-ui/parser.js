@@ -981,6 +981,10 @@
     if (block.ramp) column.ramp = block.ramp;
     if (block.growth) column.growth = block.growth;
     if (block.allowOriginal) column.allowOriginal = true;
+    // **A curve's own height may leave `[0,1]`, opt-in.** Off by default because the same shape is
+    // shared by Spacing, Radius and Typography's own scale curves, where an overshoot would let an
+    // interior step exceed the scale's own defined ends. See `@Bezier`'s `bezierNormalise`.
+    if (block.overshoot) column.overshoot = true;
     if (block.fields) {
       // A nested group ("bright", "middle", "dark"): the group's own fields, each a column in turn.
       column.columns = expandColumnsList(block.fields);
@@ -1659,12 +1663,14 @@
         // curve at all. Claimed here, ahead of the fallback below, for the same reason `@rows` is: an array
         // nothing has claimed becomes a read-only block.
         var f_curveOriginal = false;
+        var f_curveOvershoot = false;
         // The same three settings a `curve(...)` column takes, spelled the way a field spells things.
         // Collected here and applied below, because `f` does not exist yet.
         var f_curveSpec = null;
         if (/@curve\b/.test(tip) && (Array.isArray(val) || val == null)) {
           inputType = "curve";
           f_curveOriginal = /@allowOriginal\b/.test(tip);
+          f_curveOvershoot = /@overshoot\b/.test(tip);
           f_curveSpec = {};
           var f_trio = tip.match(/@ends:\s*([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)/);
           var f_ends = f_trio || tip.match(/@ends:\s*([A-Za-z0-9_$.]+)\.\.([A-Za-z0-9_$.]+)/);
@@ -1707,6 +1713,7 @@
         if (phMatch) f.placeholder = phMatch[1];
         if (helperMatch) f.helper = helperMatch[1].trim();
         if (inputType === "curve" && f_curveOriginal) f.allowOriginal = true;
+        if (inputType === "curve" && f_curveOvershoot) f.overshoot = true;
         if (f_curveSpec) {
           if (f_curveSpec.ends) f.ends = f_curveSpec.ends;
           if (f_curveSpec.range) f.range = f_curveSpec.range;
@@ -1741,7 +1748,7 @@
         // Anything annotation-shaped that this parser has no meaning for is carried through
         // untouched. `@rows` survives here before the control that reads it exists, and so does
         // whatever a later plan adds.
-        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|ends|range|ramp|helper)\b/;
+        var known = /^@(options|radio|multi|textarea|label|showWhen|placeholder|fromFile|rows|group|tabs|blocks|collection|mode|curve|allowOriginal|overshoot|ends|range|ramp|helper)\b/;
         var unknown = tip.match(/@[A-Za-z][\w-]*(?::[^@]*)?/g) || [];
         var carried = unknown
           .map(function (token) { return token.trim(); })
@@ -2006,6 +2013,7 @@
         if (r.inputType === "curve") {
           parts.push("@curve");
           if (r.allowOriginal) parts.push("@allowOriginal");
+          if (r.overshoot) parts.push("@overshoot");
           if (r.ends) {
             parts.push("@ends: " + r.ends.from + (r.ends.mid ? ".." + r.ends.mid : "") + ".." + r.ends.to);
           }
