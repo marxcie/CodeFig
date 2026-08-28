@@ -2158,8 +2158,9 @@
    *
    * A **new mode** is seeded from the last entry rather than from zeros: its fields have to hold
    * something, the tab appears immediately, and copying the neighbour is both obvious on screen and
-   * closer to right than `0` for every width and column count. `name` is then overwritten, so the only
-   * thing inherited is the shape and the numbers.
+   * closer to right than `0` for every width and column count. Nested objects (Colors' anchors and
+   * seed) are deep-cloned so the new mode starts filled and stays independent. `name` is then
+   * overwritten, so the only thing inherited is the shape and the numbers.
    */
   function applyChipOp(entries, ids, op) {
     var list = Array.isArray(entries) ? entries.slice() : [];
@@ -2192,13 +2193,11 @@
     }
 
     if (op.op === "add") {
+      // Deep clone of the last mode — Colors nests bright/middle/dark and seed objects, and a shallow
+      // copy left the new tab sharing those references (and looking empty once serialize rewrote them).
+      // Same helper alignModesToFile uses when the file gains a mode the config does not have yet.
       var template = list.length ? list[list.length - 1] : null;
-      var fresh = {};
-      if (template) {
-        for (var k in template) fresh[k] = template[k];
-      }
-      fresh.name = op.name;
-      list.push(fresh);
+      list.push(freshModeEntry(op.name, template));
       idList.push(null);
       result.added = op.name;
       return result;
@@ -2233,6 +2232,66 @@
   function sameModeName(a, b) {
     if (typeof a !== "string" || typeof b !== "string") return false;
     return a.trim().toLowerCase() === b.trim().toLowerCase();
+  }
+
+  /**
+   * Look up a mode-keyed map entry with the same name rule the chips use.
+   * Returns the actual key that matched, or null.
+   */
+  function findModeKeyedName(map, name) {
+    if (!map || typeof map !== "object" || typeof name !== "string") return null;
+    if (Object.prototype.hasOwnProperty.call(map, name)) return name;
+    var keys = Object.keys(map);
+    for (var i = 0; i < keys.length; i++) {
+      if (sameModeName(keys[i], name)) return keys[i];
+    }
+    return null;
+  }
+
+  /**
+   * Held file colours (and any other mode-keyed map) follow chip edits the way the mode block does.
+   * Deep-cloning a mode on *Original* (`curve: []`) is not enough without hexes under the new name —
+   * that is what left a fresh chip saying "Original has no colours…".
+   *
+   * Returns a new object, or the input unchanged when there is nothing to do.
+   */
+  function copyModeKeyedArrays(map, fromName, toName) {
+    if (!map || typeof map !== "object" || typeof toName !== "string") return map;
+    var fromKey = findModeKeyedName(map, fromName);
+    if (!fromKey) return map;
+    var values = map[fromKey];
+    if (!Array.isArray(values) || !values.length) return map;
+    var next = {};
+    for (var key in map) {
+      if (Object.prototype.hasOwnProperty.call(map, key)) next[key] = map[key];
+    }
+    next[toName] = values.slice();
+    return next;
+  }
+
+  function renameModeKeyedEntry(map, fromName, toName) {
+    if (!map || typeof map !== "object" || typeof toName !== "string") return map;
+    var fromKey = findModeKeyedName(map, fromName);
+    if (!fromKey || fromKey === toName) return map;
+    var next = {};
+    for (var key in map) {
+      if (!Object.prototype.hasOwnProperty.call(map, key)) continue;
+      if (key === fromKey) continue;
+      next[key] = map[key];
+    }
+    next[toName] = map[fromKey];
+    return next;
+  }
+
+  function dropModeKeyedEntry(map, name) {
+    if (!map || typeof map !== "object") return map;
+    var key = findModeKeyedName(map, name);
+    if (!key) return map;
+    var next = {};
+    for (var k in map) {
+      if (Object.prototype.hasOwnProperty.call(map, k) && k !== key) next[k] = map[k];
+    }
+    return Object.keys(next).length ? next : null;
   }
 
   /**
@@ -3188,6 +3247,9 @@
     // mode name" must have exactly one definition. It did not, and the note said "Removing" for a
     // replacement — understating what was about to happen, in the one place that exists to state it.
     sameModeName: sameModeName,
+    copyModeKeyedArrays: copyModeKeyedArrays,
+    renameModeKeyedEntry: renameModeKeyedEntry,
+    dropModeKeyedEntry: dropModeKeyedEntry,
     parseConfigBlockObject: parseConfigBlockObject,
     hasFileFields: hasFileFields,
     // `@PANEL_START` reader (.plans/31-panel-spec-json.md). `parse(code, panelSpecText)` dispatches

@@ -159,15 +159,13 @@ test('drift and the strip are driven by one comparison', () => {
 
   // The summary line counts exactly the changed list.
   assert.match(html, new RegExp(entry.changed.length + ' of ' + entry.made.rows.length + ' steps would change'));
-  // **The per-step evidence used to be a struck-through old hex, and it is gone** — Márton asked for the
-  // caption to be the token and the colour it will be, nothing else. The banner is the surviving observable
-  // and the structural assertions below are what actually pin the claim: one comparison, in one place,
-  // handed to the strip. Counting struck hexes only ever proved the strip *rendered* the entry it was
-  // given, which the summary line proves too.
-  assert.equal(html.match(/color-ramp-preview-hex--was/g), null,
-    'the old value is back in the caption; the banner already says how much changes');
-  assert.equal((html.match(/color-ramp-preview-delta/g) || []).length, 0,
-    'the per-step delta is back in the caption');
+  // Each changed step carries the file hex (was) and the run hex (now) under the swatch.
+  assert.equal((html.match(/color-ramp-preview-hex--was/g) || []).length, entry.changed.length,
+    'every changed step must show the file hex under the swatch');
+  assert.equal((html.match(/color-ramp-preview-hex--now/g) || []).length, entry.changed.length,
+    'every changed step must show the run hex under the file hex');
+  assert.equal((html.match(/color-ramp-preview-pin/g) || []).length, 0,
+    'chroma clamp notes belong in the banner, not under each swatch');
 
   const source = fs.readFileSync(path.join(LIBS, '@color-ramp.js'), 'utf8');
   assert.match(source, /function colorsStrip\(entry, steps\)/,
@@ -601,13 +599,13 @@ test('the lightness gap is measured in the ramp\'s own model', () => {
     });
   });
 
-  // The strip prints what the comparison measured rather than working it out again.
+  // The strip must not re-measure the gap from hex (mixed units); per-step ΔL is no longer shown
+  // on cards — only was/now hex labels — but `colorsAlignment` still carries `dL` for callers.
   const src = fs.readFileSync(
     path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES', '@color-ramp.js'), 'utf8');
   const strip = src.slice(src.indexOf('function colorsStrip('));
   assert.equal(/oklchFromHex\(change\.was\)/.test(strip), false,
     'colorsStrip reads the file value itself again — that is where the mixed units came from');
-  assert.match(strip, /change\.dL/);
 });
 
 test('the curve is the collection\'s in OKLCH and the mode\'s in HSL', () => {

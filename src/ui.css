@@ -269,9 +269,9 @@
       }
       
       .search-input {
-        padding: var(--space-md) var(--space-xl);
+        padding: 0px var(--space-xl);
         width: 100%;
-        height: 56px;
+        height: 51px;
         border-radius: var(--radius-md);
         font: var(--font-size-small) var(--font-family-base);
         font-weight: var(--font-weight-semibold);
@@ -513,7 +513,9 @@
         /* `--panel-padding-x` on the left, not the 24px that happens to equal it: the title, the tab
            strip below it and the first label in the form all sit on one line, and they only stay on it
            if they read one variable. */
-        padding: var(--space-md) var(--space-lg) var(--space-md) var(--panel-padding-x);
+        /* padding: var(--space-md) var(--space-lg) var(--space-md) var(--panel-padding-x); */
+        padding: 0px var(--space-lg) 0px var(--panel-padding-x);
+        height: 52px;
         background: var(--bg-primary);
         border-bottom: 1px solid var(--border-color);
         display: flex;
@@ -2887,19 +2889,6 @@
          either hex does. The split is drawn by the gradient in `colorsSwatch`, so there is no rule here —
          the swatches carry no border of their own now that the bar around them carries one. */
 
-      /* Struck through, and muted: this is the value being given up. */
-      .color-ramp-preview-hex--was {
-        text-decoration: line-through;
-        opacity: 0.45;
-      }
-
-      /* The value that would replace it, in the one colour this strip uses for "the panel did something". */
-      .color-ramp-preview-hex--now {
-        color: #17976a;
-        font-weight: var(--font-weight-semibold);
-        opacity: 1;
-      }
-
       /* ---- Two strips, when the file already holds a set ----
 
          Reading an existing collection cannot recover a curve — an eleven-step ramp made by hand may sit on
@@ -3069,7 +3058,18 @@
       .color-ramp-preview-hex {
         font-size: var(--font-size-small);
         font-variant-numeric: tabular-nums;
-        opacity: 0.6;
+        color: var(--text-primary);
+        opacity: 1;
+      }
+
+      /* Modifiers share `.color-ramp-preview-hex` — must follow the base rule or `color` loses. */
+      .color-ramp-preview-hex.color-ramp-preview-hex--was {
+        text-decoration: line-through;
+        color: var(--text-secondary);
+      }
+
+      .color-ramp-preview-hex.color-ramp-preview-hex--now {
+        color: var(--text-primary);
       }
 
       /* Green, and the only colour in the strip that is not a swatch: it names the one token the user
@@ -3456,25 +3456,17 @@
       }
 
       .config-ui-curve__toggle {
+        /* Sizing for the curve head; chrome comes from `.btn.secondary` on the same element. */
         flex: 0 0 auto;
         height: 28px;
         padding: 0 var(--space-md);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        font-family: var(--font-family-base);
         font-size: var(--font-size-small);
-        cursor: pointer;
-      }
-
-      .config-ui-curve__toggle:hover:not(:disabled) {
-        background: var(--hover-bg);
+        white-space: nowrap;
       }
 
       .config-ui-curve__toggle:disabled {
-        color: var(--text-secondary);
-        cursor: default;
+        opacity: 0.5;
+        cursor: not-allowed;
       }
 
       /* Square, and it has to stay square: the curve is read as a departure from the 45° diagonal,

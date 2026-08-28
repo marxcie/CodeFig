@@ -1781,8 +1781,11 @@
     head.appendChild(preset);
     var toggle = document.createElement("button");
     toggle.type = "button";
-    toggle.className = "config-ui-curve__toggle";
-    head.appendChild(toggle);
+    // **Same secondary chrome as the footer buttons** (`.btn.secondary`): stroke darkens on hover,
+    // background does not. The curve used to paint `--hover-bg` instead and read as a different control.
+    toggle.className = "btn secondary config-ui-curve__toggle";
+    // Order: type → coordinates → add/remove middle (was type → middle → coordinates).
+    // Toggle is appended after the text field below so DOM order matches.
     wrap.appendChild(head);
 
     // **No padding in the viewBox.** The plot fills the control, so its edges line up with the preset row
@@ -1968,11 +1971,10 @@
     text.className = "config-ui-curve__text";
     text.setAttribute("spellcheck", "false");
     text.setAttribute("placeholder", "cubic-bezier(0.37, 0, 0.63, 1)");
-    // **On the preset row, not under the chart.** The three of them are one thought — which shape, how
-    // many points, and the shape as text — and the field sitting a chart's height away from the dropdown
-    // that writes it read as a separate control. Charted curves only: a scale editor is a narrow column
-    // where three controls on one line do not fit.
+    // **On the preset row, not under the chart.** Order: type → coordinates → add/remove middle.
+    // Charted curves only: a scale editor is a narrow column where three controls on one line do not fit.
     if (field.ends) head.appendChild(text); else wrap.appendChild(text);
+    head.appendChild(toggle);
 
     /**
      * **The axis, or nothing.** `@ends: a..b` names the two fields the curve runs between, and having them
@@ -2038,56 +2040,63 @@
       if (field.ends.mid) {
         var midEl = endCell("mid");
         var midCell = adoptable(midEl);
-        if (midCell && midCell.parentNode !== anchorRow) {
-          midCell.setAttribute("class", midCell.getAttribute("class") +
-            " config-ui-curve__anchor config-ui-curve__anchor--middle");
-          anchorRow.appendChild(midCell);
+        if (midCell && !anchorRow.contains(midCell)) {
+          placeAdoptedAnchor(midCell, "config-ui-curve__anchor config-ui-curve__anchor--middle");
         }
         /**
          * **Typing a middle moves the anchor**, which has to be wired here rather than at build time.
          *
-         * The two ends need nothing: `axis()` reads their fields on every draw, so editing one moves the
-         * chart already. The middle is different — the anchor lives in the curve, not in a field — so the
-         * return leg is by hand. And `endCell` answers `null` until the control is in the tree, so wiring
-         * it where the control is *built* attaches nothing at all; this runs on every draw, and the marker
-         * is what keeps it to one listener.
+         * With a real middle the field *is* the colour at the corner, and the curve's own `pts[5]` is
+         * only pacing — so the return leg is by hand (reopen the window, redraw; leave the shape alone).
+         * `endCell` answers `null` until the control is in the tree, so wiring it where the control is
+         * *built* attaches nothing at all; this runs on every draw, and the marker keeps it to one listener.
          */
-        if (midEl && !midEl.getAttribute("data-curve-mid-bound") && midEl.addEventListener) {
-          midEl.setAttribute("data-curve-mid-bound", "true");
-          midEl.addEventListener("input", function () {
-            var a = axis();
-            if (!a) return;
-            var typed = parseFloat(String(midEl.value).replace(/[^\d.\-]/g, ""), 10);
-            if (!isFinite(typed)) return;
-            var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
-            if (pts.length !== 10) return;
-            /**
-             * **With a real middle the field *is* the colour at the corner**, and the curve's own
-             * `pts[5]` is only pacing. Typing 200° on Hue with ends near 100° used to convert through
-             * the single-span `valueToUnit`, land outside `[0,1]`, and bail — field updated, chart
-             * untouched, generation spiked. Now the field keeps the typed value, the window reopens
-             * if needed, and the chart redraws through `valueAlongRamp` so the handle sits at 200°.
-             */
-            ensureMidInView(typed);
-            if (typeof window !== "undefined" && window.codefigProbe) {
-              window.codefigProbe("curve:midInput", {
-                field: (field && field.name) || wrap.getAttribute("data-row-field") || null,
-                typed: typed, want: null, axis: a, applied: "field-only"
-              });
-            }
-            draw();
-          });
-        }
+        bindEndInput(midEl, "mid", function (typed) {
+          var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
+          if (pts.length !== 10) return;
+          ensureMidInView(typed);
+          if (typeof window !== "undefined" && window.codefigProbe) {
+            window.codefigProbe("curve:midInput", {
+              field: (field && field.name) || wrap.getAttribute("data-row-field") || null,
+              typed: typed, want: null, axis: axis(), applied: "field-only"
+            });
+          }
+          draw();
+        });
       }
-      if (fromCell && fromCell.parentNode !== anchorRow) {
-        fromCell.setAttribute("class", fromCell.getAttribute("class") + " config-ui-curve__anchor");
-        anchorRow.insertBefore(fromCell, anchorRow.firstChild);
+      if (fromCell && !anchorRow.contains(fromCell)) {
+        placeAdoptedAnchor(fromCell, "config-ui-curve__anchor", true);
       }
-      if (toCell && toCell.parentNode !== anchorRow) {
-        toCell.setAttribute("class", toCell.getAttribute("class") +
-          " config-ui-curve__anchor config-ui-curve__anchor--end");
-        anchorRow.appendChild(toCell);
+      if (toCell && !anchorRow.contains(toCell)) {
+        placeAdoptedAnchor(toCell, "config-ui-curve__anchor config-ui-curve__anchor--end");
       }
+      /**
+       * **Typing a start/end moves the grip too.** `axis()` already reads the fields on every draw —
+       * the missing piece was *calling* draw. After adoption the inputs live *inside* this wrap, and
+       * `refreshCurveControls(…, except)` skips the wrap that contains the typed field (so a growth
+       * readout is not overwritten mid-keystroke). The middle already had its own listener for that
+       * reason; the two ends did not, so the number changed and the chart stayed put.
+       */
+      bindEndInput(from, "from", function (typed) {
+        ensureValueInView(typed);
+        draw();
+      });
+      bindEndInput(to, "to", function (typed) {
+        ensureValueInView(typed);
+        draw();
+      });
+    }
+
+    /** One `input` listener per end cell, marked so redraws that re-adopt do not stack another. */
+    function bindEndInput(el, which, onTyped) {
+      if (!el || !el.addEventListener || el.getAttribute("data-curve-" + which + "-bound")) return;
+      el.setAttribute("data-curve-" + which + "-bound", "true");
+      el.addEventListener("input", function () {
+        if (!axis()) return;
+        var typed = parseFloat(String(el.value).replace(/[^\d.\-]/g, ""), 10);
+        if (!isFinite(typed)) return;
+        onTyped(typed);
+      });
     }
 
     /**
@@ -2111,6 +2120,30 @@
     function adoptable(el) {
       if (!el || typeof el.closest !== "function") return el;
       return el.closest(".config-ui-rows-cell") || el.closest(".config-ui-rows-group-part") || el;
+    }
+    /**
+     * **Put an adopted end under the chart without flattening its caption stack.**
+     *
+     * A `@rows` cell already nests a `.config-ui-rows-group-part` that owns `flex-direction: column`.
+     * Tagging the cell with `.config-ui-curve__anchor` is fine — the part inside still stacks.
+     *
+     * A field-scope `@group:` part *is* that stacker. Tagging *it* with `.config-ui-curve__anchor`
+     * loses the column to `.config-ui-curve__anchors .config-ui-curve__anchor { display: block }`
+     * (same specificity trap the control's own Middle box documents). Wrap the part instead, the
+     * way Middle already does: outer carries grid position, inner keeps the column.
+     */
+    function placeAdoptedAnchor(cell, className, asFirst) {
+      var node = cell;
+      if (!cell.classList.contains("config-ui-rows-cell")) {
+        var outer = document.createElement("div");
+        outer.className = className;
+        outer.appendChild(cell);
+        node = outer;
+      } else {
+        cell.setAttribute("class", cell.getAttribute("class") + " " + className);
+      }
+      if (asFirst) anchorRow.insertBefore(node, anchorRow.firstChild);
+      else anchorRow.appendChild(node);
     }
     function endValue(which) {
       var cell = endCell(which);
@@ -2354,16 +2387,20 @@
       return my + t * (1 - my);
     }
 
-    /** Drop a latched window that no longer contains the middle — otherwise a typed/dragged mid sits off-chart. */
-    function ensureMidInView(mid) {
-      if (mid === null || !isFinite(mid)) return;
+    /**
+     * Drop a latched window that no longer contains a typed/dragged anchor — otherwise the grip sits
+     * off-chart while the number field says the value is there.
+     */
+    function ensureValueInView(value) {
+      if (value === null || !isFinite(value)) return;
       var held = wrap.getAttribute("data-curve-view");
       if (!held) return;
       var pair = held.split(",");
       var lo = parseFloat(pair[0], 10), hi = parseFloat(pair[1], 10);
       if (!(isFinite(lo) && isFinite(hi))) return;
-      if (mid < lo || mid > hi) wrap.removeAttribute("data-curve-view");
+      if (value < lo || value > hi) wrap.removeAttribute("data-curve-view");
     }
+    function ensureMidInView(mid) { ensureValueInView(mid); }
 
     function toView(x, y) {
       var a = axis();
@@ -3472,11 +3509,16 @@
       // scale would fling the handle off the top.
       var lift = growthKey ? curveGrowthHeight(growthRatio()) : 1;
       /**
-       * **Middle handle: the field is the colour, `pts[5]` is only pacing.** Moving the corner on a
-       * two-segment axis writes the channel value under the pointer into `middle.*` and slides `pts[4]`
-       * horizontally; it does *not* rewrite `pts[5]` from the pointer's Y — that height is what
-       * `oklchRamp` divides by, and forcing it through a single-span `unitToValue` was exactly how a
-       * Hue middle of 200° collapsed back onto the ends on the chart.
+       * **Middle handle: two jobs depending on whether the channel has a real middle field.**
+       *
+       * With `ends:a..m..b` (Hue, Chroma, Saturation) the field *is* the colour at the corner and
+       * `pts[5]` is only pacing — write the channel value under the pointer into `middle.*`, slide
+       * `pts[4]` horizontally, leave `pts[5]` alone. Forcing Y through a single-span map was how a
+       * Hue middle of 200° collapsed back onto the ends.
+       *
+       * With `ends:a..b` only (Lightness) the control's own Middle box *is* the handle: typing
+       * already writes `pts[5]`, so the drag must too — otherwise the grip only slides sideways and
+       * the number box is the only way to change height (confirmed live on HSL and OKLCH).
        */
       if (dragging === 4 && pts.length === 10) {
         pts[4] = at.x;
@@ -3486,12 +3528,15 @@
             dragging: dragging, at: at, axis: axis(), middleField: true
           });
         }
-        pts = curveValueOf(pts);
         if (field.ends && field.ends.mid && at.value != null && isFinite(at.value)) {
           setEndValue("mid", at.value);
-        } else if (middleBox && at.value != null && isFinite(at.value)) {
-          middleBox.value = String(Math.round(at.value * 10) / 10);
+        } else {
+          pts[5] = lift > 0 ? at.y / lift : at.y;
+          if (middleBox && at.value != null && isFinite(at.value)) {
+            middleBox.value = String(Math.round(at.value * 10) / 10);
+          }
         }
+        pts = curveValueOf(pts);
         setPoints(pts, { live: true });
         return;
       }

@@ -21,6 +21,10 @@ a plain statement of the new default.
 
 ### Added
 
+- **Colors Run writes colour variables.** The panel strip is the preview; Run creates or updates
+  the group's COLOR tokens in place, skips aliases and non-opaque cells, reports orphans when the
+  step list shrinks, and records the set with the same stamp bracket Spacing and Radius use. The
+  hexes come from the same `colorsGenerateMode` path the panel already showed.
 - **A Hue, Saturation or Chroma curve can now peak above or dip below both of its own ends** — a
   Hue that reads the same at both ends with a real, different hue in the middle, for instance,
   which cannot be expressed any other way: `oklchLerpHue`/`oklchLerp` interpolate the two ends
@@ -127,6 +131,50 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Colors curve toolbar order is type → coordinates → add/remove middle**, matching how you think
+  about the shape before you change how many points it has.
+- **Add/remove middle uses the same secondary button chrome as the footer** — stroke darkens on
+  hover, background does not.
+- **A Lightness middle handle drags vertically again** (HSL and OKLCH). Typing already wrote the
+  curve's corner height; the drag only moved X and left the grip stuck on one height.
+- **The Middle marker above the swatch strip follows the curve bend**, not the list midpoint / seed
+  column.
+- **OKLCH Bright / Dark under the shared ladder stack caption over input** again. Adopting the
+  field-scope group part had tagged it with the curve-anchor class that forces `display: block` and
+  flattened the column.
+- **Swatch hex colours under changed steps:** file hex struck through in `--text-secondary`, new hex
+  in `--text-primary`. Split swatches and the change caption are unchanged — only the label styling moved.
+- **OKLCH preview strips show the same file/run comparison as HSL** — split swatch (file on top,
+  run below) and struck-through / new hex labels. Only the hex text styling changed, not the preview chrome.
+- **Chroma clamp notes (`C→…`) no longer print under each swatch** — the banner already summarises drift.
+- **A changed step's swatch and its hex label agree again.** The bar splits file-on-top / run-below
+  when a step would change, but the card under it had dropped the struck-through file hex — so
+  sampling the vivid top half never matched the single "now" code underneath.
+- **Switching Colors to OKLCH no longer greys the ramp out.** HSL and OKLCH keep separate hue /
+  colourfulness fields; a panel that lived in HSL often still had `chroma: 0` while saturation held the
+  real colour, so the shared lightness curve applied on top of empty chroma. Generation now borrows
+  OKLCH hue and chroma from the HSL anchors (or from the file's own ends) when chroma was never set —
+  only the lightness ladder changes on the switch.
+- **Switching HSL ↔ OKLCH keeps each mode's hue and colourfulness.** Untouched colour channels take
+  the file's per-step H and C onto the new lightness ladder — even when that ladder is the shared
+  OKLCH curve (not Original). Empty colour curves no longer re-interpolate from three anchors, which
+  is what turned Lime-3 blue and desaturated its neighbours on a model switch. Also stops treating
+  recognition-vs-hex quantization noise (~0.6° / ~0.0005 C on real Lime ends) as a colour edit, which
+  had marked every interior step "touched" and greyed the strip the same way.
+- **Typing Hue start / end (and any charted Bright / Dark) moves the grip on the chart.** The fields
+  already lived under the curve after adoption, so the shared refresh skipped that control on every
+  keystroke — the number changed and the path stayed put. Same listener the middle field already had.
+- **A successful Colors write no longer opens the InfoPanel.** Results still land there (and the
+  button still shows they exist); only error runs take over the window. Also fixes the shared UI
+  reading the message type instead of the script's severity, which had been opening the panel on
+  every `displayResults({ type: 'success' })`.
+- **Colors has no Preview only checkbox.** The strip already shows what would change; Run writes.
+- **Adding a Colors mode chip deep-clones the previous mode**, so the new block opens with real
+  hue / chroma / seed values instead of empty nested fields, and edits do not rewrite the neighbour.
+  When that mode is still on *Original*, the held file hexes are copied under the new name too —
+  otherwise the strip correctly had nothing to substitute and said "Original has no colours…".
+- **Hue start / middle / end stay editable.** They used to disable whenever both hue curves were still
+  on *Original* (the default empty state), which left the colour inputs greyed out on every fresh mode.
 - **A Hue / Saturation / Chroma middle above or below both ends finally agrees across chart, field,
   and swatch.** The chart used a single-span `bright → dark` map for every handle height; generation
   already used two spans (`bright → middle → dark`) with the middle *field* as a real colour. Typing

@@ -944,6 +944,27 @@ test('the middle box is the curve\'s middle handle, in the channel\'s units', ()
   assert.ok(Math.abs((2 + (96 - 2) * at) - 60) < 0.05, 'typing 60 put the anchor at ' + (2 + 94 * at));
 });
 
+test('dragging a Lightness middle handle moves it vertically (writes pts[5]), not only sideways', () => {
+  /**
+   * Lightness has no `ends.mid` field — the control's Middle box *is* the handle. Typing already
+   * wrote `pts[5]`; drag used to update only `pts[4]` and the box readout, so the grip refused to
+   * move up/down on HSL and OKLCH lightness charts.
+   */
+  const form = anchoredForm();
+  const svg = form.wrap.querySelector('.config-ui-curve__canvas');
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  const handle = form.wrap.querySelector('[data-curve-index="4"]');
+  const yBefore = form.points()[5];
+  svg.dispatch('pointerdown', { target: handle, clientX: 50, clientY: 50, pointerId: 1 });
+  svg.dispatch('pointermove', { clientX: 50, clientY: 20, pointerId: 1 });
+  svg.dispatch('pointerup', { clientX: 50, clientY: 20, pointerId: 1 });
+  const yAfter = form.points()[5];
+  assert.ok(Math.abs(yAfter - yBefore) > 0.05,
+    'middle handle Y must move with the pointer: was ' + yBefore + ', now ' + yAfter);
+  assert.ok(parseFloat(form.middle.value, 10) > parseFloat('34', 10),
+    'Middle box must follow the drag: ' + form.middle.value);
+});
+
 test('the middle box\'s caption and input stack, matching the adopted anchors either side of it', () => {
   // **Confirmed live, in a browser, by diffing the two DOM trees.** The adopted case (Hue/Saturation's
   // own middle) nests three levels deep: an outer cell, a `.config-ui-rows-group`, and — the thing
@@ -1315,11 +1336,19 @@ test('the three boxes and the three points are one set of values, both ways', ()
 });
 
 test('the coordinate field shares the preset row on a charted curve', () => {
-  // One thought — which shape, how many points, the shape as text — so one row. A scale editor keeps it
-  // under the plot, where the column is too narrow for three controls on a line.
+  // One thought — which shape, the shape as text, how many points — so one row, in that order.
+  // A scale editor keeps the field under the plot, where the column is too narrow for three on a line.
   const charted = axisForm();
   const head = charted.wrap.querySelector('.config-ui-curve__head');
   assert.ok(head.querySelector('.config-ui-curve__text'), 'the coordinates are not on the preset row');
+  const kids = [...head.children].map((el) => {
+    if (el.classList.contains('config-ui-curve__preset')) return 'preset';
+    if (el.classList.contains('config-ui-curve__text')) return 'text';
+    if (el.classList.contains('config-ui-curve__toggle')) return 'toggle';
+    return el.className;
+  });
+  assert.deepEqual(kids, ['preset', 'text', 'toggle'],
+    'order must be type → coordinates → add/remove middle, got ' + kids.join(', '));
 
   const scale = build({}, [0.4, 0, 0.7, 0.55]);
   const scaleHead = scale.wrap.querySelector('.config-ui-curve__head');
@@ -1974,6 +2003,42 @@ test('typing a Hue middle above both ends moves the handle there without rewriti
   assert.deepEqual(Array.from(pts), Array.from(ptsBefore),
     'typing the middle colour must not rewrite curve coordinates');
   assert.equal(midField.value, '200');
+});
+
+test('typing a start or end value moves that grip on the chart without rewriting the curve shape', () => {
+  /**
+   * Same seam the middle input already covered: after adoption the end fields live *inside* the
+   * curve wrap, so `refreshCurveControls(…, except)` skips the wrap that contains the keystroke.
+   * Without a dedicated listener the number changes and the chart stays put — reported live for
+   * Hue start / Hue end.
+   */
+  const form = dragSensitivityForm({
+    bright: 100, dark: 20, range: [0, 100],
+    curve: [0.333, 0.333, 0.667, 0.667]
+  });
+  const bright = form.container.querySelector('[data-row-field="a.bright"]');
+  const dark = form.container.querySelector('[data-row-field="a.dark"]');
+  const ptsBefore = form.points().slice();
+
+  const fromBefore = parseFloat(
+    form.container.querySelector('[data-curve-end="from"]').getAttribute('cy'));
+  bright.value = '40';
+  bright.dispatchEvent(new Event('input', { bubbles: true }));
+  const fromAfter = parseFloat(
+    form.container.querySelector('[data-curve-end="from"]').getAttribute('cy'));
+  assert.ok(fromAfter > fromBefore + 5,
+    'lowering Bright must move the start grip down the chart, before=' + fromBefore + ' after=' + fromAfter);
+  assert.deepEqual(Array.from(form.points()), Array.from(ptsBefore),
+    'typing an end must restretch the same shape, not rewrite coordinates');
+
+  const toBefore = parseFloat(
+    form.container.querySelector('[data-curve-end="to"]').getAttribute('cy'));
+  dark.value = '80';
+  dark.dispatchEvent(new Event('input', { bubbles: true }));
+  const toAfter = parseFloat(
+    form.container.querySelector('[data-curve-end="to"]').getAttribute('cy'));
+  assert.ok(toAfter < toBefore - 5,
+    'raising Dark must move the end grip up the chart, before=' + toBefore + ' after=' + toAfter);
 });
 
 test("getValues() keeps an overshoot curve's real height instead of clamping it back to [0,1]", () => {

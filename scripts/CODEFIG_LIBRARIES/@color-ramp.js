@@ -15,15 +15,16 @@
 // | Area | Functions |
 // |---|---|
 // | Config reading | `colorsParseSteps`, `colorsLightnessAnchors`, `colorsNumber`, `colorsMidIndex`, `colorsChannel` |
-// | Generation | `colorsGenerateMode` |
+// | Generation | `colorsGenerateMode`, `colorsBuildVariableMap` |
 // | Preview | `colorsPreviewHtml`, `colorsAnchorStrip`, `colorsCard`, `colorsExistingStrip` |
 //
 // `colorsGenerateMode` is the load-bearing one: the panel and the run both go through it, so they cannot
-// disagree about where a seed landed or what the gamut refused.
+// disagree about where a seed landed or what the gamut refused. `colorsBuildVariableMap` turns the same
+// rows into the COLOR map `processVariables` writes.
 // @DOC_END
 
 @import { bezierAt, bezierNormalise, bezierFromEase } from "@Bezier"
-@import { oklchFromHex, oklchHslFromHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare } from "@OKLCH"
+@import { oklchFromHex, oklchHslFromHex, oklchHslToHex, oklchToHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare } from "@OKLCH"
 
 // ========================================
 // GENERATION — pure, and shared by the preview and (later) the run
@@ -161,16 +162,37 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   var hueAnchors = colorsChannel(mode, 'hue', oklch);
   var chromaAnchors = colorsChannel(mode, 'chroma', oklch);
   /**
-   * **An explicit `[]` on a channel means Linear / Original — one segment, no middle point.** The UI
-   * draws that through `effectivePoints`; generation used to still read `middle.saturation: 0` left from
-   * an earlier explore and grey out the placement step. Only a key *absent* from the mode keeps the
-   * read-time three-anchor fallback (`oklchRamp`'s `hasMiddle` when `oklchCurveOf` is null).
+   * **Switching HSL → OKLCH must not grey the ramp out.** The models keep separate hue and
+   * colourfulness fields on purpose (different quantities), and a panel that lived in HSL often still
+   * has `chroma: 0` / `hue: 0` from the shipped defaults while `saturation` / `hslHue` hold the real
+   * colour. Generation used those zeros and produced a greyscale ladder; the shared lightness curve
+   * is the only thing that *should* change on the switch. Resolve colour from HSL anchors or from
+   * the file's own ends when OKLCH chroma was never set.
    */
-  if (hueKey in mode && hueCurve.length !== 10) {
-    hueAnchors = Object.assign({}, hueAnchors, { hasMiddle: false });
-  }
-  if (satKey in mode && chromaCurve.length !== 10) {
-    chromaAnchors = Object.assign({}, chromaAnchors, { hasMiddle: false });
+  if (oklch) {
+    var resolved = colorsResolveOklchColour(mode, held, steps, hueAnchors, chromaAnchors);
+    hueAnchors = resolved.hue;
+    chromaAnchors = resolved.chroma;
+    // Borrowed colour includes a real middle stop — keep it even when the channel curve is still
+    // the empty Linear/`[]` that would otherwise strip `hasMiddle` (that strip exists to ignore a
+    // leftover `middle.saturation: 0`, not a middle we just derived from HSL or the file).
+    if (resolved.borrowed) {
+      // leave hasMiddle as resolve set it
+    } else {
+      if (hueKey in mode && hueCurve.length !== 10) {
+        hueAnchors = Object.assign({}, hueAnchors, { hasMiddle: false });
+      }
+      if (satKey in mode && chromaCurve.length !== 10) {
+        chromaAnchors = Object.assign({}, chromaAnchors, { hasMiddle: false });
+      }
+    }
+  } else {
+    if (hueKey in mode && hueCurve.length !== 10) {
+      hueAnchors = Object.assign({}, hueAnchors, { hasMiddle: false });
+    }
+    if (satKey in mode && chromaCurve.length !== 10) {
+      chromaAnchors = Object.assign({}, chromaAnchors, { hasMiddle: false });
+    }
   }
 
   var rows = oklchRamp({
@@ -215,52 +237,63 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // file's real per-step value, same as before. Edited — a typed hue, a dragged end — they no longer
   // match, and the channel takes whatever the ramp generated from the edit. No flag survives between
   // calls; every load asks the file fresh.
+  // **Colour from the file, lightness from the ladder — and the two questions are independent.**
+  //
+  // This used to run only when Lightness itself was Original (`segments.original`). Switching HSL →
+  // OKLCH puts the shared Linear (or fitted) ladder in play, so that gate never opened: hue and
+  // chroma were re-interpolated from three anchors and the ramp drifted (Lime-3 → blue, neighbours
+  // desaturated) while the user asked for *only* the lightness curve to change. Untouched colour
+  // channels now take the file's per-step H and C onto whatever L the ladder produced; Original
+  // lightness still keeps the file's L (and the verbatim hex when both channels are untouched).
+  //
+  // **Touched is asked, not stored.** A channel whose curve is still `[]` and whose anchors were
+  // never filled (shipped zeros, or HSL-only edits) is not "edited" — comparing those zeros to the
+  // file would mark it touched and throw the file's colour away. Unset → take the file.
   var originalUnavailable = null;
-  if (segments.original) {
-    if (!held) {
-      originalUnavailable = 'missing';
-    } else if (held.length !== steps.length) {
-      originalUnavailable = 'mismatched';
-    } else {
-      var HUE_EPSILON = 0.05, CHROMA_EPSILON = 0.0005;
-      var brightReal = read(held[0]);
-      var darkReal = read(held[held.length - 1]);
-      // **The curve's own shape is a touched-ness signal too, not just the anchors.** Checking bright/
-      // dark alone missed the case Márton hit live: a mode whose anchors happen to still match the file
-      // (auto-import filled them and nobody retyped them) but whose *curve* has a real, deliberately-
-      // shaped overshoot — the anchors said "untouched" and the whole channel fell back to the file's
-      // verbatim hue, so the swatch never moved no matter how the curve was dragged. `hueCurve`/
-      // `chromaCurve` are `[]` only for a channel nobody has given a shape to at all (plan 36's lazy
-      // read); the moment a preset is picked or a handle is dragged, one of the two questions below
-      // must say so, even if the endpoints this particular drag happened to leave behind still agree
-      // with the file.
-      var hueTouched = !brightReal || !darkReal || hueCurve.length > 0 ||
-        Math.abs(hueAnchors.bright - brightReal.H) > HUE_EPSILON ||
-        Math.abs(hueAnchors.dark - darkReal.H) > HUE_EPSILON;
-      var chromaTouched = !brightReal || !darkReal || chromaCurve.length > 0 ||
-        Math.abs(chromaAnchors.bright - brightReal.C) > CHROMA_EPSILON ||
-        Math.abs(chromaAnchors.dark - darkReal.C) > CHROMA_EPSILON;
-      var toHex = oklch ? oklchToHex : oklchHslToHex;
-      for (var oi = 0; oi < rows.length; oi++) {
-        var wasHex = held[oi];
-        if (!wasHex) continue;
-        var seenIt = read(wasHex);
-        if (!seenIt) continue;
-        var row = rows[oi];
-        if (!hueTouched && !chromaTouched) {
-          // Neither channel differs from the file, so the file's own hex is used verbatim — a round trip
-          // through the colour maths would be numerically the same value but is not guaranteed to be the
-          // same *byte*, and "Original reproduces the file exactly" is the property a quiet load depends on.
-          rows[oi] = { step: row.step, hex: oklchNormaliseHex(wasHex), L: seenIt.L, C: seenIt.C,
-            H: seenIt.H, chroma: seenIt.C, clamped: false };
-          continue;
-        }
-        var useH = hueTouched ? row.H : seenIt.H;
-        var useC = chromaTouched ? row.C : seenIt.C;
-        var fit = toHex(seenIt.L, useC, useH);
-        rows[oi] = { step: row.step, hex: fit.hex, rgb: fit.rgb, L: seenIt.L, C: useC, H: useH,
-          clamped: fit.clamped, chroma: fit.chroma };
+  if (segments.original && !held) {
+    originalUnavailable = 'missing';
+  } else if (segments.original && held && held.length !== steps.length) {
+    originalUnavailable = 'mismatched';
+  } else if (held && held.length === steps.length) {
+    var brightReal = read(held[0]);
+    var darkReal = read(held[held.length - 1]);
+    // **Shared ladder (not Original): empty colour curve → file H/C.** Recognition noise on end
+    // anchors (~0.6° / ~0.0005 C between float RGB and 8-bit hex) must not mark every step
+    // touched when the ladder is shared across models — that was the OKLCH switch grey-out.
+    // **Original lightness only:** end anchors can still signal a typed hue/chroma edit (220° vs
+    // 96° is unmistakable); use generous end-only epsilons so quantization stays below threshold.
+    var hueUnset = oklch ? colorsOklchHueUnset(mode) : colorsHslHueUnset(mode);
+    var chromaUnset = oklch ? colorsOklchChromaUnset(mode) : colorsHslSaturationUnset(mode);
+    var hueTouched = !brightReal || !darkReal || hueCurve.length > 0 ||
+      (segments.original && !hueUnset && (
+        Math.abs(hueAnchors.bright - brightReal.H) > 2 ||
+        Math.abs(hueAnchors.dark - darkReal.H) > 2
+      ));
+    var chromaTouched = !brightReal || !darkReal || chromaCurve.length > 0 ||
+      (segments.original && !chromaUnset && (
+        Math.abs(chromaAnchors.bright - brightReal.C) > 0.001 ||
+        Math.abs(chromaAnchors.dark - darkReal.C) > 0.001
+      ));
+    var toHex = oklch ? oklchToHex : oklchHslToHex;
+    for (var oi = 0; oi < rows.length; oi++) {
+      var wasHex = held[oi];
+      if (!wasHex) continue;
+      var seenIt = read(wasHex);
+      if (!seenIt) continue;
+      var row = rows[oi];
+      // Full Original: both colour channels still match the file → keep the file's own bytes.
+      if (segments.original && !hueTouched && !chromaTouched) {
+        rows[oi] = { step: row.step, hex: oklchNormaliseHex(wasHex), L: seenIt.L, C: seenIt.C,
+          H: seenIt.H, chroma: seenIt.C, clamped: false };
+        continue;
       }
+      // Lightness from the ladder when a curve is in play; from the file when Lightness is Original.
+      var useL = segments.original ? seenIt.L : row.L;
+      var useH = hueTouched ? row.H : seenIt.H;
+      var useC = chromaTouched ? row.C : seenIt.C;
+      var fit = toHex(useL, useC, useH);
+      rows[oi] = { step: row.step, hex: fit.hex, rgb: fit.rgb, L: useL, C: useC, H: useH,
+        clamped: fit.clamped, chroma: fit.chroma };
     }
   }
 
@@ -486,6 +519,137 @@ function colorsAnchorMiss(hexes, steps, mid, oklch, shared, fits) {
 function colorsMidIndex(steps) {
   // Never negative: an empty list has no middle, and -1 is not an index anything can use.
   return Math.max(0, Math.floor(((steps ? steps.length : 0) - 1) / 2));
+}
+
+/**
+ * **OKLCH colour when the OKLCH fields were never filled.**
+ *
+ * Returns `{ hue, chroma, borrowed }` for `oklchRamp`. Preference:
+ *
+ *   1. HSL saturation / hslHue on the mode — what someone edited while the panel was on HSL
+ *   2. the file's own bright / middle / dark hexes — what Original was showing before the switch
+ *
+ * Lightness is deliberately not taken from either: the shared OKLCH ladder owns that on switch.
+ *
+ * **Ask the mode's own keys, not `colorsChannel`'s fallbacks.** A missing middle still answers
+ * `0.012` from the channel helper — enough to look "already set" and skip the borrow, which is
+ * how a switch from HSL greyscaled even when saturation was full.
+ */
+function colorsResolveOklchColour(mode, held, steps, hueAnchors, chromaAnchors) {
+  if (!colorsOklchChromaUnset(mode)) {
+    return { hue: hueAnchors, chroma: chromaAnchors, borrowed: false };
+  }
+
+  var fromHsl = colorsBorrowOklchColourFromHsl(mode);
+  if (fromHsl) return Object.assign({ borrowed: true }, fromHsl);
+
+  var fromFile = colorsBorrowOklchColourFromHexes(held, steps);
+  if (fromFile) return Object.assign({ borrowed: true }, fromFile);
+
+  return { hue: hueAnchors, chroma: chromaAnchors, borrowed: false };
+}
+
+/** True when every position's OKLCH chroma is absent or ~0 — the shipped / HSL-only default. */
+function colorsOklchChromaUnset(mode) {
+  if (!mode) return true;
+  var which = ['bright', 'middle', 'dark'];
+  for (var i = 0; i < which.length; i++) {
+    var held = mode[which[i]];
+    if (!held || typeof held !== 'object') continue;
+    if (held.chroma == null) continue;
+    if (Math.abs(colorsNumber(held.chroma, 0)) >= 0.001) return false;
+  }
+  return true;
+}
+
+/** True when every position's OKLCH hue is absent or ~0 — same "never filled" signal as chroma. */
+function colorsOklchHueUnset(mode) {
+  if (!mode) return true;
+  var which = ['bright', 'middle', 'dark'];
+  for (var i = 0; i < which.length; i++) {
+    var held = mode[which[i]];
+    if (!held || typeof held !== 'object') continue;
+    if (held.hue == null) continue;
+    // Hue 0 is a real red — only "every position is 0 or absent" means unset, and even then a
+    // chroma that was filled says the anchors were read. Unset = nothing non-zero written.
+    if (Math.abs(colorsNumber(held.hue, 0)) >= 0.05) return false;
+  }
+  return true;
+}
+
+/** HSL hue never filled (all absent / ~0). */
+function colorsHslHueUnset(mode) {
+  if (!mode) return true;
+  var which = ['bright', 'middle', 'dark'];
+  for (var i = 0; i < which.length; i++) {
+    var held = mode[which[i]];
+    if (!held || typeof held !== 'object') continue;
+    if (held.hslHue == null) continue;
+    if (Math.abs(colorsNumber(held.hslHue, 0)) >= 0.05) return false;
+  }
+  return true;
+}
+
+/** HSL saturation never filled (all absent / ~0). */
+function colorsHslSaturationUnset(mode) {
+  if (!mode) return true;
+  var which = ['bright', 'middle', 'dark'];
+  for (var i = 0; i < which.length; i++) {
+    var held = mode[which[i]];
+    if (!held || typeof held !== 'object') continue;
+    if (held.saturation == null) continue;
+    if (Math.abs(colorsNumber(held.saturation, 0)) >= 1) return false;
+  }
+  return true;
+}
+
+/** HSL anchors → OKLCH hue / chroma, via a real hex so the gamut and L interaction stay honest. */
+function colorsBorrowOklchColourFromHsl(mode) {
+  if (!mode) return null;
+  var maxSat = 0;
+  ['bright', 'middle', 'dark'].forEach(function (which) {
+    var held = mode[which] || {};
+    maxSat = Math.max(maxSat, Math.abs(colorsNumber(held.saturation, 0)));
+  });
+  // Below 1% is rounding on a near-grey, not a colour someone meant to keep.
+  if (maxSat < 1) return null;
+
+  function one(which, defaultL) {
+    var held = mode[which] || {};
+    var L = oklchClamp01(colorsNumber(held.lightness, defaultL) / 100);
+    var S = oklchClamp01(colorsNumber(held.saturation, 0) / 100);
+    var H = colorsNumber(held.hslHue, 0);
+    var made = oklchHslToHex(L, S, H);
+    var okl = made && made.hex ? oklchFromHex(made.hex) : null;
+    if (!okl) return { hue: H, chroma: 0 };
+    return { hue: okl.H, chroma: okl.C };
+  }
+
+  var bright = one('bright', 98);
+  var middle = one('middle', 50);
+  var dark = one('dark', 4);
+  var hasMiddle = mode.middle != null && mode.middle.saturation != null;
+  return {
+    hue: { bright: bright.hue, middle: middle.hue, dark: dark.hue, hasMiddle: hasMiddle },
+    chroma: { bright: bright.chroma, middle: middle.chroma, dark: dark.chroma, hasMiddle: hasMiddle }
+  };
+}
+
+/** File ends → OKLCH hue / chroma when the mode still has no colour of its own. */
+function colorsBorrowOklchColourFromHexes(held, steps) {
+  if (!held || held.length < 2) return null;
+  var mid = colorsMidIndex(steps);
+  if (mid < 0 || mid >= held.length) mid = Math.floor((held.length - 1) / 2);
+  var b = oklchFromHex(held[0]);
+  var d = oklchFromHex(held[held.length - 1]);
+  var m = oklchFromHex(held[mid]);
+  if (!b || !d) return null;
+  var maxC = Math.max(b.C, d.C, m ? m.C : 0);
+  if (maxC < 0.001) return null;
+  return {
+    hue: { bright: b.H, middle: m ? m.H : b.H, dark: d.H, hasMiddle: !!m },
+    chroma: { bright: b.C, middle: m ? m.C : b.C, dark: d.C, hasMiddle: !!m }
+  };
 }
 
 /** A mode's three anchors for one channel. `chroma` in OKLCH, saturation 0..1 in HSL. */
@@ -897,17 +1061,28 @@ function colorsChangeCaption(entry, made) {
 }
 
 /**
- * Bright at the first step, Dark at the last, Middle over the step the seed landed on.
+ * Bright at the first step, Dark at the last, Middle over the step the curve's middle bend lands on.
  *
- * **Middle always lands somewhere — nearest-by-lightness when nothing is named — whether or not the
- * curve actually bends there.** A plain two-anchor curve has no middle *point*, only the placement
- * a seed always gets, so marking it the same way as a genuine middle claims a shape that is not
- * there. Dimmed rather than dropped, the same treatment the curve editor's own middle box gets when
- * its curve has none: the label still says where the seed landed, just not as loudly.
+ * **When the curve has a real middle point** (`curve.length === 10`), the marker follows `curve[4]` —
+ * the unit X of that bend — so dragging the middle handle sideways moves the label with it. A plain
+ * two-anchor curve has no bend to mark; the column falls back to `placementIndex` (seed / auto mid)
+ * and is dimmed, same as the curve editor's own Middle box when the curve has none.
  */
 function colorsAnchorStrip(made, steps) {
   var last = steps.length - 1;
   var hasMiddle = Array.isArray(made.curve) && made.curve.length === 10;
+  var middleAt = made.placementIndex;
+  if (hasMiddle && last > 0) {
+    var x = made.curve[4];
+    if (typeof x === 'number' && isFinite(x)) {
+      middleAt = Math.round(Math.min(1, Math.max(0, x)) * last);
+    }
+  }
+  // Bright and Dark own the ends; keep Middle off those columns so two labels never share a cell.
+  if (last > 1) {
+    if (middleAt <= 0) middleAt = 1;
+    if (middleAt >= last) middleAt = last - 1;
+  }
   var out = ['<div class="color-ramp-preview-anchors">'];
   for (var i = 0; i < steps.length; i++) {
     if (i === 0) {
@@ -916,7 +1091,7 @@ function colorsAnchorStrip(made, steps) {
     } else if (i === last) {
       out.push('<span class="color-ramp-preview-anchor color-ramp-preview-anchor--end">Dark' +
         '<span class="color-ramp-preview-anchor-mark"></span></span>');
-    } else if (i === made.placementIndex) {
+    } else if (i === middleAt) {
       out.push('<span class="color-ramp-preview-anchor color-ramp-preview-anchor--middle" data-shown="' +
         (hasMiddle ? 'true' : 'false') + '">Middle' +
         '<span class="color-ramp-preview-anchor-mark"></span></span>');
@@ -952,23 +1127,25 @@ function colorsSwatch(hex, was) {
 
 /** One step's labels, in the row under the bar: the token, its hex, and anything worth saying about it. */
 /**
- * One swatch's caption: **the token, then the colour it will be.**
+ * One swatch's caption: **the token, then the colour(s) the swatch is showing.**
  *
- * It used to carry the old hex struck through, the new one under it, and the lightness delta between them —
- * three numbers per step, sixteen steps, on a strip whose job is to be looked at rather than read. The
- * banner above already says how many steps change and by how much, which is the summary anybody acts on;
- * the per-step arithmetic was there for debugging the recogniser and outlived it.
- *
- * `was` and `delta` are still parameters. The caller still knows both, `colorsChangeCaption` still counts
- * them, and a future *show me what changes* would want them back — dropping them from the signature would
- * mean recomputing what the caller already has.
+ * A changed step's swatch is split — file on top, run below (`colorsSwatch`) — so the label has to
+ * carry both hexes or the stripe and the text disagree by construction (confirmed live: sampling
+ * the vivid top half against the single "now" hex under it). Unchanged steps stay one hex. The
+ * banner still summarises how many differ.
  */
-function colorsCard(step, hex, seedLabel, pin, was, delta) {
+function colorsCard(step, hex, seedLabel, was) {
   var out = ['<span class="color-ramp-preview-card">'];
   out.push('<span class="color-ramp-preview-token">' + colorsEscapeHtml(step) + '</span>');
-  out.push('<span class="color-ramp-preview-hex">' + colorsEscapeHtml(hex) + '</span>');
+  if (was) {
+    out.push('<span class="color-ramp-preview-hex color-ramp-preview-hex--was">' +
+      colorsEscapeHtml(was) + '</span>');
+    out.push('<span class="color-ramp-preview-hex color-ramp-preview-hex--now">' +
+      colorsEscapeHtml(hex) + '</span>');
+  } else {
+    out.push('<span class="color-ramp-preview-hex">' + colorsEscapeHtml(hex) + '</span>');
+  }
   if (seedLabel) out.push('<span class="color-ramp-preview-seed">' + colorsEscapeHtml(seedLabel) + '</span>');
-  if (pin) out.push('<span class="color-ramp-preview-pin">' + colorsEscapeHtml(pin) + '</span>');
   out.push('</span>');
   return out.join('');
 }
@@ -1104,15 +1281,9 @@ function colorsStrip(entry, steps) {
   });
   var cards = made.rows.map(function (row, i) {
     var change = changedAt[i];
-    var delta = null;
-    // Printed, not computed: `colorsAlignment` measured it in the ramp's own model.
-    if (change && typeof change.dL === 'number' && Math.abs(change.dL) >= 0.0005) {
-      delta = 'ΔL ' + (change.dL > 0 ? '−' : '+') + colorsPct(Math.abs(change.dL));
-    }
     return colorsCard(row.step, row.hex,
       i === made.placementIndex && made.seed ? 'Seed color' : null,
-      row.clamped ? 'C→' + row.chroma.toFixed(3) : null,
-      change ? change.was : null, delta);
+      change ? change.was : null);
   });
 
   // **Nothing to say when nothing differs.** A freshly read mode is on the Original curve, so what this
@@ -1134,5 +1305,95 @@ function colorsStrip(entry, steps) {
   return out.join('');
 }
 
+/**
+ * Group prefix for variable names — same rule as `namePrefix` in `@Foundation`, kept local so this
+ * library stays free of the Figma API and of foundation imports.
+ */
+function colorsGroupPrefix(group) {
+  if (!group) return '';
+  return String(group).replace(/\/+$/, '') + '/';
+}
 
+/**
+ * **COLOR variable map for `processVariables`.** One entry per step; each mode's hex under that mode's
+ * name. Pure — same `colorsGenerateMode` path the preview uses, so a Run cannot invent colours the
+ * panel did not show.
+ *
+ * → `{ variables, names, steps, modeNames, alignment, clamped, invalid }`
+ */
+function colorsBuildVariableMap(config) {
+  var alignment = colorsAlignment(config || {});
+  var prefix = colorsGroupPrefix(config && config.group);
+  var variables = {};
+  var clamped = [];
+  var invalid = [];
+  var modeNames = [];
+
+  alignment.modes.forEach(function (entry) {
+    if (entry.name) modeNames.push(entry.name);
+  });
+
+  alignment.steps.forEach(function (step, stepIndex) {
+    var name = prefix + step;
+    var values = {};
+    alignment.modes.forEach(function (entry) {
+      if (!entry.name) return;
+      var row = entry.made && entry.made.rows && entry.made.rows[stepIndex];
+      if (!row || !row.hex) {
+        invalid.push({ name: name, mode: entry.name, reason: 'no-hex' });
+        return;
+      }
+      values[entry.name] = row.hex;
+    });
+    if (Object.keys(values).length > 0) {
+      variables[name] = { type: 'COLOR', values: values };
+    }
+  });
+
+  alignment.modes.forEach(function (entry) {
+    (entry.made && entry.made.clamped || []).forEach(function (c) {
+      clamped.push({ mode: entry.name, step: c.step, chroma: c.chroma });
+    });
+  });
+
+  return {
+    variables: variables,
+    names: Object.keys(variables),
+    steps: alignment.steps.slice(),
+    modeNames: modeNames,
+    alignment: alignment,
+    clamped: clamped,
+    invalid: invalid
+  };
+}
+
+/**
+ * Manifest config slice for a colors set — what `writeManifest` records beside the tokens.
+ * `existing` is panel-held file colour and must not land in the file; a leftover `previewOnly`
+ * from an older config is dropped the same way.
+ */
+function colorsManifestSlice(config) {
+  var c = config || {};
+  var slice = {
+    colorModel: c.colorModel || 'hsl',
+    curve: c.curve,
+    lightness: c.lightness,
+    steps: typeof c.steps === 'string' ? c.steps
+      : (Array.isArray(c.steps) ? c.steps.join(', ') : ''),
+    modes: Array.isArray(c.modes) ? c.modes.map(function (mode) {
+      var copy = {};
+      for (var key in mode) {
+        if (!Object.prototype.hasOwnProperty.call(mode, key)) continue;
+        if (key === 'existing') continue;
+        copy[key] = mode[key];
+      }
+      return copy;
+    }) : []
+  };
+  if (c.chromaCurve !== undefined) slice.chromaCurve = c.chromaCurve;
+  if (c.saturationCurve !== undefined) slice.saturationCurve = c.saturationCurve;
+  if (c.hueCurve !== undefined) slice.hueCurve = c.hueCurve;
+  if (c.hslHueCurve !== undefined) slice.hslHueCurve = c.hslHueCurve;
+  return slice;
+}
 

@@ -76,20 +76,29 @@
 //   lightness, and never overwritten with an opaque value.
 // - A **group where more than half the variables are non-opaque** is an alpha ramp, not a lightness ramp.
 //   The panel declines it in one line rather than itemising every skip.
+// - **A step leaving the token list is reported as an orphan and left alone.** Variables are never deleted
+//   or renamed because a step list shrank — update-in-place is the only regeneration that keeps bindings.
+//
+// ## Writing
+// The strip in the panel is the preview — edit and look. **Run** writes: colour variables updated in
+// place, stamped, and the set recorded — the same bracket Spacing and Radius use. Aliases, non-opaque
+// cells and orphans are reported, never removed.
 // @DOC_END
 
 // The Configuration tab redraws this as you type. Pure: it generates in memory and draws the same strips a
-// run would, so it cannot write anything.
+// run would write, and cannot change the file on its own.
 // @PREVIEW: colorsPreviewHtml
 
 // `@Color Ramp` and `@OKLCH` both, and `@Math Helpers` under them: **imports do not bring cross-script
 // dependencies.** `colorsGenerateMode` arrives here as text and its calls resolve in *this* context, so
 // everything it reaches for has to be named here too. `npm run validate` makes that a build error rather
 // than a ReferenceError swallowed by a caller's try/catch.
-@import { displayResults, createResult, createHtmlResult } from "@InfoPanel"
+@import { displayResults, createResult } from "@InfoPanel"
+@import { getOrCreateCollection, setupModes, processVariables, getVariable } from "@Variables"
+@import { namePrefix, resolveCollectionName, resolveGroup, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 @import { bezierAt, bezierNormalise, bezierFromEase, bezierWithMiddle, bezierWithoutMiddle, bezierParse, bezierFormat, bezierEaseName, bezierJoin, bezierSplit, bezierThrough, bezierFitRamp } from "@Bezier"
 @import { oklchFromHex, oklchHslFromHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare, oklchDistance, oklchToHex, oklchHslToHex } from "@OKLCH"
-@import { colorsPlaceholderSteps, colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel, colorsCurve, colorsFitCurve, colorsFitChromaCurve, colorsFitHueCurve, colorsBestAnchor, colorsAnchorFits, colorsSharedLadder, colorsLightnessOf, colorsGenerateMode, colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsChangeCaption, colorsStrip, colorsAlignment, colorsTolerance, colorsEscapeHtml, colorsPct } from "@Color Ramp"
+@import { colorsPlaceholderSteps, colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel, colorsCurve, colorsFitCurve, colorsFitChromaCurve, colorsFitHueCurve, colorsBestAnchor, colorsAnchorFits, colorsSharedLadder, colorsLightnessOf, colorsGenerateMode, colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsChangeCaption, colorsStrip, colorsAlignment, colorsTolerance, colorsEscapeHtml, colorsPct, colorsBuildVariableMap, colorsManifestSlice } from "@Color Ramp"
 
 // ========================================
 // CONFIG
@@ -141,7 +150,7 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 //     { type: "paragraph", attachTo: "previous", text: "The same curve editor a mode has, at collection scope: the ladder is shared, so the curve belongs to the collection rather than to one of its modes — **one curve for every mode**, which is what makes the modes match in greyscale." },
 //     { type: "paragraph", attachTo: "previous", text: "**Nothing below General until there are tokens.** Choosing a collection sets a read going — modes are fetched, blocks are added, the block is rewritten — and every one of those rebuilds the form. With the mode settings on screen that reads as flicker and a jumping layout, over a panel that cannot say anything useful yet: a collection with no token list has no ramp to show. Naming the tokens is the point at which there is something to draw, so it is the point at which the rest appears." },
 //     { type: "paragraph", attachTo: "next", text: "**A new scale starts Linear, not Original.** *Original* means \"the ramp already in the file\", so on a collection that has no ramp yet it names nothing — an empty editor and a preview with no line in it. Linear is the honest starting point: an even ladder between the two ends, which is a thing you can see and then bend. A read replaces it with the curve fitted to what the file actually holds." },
-//     { key: "curve", type: "curve", label: "Curve", allowOriginal: true,
+//     { key: "curve", type: "curve", label: "Shared lightness", allowOriginal: true,
 //       ramp: "oklch($% 0 0)", ends: "lightness.bright..lightness.dark", range: [0, 100],
 //       showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" },
 //       helper: "One curve, bright to dark. Drag a handle, pick a preset, or paste coordinates. Add middle point bends the two halves differently — which is what a real neutral ramp does — and that anchor is the middle colour's lightness and its step." },
@@ -176,13 +185,6 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 //             showWhen: { colorModel: "hsl" },
 //             helper: "The same, for HSL — a different angle from OKLCH's, so a different curve." },
 //           { type: "anchors", positions: ["bright", "middle", "dark"],
-//             // Both, not just OKLCH's: whichever model is not the active one sits hidden and
-//             // untouched, so it never has anything but "original" — checking only `hueCurve` read
-//             // that permanent "original" as the answer in HSL mode regardless of what `hslHueCurve`
-//             // actually held, and disabled Hue's start and end no matter what preset was picked.
-//             // AND-semantics on multiple keys (`conditionsHold`) makes "both original" mean "the
-//             // one that's actually showing has no curve", which is the question this was asking.
-//             disabledWhen: { hueCurve: "original", hslHueCurve: "original" },
 //             fields: [
 //               { key: "hue", showWhen: { colorModel: "oklch" },
 //                 labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },
@@ -242,26 +244,231 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 // ========================================
 // EXECUTION
 //
-// **Nothing is written yet, on purpose.** The panel — config, recognition and both preview strips — is
-// phase 3; the write path is phase 4 and is gated on a dry run being reviewed first. A Run that half-wrote a
-// colour set would be worse than one that refuses, because the thing it would be half-writing is a
-// collection other files subscribe to.
+// Run always writes. The panel strip is the preview; this path is align → processVariables →
+// writeManifest → stamp, same as Spacing/Radius.
 // ========================================
 
-(function () {
-  var parsed = colorsParseSteps(colorsConfigData.steps);
-  var results = [createResult(
-    'The generator is not built yet, so nothing was written.',
-    'The panel, the preview and reading an existing collection all work. The write path lands after its ' +
-    'dry run has been reviewed.',
-    'info'
-  )];
+/**
+ * Drop aliased and non-opaque mode cells from the write map. Those cells are reported, never
+ * overwritten — an alias is a deliberate link, and an alpha value is not a lightness step.
+ */
+async function colorsApplyWriteGuards(collection, built) {
+  var skippedAlias = [];
+  var skippedAlpha = [];
+  if (!collection) {
+    return { variables: built.variables, skippedAlias: skippedAlias, skippedAlpha: skippedAlpha };
+  }
+  var variables = {};
+  var names = Object.keys(built.variables);
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i];
+    var entry = built.variables[name];
+    var existing = await getVariable(collection, name);
+    var values = {};
+    var modeNames = Object.keys(entry.values || {});
+    for (var m = 0; m < modeNames.length; m++) {
+      var modeName = modeNames[m];
+      var hex = entry.values[modeName];
+      if (!existing) {
+        values[modeName] = hex;
+        continue;
+      }
+      var mode = collection.modes.filter(function (mm) { return mm.name === modeName; })[0];
+      if (!mode) {
+        values[modeName] = hex;
+        continue;
+      }
+      var cell = existing.valuesByMode[mode.modeId];
+      if (cell && cell.type === 'VARIABLE_ALIAS') {
+        skippedAlias.push(name + ' · ' + modeName);
+        continue;
+      }
+      if (cell && typeof cell.a === 'number' && cell.a < 1) {
+        skippedAlpha.push(name + ' · ' + modeName);
+        continue;
+      }
+      values[modeName] = hex;
+    }
+    if (Object.keys(values).length > 0) {
+      variables[name] = { type: 'COLOR', values: values };
+    }
+  }
+  return { variables: variables, skippedAlias: skippedAlias, skippedAlpha: skippedAlpha };
+}
+
+/** COLOR variables under the group whose step is not in the token list — reported, never removed. */
+async function colorsFindOrphans(collection, group, steps) {
+  var orphans = [];
+  if (!collection) return orphans;
+  var prefix = namePrefix(group);
+  var wanted = {};
+  (steps || []).forEach(function (step) { wanted[prefix + step] = true; });
+  var ids = collection.variableIds || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    if (!variable || variable.resolvedType !== 'COLOR') continue;
+    if (variable.name.indexOf(prefix) !== 0) continue;
+    var tail = variable.name.slice(prefix.length);
+    if (tail.indexOf('/') !== -1) continue;
+    if (wanted[variable.name]) continue;
+    orphans.push(variable.name);
+  }
+  return orphans;
+}
+
+function colorsPlanLines(built, guards, orphans) {
+  var results = [];
+  var names = Object.keys(guards.variables);
   results.push(createResult(
-    parsed.steps.length + ' steps, ' + (colorsConfigData.modes || []).length + ' modes, model ' +
-    (colorsConfigData.colorModel || 'oklch'),
-    'Collection: ' + (colorsConfigData.collectionName || '—') +
-    (colorsConfigData.group ? ' / ' + colorsConfigData.group : ''),
+    names.length + ' colour variables · ' + built.modeNames.length + ' modes',
+    'Writing: ' + (names.length ? names.join(', ') : '—'),
     'info'
   ));
-  displayResults({ title: 'Colors', results: results, type: 'info', showFilters: false });
-})();
+  if (guards.skippedAlias.length) {
+    results.push(createResult(
+      guards.skippedAlias.length + ' aliased cell' + (guards.skippedAlias.length === 1 ? '' : 's') + ' left alone',
+      guards.skippedAlias.join(', '),
+      'warning'
+    ));
+  }
+  if (guards.skippedAlpha.length) {
+    results.push(createResult(
+      guards.skippedAlpha.length + ' non-opaque cell' + (guards.skippedAlpha.length === 1 ? '' : 's') + ' left alone',
+      guards.skippedAlpha.join(', '),
+      'warning'
+    ));
+  }
+  if (orphans.length) {
+    results.push(createResult(
+      orphans.length + ' orphan' + (orphans.length === 1 ? '' : 's') + ' not in the token list — left in the file',
+      orphans.join(', '),
+      'warning'
+    ));
+  }
+  if (built.clamped.length) {
+    results.push(createResult(
+      built.clamped.length + ' chroma reduction' + (built.clamped.length === 1 ? '' : 's') + ' to stay in sRGB',
+      built.clamped.map(function (c) {
+        return (c.mode || '') + ' / ' + c.step + (c.chroma != null ? ' (C→' + c.chroma + ')' : '');
+      }).join(', '),
+      'info'
+    ));
+  }
+  if (built.invalid.length) {
+    results.push(createResult(
+      built.invalid.length + ' step' + (built.invalid.length === 1 ? '' : 's') + ' had no colour to write',
+      built.invalid.map(function (row) { return row.name + ' · ' + row.mode; }).join(', '),
+      'warning'
+    ));
+  }
+  return results;
+}
+
+async function runColors(config) {
+  var data = config || {};
+  var parsed = colorsParseSteps(data.steps);
+  var results = [];
+
+  if (!data.collectionName || !String(data.collectionName).trim()) {
+    displayResults({
+      title: 'Colors',
+      results: [createResult('Choose a collection', 'Nothing to write without one.', 'error')],
+      type: 'error',
+      showFilters: false
+    });
+    return;
+  }
+  if (!parsed.steps.length) {
+    displayResults({
+      title: 'Colors',
+      results: [createResult('Add colour tokens', 'Name the steps lightest to darkest, then run again.', 'error')],
+      type: 'error',
+      showFilters: false
+    });
+    return;
+  }
+
+  var collectionName = resolveCollectionName({ config: data, collectionName: data.collectionName });
+  var groupName = resolveGroup({ config: data, group: data.group });
+  var built = colorsBuildVariableMap(data);
+  if (!built.modeNames.length) {
+    displayResults({
+      title: 'Colors',
+      results: [createResult('Add at least one mode', 'The chips under Collection modes are the mode list.', 'error')],
+      type: 'error',
+      showFilters: false
+    });
+    return;
+  }
+
+  console.log('=== COLORS ===');
+  console.log('Collection: ' + collectionName + (groupName ? ' (group: ' + groupName + ')' : ''));
+
+  var collection = await getOrCreateCollection(collectionName);
+  setupModes(collection, built.modeNames);
+
+  var guards = await colorsApplyWriteGuards(collection, built);
+  var orphans = await colorsFindOrphans(collection, groupName, built.steps);
+
+  var names = Object.keys(guards.variables);
+  var setId = (await findFoundationSet(collection, 'colors', groupName)).id || '';
+  var aligned = await alignStampedTokens(collection, 'colors', groupName, names, setId);
+  describeStampAlignment(aligned).forEach(function (line) { console.log(line); });
+
+  var stats = await processVariables(collection, guards.variables, data, built.modeNames);
+
+  var manifest = null;
+  try {
+    manifest = writeManifest(collection, {
+      id: setId,
+      domain: 'colors',
+      group: groupName,
+      modes: built.modeNames.slice(),
+      modeIds: foundationModeIds(collection, built.modeNames),
+      tokens: built.steps.slice(),
+      config: colorsManifestSlice(data)
+    });
+    if (manifest.ok) {
+      console.log('Recorded this set: ' + manifest.key + ' (' + manifest.bytes + ' characters)');
+    } else {
+      console.warn('Variables were written. The set could not be recorded: ' +
+        ((manifest.warnings[0] && manifest.warnings[0].message) || ''));
+    }
+  } catch (e) {
+    console.warn('Variables were written. The set could not be recorded: ' +
+      (e && e.message ? e.message : e));
+  }
+
+  var stamped = await stampGeneratedTokens(
+    collection, 'colors', groupName, names,
+    (manifest && manifest.manifest ? manifest.manifest.id : setId)
+  );
+  (stamped.warnings || []).forEach(function (w) { console.warn(w.message); });
+
+  results = colorsPlanLines(built, guards, orphans);
+  results.push(createResult(
+    stats.created + ' created, ' + stats.updated + ' updated, ' + stats.skipped + ' skipped',
+    'Collection: ' + collection.name +
+      (manifest && manifest.ok ? '; set recorded' : ''),
+    'success'
+  ));
+  displayResults({
+    title: 'Colors',
+    results: results,
+    type: 'success',
+    showFilters: false,
+    autoOpen: false
+  });
+  figma.notify('✅ Colors: ' + stats.created + ' created, ' + stats.updated + ' updated');
+}
+
+runColors(colorsConfigData).catch(function (error) {
+  console.error('Error:', error);
+  figma.notify('❌ Error: ' + (error && error.message ? error.message : error));
+  displayResults({
+    title: 'Colors',
+    results: [createResult('Colors failed', String(error && error.message ? error.message : error), 'error')],
+    type: 'error',
+    showFilters: false
+  });
+});

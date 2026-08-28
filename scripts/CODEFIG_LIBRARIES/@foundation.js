@@ -1904,7 +1904,7 @@ function foundationSliceKeys(domain) {
   // warns about its own untouched config the first time anyone runs it, which is how people learn that
   // warnings are noise.
   if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
-    'lower', 'upper', 'lightness']);
+    'lower', 'upper', 'lightness', 'modes']);
   return keys;
 }
 
@@ -1922,7 +1922,7 @@ function foundationDomainKeys(domain) {
   }
   if (domain === 'grid') return common.concat(['extensionColumns']);
   if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
-    'lower', 'upper', 'lightness']);
+    'lower', 'upper', 'lightness', 'modes']);
   return common;
 }
 
@@ -2422,6 +2422,10 @@ function buildDomainSlice(inner, domain, translations, warnings) {
   if (domain === 'colors') {
     if (inner.light !== undefined) slice.light = foundationClone(inner.light);
     if (inner.dark !== undefined) slice.dark = foundationClone(inner.dark);
+    if (inner.colorModel !== undefined) slice.colorModel = inner.colorModel;
+    if (inner.curve !== undefined) slice.curve = foundationClone(inner.curve);
+    if (inner.lightness !== undefined) slice.lightness = foundationClone(inner.lightness);
+    if (Array.isArray(inner.modes)) slice.modes = foundationClone(inner.modes);
   }
   if (domain === 'grid') {
     if (typeof inner.extensionColumns === 'number') slice.extensionColumns = inner.extensionColumns;
@@ -2620,6 +2624,12 @@ function toDomainConfig(v1, domain, options) {
   }
   if (config.light !== undefined) out.light = foundationClone(config.light);
   if (config.dark !== undefined) out.dark = foundationClone(config.dark);
+  if (config.colorModel !== undefined) out.colorModel = config.colorModel;
+  if (config.curve !== undefined) out.curve = foundationClone(config.curve);
+  if (config.lightness !== undefined) out.lightness = foundationClone(config.lightness);
+  if (Array.isArray(config.modes) && config.modes.length > 0 && domain === 'colors') {
+    out.modes = foundationClone(config.modes);
+  }
   if (config.extensionColumns !== undefined) out.extensionColumns = config.extensionColumns;
   if (typeof v1.lineGrid === 'number') out.lineGrid = v1.lineGrid;
 

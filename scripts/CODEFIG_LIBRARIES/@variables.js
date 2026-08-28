@@ -65,6 +65,16 @@ function variableValueEquals(existing, modeId, newValue) {
   if (typeof newValue === 'number' && typeof current === 'number') return current === newValue;
   if (typeof newValue === 'string' && typeof current === 'string') return current === newValue;
   if (typeof newValue === 'boolean' && typeof current === 'boolean') return current === newValue;
+  // COLOR writes pass `{ r, g, b }` (0..1). Without this every run rewrote every swatch even when
+  // the hex had not moved — Colors' update-in-place path depends on the skip.
+  if (newValue && typeof newValue === 'object' && typeof current === 'object' &&
+      current.type !== 'VARIABLE_ALIAS' &&
+      typeof newValue.r === 'number' && typeof current.r === 'number') {
+    var eps = 1 / 512;
+    return Math.abs(current.r - newValue.r) < eps &&
+      Math.abs(current.g - newValue.g) < eps &&
+      Math.abs(current.b - newValue.b) < eps;
+  }
   return false;
 }
 

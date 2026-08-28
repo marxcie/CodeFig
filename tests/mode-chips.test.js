@@ -150,6 +150,62 @@ test('the + adds a mode whose settings are the neighbour it was added beside', (
   assert.deepEqual(intents.removals, []);
 });
 
+test('adding a chip deep-clones the last mode so nested colour fields stay filled and independent', () => {
+  const entries = [{
+    name: 'mode-1',
+    bright: { hue: 100, hslHue: 100, chroma: 0.12, saturation: 80, lightness: 97 },
+    middle: { hue: 110, hslHue: 110, chroma: 0.14, saturation: 70 },
+    dark: { hue: 99, hslHue: 99, chroma: 0.05, saturation: 40, lightness: 8 },
+    seed: { hex: '#71717A', placement: '500', lock: false },
+    hueCurve: [],
+    hslHueCurve: [0.37, 0, 0.63, 1],
+  }, {
+    name: 'mode-2',
+    bright: { hue: 200, hslHue: 200, chroma: 0.08, saturation: 40, lightness: 95 },
+    middle: { hue: 210, hslHue: 210, chroma: 0.1, saturation: 50 },
+    dark: { hue: 190, hslHue: 190, chroma: 0.03, saturation: 20, lightness: 10 },
+    seed: { hex: '#AABBCC', placement: '400', lock: true },
+    hueCurve: [],
+    hslHueCurve: [],
+  }];
+  const next = P.applyChipOp(entries, [null, null], { op: 'add', name: 'mode-3' });
+  assert.equal(next.entries.length, 3);
+  assert.equal(next.entries[2].name, 'mode-3');
+  assert.deepEqual(next.entries[2].bright, entries[1].bright);
+  assert.deepEqual(next.entries[2].seed, entries[1].seed);
+  assert.notEqual(next.entries[2].bright, entries[1].bright, 'nested bright must be a clone');
+  assert.notEqual(next.entries[2].seed, entries[1].seed, 'nested seed must be a clone');
+  next.entries[2].bright.hue = 1;
+  next.entries[2].seed.hex = '#000000';
+  assert.equal(entries[1].bright.hue, 200, 'editing the new mode must not mutate mode-2');
+  assert.equal(entries[1].seed.hex, '#AABBCC');
+});
+
+test('held file colours follow a chip add/rename/remove so Original can paint the new mode', () => {
+  // Deep-cloning the mode copies `curve: []` (Original). Without hexes under the new name the
+  // strip has nothing to substitute — the bug Lime-4 showed after adding from Lime-3.
+  const held = {
+    'Lime-3': ['#F0FFF4', '#001A06'],
+    'Mode Lime-3': ['#AAAAAA'],
+  };
+  const afterAdd = P.copyModeKeyedArrays(held, 'Lime-3', 'Lime-4');
+  assert.deepEqual(afterAdd['Lime-4'], ['#F0FFF4', '#001A06']);
+  assert.notEqual(afterAdd['Lime-4'], held['Lime-3'], 'copied array must be independent');
+  afterAdd['Lime-4'][0] = '#000000';
+  assert.equal(held['Lime-3'][0], '#F0FFF4');
+
+  const afterRename = P.renameModeKeyedEntry(afterAdd, 'Lime-4', 'Lime Four');
+  assert.equal(afterRename['Lime-4'], undefined);
+  assert.deepEqual(afterRename['Lime Four'], ['#000000', '#001A06']);
+
+  const afterDrop = P.dropModeKeyedEntry(afterRename, 'lime four');
+  assert.equal(afterDrop['Lime Four'], undefined);
+  assert.deepEqual(afterDrop['Lime-3'], ['#F0FFF4', '#001A06']);
+
+  assert.equal(P.copyModeKeyedArrays(held, 'missing', 'x'), held, 'unknown source leaves the map alone');
+  assert.equal(P.dropModeKeyedEntry({ only: ['#fff'] }, 'only'), null, 'last key clears the map');
+});
+
 test('a name the chips already hold is refused rather than duplicated', () => {
   const { chips } = renderForm();
   chips.querySelector('.config-ui-chip-add').dispatch('click');

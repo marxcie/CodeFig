@@ -803,6 +803,7 @@
           addedModeNames = addedModeNames.map(function (name) {
             return sameChipName(name, op.from) ? op.to : name;
           });
+          renameHeldFileColors(op.from, op.to);
         }
         // A mode added and then removed again is simply gone: it has no id, so there is no removal for a
         // run to carry out, and leaving it claimed would keep re-inserting a name nothing holds.
@@ -810,6 +811,17 @@
           addedModeNames = addedModeNames.filter(function (name) {
             return !sameChipName(name, op.name);
           });
+        }
+        if (op.op === 'remove') {
+          dropHeldFileColors(op.name);
+        }
+        // **Original needs the file's hexes under the new name.** Deep-cloning the mode copies
+        // `curve: []`, which still means Original — without this, the new strip has no colours to
+        // show. Template is the entry that was last before the push (now second-to-last).
+        if (next.added && next.entries.length >= 2) {
+          var templateName = next.entries[next.entries.length - 2] &&
+            next.entries[next.entries.length - 2].name;
+          copyHeldFileColors(templateName, next.added);
         }
 
         const values = {};
@@ -2567,6 +2579,45 @@
       }
 
       /**
+       * **Held file hexes follow a chip the way the mode block does.** `config.existing` is never in
+       * the saved text — it is re-derived from the collection on every read and keyed by mode name.
+       * Adding a chip deep-clones the previous mode's settings (including `curve: []` = Original), but
+       * without a matching `existing[newName]` the new strip has nothing to substitute and shows
+       * "Original has no colours…". The map edits live in `CodeFigConfigUI` so the rule has one
+       * definition; these only write the panel's held copy.
+       */
+      function rewriteHeldFileColors(mutator) {
+        if (!fileColorValues.byMode || typeof mutator !== 'function') return;
+        var next = mutator(fileColorValues.byMode);
+        if (next === fileColorValues.byMode) return;
+        fileColorValues = { address: fileColorValues.address, byMode: next };
+      }
+
+      function copyHeldFileColors(fromName, toName) {
+        var api = window.CodeFigConfigUI;
+        if (!api || typeof api.copyModeKeyedArrays !== 'function') return;
+        rewriteHeldFileColors(function (byMode) {
+          return api.copyModeKeyedArrays(byMode, fromName, toName);
+        });
+      }
+
+      function renameHeldFileColors(fromName, toName) {
+        var api = window.CodeFigConfigUI;
+        if (!api || typeof api.renameModeKeyedEntry !== 'function') return;
+        rewriteHeldFileColors(function (byMode) {
+          return api.renameModeKeyedEntry(byMode, fromName, toName);
+        });
+      }
+
+      function dropHeldFileColors(name) {
+        var api = window.CodeFigConfigUI;
+        if (!api || typeof api.dropModeKeyedEntry !== 'function') return;
+        rewriteHeldFileColors(function (byMode) {
+          return api.dropModeKeyedEntry(byMode, name);
+        });
+      }
+
+      /**
        * **The colours the bar beside each chart is drawn from**, keyed the way the renderer addresses its
        * curve controls — the same shape as `_curveBaselines`, published through the same call.
        *
@@ -2682,8 +2733,21 @@
         // under — pairs with the `preview:result` probe below to catch a stale answer landing after
         // a newer request, and with the curve editor's own probes to catch a request built from a
         // config that had not caught up with the handle yet.
+        // `existing` keys + lengths: without them Original / empty colour curves re-interpolate from
+        // end anchors and the strip desaturates. Logged so a missing or renamed mode is visible next
+        // to the hex sample in `preview:result`.
+        var existingProbe = null;
+        if (forPreview && forPreview.existing) {
+          existingProbe = {};
+          Object.keys(forPreview.existing).forEach(function (k) {
+            var arr = forPreview.existing[k];
+            existingProbe[k] = Array.isArray(arr) ? arr.length : -1;
+          });
+        }
         window.codefigProbe('preview:request', { seq: seq, modes: forPreview && forPreview.modes,
-          colorModel: forPreview && forPreview.colorModel });
+          colorModel: forPreview && forPreview.colorModel,
+          curve: forPreview && forPreview.curve,
+          existing: existingProbe });
         const started = runSilentSnippet(
           buildPreviewSnippet(currentScript.code || '', fn, forPreview, configPreviewDomain(), seq));
         // Busy is not a failure: another silent run is in flight and the next edit will ask again.
@@ -3950,9 +4014,13 @@
         // shows there is something in it — a result you have to go and look at is a different thing
         // from no result. Only `false` counts, so every existing caller keeps the old behaviour.
         const autoOpen = data.autoOpen !== false;
+        // `@InfoPanel`'s displayResults sends the script severity as `severity`; `type` on the
+        // message is always `INFO_PANEL_RESULTS`. Reading `type` here made every successful run
+        // look non-success and auto-open the panel.
+        const severity = data.severity || (type === 'INFO_PANEL_RESULTS' ? 'info' : type);
 
         // Auto-open the InfoPanel when results are received (only for errors, not for success)
-        if (autoOpen && !infoPanel.classList.contains('open') && !autoClose && type !== 'success') {
+        if (autoOpen && !infoPanel.classList.contains('open') && !autoClose && severity !== 'success') {
           console.log('UI: Auto-opening InfoPanel for results');
           toggleInfoPanel();
         }
@@ -3992,9 +4060,9 @@
         
         // Display results (grouped or flat)
         if (grouping) {
-          displayGroupedResults(results, grouping, type);
+          displayGroupedResults(results, grouping, severity);
         } else {
-          displayFlatResults(results, type);
+          displayFlatResults(results, severity);
         }
         
         // Auto-close panel after showing success message (only if panel was already open)

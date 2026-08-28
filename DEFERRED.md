@@ -173,22 +173,19 @@ Linux build, so a self-hosted Mac, and it breaks on Figma updates).
 
 ---
 
-## 8. `colors.js` reads and previews; it does not write
+## 8. Colors write path is built; P3 and a few panel polish items remain
 
-Supersedes "has never been verified against a real file", which is no longer true — the panel was
-driven against `color - neutral`, `color - moss` and `colors / other` in a real file, and reading,
-recognition, the banner and both preview strips were verified there.
+Supersedes "has never been verified against a real file" and the old "reads and previews; it does not
+write" entry. The panel was driven against real collections, and **Run now writes** colour variables
+(the strip is the preview; there is no separate Preview only gate), with the foundation stamp bracket,
+alias/alpha skips, and orphan reporting.
 
-**What is left.** The generator. Run reports that nothing was written and why. Márton's gate:
-*"Do not write to Figma until I have seen a dry run."* So the order is dry run → review → write,
-and the write path carries three rules that have to hold before it ships: **never delete** (a
-shrinking step list reports orphans and leaves them alone), **never rename** (a step leaving the
-list is not permission to rename the variable that held it), and **never write to an alias**.
-
-**One smaller gap found while building the panel**, cosmetic and in the shared config UI rather than
-in Colors: **a reprinted row normalises how a number is spelled.** `0.010` comes back as `0.01`. The
-value is identical and only the row being rewritten is affected, but someone who typed the trailing
-zero deliberately sees it vanish. (The other one, no per-column `@placeholder`, is now built.)
+**What is left.**
+- **Live review of the dry-run plan** against `color - neutral`, `color - moss` and `colors / other`
+  before treating the write path as ship-ready (plan 25's gate).
+- **Never rename** when a step leaves the list is already how orphans work; confirm wording in results
+  is clear enough when someone expects a tidy.
+- Display P3 (below), and the cosmetic panel items that follow.
 
 **Still prototype-only**, drawn in `colors-target.html` and not in the panel:
 
@@ -941,18 +938,13 @@ other two, and have `parseManifest` normalise anything older on the way in. Chea
 
 ---
 
-## Colors must bracket its write with the stamp passes when the write path lands
+## Colors write brackets with the stamp passes
 
-**What.** Colors generates nothing yet — its run block says so explicitly — so it is the one Design System
-Foundations domain that does not stamp. When the write path is built it must do what the other four do:
-resolve the set through `findFoundationSet`, call `alignStampedTokens` **before** `processVariables`, write
-the manifest, then call `stampGeneratedTokens` with the id the manifest minted.
+**What.** Done — `colors.js` `runColors` calls `findFoundationSet` → `alignStampedTokens` →
+`processVariables` → `writeManifest` → `stampGeneratedTokens`, same order as `runLinearRamp`.
 
-**Why it is here rather than done.** There is no code to add it to.
-
-**Fix.** Copy the six lines from `runLinearRamp`. The ordering is the part that matters and the part that
-is easy to get wrong: align must precede the write, and stamping must follow the manifest, because the
-manifest is what mints the set id.
+**Left here only as a pointer.** Do not "simplify" by stamping before the manifest: the manifest mints
+the set id the stamps must carry.
 
 ---
 
