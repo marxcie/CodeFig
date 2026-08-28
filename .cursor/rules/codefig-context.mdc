@@ -1,0 +1,45 @@
+---
+description: Where CodeFig's state lives. Read before planning or changing anything.
+alwaysApply: true
+---
+
+# Orient here first
+
+- `ROADMAP.md` — where the project is: done, in flight, next, parked, and why. Read this first.
+- `CLAUDE.md` — how the codebase works. Architecture, invariants, gotchas.
+- `.plans/NN-*.md` — one initiative each. The `**Status.**` block at the top of a plan is the source
+  of truth for that initiative.
+- `.plans/37-config-format-decision.md` — script language / config UX: JSON `@PANEL_START`; drop
+  Configuration code tab; migrate remaining DSF panels. HTML/JSX skin deferred. **Executing
+  (go-ahead 2026-08-28).** Read before touching `@PANEL_START`, `@CONFIG_START`,
+  `src/config-ui/parser.js`, or the Configuration code tab.
+- `.plans/38-script-storage-variables.md` — script storage & sharing: STRING variables, local vs
+  library, autosave policy. **Executing (go-ahead 2026-08-28).** Read before changing how user
+  scripts are saved, loaded, or shared.
+- `.plans/39-foundation-maintenance.md` — DSF metadata hygiene on plugin open (auto-clear, no UI
+  noise); Foundation config script removal. **Executing (go-ahead 2026-08-28).** Read before
+  changing `readFoundation` / `reconcileFoundation` repair behaviour or plugin boot cleanup.
+- **Do not commit `.plans/`.** They are gitignored and stay local. Update `ROADMAP.md` when a plan
+  moves.
+- **Ramp recognition is deferred** — manifest load + recreate is enough; do not prioritise it.
+- `DEFERRED.md` — known problems left unfixed, with what fixing involves. Check before reporting
+  something as new.
+- `CHANGELOG.md` — what changed, in behaviour terms.
+
+**The repo is the shared state.** Work happens across more than one tool. A decision that is not
+written into one of the files above did not happen. When something moves, update its plan's status
+and `ROADMAP.md` in the same pass.
+
+# Standing rules
+
+- Nothing is committed unless Márton asks.
+- Backward compatibility with saved user scripts is not negotiable. They live in `clientStorage`
+  today; the planned model is STRING variables (`.plans/38`). Until migration ships, treat
+  `clientStorage` as canonical. A change that alters behaviour for a script with none of the new
+  regions is a stop-and-report.
+- A Figma number comes from inside Figma. No Node substitute presented as a measurement.
+- Click what you built, in Figma, with a real collection loaded. Field reads and passing tests have
+  hidden three separate bugs that one click would have found.
+- The preview strip is the instrument for colour bugs. Hex values, before and after.
+- Panel copy goes through `.claude/skills/ux-copy/SKILL.md`.
+- `npm run build:production` disables the dev bridge. Run `npm run build:dev` after.
