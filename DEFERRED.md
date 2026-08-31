@@ -204,12 +204,12 @@ alias/alpha skips, and orphan reporting.
 
 ---
 
-## 9. `merge-variable-collections` treats "unpublished" as "unused"
+## 9. `Copy or move variables` (file: `merge-variable-collections`) treats "unpublished" as "unused"
 
-**What.** The script copies a source collection's variables into a destination, rebinds this
-document, and then removes the source. Plan 19b's never-delete invariant added a guard: it now
-refuses to remove a collection whose `getPublishStatusAsync()` is anything but `UNPUBLISHED`, and
-tells you to delete it yourself once you know nothing depends on it.
+**What.** In **Move** mode the script copies source variables into a destination, rebinds this
+document, removes the source variables, and then removes the source collection when it is empty.
+It refuses to remove a collection whose `getPublishStatusAsync()` is anything but `UNPUBLISHED`,
+and tells you to delete it yourself once you know nothing depends on it.
 
 That closes the worst hole — a published collection's variables carry keys that other files
 subscribe to, and recreating them elsewhere leaves those files with missing variables they cannot

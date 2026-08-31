@@ -152,8 +152,10 @@ Two rules that only bite when authoring one:
   relink. **Rename is safe** — id and key survive it — so **update-in-place is the only
   regeneration strategy that keeps a library alive**. Applies to generators, to adoption, to
   cleanup passes and to anything that "tidies". Orphaned tokens are *reported*, never removed
-  unless the user asks, and the wording tells them what breaks. `merge-variable-collections` is the
-  one script that removes a collection, by design, and it refuses when the collection is published
+  unless the user asks, and the wording tells them what breaks. `Copy or move variables`
+  (`merge-variable-collections.js`) is the
+  one script that removes a collection, by design (Move mode, when empty), and it refuses when the
+  collection is published
   (`getPublishStatusAsync`). Test scratch under `__codefig-test__/` is exempt: it is neither
   published nor consumed.
 - **Builds write only to `dist/`.** No tracked file changes as a result of any build, so `git status` stays clean after `dev`/`build:dev` and you never need a production build before committing. If a build ever dirties the tree again, that is a bug — fix the build, don't add a warning here.

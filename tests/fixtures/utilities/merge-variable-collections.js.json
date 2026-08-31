@@ -1,39 +1,111 @@
 [
   {
-    "type": "paragraph",
-    "text": "Source: emptied by merge. Target: receives a group named like the source collection."
+    "type": "heading",
+    "level": 1,
+    "text": "Source"
   },
   {
     "type": "field",
     "name": "sourceCollection",
     "value": "",
-    "label": "Source collection",
-    "labelSpelled": false,
+    "label": "Collection",
+    "labelSpelled": true,
     "tooltip": "",
-    "inputType": "select",
-    "optionSource": "localVariableCollections"
+    "inputType": "collection"
   },
   {
     "type": "field",
-    "name": "collectionToMergeTo",
+    "name": "sourceGroup",
     "value": "",
-    "label": "Collection to merge to",
-    "labelSpelled": false,
+    "label": "Group",
+    "labelSpelled": true,
     "tooltip": "",
-    "inputType": "select",
-    "optionSource": "localVariableCollections"
+    "inputType": "string",
+    "placeholder": "color"
   },
   {
     "type": "paragraph",
-    "text": "Optional: map source modes to target modes. Example:\nbrand1 typography, brand1\nbrand2 typography, brand2\nEmpty: first source mode fills every target mode. With lines: unmapped source modes → target’s first mode."
+    "text": "Only variables under this path. Leave empty for the whole collection."
   },
   {
     "type": "field",
-    "name": "preserveModes",
+    "name": "sourceMode",
     "value": "",
-    "label": "Preserve modes",
-    "labelSpelled": false,
+    "label": "Mode",
+    "labelSpelled": true,
     "tooltip": "",
-    "inputType": "textarea"
+    "inputType": "mode",
+    "collectionField": "sourceCollection"
+  },
+  {
+    "type": "paragraph",
+    "text": "Only this mode’s values. Leave empty to take every mode."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Target"
+  },
+  {
+    "type": "field",
+    "name": "targetCollection",
+    "value": "",
+    "label": "Collection",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "collection"
+  },
+  {
+    "type": "field",
+    "name": "targetGroup",
+    "value": "",
+    "label": "Group",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "brand"
+  },
+  {
+    "type": "paragraph",
+    "text": "Destination path prefix. Leave empty to keep each variable’s name under the source group."
+  },
+  {
+    "type": "field",
+    "name": "targetMode",
+    "value": "",
+    "label": "Mode",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "mode",
+    "collectionField": "targetCollection"
+  },
+  {
+    "type": "paragraph",
+    "text": "Mode to write into. Pick an existing one or New mode. Leave empty to match source modes by name."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "field",
+    "name": "moveOrCopy",
+    "value": "Move",
+    "label": "Move or copy",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "radio",
+    "options": [
+      "Move",
+      "Copy"
+    ]
+  },
+  {
+    "type": "paragraph",
+    "text": "Move rebinds this file and removes the source variables. Copy leaves the source alone."
   }
 ]

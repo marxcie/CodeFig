@@ -6,12 +6,12 @@ const assert = require('node:assert');
 
 const S = require('../src/script-storage.js');
 
-test('locked defaults: collection, chunk limit, empty scopes', () => {
+test('locked defaults: collection, chunk limit, TEXT_CONTENT scopes', () => {
   assert.equal(S.COLLECTION_NAME, 'CodeFig Scripts');
   assert.equal(S.INDEX_VARIABLE, '@index');
   assert.equal(S.CHUNK_CHAR_LIMIT, 90000);
   assert.equal(S.ENVELOPE_VERSION, 2);
-  assert.deepEqual(S.SCRIPT_VARIABLE_SCOPES, []);
+  assert.deepEqual(S.SCRIPT_VARIABLE_SCOPES, ['TEXT_CONTENT']);
 });
 
 test('displayNameToVariablePath mirrors CodeFig groups', () => {
@@ -50,7 +50,7 @@ test('continuation paths', () => {
   assert.equal(S.primaryVariablePath('A/B/~3'), 'A/B');
 });
 
-test('planScriptWrite: path + envelope, id inside the string', () => {
+test('planScriptWrite: path + raw value, id in description', () => {
   const { entry, variables } = S.planScriptWrite({
     id: 's-abc',
     name: 'Custom scripts / Scale to print',
@@ -61,10 +61,13 @@ test('planScriptWrite: path + envelope, id inside the string', () => {
   assert.deepEqual(entry.chunkKeys, ['Custom scripts/Scale to print']);
   assert.equal(variables.length, 1);
   assert.equal(variables[0].key, 'Custom scripts/Scale to print');
-  const env = S.parseEnvelope(variables[0].value);
-  assert.equal(env.id, 's-abc');
-  assert.equal(env.code, 'hello()');
-  assert.equal(env.v, 2);
+  assert.equal(variables[0].value, 'hello()');
+  const desc = S.parseScriptDescription(variables[0].description);
+  assert.equal(desc.id, 's-abc');
+  assert.equal(desc.type, 'user');
+  // Value is raw source, not envelope JSON.
+  assert.equal(S.parseEnvelope(variables[0].value).v, 0);
+  assert.equal(S.parseEnvelope(variables[0].value).code, 'hello()');
 });
 
 test('planScriptWrite multi-chunk + listScriptsFromValues', () => {
@@ -78,26 +81,35 @@ test('planScriptWrite multi-chunk + listScriptsFromValues', () => {
   assert.equal(entry.chunkKeys[0], 'Big');
   assert.equal(entry.chunkKeys[1], 'Big/~1');
   const map = Object.create(null);
-  for (const v of variables) map[v.key] = v.value;
-  const listed = S.listScriptsFromValues(map);
+  const desc = Object.create(null);
+  for (const v of variables) {
+    map[v.key] = v.value;
+    desc[v.key] = v.description;
+  }
+  const listed = S.listScriptsFromValues(map, desc);
   assert.equal(listed.listItems.length, 1);
   assert.equal(listed.listItems[0].name, 'Big');
   assert.equal(listed.listItems[0].code, 'abcdefghij');
   assert.equal(listed.scripts[0].id, 'big');
 });
 
-test('listScriptsFromValues skips legacy @index / @script and empty values', () => {
+test('listScriptsFromValues reads legacy envelope values and raw+description', () => {
   const map = {
     '@index': '{"v":1,"scripts":[]}',
     '@script/s-old/0': 'legacy',
     'Keep me': S.serializeEnvelope({ id: 'k1', code: 'ok', type: 'user' }),
     'Keep me/~1': '', // empty continuation ignored when parts=1
+    'Raw me': 'console.log(1)',
     '': ''
   };
-  const listed = S.listScriptsFromValues(map);
-  assert.equal(listed.listItems.length, 1);
-  assert.equal(listed.listItems[0].name, 'Keep me');
-  assert.equal(listed.listItems[0].code, 'ok');
+  const desc = { 'Raw me': S.serializeScriptDescription({ id: 'r1', type: 'user' }) };
+  const listed = S.listScriptsFromValues(map, desc);
+  assert.equal(listed.listItems.length, 2);
+  const byName = Object.create(null);
+  for (const item of listed.listItems) byName[item.name] = item;
+  assert.equal(byName['Keep me'].code, 'ok');
+  assert.equal(byName['Raw me'].code, 'console.log(1)');
+  assert.equal(byName['Raw me'].id, 'r1');
 });
 
 test('planLegacyIndexToPathMigration rewrites @script keys into paths', () => {
@@ -113,9 +125,11 @@ test('planLegacyIndexToPathMigration rewrites @script keys into paths', () => {
   const planned = S.planLegacyIndexToPathMigration(index, values);
   assert.equal(planned.count, 1);
   assert.equal(planned.writes[0].variables[0].key, 'Custom scripts/Scale to print');
-  const env = S.parseEnvelope(planned.writes[0].variables[0].value);
-  assert.equal(env.code, 'console.log(1)');
-  assert.equal(env.id, 's1');
+  assert.equal(planned.writes[0].variables[0].value, 'console.log(1)');
+  assert.equal(
+    S.parseScriptDescription(planned.writes[0].variables[0].description).id,
+    's1'
+  );
   assert.ok(planned.orphanedKeys.indexOf('@script/s1/0') !== -1);
   assert.ok(planned.orphanedKeys.indexOf('@index') !== -1);
 });
@@ -125,9 +139,15 @@ test('chunkBody / joinChunks still work', () => {
   assert.equal(S.joinChunks(['a', 'b']), 'ab');
 });
 
-test('export blob unchanged', () => {
-  const one = S.parseExportBlob({ name: 'Foo', code: 'x', type: 'user' });
-  assert.deepEqual(one.scripts, [{ name: 'Foo', code: 'x', type: 'user' }]);
+test('export blob is envelope-shaped (v + name + code + type)', () => {
+  const one = S.parseExportBlob({ name: 'Foo', code: 'x', type: 'user', id: 's-1' });
+  assert.deepEqual(one.scripts, [
+    { v: 2, name: 'Foo', code: 'x', type: 'user', id: 's-1' }
+  ]);
+  const json = S.serializeExportBlob([{ name: 'Bar', code: 'y', type: 'user' }]);
+  const again = JSON.parse(json);
+  assert.equal(again[0].v, 2);
+  assert.equal(again[0].name, 'Bar');
 });
 
 test('shouldMigrateFromClient / planClientStorageMigration use paths', () => {
@@ -145,7 +165,11 @@ test('shouldMigrateFromClient / planClientStorageMigration use paths', () => {
   );
   assert.equal(planned.count, 1);
   assert.equal(planned.writes[0].variables[0].key, 'Custom scripts/Foo');
-  assert.equal(S.parseEnvelope(planned.writes[0].variables[0].value).id, 'id-1');
+  assert.equal(planned.writes[0].variables[0].value, 'aaa');
+  assert.equal(
+    S.parseScriptDescription(planned.writes[0].variables[0].description).id,
+    'id-1'
+  );
 });
 
 test('planParallelSync gap-fills both ways without overwriting', () => {

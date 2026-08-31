@@ -74,7 +74,7 @@ migrate twice.
 | Initiative | Plan | Locked | Next concrete work |
 |---|---|---|---|
 | **Script language & config UX** | `.plans/37` | JSON `@PANEL_START` for **all** shipped config scripts; drop Configuration code tab (hidden → watch → delete) | **Migrations done** (DSF + 24 utilities + Help). Tab hidden. Watch, then delete chrome. |
-| **Script storage & sharing** | `.plans/38` | Path-named Variables + LocalStorage prefs; Local / LocalStorage / library folders; settings gear; canvas render | **Flag on.** Settings + canvas render landed locally. Library banner still pending |
+| **Script storage & sharing** | `.plans/38` | Path-named Variables + LocalStorage prefs; Local / LocalStorage / library folders; settings gear; canvas render as component instances with SRC↔variable bind (paste-share) | **Flag on.** Settings + canvas share path landed locally. Library banner still pending |
 | **Foundation metadata maintenance** | `.plans/39` | Auto-repair clear cases on every plugin open; no UI noise; remove Foundation config script | **Part A+B landed (local):** `config.js` removed; maintain on boot. **2026-08-29:** Figma has no `require` — build now inlines siblings into `code.js`. Ambiguous collisions still deferred (§11). |
 
 **Still open inside those plans (do not invent silently):** observation out of config; choice vs
@@ -135,7 +135,7 @@ Infrastructure that unblocks styling and DSF packaging, lower priority than 37�
 
 - The fitter places corners the data does not ask for (mirrored handle dragging).
 - `displayResults` grouping callbacks throw and kill the script silently.
-- `merge-variable-collections` treats unpublished as unused.
+- `Copy or move variables` (`merge-variable-collections.js`) treats unpublished as unused.
 - Styles still found by name → rename duplicates / orphans bindings.
 - Curve-editor probe instrumentation still live; P3 gamut toggle not started.
 
@@ -149,7 +149,7 @@ Infrastructure that unblocks styling and DSF packaging, lower priority than 37�
 
 ---
 
-## Two facts about `merge-variable-collections`, recorded so nobody designs around them
+## Two facts about `Copy or move variables` (`merge-variable-collections.js`), recorded so nobody designs around them
 
 - **A variable ID cannot be reused or assigned.** Figma mints them. Links are preserved by rebinding
   every consumer before deleting the original, not by keeping the id.

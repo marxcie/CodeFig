@@ -6,6 +6,7 @@ const { inlineBezier } = require('./build-bezier.js');
 const { inlineImportResolver } = require('./build-import-resolver.js');
 const { inlineStyleScoper } = require('./build-style-scoper.js');
 const { inlineAppCSS } = require('./build-app-css.js');
+const { inlineCanvasPayload } = require('./build-canvas-payload.js');
 
 const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
 /** Identifies this build, so a stale plugin can be told apart from a broken one. */
@@ -146,6 +147,7 @@ function updateUIHtml() {
   let uiContent = fs.readFileSync(uiTemplatePath, 'utf8');
   // Ahead of config-ui: the curve editor in renderer.js reads window.CodeFigBezier.
   uiContent = inlineBezier(uiContent);
+  uiContent = inlineCanvasPayload(uiContent);
   uiContent = inlineConfigUI(uiContent);
   uiContent = inlineImportResolver(uiContent);
   uiContent = inlineStyleScoper(uiContent);
@@ -210,7 +212,8 @@ function updateUIHtml() {
  */
 function copyMainSiblings() {
   // script-storage.js: plan 38 helpers — required from code.js when SCRIPT_STORAGE_VARIABLES is true.
-  const files = ['foundation-maintain.js', 'script-storage.js'];
+  // canvas-script-render.js: paint structured docs + panel mock on "Render on canvas".
+  const files = ['foundation-maintain.js', 'script-storage.js', 'canvas-script-render.js'];
   const distDir = path.join(__dirname, 'dist');
   fs.mkdirSync(distDir, { recursive: true });
   for (const name of files) {
@@ -255,6 +258,7 @@ function inlineMainRequireShim() {
   const modules = [
     { id: './foundation-maintain', file: 'foundation-maintain.js' },
     { id: './script-storage', file: 'script-storage.js' },
+    { id: './canvas-script-render', file: 'canvas-script-render.js' },
   ];
   const entries = [];
   for (const mod of modules) {
@@ -295,9 +299,9 @@ function inlineMainRequireShim() {
   // Refuse a code.js that still calls Node require for our siblings (tsc of an old
   // source, or a bad merge). Those throw in Figma even with the shim present if we
   // no longer alias `var require`.
-  if (/\brequire\s*\(\s*['"]\.\/(foundation-maintain|script-storage)['"]\s*\)/.test(code)) {
+  if (/\brequire\s*\(\s*['"]\.\/(foundation-maintain|script-storage|canvas-script-render)['"]\s*\)/.test(code)) {
     throw new Error(
-      'dist/code.js still calls require("./foundation-maintain|script-storage") — ' +
+      'dist/code.js still calls require("./foundation-maintain|script-storage|canvas-script-render") — ' +
         'src/code.ts must use __codefigMainRequire (Figma JSVM has no require)'
     );
   }

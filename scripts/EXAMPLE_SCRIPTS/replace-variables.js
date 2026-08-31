@@ -1,33 +1,32 @@
 // Replace variables
 // @DOC_START
-// Replaces variable bindings on layers and/or in the **variables table**: choose scope, source/target collection (dropdowns), and find/replace on variable path (groups + variable name). Rebinds to a different variable; does not rename variable definitions.
+// Rebinds variable **bindings** on layers and/or in the **variables table**. Does not create,
+// rename, or move variable definitions — use **Copy or move variables** for that.
 //
-// **Style vs native:** On layers, bindings that come from an applied **text**, **color (fill)**, **stroke**, or **effect** style are **not** replaced—only **native** bindings on the layer are updated.
+// **Style vs native:** On layers, bindings that come from an applied **text**, **color (fill)**,
+// **stroke**, or **effect** style are **not** replaced — only **native** bindings on the layer.
 //
 // ## Overview
-// **Scope:** **selection** — layer bindings under the current selection. **variablesCollection** — alias values inside local variable definitions (`valuesByMode`, all modes). **both** — layers (when something is selected) plus the variables table. Use **variablesCollection** or **both** after pasting a file to fix variable-to-variable links that still point at the source file.
+// **Scope:** **selection** — layer bindings under the current selection. **variablesCollection** —
+// alias values inside local variable definitions (`valuesByMode`, all modes). **both** — layers
+// (when something is selected) plus the variables table.
 //
-// **Collections:** Source collection = which **referenced** bindings to consider (empty = all collections and modes). Target collection = where to look up the replacement variable (empty = same collection as source, then any). **Path find/replace:** Applied to the variable path (e.g. "color 2 / red" → find "color 2", replace "color 1" → "color 1 / red"). Supports same-collection group swap and cross-collection replacement.
+// **Search for / Replace with:** Collection limits which referenced bindings to consider / where
+// to look up the replacement. **Group** and **Variables** compose a path find/replace (e.g. group
+// `UI`, variables `white` → find `UI/white`). Empty group + variables = match by variable leaf or
+// path fragment as before.
 //
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
 // | rebindScope | **selection**, **variablesCollection**, or **both**. |
-// | sourceCollection | Limit to bindings whose referenced variable is from this collection; empty = all collections. |
-// | targetCollection | Look up replacement variable in this collection; empty = same as source, then any. |
-// | searchFor / replaceWith | Find/replace applied to variable path (collection + variable). |
-// | previewOnly | **On by default.** Lists the bindings that would be rebound and changes nothing; untick and run again to apply. |
-// | matchCase | Match `searchFor` case-sensitively. |
-// | useRegex | Treat `searchFor` as a regular expression. |
-// | batchReplacement | Multiple "search, replace" lines; overrides searchFor/replaceWith. |
-// | **Replace-all (path)** | When **both** source + target are set and search/replace empty: replace the **source collection name** substring with the **target** in the full path (rename in path, not “same token → lookup by name”). |
-// | **Remap by name (automatic)** | When **target** is set, **source** can be empty (all collections), and search/replace/batch are **empty**—bindings are rebound to the variable with the **same name** in the target collection (typical: paste from another file → point at local tokens). Works on layer bindings and variable-table aliases. Unresolved / missing variable IDs are counted; Figma does not expose names for those, so they cannot be remapped automatically. |
-//
-// ## Preview first
-// Previews by default. Every write in the script is guarded, so the preview runs the same
-// traversal — same matching, same cache, same replacement lookup — with the writes switched
-// off, and lists each binding as `SourceCollection/name → TargetCollection/name` against the
-// node and property it belongs to. Untick **Preview only** and run again to apply.
+// | sourceCollection / targetCollection | Filter / lookup collection; empty = all / same then any. |
+// | sourceGroup / sourceVariables | Path find (joined as `group/variables` when both set). |
+// | targetGroup / targetVariables | Path replace (same join rules). |
+// | useRegex | Treat the composed find as a regular expression. |
+// | batchReplacement | Multiple `search, replace` lines; overrides Group/Variables. |
+// | **Replace-all (path)** | Source + target set, Group/Variables/batch empty: swap collection name in the path. |
+// | **Remap by name** | Target set, everything else empty: same variable name in the target collection. |
 //
 // ## Search patterns
 // | Input | Meaning |
@@ -37,24 +36,16 @@
 // | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
 // | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
 //
-// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
-// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
-// matching. Same rules in every CodeFig find/replace script.
-//
-// Patterns are matched against the path with plain `/` separators (`Color/red`, not
-// `Color / red`), and `searchFor` now supports `*` — a variable whose name contains a
-// literal asterisk needs regex mode and `\*`.
+// Patterns use plain `/` separators (`Color/red`, not `Color / red`). A literal asterisk in a
+// name needs regex mode and `\*`.
 //
 // ## Replacement tokens
 // | Token | Meaning |
 // |-------|---------|
 // | `$&` | The whole match |
 // | `$1` `$2` | Capture groups (regex mode only) |
-// | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
+// | `$n` `$nn` `$nnn` | Ascending counter (always 1 here — bindings are not an ordered list) |
 // | `$N` `$NN` `$NNN` | Descending counter |
-//
-// The counters are **not** useful here: this script rewrites a path to look up an existing
-// target variable, so it walks bindings rather than an ordered list and `$n` is always 1.
 // @DOC_END
 
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
@@ -68,12 +59,12 @@
 // @UI_CONFIG_START
 var rebindScope = "selection";
 var sourceCollection = "";
-var searchFor = "";
+var sourceGroup = "";
+var sourceVariables = "";
 var targetCollection = "";
-var replaceWith = "";
-var matchCase = false;
+var targetGroup = "";
+var targetVariables = "";
 var useRegex = false;
-var previewOnly = true;
 var batchReplacement = "";
 // @UI_CONFIG_END
 
@@ -83,50 +74,69 @@ var batchReplacement = "";
 //     {
 //       "key": "rebindScope",
 //       "type": "radio",
-//       "options": [
-//         "selection",
-//         "variablesCollection",
-//         "both"
-//       ]
+//       "options": ["selection", "variablesCollection", "both"]
 //     },
+//     { "type": "divider" },
+//     { "type": "heading", "text": "Search for" },
 //     {
 //       "key": "sourceCollection",
 //       "type": "select",
+//       "label": "Collection",
 //       "options": "variableCollections"
 //     },
 //     {
-//       "key": "searchFor",
+//       "key": "sourceGroup",
 //       "type": "string",
-//       "placeholder": "color 2/*"
+//       "label": "Group",
+//       "placeholder": "UI"
 //     },
 //     {
 //       "type": "paragraph",
 //       "attachTo": "previous",
-//       "text": "Rebinds only variables whose current name contains this — `color 1`. Leave it empty for every variable."
+//       "text": "Path prefix to match, e.g. `UI` or `UI/*`. Leave empty to ignore group."
 //     },
 //     {
-//       "type": "divider"
+//       "key": "sourceVariables",
+//       "type": "string",
+//       "label": "Variables",
+//       "placeholder": "white"
 //     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Variable name or fragment to find. Combined with Group as `group/name`. Leave empty for every variable in the collection filter."
+//     },
+//     { "type": "divider" },
+//     { "type": "heading", "text": "Replace with" },
 //     {
 //       "key": "targetCollection",
 //       "type": "select",
+//       "label": "Collection",
 //       "options": "variableCollections"
 //     },
 //     {
-//       "key": "replaceWith",
+//       "key": "targetGroup",
 //       "type": "string",
-//       "placeholder": "color 1"
+//       "label": "Group",
+//       "placeholder": "UI"
 //     },
 //     {
 //       "type": "paragraph",
 //       "attachTo": "previous",
-//       "text": "The name to bind to instead. Leave it empty to keep each variable's own name and only change collection."
+//       "text": "Destination path prefix. Leave empty to keep the matched group structure."
 //     },
 //     {
-//       "key": "matchCase",
-//       "type": "boolean",
-//       "label": "Match case"
+//       "key": "targetVariables",
+//       "type": "string",
+//       "label": "Variables",
+//       "placeholder": "accent-color"
 //     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Name to bind to instead. Leave empty to keep each variable’s own name and only change collection or group."
+//     },
+//     { "type": "divider" },
 //     {
 //       "key": "useRegex",
 //       "type": "boolean",
@@ -135,20 +145,7 @@ var batchReplacement = "";
 //     {
 //       "type": "paragraph",
 //       "attachTo": "previous",
-//       "text": "Reads **Search for** as a regular expression rather than plain text with `*` wildcards."
-//     },
-//     {
-//       "key": "previewOnly",
-//       "type": "boolean",
-//       "label": "Preview only"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "**On by default.** Lists the bindings that would be rebound and touches nothing. Untick and run again to apply."
-//     },
-//     {
-//       "type": "divider"
+//       "text": "Reads the composed find path as a regular expression rather than plain text with `*` wildcards."
 //     },
 //     {
 //       "key": "batchReplacement",
@@ -157,7 +154,7 @@ var batchReplacement = "";
 //     {
 //       "type": "paragraph",
 //       "attachTo": "previous",
-//       "text": "Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas."
+//       "text": "Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides Group and Variables. No quotes, no trailing commas."
 //     },
 //     {
 //       "type": "paragraph",
@@ -265,6 +262,13 @@ function findVariableInTargetByName(variableCache, targetCollectionName, variabl
   return match;
 }
 
+function composePathPart(group, variables) {
+  var g = group != null ? String(group).trim().replace(/\/+$/, '') : '';
+  var v = variables != null ? String(variables).trim().replace(/^\/+/, '') : '';
+  if (g && v) return g + '/' + v;
+  return g || v || '';
+}
+
 function buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal) {
   var batch = typeof batchReplacement !== 'undefined' ? batchReplacement : null;
   if (typeof batch === 'string' && batch.trim()) {
@@ -280,8 +284,19 @@ function buildReplacementsFromConfig(sourceCollectionVal, targetCollectionVal) {
     }
     return list;
   }
-  var searchForVal = typeof searchFor !== 'undefined' ? searchFor : '';
-  var replaceWithVal = typeof replaceWith !== 'undefined' ? replaceWith : '';
+  var searchForVal = composePathPart(
+    typeof sourceGroup !== 'undefined' ? sourceGroup : '',
+    typeof sourceVariables !== 'undefined' ? sourceVariables : ''
+  );
+  var replaceWithVal = composePathPart(
+    typeof targetGroup !== 'undefined' ? targetGroup : '',
+    typeof targetVariables !== 'undefined' ? targetVariables : ''
+  );
+  // Backward compat for pasted configs that still use the old flat fields.
+  if (!searchForVal && !replaceWithVal) {
+    if (typeof searchFor !== 'undefined' && searchFor) searchForVal = String(searchFor);
+    if (typeof replaceWith !== 'undefined' && replaceWith) replaceWithVal = String(replaceWith);
+  }
   if (searchForVal || replaceWithVal) {
     return [{ find: searchForVal, replace: replaceWithVal }];
   }
@@ -311,7 +326,7 @@ async function rvVariablePath(variable) {
 function getMatchOpts() {
   return {
     useRegex: typeof useRegex !== 'undefined' && useRegex === true,
-    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+    matchCase: false
   };
 }
 
@@ -754,7 +769,7 @@ async function findAndReplaceVariables() {
   var remapBySameName = targetCollectionVal.length > 0 && replacements.length === 0;
   
   if (!remapBySameName && replacements.length === 0) {
-    figma.notify('Configure search/replace or batch, or set Target collection (all sources → remap by same name), or Source+Target for path rename');
+    figma.notify('Configure Group/Variables or batch, or set Target collection (remap by same name), or Source+Target for path rename');
     return;
   }
   
@@ -840,7 +855,9 @@ async function findAndReplaceVariables() {
     return;
   }
 
-  var previewOnlyVal = typeof previewOnly === 'undefined' || previewOnly === true;
+  // Writes on every run (Preview only control removed). Still records a plan for the Info panel
+  // when something would have been preview-only in older builds.
+  var previewOnlyVal = false;
   var ctx = {
     variableCache: variableCache,
     sourceCollectionVal: sourceCollectionVal,

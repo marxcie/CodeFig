@@ -16,8 +16,10 @@ test('src/code.ts calls __codefigMainRequire, not require, for siblings', () => 
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'code.ts'), 'utf8');
   assert.match(src, /__codefigMainRequire\s*\(\s*['"]\.\/foundation-maintain['"]\s*\)/);
   assert.match(src, /__codefigMainRequire\s*\(\s*['"]\.\/script-storage['"]\s*\)/);
+  assert.match(src, /__codefigMainRequire\s*\(\s*['"]\.\/canvas-script-render['"]\s*\)/);
   assert.doesNotMatch(src, /\brequire\s*\(\s*['"]\.\/foundation-maintain['"]\s*\)/);
   assert.doesNotMatch(src, /\brequire\s*\(\s*['"]\.\/script-storage['"]\s*\)/);
+  assert.doesNotMatch(src, /\brequire\s*\(\s*['"]\.\/canvas-script-render['"]\s*\)/);
 });
 
 test('dist/code.js (when present) has shim and no bare sibling require', () => {
@@ -37,11 +39,11 @@ test('dist/code.js (when present) has shim and no bare sibling require', () => {
   assert.match(code, /__codefigMainRequire\s*\(\s*['"]\.\/foundation-maintain['"]\s*\)/);
   assert.doesNotMatch(
     code,
-    /\brequire\s*\(\s*['"]\.\/(foundation-maintain|script-storage)['"]\s*\)/
+    /\brequire\s*\(\s*['"]\.\/(foundation-maintain|script-storage|canvas-script-render)['"]\s*\)/
   );
 });
 
-test('shim loads foundation-maintain and script-storage in a sandbox', () => {
+test('shim loads foundation-maintain, script-storage, and canvas-script-render in a sandbox', () => {
   assert.ok(fs.existsSync(codePath), 'dist/code.js missing — run build:dev first');
   inlineMainRequireShim();
   const code = fs.readFileSync(codePath, 'utf8');
@@ -56,6 +58,9 @@ test('shim loads foundation-maintain and script-storage in a sandbox', () => {
   assert.equal(typeof maintain.runFoundationMaintain, 'function');
   const storage = sandbox.__codefigMainRequire('./script-storage');
   assert.equal(storage.COLLECTION_NAME, 'CodeFig Scripts');
+  const canvas = sandbox.__codefigMainRequire('./canvas-script-render');
+  assert.equal(typeof canvas.renderMarkdownInto, 'function');
+  assert.equal(typeof canvas.renderPanelMockInto, 'function');
 });
 
 test('shim is idempotent — a second pass does not nest factories', () => {

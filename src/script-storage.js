@@ -10,15 +10,18 @@
  *   "Scale to print"                         → ungrouped
  *   "Custom scripts/Scale to print"          ← CodeFig "Custom scripts / Scale to print"
  *
- * Value is a JSON envelope (id lives in the string — no fake modes):
- *   { "v": 2, "id": "s-…", "code": "…" }
+ * Value is the **raw script source** (real newlines) so canvas SRC can bind and
+ * stay readable. Id / type / chunk meta live on the variable **description**:
+ *   codefig-id:s-…;type:user;parts:1;i:0
  * Oversized bodies split across `Name/~1`, `Name/~2`, … (continuation chunks).
+ *
+ * Legacy: JSON envelope still readable in the value (`{ "v": 2, "id", "code" }`).
+ * Export JSON uses the same envelope shape (+ `name`) for Sync/backup identity.
  *
  * Legacy v1 (`@index` + `@script/{id}/{n}`) is still readable for one-shot
  * migrate-to-path. New writes never create it.
  *
- * Scopes are emptied by the sandbox writer so these STRINGs do not appear as
- * bindable text tokens.
+ * Scopes = TEXT_CONTENT so SRC can bind; not offered for fills/gaps/etc.
  */
 (function (root, factory) {
   var api = factory();
@@ -43,8 +46,11 @@
   var INDEX_VERSION = 1;
   var ENVELOPE_VERSION = 2;
 
-  /** Empty scopes — hide from every bindable property (text, layout, etc.). */
-  var SCRIPT_VARIABLE_SCOPES = [];
+  /** Text content only — canvas SRC binding; hide from layout/fill pickers. */
+  var SCRIPT_VARIABLE_SCOPES = ['TEXT_CONTENT'];
+
+  /** Prefix for id stashed on Variable.description (not a second mode). */
+  var DESCRIPTION_ID_KEY = 'codefig-id';
 
   // ---------------------------------------------------------------------------
   // Path / name (CodeFig display ↔ Figma variable path)
@@ -231,6 +237,9 @@
       code: parts.code == null ? '' : String(parts.code)
     };
     if (parts.type === 'library' || parts.type === 'user') body.type = parts.type;
+    if (parts.name != null && String(parts.name).trim() !== '') {
+      body.name = String(parts.name).trim();
+    }
     var i = parts.i != null ? Math.floor(Number(parts.i)) : 0;
     var n = parts.parts != null ? Math.floor(Number(parts.parts)) : 1;
     if (n > 1) {
@@ -240,12 +249,60 @@
     return JSON.stringify(body);
   }
 
+  /**
+   * Variable.description carrier for id (and chunk meta). Value stays raw source.
+   * Example: "codefig-id:s-abc;type:user;parts:2;i:0"
+   */
+  function serializeScriptDescription(meta) {
+    if (!meta || typeof meta !== 'object') return '';
+    var id = meta.id != null ? String(meta.id).trim() : '';
+    if (!id) return '';
+    var parts = ['codefig-id:' + id];
+    if (meta.type === 'library' || meta.type === 'user') {
+      parts.push('type:' + meta.type);
+    }
+    var n = meta.parts != null ? Math.floor(Number(meta.parts)) : 1;
+    var i = meta.i != null ? Math.floor(Number(meta.i)) : 0;
+    if (n > 1) {
+      parts.push('parts:' + n);
+      parts.push('i:' + i);
+    }
+    return parts.join(';');
+  }
+
+  function parseScriptDescription(raw) {
+    var text = String(raw == null ? '' : raw).trim();
+    var out = { id: null, type: null, parts: 1, i: 0 };
+    if (!text) return out;
+    var chunks = text.split(';');
+    for (var c = 0; c < chunks.length; c++) {
+      var piece = String(chunks[c] || '').trim();
+      if (!piece) continue;
+      var colon = piece.indexOf(':');
+      if (colon <= 0) continue;
+      var key = piece.slice(0, colon).trim();
+      var val = piece.slice(colon + 1).trim();
+      if (key === 'codefig-id' || key === DESCRIPTION_ID_KEY) {
+        out.id = val || null;
+      } else if (key === 'type' && (val === 'library' || val === 'user')) {
+        out.type = val;
+      } else if (key === 'parts') {
+        var n = Math.floor(Number(val));
+        if (n >= 1) out.parts = n;
+      } else if (key === 'i') {
+        var idx = Math.floor(Number(val));
+        if (idx >= 0) out.i = idx;
+      }
+    }
+    return out;
+  }
+
   // ---------------------------------------------------------------------------
   // Plan write / read (path-based)
   // ---------------------------------------------------------------------------
 
   /**
-   * Plan a write: Figma variable path(s) + envelope JSON values.
+   * Plan a write: Figma variable path(s) + raw source values + description meta.
    * `entry` carries display name, id, type, and chunkKeys (variable paths).
    */
   function planScriptWrite(script) {
@@ -259,11 +316,10 @@
     var code = script.code == null ? '' : String(script.code);
     var type = inferType(name, script.type);
     var primary = displayNameToVariablePath(name);
-    // Leave headroom so the envelope JSON still fits under the STRING comfort limit.
-    var overhead = 128 + id.length + primary.length;
     var limit = script.limit != null
       ? Math.floor(Number(script.limit))
-      : Math.max(1024, CHUNK_CHAR_LIMIT - overhead);
+      : CHUNK_CHAR_LIMIT;
+    if (!(limit > 0)) limit = CHUNK_CHAR_LIMIT;
     var chunks = chunkBody(code, limit);
     var chunkKeys = [primary];
     for (var c = 1; c < chunks.length; c++) {
@@ -273,9 +329,9 @@
     for (var i = 0; i < chunks.length; i++) {
       variables.push({
         key: chunkKeys[i],
-        value: serializeEnvelope({
+        value: chunks[i],
+        description: serializeScriptDescription({
           id: id,
-          code: chunks[i],
           type: type,
           i: i,
           parts: chunks.length
@@ -296,13 +352,22 @@
 
   /**
    * Reassemble code for one primary path from a name→value map.
+   * Optional descriptionByKey supplies parts count when values are raw.
    */
-  function readScriptBodyFromPath(primaryPath, valueByKey) {
+  function readScriptBodyFromPath(primaryPath, valueByKey, descriptionByKey) {
     var map = valueByKey && typeof valueByKey === 'object' ? valueByKey : {};
+    var descMap =
+      descriptionByKey && typeof descriptionByKey === 'object' ? descriptionByKey : {};
     var primary = primaryVariablePath(primaryPath);
     var first = parseEnvelope(map[primary]);
     if (!first) return '';
-    var parts = first.parts >= 1 ? first.parts : 1;
+    var parts;
+    if (first.v === ENVELOPE_VERSION) {
+      parts = first.parts >= 1 ? first.parts : 1;
+    } else {
+      var meta = parseScriptDescription(descMap[primary]);
+      parts = meta.parts >= 1 ? meta.parts : 1;
+    }
     var chunks = [first.code];
     for (var i = 1; i < parts; i++) {
       var env = parseEnvelope(map[continuationPath(primary, i)]);
@@ -335,11 +400,14 @@
 
   /**
    * Scan a collection's name→value map into LIST items + entries.
+   * Optional descriptionByKey supplies id when values are raw source.
    * Skips legacy `@index` / `@script/…` / `@lib/…` and continuation `/~N` keys
    * (continuations are folded into their primary).
    */
-  function listScriptsFromValues(valueByKey) {
+  function listScriptsFromValues(valueByKey, descriptionByKey) {
     var map = valueByKey && typeof valueByKey === 'object' ? valueByKey : {};
+    var descMap =
+      descriptionByKey && typeof descriptionByKey === 'object' ? descriptionByKey : {};
     var scripts = [];
     var listItems = [];
     var keys = Object.keys(map);
@@ -349,15 +417,27 @@
       if (key === INDEX_VARIABLE) continue;
       if (key.indexOf('@script/') === 0 || key.indexOf('@lib/') === 0) continue;
       if (isContinuationPath(key)) continue;
-      var env = parseEnvelope(map[key]);
+      var raw = map[key];
+      if (raw == null || String(raw) === '') continue;
+      var env = parseEnvelope(raw);
       if (!env) continue;
+      var desc = parseScriptDescription(descMap[key]);
       // Continuations mis-filed as primaries (i > 0) — skip.
-      if (env.i > 0) continue;
+      if (env.v === ENVELOPE_VERSION && env.i > 0) continue;
+      if (env.v !== ENVELOPE_VERSION && desc.i > 0) continue;
       var name = variablePathToDisplayName(key);
-      var type = inferType(name, env.type);
-      var code = readScriptBodyFromPath(key, map);
-      var id = env.id || mintScriptId();
-      var parts = env.parts >= 1 ? env.parts : 1;
+      var type = inferType(name, (env.v === ENVELOPE_VERSION && env.type) || desc.type);
+      var code = readScriptBodyFromPath(key, map, descMap);
+      var id =
+        (env.v === ENVELOPE_VERSION && env.id) || desc.id || null;
+      var parts =
+        env.v === ENVELOPE_VERSION
+          ? env.parts >= 1
+            ? env.parts
+            : 1
+          : desc.parts >= 1
+            ? desc.parts
+            : 1;
       var chunkKeys = [key];
       for (var c = 1; c < parts; c++) chunkKeys.push(continuationPath(key, c));
       scripts.push({
@@ -367,7 +447,7 @@
         path: key,
         chunkKeys: chunkKeys
       });
-      listItems.push({ name: name, code: code, type: type });
+      listItems.push({ name: name, code: code, type: type, id: id });
     }
     return { scripts: scripts, listItems: listItems };
   }
@@ -583,7 +663,12 @@
     if (raw.type === 'library' || raw.type === 'user') {
       type = isAtLib ? 'library' : raw.type;
     }
-    var out = { name: name, code: code, type: type };
+    var out = {
+      v: ENVELOPE_VERSION,
+      name: name,
+      code: code,
+      type: type
+    };
     if (raw.id != null && String(raw.id).trim() !== '') {
       out.id = String(raw.id).trim();
     }
@@ -900,6 +985,7 @@
     INDEX_VERSION: INDEX_VERSION,
     ENVELOPE_VERSION: ENVELOPE_VERSION,
     SCRIPT_VARIABLE_SCOPES: SCRIPT_VARIABLE_SCOPES,
+    DESCRIPTION_ID_KEY: DESCRIPTION_ID_KEY,
     sanitizePathSegment: sanitizePathSegment,
     sanitizePathSegmentLegacyId: sanitizePathSegmentLegacyId,
     displayNameToVariablePath: displayNameToVariablePath,
@@ -915,6 +1001,8 @@
     chunkKeysFor: chunkKeysFor,
     parseEnvelope: parseEnvelope,
     serializeEnvelope: serializeEnvelope,
+    serializeScriptDescription: serializeScriptDescription,
+    parseScriptDescription: parseScriptDescription,
     normalizeIndexEntry: normalizeIndexEntry,
     parseIndex: parseIndex,
     serializeIndex: serializeIndex,

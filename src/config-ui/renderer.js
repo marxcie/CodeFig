@@ -168,7 +168,7 @@
    * A paragraph row has no owner in the block — it is a comment line between two other lines — so
    * the question is decided by adjacency, and the shipped scripts answer it two different ways. Most
    * write the explanation *under* the field (`rename-variables` and the six scripts shaped like it);
-   * a few write it *above* (`merge-variable-collections`, `config`). A blank or bare `//` line is
+   * a few write it *above* (`merge-variable-collections` / Copy or move, `config`). A blank or bare `//` line is
    * what separates one from the next, and it turns out to be a reliable signal: where an author put
    * a spacer, they meant the paragraph to go with the other side.
    *

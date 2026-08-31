@@ -176,16 +176,18 @@ type ScriptStorageModule = {
   SCRIPT_VARIABLE_SCOPES: VariableScope[];
   parseIndex: (json: unknown) => { v: number; scripts: ScriptIndexEntry[] };
   listScriptsFromValues: (
-    valueByKey: Record<string, string>
+    valueByKey: Record<string, string>,
+    descriptionByKey?: Record<string, string>
   ) => { scripts: ScriptIndexEntry[]; listItems: ScriptListItem[] };
   planScriptWrite: (script: {
     id: string;
     name: string;
     type?: string;
     code: string;
+    limit?: number;
   }) => {
     entry: ScriptIndexEntry;
-    variables: Array<{ key: string; value: string }>;
+    variables: Array<{ key: string; value: string; description?: string }>;
   };
   readScriptBody: (
     entry: ScriptIndexEntry,
@@ -264,6 +266,7 @@ type ScriptListItem = {
   name: string;
   code: string;
   type: string;
+  id?: string | null;
   origin?: string;
   libraryName?: string;
   storageId?: string;
@@ -326,21 +329,33 @@ function readStringModeValue(variable: Variable, modeId: string): string {
   return typeof raw === 'string' ? raw : '';
 }
 
+function descriptionMapFromCollection(
+  byName: Map<string, Variable>
+): Record<string, string> {
+  const descriptionByKey: Record<string, string> = Object.create(null);
+  byName.forEach((variable, name) => {
+    descriptionByKey[name] = variable.description != null ? String(variable.description) : '';
+  });
+  return descriptionByKey;
+}
+
 async function setStringVariableValue(
   collection: VariableCollection,
   byName: Map<string, Variable>,
   modeId: string,
   key: string,
   value: string,
-  scopes?: VariableScope[]
+  scopes?: VariableScope[],
+  description?: string
 ): Promise<void> {
   let variable = byName.get(key);
   if (!variable) {
     variable = figma.variables.createVariable(key, collection, 'STRING');
     byName.set(key, variable);
   }
-  // Script bodies must not appear as bindable text/layout tokens.
+  // TEXT_CONTENT so canvas SRC can bind; not fills/gaps.
   if (scopes) variable.scopes = scopes;
+  if (description != null) variable.description = String(description);
   variable.setValueForMode(modeId, value == null ? '' : String(value));
 }
 
@@ -372,7 +387,7 @@ async function writeScriptVariables(
   collection: VariableCollection,
   byName: Map<string, Variable>,
   modeId: string,
-  variables: Array<{ key: string; value: string }>,
+  variables: Array<{ key: string; value: string; description?: string }>,
   orphanedKeys: string[]
 ): Promise<void> {
   const scopes = storage.SCRIPT_VARIABLE_SCOPES || [];
@@ -383,7 +398,8 @@ async function writeScriptVariables(
       modeId,
       pair.key,
       pair.value,
-      scopes
+      scopes,
+      pair.description
     );
   }
   await clearOrphanedChunkValues(byName, modeId, orphanedKeys);
@@ -401,7 +417,8 @@ async function readScriptsFromCollection(
   let byName = await loadCollectionVariablesByName(collection);
   const modeId = collectionModeId(collection);
   let valueByKey = valueMapFromCollection(byName, modeId);
-  let listed = storage.listScriptsFromValues(valueByKey);
+  let descriptionByKey = descriptionMapFromCollection(byName);
+  let listed = storage.listScriptsFromValues(valueByKey, descriptionByKey);
 
   const indexVar = byName.get(storage.INDEX_VARIABLE);
   const indexJson = indexVar ? readStringModeValue(indexVar, modeId) : '';
@@ -419,7 +436,7 @@ async function readScriptsFromCollection(
         byName,
         modeId,
         planned.writes.reduce(
-          (acc: Array<{ key: string; value: string }>, w) => {
+          (acc: Array<{ key: string; value: string; description?: string }>, w) => {
             for (const pair of w.variables) acc.push(pair);
             return acc;
           },
@@ -434,12 +451,12 @@ async function readScriptsFromCollection(
       );
       byName = await loadCollectionVariablesByName(collection);
       valueByKey = valueMapFromCollection(byName, modeId);
-      listed = storage.listScriptsFromValues(valueByKey);
+      descriptionByKey = descriptionMapFromCollection(byName);
+      listed = storage.listScriptsFromValues(valueByKey, descriptionByKey);
     }
   }
 
-  // Ensure every script variable has empty scopes (including ones created
-  // before this policy, and path vars just written above).
+  // TEXT_CONTENT scopes so SRC can bind (including vars created before this policy).
   const scopes = storage.SCRIPT_VARIABLE_SCOPES || [];
   for (const entry of listed.scripts) {
     for (const key of entry.chunkKeys || []) {
@@ -626,10 +643,16 @@ async function saveScriptToVariableStore(
   const byName = await loadCollectionVariablesByName(collection);
   const modeId = collectionModeId(collection);
   const valueByKey = valueMapFromCollection(byName, modeId);
-  const listed = storage.listScriptsFromValues(valueByKey);
+  const descriptionByKey = descriptionMapFromCollection(byName);
+  const listed = storage.listScriptsFromValues(valueByKey, descriptionByKey);
   const searchName = oldName || scriptData.name;
   const existing = storage.findEntryByName(listed.scripts, searchName);
-  const id = existing ? existing.id : storage.mintScriptId();
+  const id =
+    existing && existing.id
+      ? existing.id
+      : scriptData.id
+        ? String(scriptData.id)
+        : storage.mintScriptId();
   const planned = storage.planScriptWrite({
     id,
     name: scriptData.name,
@@ -668,12 +691,18 @@ async function saveBatchToVariableStore(
   let byName = await loadCollectionVariablesByName(collection);
   const modeId = collectionModeId(collection);
   let valueByKey = valueMapFromCollection(byName, modeId);
-  let listed = storage.listScriptsFromValues(valueByKey);
+  let descriptionByKey = descriptionMapFromCollection(byName);
+  let listed = storage.listScriptsFromValues(valueByKey, descriptionByKey);
   const allOrphans: string[] = [];
-  const allVariables: Array<{ key: string; value: string }> = [];
+  const allVariables: Array<{ key: string; value: string; description?: string }> = [];
   for (const scriptData of scripts) {
     const existing = storage.findEntryByName(listed.scripts, scriptData.name);
-    const id = existing ? existing.id : storage.mintScriptId();
+    const id =
+      existing && existing.id
+        ? existing.id
+        : scriptData.id
+          ? String(scriptData.id)
+          : storage.mintScriptId();
     const planned = storage.planScriptWrite({
       id,
       name: scriptData.name,
@@ -711,7 +740,8 @@ async function deleteScriptFromVariableStore(
   const byName = await loadCollectionVariablesByName(collection);
   const modeId = collectionModeId(collection);
   const valueByKey = valueMapFromCollection(byName, modeId);
-  const listed = storage.listScriptsFromValues(valueByKey);
+  const descriptionByKey = descriptionMapFromCollection(byName);
+  const listed = storage.listScriptsFromValues(valueByKey, descriptionByKey);
   const existing = storage.findEntryByName(listed.scripts, name);
   if (!existing) return;
   await writeScriptVariables(
@@ -791,24 +821,110 @@ async function listScriptsWithVariableStore(
 const CODEFIG_SCRIPTS_PAGE = 'CodeFig Scripts';
 const CANVAS_TEXT_CHUNK = 900;
 
-async function loadCanvasFonts(): Promise<{ regular: FontName; bold: FontName }> {
-  const regular: FontName = { family: 'Inter', style: 'Regular' };
-  const bold: FontName = { family: 'Inter', style: 'Bold' };
+type CanvasFonts = {
+  regular: FontName;
+  bold: FontName;
+  italic?: FontName;
+  boldItalic?: FontName;
+  mono?: FontName;
+};
+
+type CanvasDocBlock = {
+  type: string;
+  depth?: number;
+  text?: string;
+  lang?: string;
+  ordered?: boolean;
+  start?: number;
+  segments?: Array<{ text: string; bold?: boolean; italic?: boolean; code?: boolean; link?: string | boolean; strike?: boolean }>;
+  items?: Array<{ text?: string; segments?: CanvasDocBlock['segments']; task?: boolean; checked?: boolean }>;
+  header?: string[];
+  rows?: string[][];
+};
+
+type CanvasPanelRow = {
+  type: string;
+  level?: number;
+  text?: string;
+  section?: boolean;
+  label?: string;
+  hint?: string;
+  inputType?: string;
+  value?: string;
+  options?: string[];
+  chips?: string[];
+  multi?: boolean;
+  radio?: boolean;
+};
+
+type CanvasScriptPayload = {
+  name: string;
+  code: string;
+  id?: string | null;
+  docs?: string;
+  docsBlocks?: CanvasDocBlock[];
+  panelRows?: CanvasPanelRow[];
+  uiSummary?: string;
+};
+
+type CanvasScriptRenderModule = {
+  ROOT_WIDTH?: number;
+  renderMarkdownInto: (parent: FrameNode, blocks: CanvasDocBlock[], fonts: CanvasFonts) => void;
+  renderPanelMockInto: (parent: FrameNode, panelRows: CanvasPanelRow[], fonts: CanvasFonts) => void;
+  renderScriptCard?: (
+    script: CanvasScriptPayload,
+    fonts: CanvasFonts,
+    x: number,
+    y: number
+  ) => SceneNode;
+  findSrcNode?: (card: SceneNode) => TextNode | null;
+};
+
+let canvasScriptRender: CanvasScriptRenderModule | null = null;
+try {
+  canvasScriptRender = __codefigMainRequire('./canvas-script-render') as CanvasScriptRenderModule;
+} catch (err) {
+  console.warn(
+    'CodeFig: canvas-script-render unavailable:',
+    err instanceof Error ? err.message : String(err)
+  );
+}
+
+async function tryLoadFont(family: string, style: string): Promise<FontName | null> {
+  const font: FontName = { family, style };
+  try {
+    await figma.loadFontAsync(font);
+    return font;
+  } catch {
+    return null;
+  }
+}
+
+async function loadCanvasFonts(): Promise<CanvasFonts> {
+  const regular =
+    (await tryLoadFont('Inter', 'Regular')) ||
+    (await tryLoadFont('Roboto', 'Regular')) ||
+    ({ family: 'Inter', style: 'Regular' } as FontName);
   try {
     await figma.loadFontAsync(regular);
-    await figma.loadFontAsync(bold);
-    return { regular, bold };
   } catch {
-    const fallback: FontName = { family: 'Roboto', style: 'Regular' };
-    const fallbackBold: FontName = { family: 'Roboto', style: 'Bold' };
-    await figma.loadFontAsync(fallback);
-    try {
-      await figma.loadFontAsync(fallbackBold);
-      return { regular: fallback, bold: fallbackBold };
-    } catch {
-      return { regular: fallback, bold: fallback };
-    }
+    /* already tried */
   }
+  const bold =
+    (await tryLoadFont(regular.family, 'Bold')) ||
+    (await tryLoadFont('Inter', 'Bold')) ||
+    (await tryLoadFont('Roboto', 'Bold')) ||
+    regular;
+  const italic = (await tryLoadFont(regular.family, 'Italic')) || undefined;
+  const boldItalic =
+    (await tryLoadFont(regular.family, 'Bold Italic')) ||
+    (await tryLoadFont(regular.family, 'BoldItalic')) ||
+    undefined;
+  const mono =
+    (await tryLoadFont('Roboto Mono', 'Regular')) ||
+    (await tryLoadFont('Source Code Pro', 'Regular')) ||
+    undefined;
+  return { regular, bold, italic, boldItalic, mono };
 }
 
 async function ensureCodeFigScriptsPage(): Promise<PageNode> {
@@ -850,12 +966,93 @@ function chunkTextForCanvas(text: string, limit: number): string[] {
   return out;
 }
 
+/**
+ * Ensure a local STRING var holds raw source + id in description (for SRC bind / paste-share).
+ */
+async function ensureScriptVariableForCanvas(
+  storage: ScriptStorageModule,
+  script: CanvasScriptPayload
+): Promise<Variable | null> {
+  if (!script || !String(script.code || '').trim()) return null;
+  const collection = await ensureScriptsCollection(storage);
+  const byName = await loadCollectionVariablesByName(collection);
+  const modeId = collectionModeId(collection);
+  const valueByKey = valueMapFromCollection(byName, modeId);
+  const descriptionByKey = descriptionMapFromCollection(byName);
+  const listed = storage.listScriptsFromValues(valueByKey, descriptionByKey);
+  const existing = storage.findEntryByName(listed.scripts, script.name);
+  const id =
+    (existing && existing.id) ||
+    (script.id != null && String(script.id).trim() !== ''
+      ? String(script.id).trim()
+      : storage.mintScriptId());
+  const planned = storage.planScriptWrite({
+    id,
+    name: script.name,
+    code: script.code,
+    type: 'user'
+  });
+  const orphanedKeys = storage.orphanedKeysFor(
+    existing ? existing.chunkKeys : undefined,
+    planned.entry.chunkKeys
+  );
+  await writeScriptVariables(
+    storage,
+    collection,
+    byName,
+    modeId,
+    planned.variables,
+    orphanedKeys
+  );
+  const primary = planned.entry.path || planned.entry.chunkKeys[0];
+  const refreshed = await loadCollectionVariablesByName(collection);
+  return refreshed.get(primary) || null;
+}
+
+function bindSrcToVariable(src: TextNode | null, variable: Variable | null): void {
+  if (!src || !variable) return;
+  try {
+    const scopes = scriptStorage ? scriptStorage.SCRIPT_VARIABLE_SCOPES : ['TEXT_CONTENT'];
+    variable.scopes = scopes as VariableScope[];
+    src.setBoundVariable('characters', variable);
+  } catch (err) {
+    console.warn(
+      'CodeFig: could not bind SRC to script variable:',
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+}
+
 async function renderOneScriptFrame(
-  script: { name: string; code: string; docs?: string; uiSummary?: string },
-  fonts: { regular: FontName; bold: FontName },
+  script: CanvasScriptPayload,
+  fonts: CanvasFonts,
   x: number,
   y: number
-): Promise<FrameNode> {
+): Promise<SceneNode> {
+  let variable: Variable | null = null;
+  if (scriptStorage) {
+    try {
+      variable = await ensureScriptVariableForCanvas(scriptStorage, script);
+    } catch (err) {
+      console.warn(
+        'CodeFig: canvas variable ensure failed:',
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
+
+  if (canvasScriptRender && typeof canvasScriptRender.renderScriptCard === 'function') {
+    const card = canvasScriptRender.renderScriptCard(script, fonts, x, y);
+    const src =
+      typeof canvasScriptRender.findSrcNode === 'function'
+        ? canvasScriptRender.findSrcNode(card)
+        : ((card as any).findOne &&
+            (card as any).findOne((n: BaseNode) => n && n.name === 'SRC')) ||
+          null;
+    bindSrcToVariable(src && src.type === 'TEXT' ? src : null, variable);
+    return card;
+  }
+  // Fallback if shim module is old — vertical stack (legacy).
   const ink: RGB = { r: 0.12, g: 0.12, b: 0.12 };
   const muted: RGB = { r: 0.4, g: 0.4, b: 0.4 };
   const frame = figma.createFrame();
@@ -875,52 +1072,57 @@ async function renderOneScriptFrame(
   frame.cornerRadius = 8;
   frame.x = x;
   frame.y = y;
-
   frame.appendChild(createCanvasText(script.name || 'Untitled', fonts.bold, 20, ink));
-
   frame.appendChild(createCanvasText('Documentation', fonts.bold, 14, ink));
   const docs = String(script.docs || '').trim() || '(No documentation block in this script.)';
   for (const chunk of chunkTextForCanvas(docs, CANVAS_TEXT_CHUNK)) {
     frame.appendChild(createCanvasText(chunk, fonts.regular, 12, muted));
   }
-
   frame.appendChild(createCanvasText('Configuration UI', fonts.bold, 14, ink));
-  const ui =
-    String(script.uiSummary || '').trim() ||
-    'Open this script in CodeFig to use its Configuration UI.';
-  frame.appendChild(createCanvasText(ui, fonts.regular, 12, muted));
-
+  frame.appendChild(
+    createCanvasText(
+      String(script.uiSummary || '').trim() || 'Open this script in CodeFig to use its Configuration UI.',
+      fonts.regular,
+      12,
+      muted
+    )
+  );
   frame.appendChild(createCanvasText('Source code', fonts.bold, 14, ink));
-  for (const chunk of chunkTextForCanvas(script.code || '', CANVAS_TEXT_CHUNK)) {
-    const block = createCanvasText(chunk, fonts.regular, 11, ink);
-    block.fills = [{ type: 'SOLID', color: ink }];
-    frame.appendChild(block);
-  }
-
+  const mono = fonts.mono || fonts.regular;
+  const src = createCanvasText(
+    String(script.code || '').slice(0, CANVAS_TEXT_CHUNK) || ' ',
+    mono,
+    11,
+    ink
+  );
+  src.name = 'SRC';
+  frame.appendChild(src);
+  bindSrcToVariable(src, variable);
   return frame;
 }
 
-async function renderScriptsOnCanvasPage(
-  scripts: Array<{ name: string; code: string; docs?: string; uiSummary?: string }>
-): Promise<number> {
+async function renderScriptsOnCanvasPage(scripts: CanvasScriptPayload[]): Promise<number> {
   const page = await ensureCodeFigScriptsPage();
   await figma.setCurrentPageAsync(page);
   const fonts = await loadCanvasFonts();
   let x = 0;
   let y = 0;
   let rowHeight = 0;
-  const gap = 40;
-  const colWidth = 760;
+  const gap = 80;
+  const colWidth =
+    canvasScriptRender && canvasScriptRender.ROOT_WIDTH
+      ? Number(canvasScriptRender.ROOT_WIDTH) + gap
+      : 1880;
   let count = 0;
-  const created: FrameNode[] = [];
+  const created: SceneNode[] = [];
   for (const script of scripts) {
     if (!script || !String(script.code || '').trim()) continue;
     const frame = await renderOneScriptFrame(script, fonts, x, y);
     page.appendChild(frame);
     created.push(frame);
-    rowHeight = Math.max(rowHeight, frame.height);
+    rowHeight = Math.max(rowHeight, (frame as LayoutMixin).height || 0);
     x += colWidth;
-    if (x > colWidth * 2) {
+    if (x > colWidth * 1.5) {
       x = 0;
       y += rowHeight + gap;
       rowHeight = 0;
@@ -1243,12 +1445,15 @@ figma.ui.onmessage = (msg) => {
     const raw = Array.isArray((msg as { scripts?: unknown }).scripts)
       ? (msg as { scripts: any[] }).scripts
       : [];
-    const scripts = raw
+    const scripts: CanvasScriptPayload[] = raw
       .filter((s) => s && typeof s.name === 'string' && s.code != null)
       .map((s) => ({
         name: String(s.name),
         code: typeof s.code === 'string' ? s.code : String(s.code),
+        id: s.id != null && String(s.id).trim() !== '' ? String(s.id).trim() : null,
         docs: s.docs != null ? String(s.docs) : '',
+        docsBlocks: Array.isArray(s.docsBlocks) ? s.docsBlocks : [],
+        panelRows: Array.isArray(s.panelRows) ? s.panelRows : [],
         uiSummary: s.uiSummary != null ? String(s.uiSummary) : ''
       }));
     renderScriptsOnCanvasPage(scripts)

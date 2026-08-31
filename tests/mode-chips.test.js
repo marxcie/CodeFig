@@ -65,6 +65,34 @@ function renameChip(chips, index, to) {
   input.dispatch('keydown', { key: 'Enter', preventDefault() {} });
 }
 
+test('an empty mode name locks the chips; a named starter unlocks them', () => {
+  // The mechanism behind the Colors new-collection bug: chipNamesFromSchema drops blank names,
+  // so an empty starter looks like "no modes yet" and drawChips paints the placeholder "Value"
+  // with "Modes locked by Collection scope". A real starter name is editable and Run can see it.
+  function chipsFor(modeName) {
+    const block = [
+      'collectionName: "Test", // @collection @label: Collection',
+      '// @collectionModes: Collection modes',
+      'modes: [',
+      '  { name: ' + JSON.stringify(modeName) + ', seed: { hex: "" } },',
+      '], // @rows: name:text=Mode @tabs @label: Modes',
+    ].join('\n');
+    return renderForm(block).chips;
+  }
+
+  const locked = chipsFor('');
+  assert.equal(locked.getAttribute('data-placeholder'), 'true');
+  assert.ok(locked.querySelector('.config-ui-chips-locked'), 'empty name shows the lock line');
+  assert.equal(chipNames(locked).length, 0, 'placeholder chips do not count as a mode list');
+  assert.equal(locked.querySelector('.config-ui-chip-add'), null, 'no + while locked');
+
+  const open = chipsFor('Value');
+  assert.equal(open.getAttribute('data-placeholder'), 'false');
+  assert.equal(open.querySelector('.config-ui-chips-locked'), null);
+  assert.deepEqual(chipNames(open), ['Value']);
+  assert.ok(open.querySelector('.config-ui-chip-add'), '+ is available on a named starter');
+});
+
 test('a rename is a rename: same mode, new name, values untouched', () => {
   const { chips, entries, ids } = renderForm();
   renameChip(chips, 1, 'Pad');
@@ -521,7 +549,9 @@ test('no shipped config block proposes a viewport system of its own', () => {
   // collection. Not zero: a collection cannot exist without at least one mode, so one is the floor.
   // Point a panel at a collection and its real modes replace this.
   const DSF = path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations');
-  ['grid.js', 'spacing.js', 'typography.js', 'corner-radius.js'].forEach((file) => {
+  // colors.js was left off this list once — empty `name: ""` locked its chips (placeholder
+  // "Value" + "Modes locked by Collection scope") and Run answered "Add at least one mode".
+  ['grid.js', 'spacing.js', 'typography.js', 'corner-radius.js', 'colors.js'].forEach((file) => {
     const source = fs.readFileSync(path.join(DSF, file), 'utf8');
     const block = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(source)[1];
     const modes = P.parse(block).rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];

@@ -36,6 +36,7 @@
       })();
     </script>
     <script id="bezier-js">/* generated at build time from scripts/CODEFIG_LIBRARIES/@bezier.js - do not edit */</script>
+    <script id="canvas-payload-js">/* generated at build time from src/canvas-script-payload.js - do not edit */</script>
     <script id="config-ui-js">/* generated at build time from src/config-ui/ - do not edit */</script>
     <script id="import-resolver-js">/* generated at build time from src/import-resolver.js - do not edit */</script>
     <script id="style-scoper-js">/* generated at build time from src/style-scoper.js - do not edit */</script>
@@ -5038,10 +5039,13 @@
         if (!currentScript) return;
         
         const scriptData = {
+          v: 2,
+          id: currentScript.id || undefined,
           name: currentScript.name,
           code: getFullCode(),
           type: currentScript.type
         };
+        if (!scriptData.id) delete scriptData.id;
         
         const dataStr = JSON.stringify(scriptData, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -5058,7 +5062,19 @@
 
       // Export all user scripts
       function exportAllUserScripts() {
-        const userScriptsData = allScripts.filter(s => s.type === 'user' || s.type === 'library');
+        const userScriptsData = allScripts
+          .filter(s => s.type === 'user' || s.type === 'library')
+          .map(function (s) {
+            const entry = {
+              v: 2,
+              id: s.id || undefined,
+              name: s.name,
+              code: s.code == null ? '' : String(s.code),
+              type: s.type
+            };
+            if (!entry.id) delete entry.id;
+            return entry;
+          });
         
         if (userScriptsData.length === 0) {
           post('NOTIFY', { message: 'No user scripts or libraries to export' });
@@ -5209,7 +5225,7 @@
       }
 
       /**
-       * Build canvas payload: name, source, docs, and a short UI summary when the script has config.
+       * Build canvas payload: name, source, structured docs blocks, and panel mock rows.
        */
       function buildCanvasScriptPayload(script) {
         const code = (currentScript && currentScript.storageId && script.storageId
@@ -5218,17 +5234,46 @@
           ? getFullCode()
           : (script.code || '');
         const sections = parseScriptSections(code);
+        let docs = (sections && sections.docContent) ? sections.docContent : '';
+        const payloadApi = window.CodeFigCanvasPayload;
+        if (!docs && payloadApi && typeof payloadApi.extractLeadingCommentDocs === 'function') {
+          docs = payloadApi.extractLeadingCommentDocs(code) || '';
+        }
+        let docsBlocks = [];
+        if (docs && payloadApi && typeof payloadApi.markdownToDocsBlocks === 'function') {
+          const markedApi = (typeof window.marked !== 'undefined') ? window.marked : null;
+          docsBlocks = payloadApi.markdownToDocsBlocks(docs, markedApi) || [];
+        } else if (docs) {
+          docsBlocks = [{ type: 'paragraph', segments: [{ text: docs }] }];
+        }
+        let panelRows = [];
         let uiSummary = '';
         if (sections && sections.hasConfig) {
           uiSummary = 'This script has a Configuration UI in CodeFig.';
-          if (sections.hasUIConfig) uiSummary += ' Open it in the plugin to edit fields.';
-          else uiSummary += ' Config lives in the Source / Configuration block.';
+          if (window.CodeFigConfigUI && typeof window.CodeFigConfigUI.parse === 'function' &&
+              payloadApi && typeof payloadApi.schemaRowsToPanelRows === 'function') {
+            try {
+              const panelSpec = sections.hasPanelSpec ? sections.panelSpecContent : undefined;
+              const schema = window.CodeFigConfigUI.parse(sections.configContent || '', panelSpec);
+              panelRows = payloadApi.schemaRowsToPanelRows(schema && schema.rows) || [];
+            } catch (e) {
+              console.warn('canvas panel mock parse failed', e);
+            }
+          }
+          if (!panelRows.length) {
+            uiSummary += sections.hasUIConfig
+              ? ' Open it in the plugin to edit fields.'
+              : ' Config lives in the Source / Configuration block.';
+          }
         }
         return {
           name: script.name,
           type: script.type,
+          id: script.id || null,
           code: code,
-          docs: (sections && sections.docContent) ? sections.docContent : '',
+          docs: docs,
+          docsBlocks: docsBlocks,
+          panelRows: panelRows,
           uiSummary: uiSummary
         };
       }
@@ -5337,7 +5382,11 @@
         if (raw.type === 'library' || raw.type === 'user') {
           type = isAtLib ? 'library' : raw.type;
         }
-        return { name, code, type };
+        const out = { name, code, type };
+        if (raw.id != null && String(raw.id).trim() !== '') {
+          out.id = String(raw.id).trim();
+        }
+        return out;
       }
 
       // Import script (single object or array from "export all user scripts")

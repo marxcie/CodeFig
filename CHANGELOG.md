@@ -19,8 +19,24 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Changed
+
+- **Copy or move variables** (was Merge variable collections): Source/Target sections with
+  collection, group, and mode; **Move** or **Copy**. Matching names in the target overwrite.
+  Move rebinds this file and removes the source variables (collection too when empty and
+  unpublished). Copy leaves the source alone. Collection fields use the collection picker
+  (so Mode can follow them); a missing target collection is created.
+- **Replace variables** panel: Rebind scope, then Search for / Replace with (collection, group,
+  variables). Match case and Preview only removed — runs apply immediately, case-insensitive.
+  Still rebinds only; does not move definitions.
+
 ### Fixed
 
+- **Colors on a new collection no longer locks modes and refuses to run.** The shipped starter
+  mode was `name: ""`, so the chips stayed in placeholder ("Value" + *Modes locked by Collection
+  scope*) and Run answered *Add at least one mode*. It now ships `Value`, same as the other
+  Design System Foundations scripts — leave it, rename it, or add more with `+`; a fresh
+  collection gets that mode on write.
 - **Delete is local user scripts only.** The Delete control is hidden for `@` libraries and
   for scripts loaded from a remote `"CodeFig Scripts"` library; the handler refuses those too.
 - **Sidebar no longer rebuilds on every autosave.** `updateScriptList` skips `innerHTML` when
@@ -35,8 +51,16 @@ a plain statement of the new default.
   filter hid them until reopen).
 - **Settings gear** (left of the export menus) opens stores prefs: Variables / LocalStorage on or
   off, and dual-write vs preferred-store SAVE behaviour. Stored in `clientStorage`.
-- **Render on canvas** (This script / All user scripts): builds page `CodeFig Scripts` with one
-  frame per script — Documentation, a Configuration UI note, and Source code.
+- **Render on canvas** (This script / All user scripts): builds page `CodeFig Scripts` with
+  instances of a shared `{Script name}` component (Config/Docs slots + SRC). SRC binds to the
+  script’s STRING variable (**raw source**, real newlines); id lives on the variable
+  **description** (`codefig-id:…`). Paste the instance into another file → Figma’s “add local
+  variables” → script shows in CodeFig. Root is **fixed 1728px**; columns Fill equally. Docs use
+  structured markdown (table cells keep bold/italic; lists are bulleted text layers; TR / field
+  CONTROL Fill). Scripts without `@DOC_START` still show leading `//` / `/*` comments as docs.
+- **Script variable values are raw source** (not JSON envelope on the wire). Export JSON uses the
+  envelope shape `{ v, id?, name, code, type }` for Sync/backup identity; legacy envelopes in
+  variable values still read.
 - **Foundation housekeeping actually runs on plugin open.** The boot path called
   `require('./foundation-maintain')`, but Figma's main JSVM has no Node `require`, so every
   open logged `foundationMaintain unavailable` and did nothing. The build inlines those

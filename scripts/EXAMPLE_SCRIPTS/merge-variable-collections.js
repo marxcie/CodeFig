@@ -1,38 +1,61 @@
-// Merge variable collections
+// Copy or move variables
 // @DOC_START
-// Moves every variable from a source collection into a target collection under a group folder named like the source collection. Optional lines map source modes to target modes; when there are no lines, the first source mode’s value is copied into every target mode.
+// Copies or moves variable **definitions** from a source collection (optional group and mode)
+// into a target collection (optional group and mode). Matching names in the target are
+// overwritten. **Move** rebinds this file’s layers and local styles to the new variables, then
+// removes the source variables (and the source collection when it is empty and unpublished).
+// **Copy** leaves the source and its bindings alone.
 //
 // ## Overview
-// Choose source and target (local collections). Variables become `sourceCollectionName / …` in the target (e.g. `typography / body`). Each line in **Preserve modes** is `source mode name, target mode name`. **Empty textarea:** the collection’s **first source mode** is applied to **all** target modes. **With lines:** unmapped source modes still map to the target’s first mode only. After copying values, **layer** bindings and **local style** bindings (text, paint, effect, grid) are updated, then the **source variable collection** is removed.
+// Empty **Group** = every variable in the collection. Empty **Mode** on both sides = every source
+// mode, matched by name on the target (missing target modes are created). Source mode set + target
+// mode set = only that mode’s values are written. Target mode may be a new name.
 //
 // ## Config options
 // | Option | Description |
 // |--------|--------------|
-// | sourceCollection | Collection to merge (all variables moved out). |
-// | collectionToMergeTo | Destination collection. |
-// | preserveModes | One mapping per line: `source mode, target mode`. Optional. |
+// | sourceCollection / targetCollection | Local collections (pickers, exact name). |
+// | sourceGroup / targetGroup | Path prefix filter / destination prefix. Empty = none. |
+// | sourceMode / targetMode | Mode filter / destination mode. Empty = all / match by name. |
+// | moveOrCopy | **Move** (rebind + remove source) or **Copy** (duplicate only). |
 //
-// **Not a search pattern.** The source and target collections are pickers — compared by exact name, not with the
-// `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
-// identifier, not a search.
+// **Not a search pattern.** Collection pickers are identifiers, not `*` / regex matching.
 // @DOC_END
 
 // @UI_CONFIG_START
 var sourceCollection = '';
-var collectionToMergeTo = '';
-var preserveModes = '';
+var sourceGroup = '';
+var sourceMode = '';
+var targetCollection = '';
+var targetGroup = '';
+var targetMode = '';
+var moveOrCopy = 'Move';
 // @UI_CONFIG_END
 
 // @PANEL_START
 // {
-//   blocks: [
-//     { type: "paragraph", attachTo: "next",
-//       text: "Source: emptied by merge. Target: receives a group named like the source collection." },
-//     { key: "sourceCollection", type: "select", options: "localVariableCollections" },
-//     { key: "collectionToMergeTo", type: "select", options: "localVariableCollections" },
-//     { type: "paragraph", attachTo: "next",
-//       text: "Optional: map source modes to target modes. Example:\nbrand1 typography, brand1\nbrand2 typography, brand2\nEmpty: first source mode fills every target mode. With lines: unmapped source modes → target’s first mode." },
-//     { key: "preserveModes", type: "textarea" }
+//   "blocks": [
+//     { "type": "heading", "text": "Source" },
+//     { "key": "sourceCollection", "type": "collection", "label": "Collection" },
+//     { "key": "sourceGroup", "type": "string", "label": "Group", "placeholder": "color" },
+//     { "type": "paragraph", "attachTo": "previous",
+//       "text": "Only variables under this path. Leave empty for the whole collection." },
+//     { "key": "sourceMode", "type": "mode", "label": "Mode", "collection": "sourceCollection" },
+//     { "type": "paragraph", "attachTo": "previous",
+//       "text": "Only this mode’s values. Leave empty to take every mode." },
+//     { "type": "divider" },
+//     { "type": "heading", "text": "Target" },
+//     { "key": "targetCollection", "type": "collection", "label": "Collection" },
+//     { "key": "targetGroup", "type": "string", "label": "Group", "placeholder": "brand" },
+//     { "type": "paragraph", "attachTo": "previous",
+//       "text": "Destination path prefix. Leave empty to keep each variable’s name under the source group." },
+//     { "key": "targetMode", "type": "mode", "label": "Mode", "collection": "targetCollection" },
+//     { "type": "paragraph", "attachTo": "previous",
+//       "text": "Mode to write into. Pick an existing one or New mode. Leave empty to match source modes by name." },
+//     { "type": "divider" },
+//     { "key": "moveOrCopy", "type": "radio", "label": "Move or copy", "options": ["Move", "Copy"] },
+//     { "type": "paragraph", "attachTo": "previous",
+//       "text": "Move rebinds this file and removes the source variables. Copy leaves the source alone." }
 //   ]
 // }
 // @PANEL_END
@@ -42,52 +65,95 @@ function normalizeVariableName(name) {
   return name.replace(/\/+/g, '/').replace(/^\//, '').replace(/\/$/, '');
 }
 
-function parseModeMappings(str) {
-  if (!str || typeof str !== 'string') return [];
-  var lines = str.split(/\r?\n/);
-  var out = [];
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i].trim();
-    if (!line) continue;
-    var comma = line.indexOf(',');
-    if (comma === -1) continue;
-    var sourceMode = line.slice(0, comma).trim();
-    var targetMode = line.slice(comma + 1).trim();
-    if (sourceMode && targetMode) out.push([sourceMode, targetMode]);
-  }
-  return out;
+function normalizeGroup(g) {
+  return normalizeVariableName(String(g == null ? '' : g).trim());
 }
 
-/** sourceModeId -> targetModeId */
-function buildModeIdMap(sourceCol, targetCol, preserveModesStr) {
-  if (!targetCol.modes || targetCol.modes.length === 0) {
-    throw new Error('Target collection has no modes');
+function variableInSourceGroup(varName, sourceGroup) {
+  var g = normalizeGroup(sourceGroup);
+  if (!g) return true;
+  var n = normalizeVariableName(varName);
+  return n === g || n.indexOf(g + '/') === 0;
+}
+
+function destVariableName(srcName, sourceGroup, targetGroup) {
+  var n = normalizeVariableName(srcName);
+  var sg = normalizeGroup(sourceGroup);
+  var tg = normalizeGroup(targetGroup);
+  var relative = n;
+  if (sg) {
+    if (n === sg) relative = '';
+    else if (n.indexOf(sg + '/') === 0) relative = n.slice(sg.length + 1);
   }
-  var defaultTargetModeId = targetCol.modes[0].modeId;
-  var pairs = parseModeMappings(preserveModesStr || '');
-  var map = {};
-  for (var p = 0; p < pairs.length; p++) {
-    var smName = pairs[p][0];
-    var tmName = pairs[p][1];
-    var sm = sourceCol.modes.find(function(m) { return m.name === smName; });
-    var tm = targetCol.modes.find(function(m) { return m.name === tmName; });
-    if (!sm) {
-      console.warn('Merge variables: unknown source mode in mapping (skipped): "' + smName + '"');
-      continue;
-    }
-    if (!tm) {
-      console.warn('Merge variables: unknown target mode in mapping (skipped): "' + tmName + '"');
-      continue;
-    }
-    map[sm.modeId] = tm.modeId;
+  if (tg && relative) return normalizeVariableName(tg + '/' + relative);
+  if (tg && !relative) return tg;
+  return relative || n;
+}
+
+function findModeByName(col, name) {
+  var want = String(name == null ? '' : name).trim();
+  if (!want || !col || !col.modes) return null;
+  for (var i = 0; i < col.modes.length; i++) {
+    if (col.modes[i].name === want) return col.modes[i];
   }
-  for (var j = 0; j < sourceCol.modes.length; j++) {
-    var mode = sourceCol.modes[j];
-    if (map[mode.modeId] === undefined) {
-      map[mode.modeId] = defaultTargetModeId;
-    }
+  return null;
+}
+
+function ensureTargetMode(targetCol, modeName) {
+  var want = String(modeName == null ? '' : modeName).trim();
+  if (!want) return null;
+  var existing = findModeByName(targetCol, want);
+  if (existing) return existing.modeId;
+  if (typeof targetCol.addMode !== 'function') {
+    throw new Error('Cannot create mode "' + want + '" on target collection');
   }
-  return map;
+  return targetCol.addMode(want);
+}
+
+/**
+ * Build list of { sourceModeId, targetModeId } pairs for this run.
+ * Empty source + empty target → every source mode → same-named target mode (created if needed).
+ * Source set + target set → that pair only.
+ * Source set + target empty → source mode → same-named target mode.
+ * Source empty + target set → first source mode → that target mode.
+ */
+function buildModePairs(sourceCol, targetCol, sourceModeName, targetModeName) {
+  var srcWant = String(sourceModeName == null ? '' : sourceModeName).trim();
+  var tgtWant = String(targetModeName == null ? '' : targetModeName).trim();
+  if (!sourceCol.modes || sourceCol.modes.length === 0) {
+    throw new Error('Source collection has no modes');
+  }
+  var pairs = [];
+  if (srcWant && tgtWant) {
+    var sm = findModeByName(sourceCol, srcWant);
+    if (!sm) throw new Error('Source mode not found: ' + srcWant);
+    pairs.push({ sourceModeId: sm.modeId, targetModeId: ensureTargetMode(targetCol, tgtWant) });
+    return pairs;
+  }
+  if (srcWant && !tgtWant) {
+    var smOnly = findModeByName(sourceCol, srcWant);
+    if (!smOnly) throw new Error('Source mode not found: ' + srcWant);
+    pairs.push({
+      sourceModeId: smOnly.modeId,
+      targetModeId: ensureTargetMode(targetCol, smOnly.name)
+    });
+    return pairs;
+  }
+  if (!srcWant && tgtWant) {
+    pairs.push({
+      sourceModeId: sourceCol.modes[0].modeId,
+      targetModeId: ensureTargetMode(targetCol, tgtWant)
+    });
+    return pairs;
+  }
+  for (var i = 0; i < sourceCol.modes.length; i++) {
+    var mode = sourceCol.modes[i];
+    pairs.push({
+      sourceModeId: mode.modeId,
+      targetModeId: ensureTargetMode(targetCol, mode.name)
+    });
+  }
+  return pairs;
 }
 
 function collectAllNodes(nodes) {
@@ -174,7 +240,6 @@ async function isVariableFromStyle(node, property, variableId, bindIndex) {
 async function rebindDocument(oldIdToNewVariable) {
   var replacementCount = 0;
   var skippedCount = 0;
-  // documentAccess / dynamic-page: pages must be loaded before reading children
   if (typeof figma.loadAllPagesAsync === 'function') {
     await figma.loadAllPagesAsync();
   }
@@ -303,7 +368,7 @@ function replaceVariableIdsInObject(o, oldIdToNew) {
 }
 
 /**
- * Rebind local style definitions that still point at merged (source) variables.
+ * Rebind local style definitions that still point at moved (source) variables.
  */
 async function rebindMergeStyles(oldIdToNew) {
   var styleBindingCount = 0;
@@ -327,7 +392,7 @@ async function rebindMergeStyles(oldIdToNew) {
         tStyle.setBoundVariable(tProp, tRep);
         styleBindingCount++;
       } catch (e) {
-        console.warn('Merge: text style', tStyle.name, tProp, e && e.message);
+        console.warn('Copy/move: text style', tStyle.name, tProp, e && e.message);
       }
     }
   }
@@ -357,7 +422,7 @@ async function rebindMergeStyles(oldIdToNew) {
       try {
         pStyle.paints = pPaints;
       } catch (e) {
-        console.warn('Merge: paint style', pStyle.name, e && e.message);
+        console.warn('Copy/move: paint style', pStyle.name, e && e.message);
       }
     }
   }
@@ -374,7 +439,7 @@ async function rebindMergeStyles(oldIdToNew) {
           eStyle.boundVariables = eBv;
           styleBindingCount += eN1;
         } catch (e) {
-          console.warn('Merge: effect style boundVariables', eStyle.name, e && e.message);
+          console.warn('Copy/move: effect style boundVariables', eStyle.name, e && e.message);
         }
       }
     }
@@ -386,7 +451,7 @@ async function rebindMergeStyles(oldIdToNew) {
           eStyle.effects = eEff;
           styleBindingCount += eN2;
         } catch (e) {
-          console.warn('Merge: effect style effects', eStyle.name, e && e.message);
+          console.warn('Copy/move: effect style effects', eStyle.name, e && e.message);
         }
       }
     }
@@ -405,55 +470,98 @@ async function rebindMergeStyles(oldIdToNew) {
             gStyle.boundVariables = gBv;
             styleBindingCount += gN;
           } catch (e) {
-            console.warn('Merge: grid style', gStyle.name, e && e.message);
+            console.warn('Copy/move: grid style', gStyle.name, e && e.message);
           }
         }
       }
     } catch (e) {
-      console.warn('Merge: grid styles', e && e.message);
+      console.warn('Copy/move: grid styles', e && e.message);
     }
   }
 
   return styleBindingCount;
 }
 
-async function mergeCollections(sourceCol, targetCol, preserveModesStr) {
-  var groupPrefix = normalizeVariableName(sourceCol.name);
-  if (!groupPrefix) {
-    throw new Error('Source collection name is empty');
+/** Rebind VARIABLE_ALIAS values inside local variable definitions that still point at moved ids. */
+async function rebindVariableTableAliases(oldIdToNew) {
+  var n = 0;
+  var local = await figma.variables.getLocalVariableCollectionsAsync();
+  for (var ci = 0; ci < local.length; ci++) {
+    var col = local[ci];
+    for (var vi = 0; vi < col.variableIds.length; vi++) {
+      var host = await figma.variables.getVariableByIdAsync(col.variableIds[vi]);
+      if (!host || !host.valuesByMode) continue;
+      var modeIds = Object.keys(host.valuesByMode);
+      for (var mi = 0; mi < modeIds.length; mi++) {
+        var modeId = modeIds[mi];
+        var val = host.valuesByMode[modeId];
+        if (!val || typeof val !== 'object' || val.type !== 'VARIABLE_ALIAS' || typeof val.id !== 'string') continue;
+        var rep = oldIdToNew[val.id];
+        if (!rep) continue;
+        try {
+          host.setValueForMode(modeId, { type: 'VARIABLE_ALIAS', id: rep.id });
+          n++;
+        } catch (e) {
+          console.warn('Copy/move: variable alias', host.name, e && e.message);
+        }
+      }
+    }
   }
+  return n;
+}
 
-  var explicitPairs = parseModeMappings(preserveModesStr || '');
-  var hasExplicitMapping = explicitPairs.length > 0;
-  var modeMap = hasExplicitMapping ? buildModeIdMap(sourceCol, targetCol, preserveModesStr) : null;
+async function findVariableByNameInCollection(col, name) {
+  var want = normalizeVariableName(name);
+  for (var i = 0; i < col.variableIds.length; i++) {
+    var v = await figma.variables.getVariableByIdAsync(col.variableIds[i]);
+    if (v && normalizeVariableName(v.name) === want) return v;
+  }
+  return null;
+}
+
+/**
+ * @param {{ sourceCol, targetCol, sourceGroup, targetGroup, sourceMode, targetMode, isMove }} opts
+ */
+async function copyOrMoveVariables(opts) {
+  var sourceCol = opts.sourceCol;
+  var targetCol = opts.targetCol;
+  var sourceGroup = opts.sourceGroup;
+  var targetGroup = opts.targetGroup;
+  var isMove = opts.isMove === true;
+  var modePairs = buildModePairs(sourceCol, targetCol, opts.sourceMode, opts.targetMode);
   var oldIdToNew = {};
   var created = 0;
   var updated = 0;
+  var skipped = 0;
+  var sourceIdsToRemove = [];
 
   for (var vi = 0; vi < sourceCol.variableIds.length; vi++) {
     var vid = sourceCol.variableIds[vi];
     var srcVar = await figma.variables.getVariableByIdAsync(vid);
     if (!srcVar) continue;
+    if (!variableInSourceGroup(srcVar.name, sourceGroup)) continue;
 
-    var newName = normalizeVariableName(groupPrefix + '/' + srcVar.name);
-    var existing = null;
-    for (var tj = 0; tj < targetCol.variableIds.length; tj++) {
-      var tv = await figma.variables.getVariableByIdAsync(targetCol.variableIds[tj]);
-      if (tv && tv.name === newName) {
-        existing = tv;
-        break;
-      }
+    var newName = destVariableName(srcVar.name, sourceGroup, targetGroup);
+    if (!newName) {
+      console.warn('Copy/move: empty destination name for', srcVar.name);
+      skipped++;
+      continue;
     }
 
-    var destVar = existing;
+    var sameSlot = sourceCol.id === targetCol.id && normalizeVariableName(srcVar.name) === normalizeVariableName(newName);
+    var destVar = sameSlot ? srcVar : await findVariableByNameInCollection(targetCol, newName);
+
     if (!destVar) {
       destVar = figma.variables.createVariable(newName, targetCol, srcVar.resolvedType);
       created++;
-    } else {
+    } else if (!sameSlot) {
       if (destVar.resolvedType !== srcVar.resolvedType) {
-        console.warn('Skip merge (type mismatch):', newName, srcVar.resolvedType, 'vs', destVar.resolvedType);
+        console.warn('Skip (type mismatch):', newName, srcVar.resolvedType, 'vs', destVar.resolvedType);
+        skipped++;
         continue;
       }
+      updated++;
+    } else {
       updated++;
     }
 
@@ -462,81 +570,95 @@ async function mergeCollections(sourceCol, targetCol, preserveModesStr) {
       destVar.scopes = srcVar.scopes.slice();
     }
 
-    if (!hasExplicitMapping) {
-      if (!sourceCol.modes || sourceCol.modes.length === 0) {
-        console.warn('Merge variables: source collection has no modes, skip:', newName);
-      } else {
-        var firstSrcModeId = sourceCol.modes[0].modeId;
-        var broadcastVal = srcVar.valuesByMode[firstSrcModeId];
-        if (broadcastVal !== undefined) {
-          for (var ti = 0; ti < targetCol.modes.length; ti++) {
-            try {
-              destVar.setValueForMode(targetCol.modes[ti].modeId, broadcastVal);
-            } catch (e) {
-              console.warn('setValueForMode', newName, e && e.message);
-            }
-          }
-        }
+    var fallbackVal = undefined;
+    for (var pi = 0; pi < modePairs.length; pi++) {
+      var pair = modePairs[pi];
+      var val = srcVar.valuesByMode[pair.sourceModeId];
+      if (val === undefined) continue;
+      if (fallbackVal === undefined) fallbackVal = val;
+      try {
+        destVar.setValueForMode(pair.targetModeId, val);
+      } catch (e) {
+        console.warn('setValueForMode', newName, e && e.message);
       }
-    } else {
-      for (var smi = 0; smi < sourceCol.modes.length; smi++) {
-        var smode = sourceCol.modes[smi];
-        var tModeId = modeMap[smode.modeId];
-        if (!tModeId) continue;
-        var val = srcVar.valuesByMode[smode.modeId];
-        if (val !== undefined) {
-          try {
-            destVar.setValueForMode(tModeId, val);
-          } catch (e) {
-            console.warn('setValueForMode', newName, e && e.message);
-          }
+    }
+
+    // New variables need a value in every target mode; fill gaps from the first copied value.
+    if (fallbackVal !== undefined && targetCol.modes) {
+      for (var ti = 0; ti < targetCol.modes.length; ti++) {
+        var tModeId = targetCol.modes[ti].modeId;
+        if (destVar.valuesByMode[tModeId] !== undefined) continue;
+        try {
+          destVar.setValueForMode(tModeId, fallbackVal);
+        } catch (e) {
+          console.warn('setValueForMode (fill)', newName, e && e.message);
         }
       }
     }
 
-    oldIdToNew[srcVar.id] = destVar;
+    if (!sameSlot) {
+      oldIdToNew[srcVar.id] = destVar;
+      if (isMove) sourceIdsToRemove.push(srcVar);
+    }
   }
 
-  var rebindStats = await rebindDocument(oldIdToNew);
-  var styleBindings = await rebindMergeStyles(oldIdToNew);
+  var rebindStats = { replaced: 0, skipped: 0 };
+  var styleBindings = 0;
+  var aliasBindings = 0;
+  if (isMove && Object.keys(oldIdToNew).length > 0) {
+    rebindStats = await rebindDocument(oldIdToNew);
+    styleBindings = await rebindMergeStyles(oldIdToNew);
+    aliasBindings = await rebindVariableTableAliases(oldIdToNew);
+  }
 
-  // A variable's id and its published key are minted at creation, so removing the source is
-  // unrecoverable for anyone consuming it: bindings in *this* file were rebound above, but a file
-  // subscribing to this as a library gets a "missing variable" it cannot relink. Refuse when the
-  // collection is published — the merge itself has already happened and is not undone by keeping
-  // the source, so the safe outcome is a leftover collection you can delete yourself.
-  var publishStatus = 'UNPUBLISHED';
-  try {
-    if (typeof sourceCol.getPublishStatusAsync === 'function') {
-      publishStatus = await sourceCol.getPublishStatusAsync();
+  var variablesRemoved = 0;
+  if (isMove) {
+    for (var ri = 0; ri < sourceIdsToRemove.length; ri++) {
+      try {
+        sourceIdsToRemove[ri].remove();
+        variablesRemoved++;
+      } catch (e) {
+        console.warn('Copy/move: could not remove source variable', sourceIdsToRemove[ri].name, e && e.message);
+      }
     }
-  } catch (e) {
-    publishStatus = 'UNKNOWN';
   }
 
   var collectionRemoved = false;
-  if (publishStatus !== 'UNPUBLISHED') {
-    console.warn(
-      'Merge: "' + sourceCol.name + '" is published (' + publishStatus + '), so it was NOT removed.\n' +
-      '  Its variables were copied and this file was rebound, but other files subscribe to these ' +
-      'variables by key. Deleting it would leave them with missing variables they cannot relink.\n' +
-      '  Delete it yourself in the Variables panel once you know nothing depends on it.'
-    );
-  } else if (typeof sourceCol.remove === 'function') {
+  if (isMove && sourceCol.variableIds.length === 0) {
+    var publishStatus = 'UNPUBLISHED';
     try {
-      sourceCol.remove();
-      collectionRemoved = true;
+      if (typeof sourceCol.getPublishStatusAsync === 'function') {
+        publishStatus = await sourceCol.getPublishStatusAsync();
+      }
     } catch (e) {
-      console.warn('Merge: collection.remove failed, leaving the source in place:', e && e.message);
+      publishStatus = 'UNKNOWN';
+    }
+    if (publishStatus !== 'UNPUBLISHED') {
+      console.warn(
+        'Copy/move: "' + sourceCol.name + '" is published (' + publishStatus + '), so it was NOT removed.\n' +
+        '  Its variables were moved and this file was rebound, but other files subscribe to these ' +
+        'variables by key. Deleting it would leave them with missing variables they cannot relink.\n' +
+        '  Delete it yourself in the Variables panel once you know nothing depends on it.'
+      );
+    } else if (typeof sourceCol.remove === 'function') {
+      try {
+        sourceCol.remove();
+        collectionRemoved = true;
+      } catch (e) {
+        console.warn('Copy/move: collection.remove failed:', e && e.message);
+      }
     }
   }
 
   return {
     created: created,
     updated: updated,
+    skipped: skipped,
     rebindReplaced: rebindStats.replaced,
     rebindSkipped: rebindStats.skipped,
     styleBindings: styleBindings,
+    aliasBindings: aliasBindings,
+    variablesRemoved: variablesRemoved,
     collectionRemoved: collectionRemoved
   };
 }
@@ -545,17 +667,22 @@ async function mergeCollections(sourceCol, targetCol, preserveModesStr) {
   try {
     var srcName = (typeof sourceCollection !== 'undefined' && sourceCollection != null)
       ? String(sourceCollection).trim() : '';
-    var tgtName = (typeof collectionToMergeTo !== 'undefined' && collectionToMergeTo != null)
-      ? String(collectionToMergeTo).trim() : '';
-    var modesStr = (typeof preserveModes !== 'undefined' && preserveModes != null)
-      ? String(preserveModes) : '';
+    var tgtName = (typeof targetCollection !== 'undefined' && targetCollection != null)
+      ? String(targetCollection).trim() : '';
+    // Prefer new keys; fall back to the old merge field name if a pasted config still has it.
+    if (!tgtName && typeof collectionToMergeTo !== 'undefined' && collectionToMergeTo != null) {
+      tgtName = String(collectionToMergeTo).trim();
+    }
+    var srcGroup = (typeof sourceGroup !== 'undefined' && sourceGroup != null) ? String(sourceGroup) : '';
+    var tgtGroup = (typeof targetGroup !== 'undefined' && targetGroup != null) ? String(targetGroup) : '';
+    var srcMode = (typeof sourceMode !== 'undefined' && sourceMode != null) ? String(sourceMode) : '';
+    var tgtMode = (typeof targetMode !== 'undefined' && targetMode != null) ? String(targetMode) : '';
+    var action = (typeof moveOrCopy !== 'undefined' && moveOrCopy != null)
+      ? String(moveOrCopy).trim() : 'Move';
+    var isMove = action !== 'Copy';
 
     if (!srcName || !tgtName) {
       figma.notify('Choose both source and target collections');
-      return;
-    }
-    if (srcName === tgtName) {
-      figma.notify('Source and target must be different collections');
       return;
     }
 
@@ -567,21 +694,31 @@ async function mergeCollections(sourceCol, targetCol, preserveModesStr) {
       return;
     }
     if (!targetCol) {
-      figma.notify('Target collection not found: ' + tgtName);
-      return;
+      targetCol = figma.variables.createVariableCollection(tgtName);
     }
 
-    var stats = await mergeCollections(sourceCol, targetCol, modesStr);
-    figma.notify(
-      'Merged into "' + tgtName + '": +' + stats.created + ' vars. ' +
-      stats.rebindReplaced + ' layer + ' + stats.styleBindings + ' style bindings. ' +
-      (stats.collectionRemoved
-        ? 'Source collection removed.'
-        : 'Source collection kept — see console for why. Delete it yourself once nothing depends on it.')
-    );
+    var stats = await copyOrMoveVariables({
+      sourceCol: sourceCol,
+      targetCol: targetCol,
+      sourceGroup: srcGroup,
+      targetGroup: tgtGroup,
+      sourceMode: srcMode,
+      targetMode: tgtMode,
+      isMove: isMove
+    });
+
+    var verb = isMove ? 'Moved' : 'Copied';
+    var msg = verb + ' into "' + tgtName + '": +' + stats.created + ' created, ' +
+      stats.updated + ' updated';
+    if (isMove) {
+      msg += '. ' + stats.rebindReplaced + ' layer + ' + stats.styleBindings + ' style + ' +
+        stats.aliasBindings + ' alias bindings. Removed ' + stats.variablesRemoved + ' source var(s).';
+      if (stats.collectionRemoved) msg += ' Source collection removed.';
+    }
+    figma.notify(msg);
   } catch (err) {
-    var msg = err instanceof Error ? err.message : String(err);
-    console.error('Merge variable collections:', msg);
-    figma.notify('Merge failed: ' + msg);
+    var errMsg = err instanceof Error ? err.message : String(err);
+    console.error('Copy or move variables:', errMsg);
+    figma.notify('Copy/move failed: ' + errMsg);
   }
 })();
