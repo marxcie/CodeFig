@@ -1,10 +1,11 @@
 /**
  * Typography `@PANEL_START` migration differential (plan 37).
  *
- * Compares the new panel reader against the pre-migration old-parser rows dumped to
- * `scratchpad/rows-typography.js.json` (directive stripped). Colors already migrated the same
- * way; Typography adds list fields, textarea, nested group columns with `unit`, and a
- * suggestions marker — features Colors never exercised.
+ * Compares the new panel reader against the pre-migration old-parser rows in
+ * `tests/fixtures/typography-panel-rows.json` (directive stripped; originally dumped from
+ * scratchpad before migration). Colors already migrated the same way; Typography adds list
+ * fields, textarea, nested group columns with `unit`, and a suggestions marker — features
+ * Colors never exercised.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -16,7 +17,7 @@ const parser = require('../src/config-ui/parser.js');
 const TYPOGRAPHY_PATH = path.join(
   __dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'typography.js'
 );
-const ROWS_FIXTURE_PATH = path.join(__dirname, '..', 'scratchpad', 'rows-typography.js.json');
+const ROWS_FIXTURE_PATH = path.join(__dirname, 'fixtures', 'typography-panel-rows.json');
 
 function extractRegion(src, startMarker, endMarker) {
   const re = new RegExp(startMarker + '\\n([\\s\\S]*?)\\/\\/ ' + endMarker);

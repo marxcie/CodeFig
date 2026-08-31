@@ -8,8 +8,9 @@ dist/
 codefig-plugin.zip
 codefig-v*-plugin.zip
 
-# Local working notes (streamlining plans, scratch)
+# Local working notes (streamlining plans, scratch dumps / drafts)
 .plans/
+scratchpad/
 
 # Local Claude Code settings — machine-specific, not shared
 .claude/settings.local.json
