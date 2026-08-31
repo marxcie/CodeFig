@@ -316,17 +316,38 @@ test('a panel that names no modes reads the collection’s own', async () => {
   assert.deepEqual(Object.keys(adopted.existing), ['Ash', 'Granite', 'Bark']);
   assert.equal(adopted.config.modes.length, 3);
 
-  // A block whose name is blank counts as naming nothing, which is exactly the shipped default.
+  // A block whose name is blank still counts as naming nothing (the pre-Value starter).
   const blank = await ctx.foundationColorsAutoImport('color - neutral (formerly Ash)', 'neutral', ['', '  ']);
   assert.deepEqual(blank.modes, ['Ash', 'Granite', 'Bark']);
   assert.equal(blank.modeSource, 'collection');
 
-  // And named blocks still win, so a panel that has been set up is not overwritten by the file's mode list.
+  // And named blocks that exist in the collection still win, so a set-up panel is not overwritten.
   const named = await ctx.foundationColorsAutoImport(
     'color - neutral (formerly Ash)', 'neutral', ['Granite']);
   assert.equal(named.modeSource, 'panel');
   assert.deepEqual(named.modes, ['Granite']);
   assert.deepEqual(Object.keys(named.existing), ['Granite']);
+});
+
+test('a shipped Value starter still loads a Mode 1 collection', async () => {
+  // The starter was renamed from "" to "Value" so a fresh collection can run (chips + Run both need a
+  // real name). Figma's other default is still `Mode 1`. Asking for Value against that used to return
+  // source:none and leave steps empty — the panel looked dead after Collection + Group.
+  const ctx = load(stubFigma([{
+    name: 'color - moss',
+    modes: ['Mode 1'],
+    variables: NEUTRAL.steps.map((step, i) => ({
+      name: 'moss/' + step,
+      values: { 'Mode 1': rgbOf(NEUTRAL.modes.Ash[i]) },
+    })),
+  }]));
+
+  const found = await ctx.foundationColorsAutoImport('color - moss', 'moss', ['Value'], 'hsl');
+  assert.equal(found.source, 'recognised');
+  assert.equal(found.modeSource, 'collection');
+  assert.deepEqual(found.modes, ['Mode 1']);
+  assert.equal(found.config.steps, NEUTRAL.steps.join(', '));
+  assert.deepEqual(Object.keys(found.existing), ['Mode 1']);
 });
 
 test('a group that is mostly non-opaque is declined in one line', async () => {

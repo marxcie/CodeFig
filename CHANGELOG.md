@@ -32,6 +32,11 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Colors loads again when Collection and Group point at an existing set.** Renaming the
+  shipped starter mode to `Value` (so a fresh collection can run) made auto-import ask the
+  file for a mode many collections do not have — Figma's other default is still `Mode 1`.
+  When none of the panel's mode names exist in the collection, the read adopts the
+  collection's modes instead of returning empty.
 - **Colors on a new collection no longer locks modes and refuses to run.** The shipped starter
   mode was `name: ""`, so the chips stayed in placeholder ("Value" + *Modes locked by Collection
   scope*) and Run answered *Add at least one mode*. It now ships `Value`, same as the other

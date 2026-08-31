@@ -3746,21 +3746,39 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   var owner = collections.filter(function (c) { return c.name === collectionName; })[0];
   if (!owner) return answer;
 
-  // **When the panel names no modes, read the collection's own.**
+  // **When the panel's modes are not in the collection, read the collection's own.**
   //
   // "The modes come from the panel, not the collection" is right about which modes get *written* — a mode
   // with no block is not the panel's business. As the only source for what to *read* it was a
-  // chicken-and-egg: the shipped block opens with one unnamed mode, so nothing was asked about, so nothing
+  // chicken-and-egg: the shipped block opens with one starter mode named `Value`, and many collections
+  // still carry Figma's other default (`Mode 1`). Asking for `Value` found nothing, so nothing
   // populated, so there was no way to name a mode. Selecting a collection read none of its modes and said
-  // nothing, which is bug 1.
+  // nothing — the same miss an empty name used to trigger, reintroduced the moment the starter was named
+  // so a fresh collection could run.
   //
-  // So: named blocks win, and an unnamed panel adopts what is there. `modeSource` says which happened, so
-  // the note can tell the difference between "your blocks" and "what the file had".
+  // So: named blocks that exist in the collection win; when none of them do, adopt what is there.
+  // `modeSource` says which happened, so the note can tell the difference between "your blocks" and
+  // "what the file had".
   var asked = (Array.isArray(modeNames) ? modeNames : []).filter(function (name) {
     return typeof name === 'string' && name.trim();
   });
-  var wanted = asked.length ? asked : owner.modes.map(function (m) { return m.name; });
-  answer.modeSource = asked.length ? 'panel' : 'collection';
+  var collectionModeNames = owner.modes.map(function (m) { return m.name; });
+  var askedPresent = asked.filter(function (name) {
+    return collectionModeNames.indexOf(name) !== -1;
+  });
+  var wanted;
+  if (askedPresent.length) {
+    // Keep the full asked list so a block the file does not have still arrives as a name-only entry
+    // rather than being dropped — `fillConfigBlock` removes anything the payload never mentions.
+    wanted = asked;
+    answer.modeSource = 'panel';
+  } else if (collectionModeNames.length) {
+    wanted = collectionModeNames;
+    answer.modeSource = 'collection';
+  } else {
+    wanted = asked;
+    answer.modeSource = asked.length ? 'panel' : 'collection';
+  }
   if (!wanted.length) return answer;
 
   // **One indexed read for every mode this loop is about to ask about**, replacing the (M+1)×V
