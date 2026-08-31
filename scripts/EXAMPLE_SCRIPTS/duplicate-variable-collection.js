@@ -30,10 +30,19 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// Source collection (choose from existing). New name for the copy.
-var sourceCollectionName = 'website V3'; // @options: localVariableCollections
-var newCollectionName = ''; // @placeholder="website V4"
+var sourceCollectionName = 'website V3';
+var newCollectionName = '';
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "paragraph", attachTo: "next", text: "Source collection (choose from existing). New name for the copy." },
+//     { key: "sourceCollectionName", type: "select", options: "localVariableCollections" },
+//     { key: "newCollectionName", type: "string", placeholder: "website V4" }
+//   ]
+// }
+// @PANEL_END
 
 @import { foundationNamespace, parseManifest, writeManifest, foundationMintSetId, foundationSetIdFromKey, foundationModeIds, stampToken, readStamp } from "@Foundation"
 

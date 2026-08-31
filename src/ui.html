@@ -160,9 +160,82 @@
           </button>
         </div>
         <div class="footer-right">
-          <button class="btn secondary" id="exportBtn" title="Export current script (⌘E)">Export script</button>
-          <button class="btn secondary" id="exportAllBtn" title="Export all user scripts">Export all user scripts</button>
+          <button type="button" class="icon-btn" id="settingsBtn" title="CodeFig settings" aria-label="CodeFig settings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </button>
+          <div class="footer-menu" id="thisScriptMenu">
+            <button type="button" class="btn secondary footer-menu__trigger" id="thisScriptMenuBtn"
+              aria-haspopup="menu" aria-expanded="false" title="Export or sync the open script (⌘E exports JSON)">
+              This script
+              <span class="footer-menu__caret" aria-hidden="true"></span>
+            </button>
+            <div class="footer-menu__panel" id="thisScriptMenuPanel" role="menu" hidden>
+              <button type="button" class="footer-menu__item" role="menuitem" data-action="export">Export to JSON</button>
+              <button type="button" class="footer-menu__item" role="menuitem" data-action="sync" id="thisScriptSyncItem">Sync to variables</button>
+              <button type="button" class="footer-menu__item" role="menuitem" data-action="canvas" id="thisScriptCanvasItem">Render on canvas</button>
+            </div>
+          </div>
+          <div class="footer-menu" id="allScriptsMenu">
+            <button type="button" class="btn secondary footer-menu__trigger" id="allScriptsMenuBtn"
+              aria-haspopup="menu" aria-expanded="false" title="Export or sync all user scripts">
+              All user scripts
+              <span class="footer-menu__caret" aria-hidden="true"></span>
+            </button>
+            <div class="footer-menu__panel" id="allScriptsMenuPanel" role="menu" hidden>
+              <button type="button" class="footer-menu__item" role="menuitem" data-action="export">Export all to JSON</button>
+              <button type="button" class="footer-menu__item" role="menuitem" data-action="sync" id="allScriptsSyncItem">Sync all to variables</button>
+              <button type="button" class="footer-menu__item" role="menuitem" data-action="canvas" id="allScriptsCanvasItem">Render all on canvas</button>
+            </div>
+          </div>
           <button class="btn secondary" id="importBtn" title="Import script (⌘I)">Import script</button>
+        </div>
+      </div>
+
+      <!-- CodeFig settings modal -->
+      <div class="settings-modal" id="settingsModal" hidden>
+        <div class="settings-modal__backdrop" id="settingsModalBackdrop"></div>
+        <div class="settings-modal__panel" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+          <div class="settings-modal__header">
+            <h2 id="settingsModalTitle">CodeFig settings</h2>
+            <button type="button" class="icon-btn" id="settingsModalClose" title="Close" aria-label="Close">×</button>
+          </div>
+          <div class="settings-modal__body">
+            <p class="settings-modal__lead">Where user scripts are stored and how they sync.</p>
+            <fieldset class="settings-fieldset">
+              <legend>Stores</legend>
+              <label class="settings-check">
+                <input type="checkbox" id="settingsUseVariables" checked>
+                <span>Variables — <code>CodeFig Scripts</code> collection to use locally or share them as library assets</span>
+              </label>
+              <label class="settings-check">
+                <input type="checkbox" id="settingsUseLocalStorage" checked>
+                <span>LocalStorage — this browser / machine only</span>
+              </label>
+            </fieldset>
+            <fieldset class="settings-fieldset" id="settingsDualPriority">
+              <legend>Dual storage priority</legend>
+              <label class="settings-radio">
+                <input type="radio" name="settingsSyncMode" value="dual-write" checked>
+                <span>Keep both updated — every SAVE and Sync writes Variables and LocalStorage</span>
+              </label>
+              <label class="settings-radio">
+                <input type="radio" name="settingsSyncMode" value="variables-preferred">
+                <span>Prefer Variables — SAVE writes Variables only; LocalStorage is read if Variables has no copy</span>
+              </label>
+              <label class="settings-radio">
+                <input type="radio" name="settingsSyncMode" value="localstorage-preferred">
+                <span>Prefer LocalStorage — SAVE writes LocalStorage only; use Sync to push into Variables</span>
+              </label>
+            </fieldset>
+            <p class="settings-modal__hint" id="settingsModalHint">Turn a store off to stop reading and writing it. At least one store must stay on.</p>
+          </div>
+          <div class="settings-modal__footer">
+            <button type="button" class="btn secondary" id="settingsModalCancel">Cancel</button>
+            <button type="button" class="btn primary" id="settingsModalSave">Save</button>
+          </div>
         </div>
       </div>
     </div>
@@ -522,16 +595,34 @@
       const newScriptBtn = document.getElementById('newScript');
       const runBtn = document.getElementById('runBtn');
       const deleteBtn = document.getElementById('deleteBtn');
-      const exportBtn = document.getElementById('exportBtn');
+      const thisScriptMenu = document.getElementById('thisScriptMenu');
+      const thisScriptMenuBtn = document.getElementById('thisScriptMenuBtn');
+      const thisScriptMenuPanel = document.getElementById('thisScriptMenuPanel');
+      const thisScriptSyncItem = document.getElementById('thisScriptSyncItem');
+      const allScriptsMenu = document.getElementById('allScriptsMenu');
+      const allScriptsMenuBtn = document.getElementById('allScriptsMenuBtn');
+      const allScriptsMenuPanel = document.getElementById('allScriptsMenuPanel');
+      const allScriptsSyncItem = document.getElementById('allScriptsSyncItem');
+      const settingsBtn = document.getElementById('settingsBtn');
+      const settingsModal = document.getElementById('settingsModal');
+      const settingsModalBackdrop = document.getElementById('settingsModalBackdrop');
+      const settingsModalClose = document.getElementById('settingsModalClose');
+      const settingsModalCancel = document.getElementById('settingsModalCancel');
+      const settingsModalSave = document.getElementById('settingsModalSave');
+      const settingsUseVariables = document.getElementById('settingsUseVariables');
+      const settingsUseLocalStorage = document.getElementById('settingsUseLocalStorage');
+      const settingsDualPriority = document.getElementById('settingsDualPriority');
+      const settingsModalHint = document.getElementById('settingsModalHint');
       const importBtn = document.getElementById('importBtn');
       const infoPanelBtn = document.getElementById('infoPanelBtn');
       const infoPanel = document.getElementById('infoPanel');
       const infoContent = document.getElementById('infoContent');
-      const exportAllBtn = document.getElementById('exportAllBtn');
       const resizer = document.getElementById('resizer');
       const sidebar = document.getElementById('sidebar');
       const searchInput = document.getElementById('searchInput');
-      
+
+      /** 'one' | 'all' | null — distinguishes sync confirms from import/autosave. */
+      let pendingSyncKind = null;      
       // Window resize handle (corner only)
       const resizeHandleCorner = document.getElementById('resizeHandleCorner');
 
@@ -1319,12 +1410,15 @@
       }
 
       /**
-       * Four tabs, and two of them are views of the same config.
+       * Tabs for one script. Configuration UI and Source (and Docs when present).
        *
        * **The config block text is canonical; the form is a projection of it.** Editing the form
        * writes back through the serializer, and showing the form re-reads the text — so there is
        * never a divergence to resolve and "last edit wins" falls out rather than being implemented.
        * Nothing has to decide which side is fresher, because one side is derived.
+       *
+       * Plan 37: Configuration code chrome still exists (`switchTab('configCode')`, `configEditor`)
+       * but is not offered in the tab list.
        */
       function switchTab(tabName) {
         const previous = currentTab;
@@ -1425,7 +1519,7 @@
           if (noForm) {
             noForm.style.display = 'block';
             noForm.textContent = "This script's config has no settings a form can show. " +
-              'Configuration code has it, and they are the same config.';
+              'Edit it in Source — it is the same config.';
           }
           return;
         }
@@ -1441,7 +1535,7 @@
           configFormReadOnly = true;
           if (note) {
             note.style.display = 'block';
-            note.textContent = 'Configuration code has an error, so the form is showing the last ' +
+            note.textContent = 'The config in Source has an error, so the form is showing the last ' +
               'version it could read. Fix it there and this will catch up.';
           }
           return;
@@ -1487,8 +1581,8 @@
           if (unsupported.length > 0) {
             note.style.display = 'block';
             note.textContent = unsupported.length === 1
-              ? '"' + unsupported[0].label + '" is only editable in Configuration code.'
-              : unsupported.length + ' settings are only editable in Configuration code: ' +
+              ? '"' + unsupported[0].label + '" is only editable in Source.'
+              : unsupported.length + ' settings are only editable in Source: ' +
                 unsupported.map(function (r) { return r.label; }).join(', ') + '.';
           } else {
             note.style.display = 'none';
@@ -1613,7 +1707,8 @@
         scriptHasUIConfig = nextHasUI;
 
         const tabs = [];
-        if (nextHasConfig) { tabs.push('configUI'); tabs.push('configCode'); }
+        // Plan 37: Configuration code is hidden (watch → delete). Chrome stays; do not push it.
+        if (nextHasConfig) tabs.push('configUI');
         if (nextHasDocs) tabs.push('docs');
         tabs.push('source');
         updateTabVisibility(tabs);
@@ -1708,14 +1803,50 @@
         setTimeout(() => error('%cCodeFig: ' + message, 'color: #cc0000; font-weight: bold;', ...args), 0);
       }
 
-      // Update script list in sidebar
+      // Sidebar DOM fingerprint — skip full rebuild when only script *bodies* change (autosave).
+      // Ask the inventory, don't rebuild from habit: name/type/origin/selection/collapse/search.
+      let scriptListRenderKey = '';
+
+      function getScriptListRenderKey(searchTerm) {
+        const activeId = currentScript
+          ? String(currentScript.storageId || currentScript.name || '')
+          : '';
+        const collapsed = Array.from(collapsedSections).sort().join(',');
+        const rows = [];
+        for (let i = 0; i < allScripts.length; i++) {
+          const s = allScripts[i];
+          if (s.isTemporary) continue;
+          rows.push([
+            s.storageId || '',
+            s.name || '',
+            s.type || '',
+            s.origin || '',
+            s.libraryName || ''
+          ].join('\x1f'));
+        }
+        rows.sort();
+        return String(searchTerm || '') + '\n' + activeId + '\n' + collapsed + '\n' + rows.join('\n');
+      }
+
+      // Update script list in sidebar (no-op when visible structure is unchanged)
       function updateScriptList(searchTerm = '') {
+        const term = searchTerm == null ? '' : String(searchTerm);
+        const nextKey = getScriptListRenderKey(term);
+        if (
+          nextKey === scriptListRenderKey &&
+          scriptList &&
+          scriptList.childNodes.length > 0
+        ) {
+          return;
+        }
+        scriptListRenderKey = nextKey;
+
         const filteredScripts = allScripts.filter(script =>
-          script.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          script.name.toLowerCase().includes(term.toLowerCase()) &&
           !script.isTemporary // Don't show temporary scripts in the list
         );
 
-        if (filteredScripts.length === 0 && searchTerm) {
+        if (filteredScripts.length === 0 && term) {
           scriptList.innerHTML = '<div class="no-results">No scripts found</div>';
           return;
         }
@@ -1724,8 +1855,26 @@
         const helpScripts = filteredScripts.filter(s => s.type === 'help');
         const prebuiltScripts = filteredScripts.filter(s => s.type === 'prebuilt')
           .sort((a, b) => a.name.localeCompare(b.name));
-        const userScripts = filteredScripts.filter(s => s.type === 'user' || s.type === 'library')
+        const localScripts = filteredScripts
+          .filter(s => (s.type === 'user' || s.type === 'library') && s.origin === 'local')
           .sort((a, b) => a.name.localeCompare(b.name));
+        // clientStorage is per-machine, not this .fig — do not call it "Local scripts".
+        const deviceScripts = filteredScripts
+          .filter(s => (s.type === 'user' || s.type === 'library') && s.origin === 'client')
+          .sort((a, b) => a.name.localeCompare(b.name));
+        const remoteScripts = filteredScripts
+          .filter(s => s.origin === 'remote')
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        const remoteByLibrary = new Map();
+        remoteScripts.forEach(function (script) {
+          const lib = (script.libraryName && String(script.libraryName).trim()) || 'Library';
+          if (!remoteByLibrary.has(lib)) remoteByLibrary.set(lib, []);
+          remoteByLibrary.get(lib).push(script);
+        });
+        const libraryNames = Array.from(remoteByLibrary.keys()).sort(function (a, b) {
+          return a.localeCompare(b);
+        });
 
         let html = '';
 
@@ -1752,20 +1901,78 @@
           
           html += '</div>'; // Close system-scripts
         }
+
+        const hasUserFacing =
+          localScripts.length > 0 ||
+          deviceScripts.length > 0 ||
+          libraryNames.length > 0;
         
         // <divider>
-        if ((helpScripts.length > 0 || prebuiltScripts.length > 0) && userScripts.length > 0) {
+        if ((helpScripts.length > 0 || prebuiltScripts.length > 0) && hasUserFacing) {
           html += '<div class="divider"></div>';
         }
 
-        // <user-scripts>
-        if (userScripts.length > 0) {
-          html += '<div class="user-scripts">';
-          html += createUserScriptsWithGroups(userScripts);
-          html += '</div>'; // Close user-scripts
+        // <local-scripts> — local "CodeFig Scripts" Variables in this file only
+        if (localScripts.length > 0) {
+          html += '<div class="user-scripts local-scripts">';
+          html += createNamedScriptFolder(localScripts, 'Local scripts', 'local-scripts', 'user');
+          html += '</div>';
+        }
+
+        // <device-scripts> — clientStorage on this machine (not the open file)
+        if (deviceScripts.length > 0) {
+          if (localScripts.length > 0) {
+            html += '<div class="divider"></div>';
+          }
+          html += '<div class="user-scripts device-scripts">';
+          html += createNamedScriptFolder(deviceScripts, 'LocalStorage', 'device-scripts', 'user');
+          html += '</div>';
+        }
+
+        // <library-scripts> — published "CodeFig Scripts" from enabled Figma libraries
+        if (libraryNames.length > 0) {
+          if (localScripts.length > 0 || deviceScripts.length > 0) {
+            html += '<div class="divider"></div>';
+          }
+          html += '<div class="user-scripts library-scripts">';
+          libraryNames.forEach(function (libName) {
+            const scripts = remoteByLibrary.get(libName) || [];
+            const folderId = 'library-' + libName.replace(/\s+/g, '-').toLowerCase();
+            html += createNamedScriptFolder(scripts, libName, folderId, 'user');
+          });
+          html += '</div>';
         }
 
         scriptList.innerHTML = html;
+      }
+
+      /** Collapsible top-level folder (Local scripts, or a remote library name). */
+      function createNamedScriptFolder(scripts, title, folderId, scriptType) {
+        const safeId = String(folderId || 'folder').replace(/[^a-zA-Z0-9_-]+/g, '-');
+        const isCollapsed = collapsedSections.has(safeId);
+        const toggleClass = isCollapsed ? 'collapsed' : '';
+        const hasSelectedScript = scripts.some(function (s) { return scriptListIsActive(s); });
+        const headerClass = hasSelectedScript ? 'selected' : '';
+        const groupClass = hasSelectedScript ? 'selected' : '';
+        const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
+        const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
+        let html = `
+              <div class="script-group ${groupClass}">
+                <div class="group-header ${headerClass}" onclick="toggleSection('${safeId}')">
+                  <div class="section-toggle ${toggleClass}">
+                    ${expandedChevron}
+                    ${collapsedChevron}
+                  </div>
+                  <span>${escapeHtml(title)}</span>
+                </div>
+                <div class="group-content ${isCollapsed ? 'collapsed' : ''}" id="content-${safeId}">
+            `;
+        html += createScriptsWithGroups(scripts, scriptType, 1);
+        html += `
+                </div>
+              </div>
+            `;
+        return html;
       }
 
       function createScriptSection(scripts, title, hideHeader = false) {
@@ -1815,10 +2022,12 @@
         return html;
       }
       
-      function createScriptsWithGroups(scripts, scriptType) {
+      function createScriptsWithGroups(scripts, scriptType, depth) {
         let html = '';
         const ungroupedScripts = [];
         const groupedScripts = new Map();
+        // depth: 0 = top of list (system); 1 = under Local scripts / library folder; 2+ = nested path groups
+        const itemDepth = typeof depth === 'number' ? depth : 0;
         
         // Parse script names to extract groups and separate grouped/ungrouped scripts
         // Handle all slash variations: Test/Script, Test / Script, Test /Script, Test/ Script, etc.
@@ -1884,48 +2093,49 @@
         // Render items in sorted order
         allItems.forEach(item => {
           if (item.type === 'script') {
-            // Render ungrouped script
             const script = item.script;
-            const isActive = currentScript && currentScript.name === script.name;
             const scriptClass = scriptType === 'prebuilt' ? 'system-script' : 'user-script';
-            html += `
-              <div class="script-item ${scriptClass} ${isActive ? 'active' : ''}" onclick="selectScript('${script.name}')">
-                <div class="name">${script.displayName}</div>
-              </div>
-            `;
+            // Top-level prebuilt ungrouped use system-script indent; under a folder use tree depth
+            const depthForItem = scriptType === 'prebuilt' && itemDepth === 0
+              ? 0
+              : Math.max(itemDepth, scriptType === 'prebuilt' ? 1 : itemDepth);
+            html += scriptListItemHtml(script, scriptClass, depthForItem);
           } else {
-            // Render group
+            // Nested path group (e.g. "Test" under Local scripts, or DSF at top level)
             const groupName = item.name;
-            const scripts = item.scripts;
-            const groupId = `group-${groupName.replace(/\s+/g, '-').toLowerCase()}`;
+            const groupScripts = item.scripts;
+            const groupId = `group-${groupName.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}`;
             const isGroupCollapsed = collapsedSections.has(groupId);
             const toggleClass = isGroupCollapsed ? 'collapsed' : '';
-            const hasSelectedScript = scripts.some(s => currentScript && currentScript.name === s.name);
+            const hasSelectedScript = groupScripts.some(s => scriptListIsActive(s));
             const groupHeaderClass = hasSelectedScript ? 'selected' : '';
             const groupClass = hasSelectedScript ? 'selected' : '';
             const expandedChevron = `<svg class="chevron-expanded" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5L6 4.5L3 7.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
             const collapsedChevron = `<svg class="chevron-collapsed" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>`;
+            // Top-level path groups (DSF / Utility Scripts) stay at base padding; under Local/library they inherit depth
+            const headerDepth = itemDepth;
+            const nestedGroupClass = itemDepth >= 1 ? ' nested-under-folder' : '';
+            const depthClass = headerDepth > 0 ? ` tree-depth-${Math.min(headerDepth, 4)}` : '';
             
             html += `
-              <div class="script-group ${groupClass}">
-                <div class="group-header ${groupHeaderClass}" onclick="toggleSection('${groupId}')">
+              <div class="script-group ${groupClass}${nestedGroupClass}">
+                <div class="group-header ${groupHeaderClass}${depthClass}" onclick="toggleSection('${groupId}')">
                   <div class="section-toggle ${toggleClass}">
                     ${expandedChevron}
                     ${collapsedChevron}
                   </div>
-                  <span>${groupName}</span>
+                  <span>${escapeHtml(groupName)}</span>
                 </div>
                 <div class="group-content ${isGroupCollapsed ? 'collapsed' : ''}" id="content-${groupId}">
             `;
             
-            scripts.forEach(script => {
-              const isActive = currentScript && currentScript.name === script.name;
+            groupScripts.forEach(script => {
               const scriptClass = scriptType === 'prebuilt' ? 'system-script' : 'user-script';
-              html += `
-                <div class="script-item ${scriptClass} grouped ${isActive ? 'active' : ''}" onclick="selectScript('${script.name}')">
-                  <div class="name">${script.displayName}</div>
-                </div>
-              `;
+              // Inside top-level prebuilt groups, system-script indent is enough; otherwise one level deeper
+              const childDepth = (scriptType === 'prebuilt' && itemDepth === 0)
+                ? 0
+                : headerDepth + 1;
+              html += scriptListItemHtml(script, scriptClass, childDepth);
             });
             
             html += `
@@ -1940,15 +2150,54 @@
       
       // Legacy function for backward compatibility
       function createUserScriptsWithGroups(userScripts) {
-        return createScriptsWithGroups(userScripts, 'user');
+        return createNamedScriptFolder(userScripts, 'Local scripts', 'local-scripts', 'user');
       }
 
-      // Select script
-      function selectScript(scriptName) {
-        const script = allScripts.find(s => s.name === scriptName);
+      // Select script (by storageId when present — local vs remote can share a display name)
+      function selectScript(scriptNameOrId) {
+        const key = String(scriptNameOrId || '');
+        let script = allScripts.find(s => s.storageId && s.storageId === key);
+        if (!script) script = allScripts.find(s => s.name === key);
         if (script) {
           selectScriptDirectly(script);
         }
+      }
+
+      function scriptListIsActive(script) {
+        if (!currentScript || !script) return false;
+        if (currentScript.storageId && script.storageId) {
+          return currentScript.storageId === script.storageId;
+        }
+        return currentScript.name === script.name;
+      }
+
+      function escapeScriptListAttr(value) {
+        return String(value == null ? '' : value)
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'");
+      }
+
+      function scriptListItemHtml(script, scriptClass, depth) {
+        const isActive = scriptListIsActive(script);
+        const selectKey = escapeScriptListAttr(script.storageId || script.name);
+        const d = typeof depth === 'number' ? depth : (depth ? 1 : 0);
+        // system-script already carries the top-section indent; tree-depth-* for Local / library trees
+        const depthClass = (scriptClass === 'system-script')
+          ? ''
+          : (d > 0 ? ` tree-depth-${Math.min(d, 4)}` : '');
+        return `
+                <div class="script-item ${scriptClass}${depthClass} ${isActive ? 'active' : ''}" onclick="selectScript('${selectKey}')">
+                  <div class="name">${escapeHtml(script.displayName || script.name)}</div>
+                </div>
+              `;
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
       }
 
       function selectScriptDirectly(script) {
@@ -1979,17 +2228,24 @@
         if (configUIContainer) configUIContainer.innerHTML = '';
         configUIInstance = null;
         const fullCode = script.code || '';
-        
+
+        // Remote library scripts list as stubs; import values only when opened (no LIST write).
+        if (script.origin === 'remote' && !String(script.code || '').trim() && script.remote) {
+          post('LOAD_REMOTE_SCRIPT', {
+            storageId: script.storageId || '',
+            name: script.name,
+            remote: script.remote
+          });
+        }
         parsedSections = parseScriptSections(fullCode);
         scriptHasDocs = parsedSections.hasDocs;
         scriptHasConfig = parsedSections.hasConfig;
         scriptHasUIConfig = !!parsedSections.hasUIConfig;
         
         const tabs = [];
-        // Two views of one config, both listed whenever the script has a config at all. The form
-        // tab exists even for a script with no form yet: it says so, which is a truer answer than
-        // hiding the tab and making the structure change per script.
-        if (parsedSections.hasConfig) { tabs.push('configUI'); tabs.push('configCode'); }
+        // Plan 37: Configuration UI only. Configuration code chrome stays in the DOM for a watch
+        // period but is not offered — form is the only config surface users see.
+        if (parsedSections.hasConfig) tabs.push('configUI');
         if (parsedSections.hasDocs) tabs.push('docs');
         tabs.push('source');
         updateTabVisibility(tabs);
@@ -2010,10 +2266,7 @@
             if (panelSpecEditor) { panelSpecEditor.refresh(); panelSpecEditor.setSize(null, '100%'); }
           }, 10);
         }
-        // First view: Configuration if script has config, otherwise Script
-        // Configuration UI is the default for any script with a config, now that a property-list
-        // block builds a form as readily as a `var`-row one. A config with no showable settings still
-        // lands on Configuration code, because an empty form tab is not a default worth having.
+        // Configuration UI is the default for any script with a config (Plan 37: no code tab).
         const initialTab = scriptHasConfig ? 'configUI' : 'source';
         currentTab = initialTab;
         switchTab(initialTab);
@@ -2042,6 +2295,12 @@
           scriptStatus.textContent = 'Help';
           scriptStatus.style.display = 'block';
           // Remove editable class for help scripts
+          scriptTitle.classList.remove('editable');
+        } else if (script.origin === 'remote') {
+          scriptStatus.textContent = script.libraryName
+            ? ('Library · ' + script.libraryName)
+            : 'Library';
+          scriptStatus.style.display = 'block';
           scriptTitle.classList.remove('editable');
         } else {
           // Hide badge for user scripts (including new/temporary scripts)
@@ -2096,20 +2355,50 @@
         const isTemporary = currentScript && currentScript.isTemporary;
         const isPrebuilt = currentScript && (currentScript.type === 'prebuilt' || currentScript.type === 'help');
         const isLibrary = currentScript && currentScript.type === 'library';
+        const isRemote = currentScript && currentScript.origin === 'remote';
+        const isUserOrLibrary = currentScript && (currentScript.type === 'user' || currentScript.type === 'library');
         const isEmptyTemporary = isTemporary && !hasContent;
+        const userOrLibCount = allScripts.filter(function (s) {
+          return s.type === 'user' || s.type === 'library';
+        }).length;
 
         // Run button: enabled if there's content and not a library (libraries are imported, not run)
         runBtn.disabled = !hasContent || isLibrary;
         runBtn.title = isLibrary ? 'Libraries are imported, not run directly.' : 'Run script (⌘R)';
 
-        // Delete button: enabled for user scripts and libraries that aren't empty temporary scripts
-        deleteBtn.disabled = isEmptyTemporary || !currentScript || (currentScript.type !== 'user' && currentScript.type !== 'library');
+        // Delete: local user scripts only — not @ libraries, not remote library scripts
+        const canDelete =
+          !!currentScript &&
+          currentScript.type === 'user' &&
+          !isRemote &&
+          !isEmptyTemporary;
+        deleteBtn.disabled = !canDelete;
+        deleteBtn.title = isRemote
+          ? 'Library scripts can’t be deleted here'
+          : isLibrary
+            ? 'Libraries can’t be deleted from here'
+            : 'Delete script';
 
-        // Hide Delete button for prebuilt scripts
-        if (isPrebuilt) {
+        // Hide Delete for prebuilt, help, @ libraries, and remote library scripts
+        if (isPrebuilt || isLibrary || isRemote) {
           deleteBtn.style.display = 'none';
         } else {
           deleteBtn.style.display = 'flex';
+        }
+
+        // This-script menu: export needs an open script; sync only for user/library with content
+        if (thisScriptMenuBtn) {
+          thisScriptMenuBtn.disabled = !currentScript;
+        }
+        if (thisScriptSyncItem) {
+          thisScriptSyncItem.disabled = !isUserOrLibrary || isEmptyTemporary || !hasContent;
+          thisScriptSyncItem.textContent = isRemote ? 'Save as local copy' : 'Sync to variables';
+        }
+        if (allScriptsMenuBtn) {
+          allScriptsMenuBtn.disabled = userOrLibCount === 0;
+        }
+        if (allScriptsSyncItem) {
+          allScriptsSyncItem.disabled = userOrLibCount === 0;
         }
       }
 
@@ -4429,6 +4718,11 @@
           debugLog('autoSaveCurrentScript - no current script or not user script');
           return;
         }
+        // Remote library scripts are read-only in consumer files — Sync creates a local copy.
+        if (currentScript.origin === 'remote') {
+          debugLog('autoSaveCurrentScript - skip remote library script');
+          return;
+        }
         
         const scriptCode = getFullCode();
         debugLog('autoSaveCurrentScript - script code length:', scriptCode.length);
@@ -4537,6 +4831,10 @@
       // Save current script (with prompts for naming)
       function saveCurrentScript() {
         if (!currentScript) return;
+        if (currentScript.origin === 'remote') {
+          post('NOTIFY', { message: 'Library script — use Save as local copy to keep edits in this file' });
+          return;
+        }
         
         let scriptName = currentScript.name;
         
@@ -4614,7 +4912,12 @@
 
       // Delete current script
       function deleteCurrentScript() {
+        // Local user scripts only — never @ libraries or remote Figma-library scripts
         if (!currentScript || currentScript.type !== 'user') return;
+        if (currentScript.origin === 'remote') {
+          post('NOTIFY', { message: 'Library scripts can’t be deleted here' });
+          return;
+        }
         
         // Handle temporary scripts with content differently
         if (currentScript.isTemporary) {
@@ -4753,6 +5056,277 @@
         post('NOTIFY', { message: `Exported: ${currentScript.name}` });
       }
 
+      // Export all user scripts
+      function exportAllUserScripts() {
+        const userScriptsData = allScripts.filter(s => s.type === 'user' || s.type === 'library');
+        
+        if (userScriptsData.length === 0) {
+          post('NOTIFY', { message: 'No user scripts or libraries to export' });
+          return;
+        }
+        
+        const dataStr = JSON.stringify(userScriptsData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'codefig_user_scripts.json';
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        post('NOTIFY', { message: `Exported ${userScriptsData.length} user script(s) and library(ies)` });
+      }
+
+      /** Push the open user/library script into Variables + clientStorage. */
+      function syncCurrentScriptToVariables() {
+        if (!currentScript) return;
+        if (currentScript.type !== 'user' && currentScript.type !== 'library') {
+          post('NOTIFY', { message: 'Only user scripts and libraries sync to variables' });
+          return;
+        }
+        const code = getFullCode();
+        if (!String(code || '').trim()) {
+          post('NOTIFY', { message: 'Nothing to sync — the script is empty' });
+          return;
+        }
+        pendingSyncKind = 'one';
+        post('SYNC_SCRIPT_TO_VARIABLES', {
+          name: currentScript.name,
+          code: code,
+          type: currentScript.type
+        });
+      }
+
+      /** Push every local user/library script into Variables + clientStorage. */
+      function syncAllUserScriptsToVariables() {
+        const list = allScripts
+          .filter(function (s) {
+            if (s.type !== 'user' && s.type !== 'library') return false;
+            // Remotes are not auto-copied; open and use Save as local copy.
+            if (s.origin === 'remote') return false;
+            return true;
+          })
+          .map(function (s) {
+            const code = (currentScript && currentScript.storageId && s.storageId
+              ? currentScript.storageId === s.storageId
+              : currentScript && currentScript.name === s.name)
+              ? getFullCode()
+              : (s.code || '');
+            return { name: s.name, code: code, type: s.type };
+          })
+          .filter(function (s) { return String(s.code || '').trim() !== ''; });
+        if (list.length === 0) {
+          post('NOTIFY', { message: 'No local user scripts or libraries to sync' });
+          return;
+        }
+        pendingSyncKind = 'all';
+        post('SYNC_ALL_TO_VARIABLES', { scripts: list });
+      }
+
+      /** Default script-storage prefs (mirrored in clientStorage by the sandbox). */
+      let scriptStorageSettings = {
+        useVariables: true,
+        useLocalStorage: true,
+        syncMode: 'dual-write'
+      };
+
+      function updateDualPriorityVisibility() {
+        const bothOn =
+          !!(settingsUseVariables && settingsUseVariables.checked) &&
+          !!(settingsUseLocalStorage && settingsUseLocalStorage.checked);
+        if (settingsDualPriority) settingsDualPriority.hidden = !bothOn;
+        if (settingsModalHint) {
+          settingsModalHint.textContent = bothOn
+            ? 'Dual storage priority only applies when both stores are on. The sidebar still prefers Variables over LocalStorage when the same name exists in both.'
+            : 'Turn a store off to stop reading and writing it. At least one store must stay on.';
+        }
+      }
+
+      function applyScriptStorageSettingsToForm() {
+        if (settingsUseVariables) settingsUseVariables.checked = !!scriptStorageSettings.useVariables;
+        if (settingsUseLocalStorage) settingsUseLocalStorage.checked = !!scriptStorageSettings.useLocalStorage;
+        const mode = scriptStorageSettings.syncMode || 'dual-write';
+        const radios = document.querySelectorAll('input[name="settingsSyncMode"]');
+        radios.forEach(function (r) {
+          r.checked = r.value === mode;
+        });
+        updateDualPriorityVisibility();
+      }
+
+      function readScriptStorageSettingsFromForm() {
+        const useVariables = !!(settingsUseVariables && settingsUseVariables.checked);
+        const useLocalStorage = !!(settingsUseLocalStorage && settingsUseLocalStorage.checked);
+        let syncMode = 'dual-write';
+        const checked = document.querySelector('input[name="settingsSyncMode"]:checked');
+        if (checked) syncMode = checked.value;
+        // Priority is irrelevant with a single store — keep last choice for when both turn back on.
+        return { useVariables: useVariables, useLocalStorage: useLocalStorage, syncMode: syncMode };
+      }
+
+      function openSettingsModal() {
+        closeFooterMenus();
+        applyScriptStorageSettingsToForm();
+        if (settingsModal) settingsModal.hidden = false;
+      }
+
+      function closeSettingsModal() {
+        if (settingsModal) settingsModal.hidden = true;
+      }
+
+      function saveSettingsModal() {
+        const next = readScriptStorageSettingsFromForm();
+        if (!next.useVariables && !next.useLocalStorage) {
+          post('NOTIFY', { message: 'Keep at least one store on — Variables or LocalStorage' });
+          return;
+        }
+        scriptStorageSettings = next;
+        post('SAVE_SCRIPT_STORAGE_SETTINGS', next);
+        closeSettingsModal();
+      }
+
+      function initSettingsModal() {
+        if (settingsBtn) {
+          settingsBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openSettingsModal();
+          });
+        }
+        if (settingsUseVariables) {
+          settingsUseVariables.addEventListener('change', updateDualPriorityVisibility);
+        }
+        if (settingsUseLocalStorage) {
+          settingsUseLocalStorage.addEventListener('change', updateDualPriorityVisibility);
+        }
+        if (settingsModalBackdrop) settingsModalBackdrop.addEventListener('click', closeSettingsModal);
+        if (settingsModalClose) settingsModalClose.addEventListener('click', closeSettingsModal);
+        if (settingsModalCancel) settingsModalCancel.addEventListener('click', closeSettingsModal);
+        if (settingsModalSave) settingsModalSave.addEventListener('click', saveSettingsModal);
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && settingsModal && !settingsModal.hidden) closeSettingsModal();
+        });
+        post('LOAD_SCRIPT_STORAGE_SETTINGS');
+      }
+
+      /**
+       * Build canvas payload: name, source, docs, and a short UI summary when the script has config.
+       */
+      function buildCanvasScriptPayload(script) {
+        const code = (currentScript && currentScript.storageId && script.storageId
+          ? currentScript.storageId === script.storageId
+          : currentScript && currentScript.name === script.name)
+          ? getFullCode()
+          : (script.code || '');
+        const sections = parseScriptSections(code);
+        let uiSummary = '';
+        if (sections && sections.hasConfig) {
+          uiSummary = 'This script has a Configuration UI in CodeFig.';
+          if (sections.hasUIConfig) uiSummary += ' Open it in the plugin to edit fields.';
+          else uiSummary += ' Config lives in the Source / Configuration block.';
+        }
+        return {
+          name: script.name,
+          type: script.type,
+          code: code,
+          docs: (sections && sections.docContent) ? sections.docContent : '',
+          uiSummary: uiSummary
+        };
+      }
+
+      function renderScriptsOnCanvas(kind) {
+        let list = [];
+        if (kind === 'one') {
+          if (!currentScript || (currentScript.type !== 'user' && currentScript.type !== 'library')) {
+            post('NOTIFY', { message: 'Open a user script to render on the canvas' });
+            return;
+          }
+          if (currentScript.origin === 'remote' && !String(currentScript.code || '').trim()) {
+            post('NOTIFY', { message: 'Load the library script first, then render' });
+            return;
+          }
+          list = [buildCanvasScriptPayload(currentScript)];
+        } else {
+          list = allScripts
+            .filter(function (s) {
+              return (s.type === 'user' || s.type === 'library') && s.origin !== 'remote';
+            })
+            .map(buildCanvasScriptPayload)
+            .filter(function (s) { return String(s.code || '').trim() !== ''; });
+          if (list.length === 0) {
+            post('NOTIFY', { message: 'No local scripts to render' });
+            return;
+          }
+        }
+        post('RENDER_SCRIPTS_ON_CANVAS', { scripts: list });
+      }
+
+      function closeFooterMenus() {
+        [thisScriptMenu, allScriptsMenu].forEach(function (menu) {
+          if (!menu) return;
+          menu.classList.remove('is-open');
+          const trigger = menu.querySelector('.footer-menu__trigger');
+          const panel = menu.querySelector('.footer-menu__panel');
+          if (trigger) trigger.setAttribute('aria-expanded', 'false');
+          if (panel) panel.hidden = true;
+        });
+      }
+
+      function toggleFooterMenu(menu) {
+        if (!menu) return;
+        const wasOpen = menu.classList.contains('is-open');
+        closeFooterMenus();
+        if (wasOpen) return;
+        const trigger = menu.querySelector('.footer-menu__trigger');
+        if (trigger && trigger.disabled) return;
+        menu.classList.add('is-open');
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        const panel = menu.querySelector('.footer-menu__panel');
+        if (panel) panel.hidden = false;
+      }
+
+      function initFooterMenus() {
+        if (thisScriptMenuBtn) {
+          thisScriptMenuBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            toggleFooterMenu(thisScriptMenu);
+          });
+        }
+        if (allScriptsMenuBtn) {
+          allScriptsMenuBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            toggleFooterMenu(allScriptsMenu);
+          });
+        }
+        if (thisScriptMenuPanel) {
+          thisScriptMenuPanel.addEventListener('click', function (e) {
+            const item = e.target.closest('[data-action]');
+            if (!item || item.disabled) return;
+            closeFooterMenus();
+            const action = item.getAttribute('data-action');
+            if (action === 'export') exportCurrentScript();
+            else if (action === 'sync') syncCurrentScriptToVariables();
+            else if (action === 'canvas') renderScriptsOnCanvas('one');
+          });
+        }
+        if (allScriptsMenuPanel) {
+          allScriptsMenuPanel.addEventListener('click', function (e) {
+            const item = e.target.closest('[data-action]');
+            if (!item || item.disabled) return;
+            closeFooterMenus();
+            const action = item.getAttribute('data-action');
+            if (action === 'export') exportAllUserScripts();
+            else if (action === 'sync') syncAllUserScriptsToVariables();
+            else if (action === 'canvas') renderScriptsOnCanvas('all');
+          });
+        }
+        document.addEventListener('click', function () {
+          closeFooterMenus();
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') closeFooterMenus();
+        });
+      }
+
       function normalizeImportedScriptEntry(raw) {
         if (!raw || typeof raw !== 'object') return null;
         const name = raw.name != null ? String(raw.name).trim() : '';
@@ -4833,28 +5407,6 @@
           }
         };
         input.click();
-      }
-
-      // Export all user scripts
-      function exportAllUserScripts() {
-        const userScriptsData = allScripts.filter(s => s.type === 'user' || s.type === 'library');
-        
-        if (userScriptsData.length === 0) {
-          post('NOTIFY', { message: 'No user scripts or libraries to export' });
-          return;
-        }
-        
-        const dataStr = JSON.stringify(userScriptsData, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'codefig_user_scripts.json';
-        link.click();
-        
-        URL.revokeObjectURL(url);
-        post('NOTIFY', { message: `Exported ${userScriptsData.length} user script(s) and library(ies)` });
       }
 
       // Initialize resizing functionality
@@ -5297,10 +5849,10 @@
       newScriptBtn.addEventListener('click', createNewScript);
       runBtn.addEventListener('click', runCurrentScript);
       deleteBtn.addEventListener('click', deleteCurrentScript);
-      exportBtn.addEventListener('click', exportCurrentScript);
       importBtn.addEventListener('click', importScript);
       infoPanelBtn.addEventListener('click', toggleInfoPanel);
-      exportAllBtn.addEventListener('click', exportAllUserScripts);
+      initFooterMenus();
+      initSettingsModal();
 
       // Editor tab clicks
       if (editorTabsEl) {
@@ -5380,7 +5932,11 @@
             userScripts = msg.items.map(script => ({
               name: script.name || 'Unnamed',
               code: script.code || '',
-              type: (script.type === 'library' || (script.name && String(script.name).startsWith('@'))) ? 'library' : 'user'
+              type: (script.type === 'library' || (script.name && String(script.name).startsWith('@'))) ? 'library' : 'user',
+              origin: script.origin || (script.libraryName ? 'remote' : 'client'),
+              libraryName: script.libraryName || '',
+              storageId: script.storageId || ((script.origin || 'client') + ':' + (script.name || 'Unnamed')),
+              remote: script.remote || null
             }));
             allScripts = [...prebuiltScripts, ...userScripts];
             updateScriptList();
@@ -5391,6 +5947,53 @@
             setTimeout(() => {
               openInitialScript(msg.lastOpenedScript);
             }, 50);
+            break;
+
+          case 'REMOTE_SCRIPT_LOADED': {
+            const sid = msg.storageId || '';
+            const idx = allScripts.findIndex(function (s) {
+              return (sid && s.storageId === sid) || (!sid && s.name === msg.name && s.origin === 'remote');
+            });
+            if (idx < 0) break;
+            allScripts[idx].code = msg.code || '';
+            userScripts = allScripts.filter(function (s) {
+              return s.type === 'user' || s.type === 'library';
+            });
+            if (currentScript && (
+              (sid && currentScript.storageId === sid) ||
+              (currentScript.origin === 'remote' && currentScript.name === msg.name)
+            )) {
+              currentScript.code = msg.code || '';
+              if (code && code.setValue) {
+                code.setValue(currentScript.code);
+                originalCode = currentScript.code;
+                parsedSections = parseScriptSections(currentScript.code);
+                scriptHasDocs = parsedSections.hasDocs;
+                scriptHasConfig = parsedSections.hasConfig;
+                scriptHasUIConfig = !!parsedSections.hasUIConfig;
+                const tabs = [];
+                if (parsedSections.hasConfig) tabs.push('configUI');
+                if (parsedSections.hasDocs) tabs.push('docs');
+                tabs.push('source');
+                updateTabVisibility(tabs);
+                if (scriptHasDocs && docsRendererEl) {
+                  renderSimpleMarkdown(parsedSections.docContent || '');
+                }
+                updateConfigPanelSpecPane();
+                const tab = scriptHasConfig ? 'configUI' : 'source';
+                currentTab = tab;
+                switchTab(tab);
+                scheduleConfigPreview();
+              }
+              updateButtonStates();
+            }
+            break;
+          }
+
+          case 'REMOTE_SCRIPT_FAILED':
+            post('NOTIFY', {
+              message: 'Could not load library script' + (msg.error ? ': ' + msg.error : '')
+            });
             break;
             
           case 'COLLAPSED_SECTIONS':
@@ -5412,9 +6015,16 @@
               if (existingIndex >= 0) {
                 // Mutate in place so currentScript stays the same reference as allScripts[i] after renames/saves
                 const target = allScripts[existingIndex];
+                const wasRemote = target.origin === 'remote';
                 target.name = confirmedName;
                 target.code = scriptCode;
                 target.type = derivedType;
+                if (pendingSyncKind === 'one' || wasRemote) {
+                  target.origin = 'local';
+                  target.libraryName = '';
+                  target.storageId = 'local:' + confirmedName;
+                  target.remote = null;
+                }
               } else {
                 // Late SAVE_CONFIRMED for a filename we already renamed away (autosave vs inline title edit race).
                 // Pushing would duplicate the script (e.g. "Untitled" + new name) and break the sidebar.
@@ -5426,12 +6036,26 @@
                 allScripts.push({
                   name: confirmedName,
                   code: scriptCode,
-                  type: derivedType
+                  type: derivedType,
+                  origin: 'local',
+                  libraryName: '',
+                  storageId: 'local:' + confirmedName,
+                  remote: null
                 });
               }
               // Update userScripts array as well (user + library)
               userScripts = allScripts.filter(s => s.type === 'user' || s.type === 'library');
               debugLog('Script added to allScripts for immediate import availability:', msg.scriptData.name);
+              updateScriptList(searchInput.value);
+              updateButtonStates();
+            }
+            if (pendingSyncKind === 'one') {
+              pendingSyncKind = null;
+              post('NOTIFY', {
+                message: 'Synced to variables: ' + (msg.scriptData && msg.scriptData.name
+                  ? msg.scriptData.name
+                  : 'script')
+              });
             }
             break;
 
@@ -5445,21 +6069,37 @@
                 const existingIndex = allScripts.findIndex(
                   s => s.name === scriptData.name && (s.type === 'user' || s.type === 'library')
                 );
+                // Import / Sync writes Variables (+ optional LocalStorage) — treat as local for the sidebar.
+                const meta = {
+                  name: scriptData.name,
+                  code: scriptData.code,
+                  type: derivedType,
+                  origin: 'local',
+                  libraryName: '',
+                  storageId: 'local:' + scriptData.name,
+                  remote: null
+                };
                 if (existingIndex >= 0) {
                   const target = allScripts[existingIndex];
-                  target.name = scriptData.name;
-                  target.code = scriptData.code;
-                  target.type = derivedType;
+                  Object.assign(target, meta);
                 } else {
-                  allScripts.push({
-                    name: scriptData.name,
-                    code: scriptData.code,
-                    type: derivedType
-                  });
+                  allScripts.push(meta);
                 }
               }
               userScripts = allScripts.filter(s => s.type === 'user' || s.type === 'library');
+              scriptListRenderKey = ''; // force rebuild — import must show in-session
               updateScriptList(searchInput.value);
+              if (pendingSyncKind === 'all') {
+                pendingSyncKind = null;
+                const n = list.length;
+                post('NOTIFY', {
+                  message: n === 1
+                    ? 'Synced 1 script to variables'
+                    : 'Synced ' + n + ' scripts to variables'
+                });
+                updateButtonStates();
+                break;
+              }
               if (list.length) {
                 const last = list[list.length - 1];
                 const sel = allScripts.find(
@@ -5481,12 +6121,67 @@
 
           case 'BATCH_SAVE_FAILED':
             pendingBatchImportSummary = null;
-            post('NOTIFY', { message: msg.error ? `Import failed: ${msg.error}` : 'Import failed' });
+            if (pendingSyncKind) {
+              pendingSyncKind = null;
+              post('NOTIFY', { message: msg.error ? `Sync failed: ${msg.error}` : 'Sync failed' });
+            } else {
+              post('NOTIFY', { message: msg.error ? `Import failed: ${msg.error}` : 'Import failed' });
+            }
             break;
             
           case 'SAVE_FAILED':
             debugError('Save failed for:', msg.scriptName, msg.error);
-            post('NOTIFY', { message: `Failed to save script: ${msg.error}` });
+            if (pendingSyncKind === 'one') {
+              pendingSyncKind = null;
+              post('NOTIFY', { message: msg.error ? `Sync failed: ${msg.error}` : 'Sync failed' });
+            } else {
+              post('NOTIFY', { message: `Failed to save script: ${msg.error}` });
+            }
+            break;
+
+          case 'SYNC_TO_VARIABLES_UNAVAILABLE':
+            pendingSyncKind = null;
+            post('NOTIFY', {
+              message: 'Variables sync is off in this build — scripts still save locally'
+            });
+            break;
+
+          case 'SCRIPT_STORAGE_SETTINGS':
+            if (msg.settings && typeof msg.settings === 'object') {
+              scriptStorageSettings = {
+                useVariables: msg.settings.useVariables !== false,
+                useLocalStorage: msg.settings.useLocalStorage !== false,
+                syncMode: msg.settings.syncMode || 'dual-write'
+              };
+              applyScriptStorageSettingsToForm();
+            }
+            break;
+
+          case 'SCRIPT_STORAGE_SETTINGS_SAVED':
+            if (msg.settings && typeof msg.settings === 'object') {
+              scriptStorageSettings = {
+                useVariables: msg.settings.useVariables !== false,
+                useLocalStorage: msg.settings.useLocalStorage !== false,
+                syncMode: msg.settings.syncMode || 'dual-write'
+              };
+            }
+            scriptListRenderKey = '';
+            post('NOTIFY', { message: 'Settings saved' });
+            post('LIST');
+            break;
+
+          case 'CANVAS_RENDER_DONE':
+            post('NOTIFY', {
+              message: msg.count === 1
+                ? 'Rendered on page “CodeFig Scripts”'
+                : ('Rendered ' + (msg.count || 0) + ' scripts on page “CodeFig Scripts”')
+            });
+            break;
+
+          case 'CANVAS_RENDER_FAILED':
+            post('NOTIFY', {
+              message: msg.error ? ('Canvas render failed: ' + msg.error) : 'Canvas render failed'
+            });
             break;
 
           case 'OPTIONS':
@@ -5659,7 +6354,7 @@
                   });
                   if (configCodeContainer) configCodeContainer.style.display = 'none';
                   container.style.display = 'flex';
-                  if (scriptHasConfig) switchTab(scriptHasUIConfig ? 'configUI' : 'configCode');
+                  if (scriptHasConfig) switchTab('configUI');
                 }
               } catch (e) { console.warn('CodeFigUI render failed', e); }
             }
@@ -6047,7 +6742,7 @@
       function _codefigUiCommandNames() {
         return ['selectScript', 'listScripts', 'readConfig', 'writeConfig', 'readInfoPanel',
           'readPreview', 'readTabs', 'readForm', 'switchTab', 'setField', 'clickControl',
-          'dragControl', 'readModeIntents', 'readAutoImport'];
+          'dragControl', 'readModeIntents', 'readAutoImport', 'saveScript', 'deleteScript'];
       }
 
       /** Resolvers waiting for a form change to be folded into the config. */
@@ -6650,6 +7345,74 @@
               removedModeIds: removedModeIds,
               addedModeNames: addedModeNames
             });
+
+          // Plan 38: drive SAVE / DELETE from the terminal without inventing a second write path.
+          // `saveScript` is the autosave path; `deleteScript` skips the confirm() dialog.
+          case 'saveScript': {
+            if (!currentScript || (currentScript.type !== 'user' && currentScript.type !== 'library')) {
+              // Allow creating a throwaway probe when nothing user-owned is open.
+              if (typeof a.name !== 'string' || typeof a.code !== 'string') {
+                throw new Error('saveScript needs a user script open, or { name, code }');
+              }
+              currentScript = { name: a.name, code: a.code, type: 'user', isTemporary: false };
+            }
+            if (typeof a.name === 'string' && a.name) {
+              currentScript.name = a.name;
+              currentScript.type = a.name.charAt(0) === '@' ? 'library' : 'user';
+              currentScript.isTemporary = false;
+            }
+            if (typeof a.code === 'string' && code) {
+              code.setValue(a.code);
+              currentScript.code = a.code;
+            } else if (typeof a.code === 'string') {
+              currentScript.code = a.code;
+            }
+            // Force the dirty check — autosave skips when code === originalCode.
+            originalCode = (currentScript.code || '') + '\0';
+            return new Promise(function (resolve, reject) {
+              var done = false;
+              function finish(ok, payload) {
+                if (done) return;
+                done = true;
+                window.removeEventListener('message', onMsg);
+                if (ok) resolve(payload);
+                else reject(new Error(payload));
+              }
+              function onMsg(ev) {
+                var msg = ev.data && ev.data.pluginMessage;
+                if (!msg) return;
+                if (msg.type === 'SAVE_CONFIRMED') {
+                  finish(true, {
+                    name: msg.scriptData && msg.scriptData.name,
+                    codeLength: msg.scriptData && msg.scriptData.code
+                      ? msg.scriptData.code.length : 0
+                  });
+                } else if (msg.type === 'SAVE_FAILED') {
+                  finish(false, msg.error || 'SAVE_FAILED');
+                }
+              }
+              window.addEventListener('message', onMsg);
+              autoSaveCurrentScript();
+              setTimeout(function () {
+                finish(false, 'SAVE timed out waiting for SAVE_CONFIRMED');
+              }, 8000);
+            });
+          }
+
+          case 'deleteScript': {
+            if (!a.name) throw new Error('deleteScript needs { name }');
+            var delName = String(a.name);
+            post('DELETE', { name: delName });
+            allScripts = allScripts.filter(function (s) { return s.name !== delName; });
+            if (currentScript && currentScript.name === delName) {
+              currentScript = null;
+              if (code) code.setValue('');
+              originalCode = '';
+              scriptTitle.textContent = 'Select a script';
+            }
+            updateScriptList(searchInput ? searchInput.value : '');
+            return Promise.resolve({ deleted: delName });
+          }
 
           default:
             throw new Error('Unknown UI command "' + command + '". Known: ' +

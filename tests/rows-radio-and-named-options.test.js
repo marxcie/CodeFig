@@ -245,7 +245,9 @@ test('the shipped Spacing panel is the one Márton asked for', () => {
     path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'spacing.js'),
     'utf8'
   );
-  const schema = P.parse(source.slice(source.indexOf('@CONFIG_START'), source.indexOf('@CONFIG_END')));
+  const config = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(source)[1];
+  const panel = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(source)[1];
+  const schema = P.parse(config, panel);
   const modes = schema.rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];
   const by = {};
   modes.columns.forEach((c) => { by[c.key] = c; });

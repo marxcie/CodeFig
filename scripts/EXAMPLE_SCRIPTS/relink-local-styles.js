@@ -13,8 +13,16 @@
 @import { traverseNodes } from "@Core Library"
 
 // @UI_CONFIG_START
-var scope = "Selection"; // @options: Selection|This page|All pages @radio
+var scope = "Selection";
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { key: "scope", type: "radio", options: ["Selection", "This page", "All pages"] }
+//   ]
+// }
+// @PANEL_END
 
 function getScopeValue() {
   var sc = typeof scope !== "undefined" ? scope : "Selection";

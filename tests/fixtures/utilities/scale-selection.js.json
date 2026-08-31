@@ -1,0 +1,204 @@
+[
+  {
+    "type": "field",
+    "name": "scaleOrResize",
+    "value": "scale",
+    "label": "Scale or resize",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "radio",
+    "options": [
+      "scale",
+      "resize"
+    ]
+  },
+  {
+    "type": "heading",
+    "level": 2,
+    "text": "Scale",
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "scale"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "scaleMethod",
+    "value": "factor",
+    "label": "Scale method",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "radio",
+    "options": [
+      "factor",
+      "width",
+      "height"
+    ],
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "scale"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "scaleFactor",
+    "value": 0.8,
+    "label": "Scale factor",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "number",
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "scale"
+        ]
+      },
+      {
+        "field": "scaleMethod",
+        "values": [
+          "factor"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "scaleWidthTo",
+    "value": "",
+    "label": "Scale width to",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "scale"
+        ]
+      },
+      {
+        "field": "scaleMethod",
+        "values": [
+          "width"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "scaleHeightTo",
+    "value": "",
+    "label": "Scale height to",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "scale"
+        ]
+      },
+      {
+        "field": "scaleMethod",
+        "values": [
+          "height"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "heading",
+    "level": 2,
+    "text": "Resize",
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "resize"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "resizeUnitMode",
+    "value": "pixels",
+    "label": "Resize unit mode",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "radio",
+    "options": [
+      "factor",
+      "pixels"
+    ],
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "resize"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "widthTo",
+    "value": "",
+    "label": "Width to",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "resize"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "heightTo",
+    "value": "",
+    "label": "Height to",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "resize"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "aspectRatio",
+    "value": "",
+    "label": "Aspect ratio",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "showWhenRules": [
+      {
+        "field": "scaleOrResize",
+        "values": [
+          "resize"
+        ]
+      }
+    ]
+  }
+]

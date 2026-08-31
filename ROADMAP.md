@@ -20,7 +20,7 @@ lies is worse than none.
 | `.plans/00-INDEX.md` | The 01 to 27 history and their ordering constraints. | Rarely. Historical. |
 | `.plans/37-config-format-decision.md` | Script language / config UX: JSON `@PANEL_START`; drop Configuration code tab; migrate remaining DSF panels. **Executing.** | A format or UX decision changes. |
 | `.plans/38-script-storage-variables.md` | Script storage & sharing: STRING variables, local vs library, autosave policy. **Executing.** | A storage decision changes. |
-| `.plans/39-foundation-maintenance.md` | DSF metadata hygiene: auto-repair on plugin open; Foundation config script removal. **Executing.** | A maintenance decision changes. |
+| `.plans/39-foundation-maintenance.md` | DSF metadata hygiene: auto-repair on plugin open; Foundation config script removal. **Part A+B landed (local); ambiguous collisions still open.** | A maintenance decision changes. |
 | `DEFERRED.md` | Known problems nobody is fixing yet, with what fixing involves. | Something is found and left. |
 | `CHANGELOG.md` | What changed, in behaviour terms, for a user deciding whether to upgrade. | Every landed change. |
 
@@ -73,13 +73,13 @@ migrate twice.
 
 | Initiative | Plan | Locked | Next concrete work |
 |---|---|---|---|
-| **Script language & config UX** | `.plans/37` | JSON `@PANEL_START`; drop Configuration code tab (hide → watch → delete); share via `@CONFIG` copy; HTML/JSX skin deferred | Migrate Spacing / Radius / Typography / Grid → soft `unsupported` audit → hide `configCode` tab |
-| **Script storage & sharing** | `.plans/38` | STRING variables; Local vs Library UI; no consumer autosave for library scripts; explicit local copy only | Lock collection/chunk schema defaults; implement store + migrate from `clientStorage`; sidebar Local/Library |
-| **Foundation metadata maintenance** | `.plans/39` | Auto-repair clear cases on every plugin open; no UI noise; remove Foundation config script | Remove `config.js`; `foundationMaintain` on boot; leave ambiguous stamp collisions alone |
+| **Script language & config UX** | `.plans/37` | JSON `@PANEL_START` for **all** shipped config scripts; drop Configuration code tab (hidden → watch → delete) | **Migrations done** (DSF + 24 utilities + Help). Tab hidden. Watch, then delete chrome. |
+| **Script storage & sharing** | `.plans/38` | Path-named Variables + LocalStorage prefs; Local / LocalStorage / library folders; settings gear; canvas render | **Flag on.** Settings + canvas render landed locally. Library banner still pending |
+| **Foundation metadata maintenance** | `.plans/39` | Auto-repair clear cases on every plugin open; no UI noise; remove Foundation config script | **Part A+B landed (local):** `config.js` removed; maintain on boot. **2026-08-29:** Figma has no `require` — build now inlines siblings into `code.js`. Ambiguous collisions still deferred (§11). |
 
 **Still open inside those plans (do not invent silently):** observation out of config; choice vs
-readiness naming; full reachability SAT; 38 chunking threshold / `@import` across library
-inventory; 39 boot sync vs async and ambiguous native-duplicate collisions.
+readiness naming; full reachability SAT; 38 `@import` across library inventory / id minting /
+when to use `@lib/` paths; 39 boot sync vs async and ambiguous native-duplicate collisions.
 
 ---
 
@@ -93,13 +93,16 @@ inventory; 39 boot sync vs async and ambiguous native-duplicate collisions.
 | 39 (cache) | Manifest cache and recovery | Renamed group recovers; duplicated collection carries sets. |
 | 34 | DevTools harness | Layout / CSS / rebuild / profile helpers. |
 | 31 | `@PANEL_START` panel spec | Format complete; **Colors migrated**. |
+| 37 (migrate) | All shipped configs → `@PANEL_START` | DSF (5) + EXAMPLE_SCRIPTS utilities (24) + Help specimen (local). |
 | — | Curve editor fundamentals | Drag, presets → Custom, zoom, middle anchor. |
+| 39 A+B | Foundation maintain + remove config script | `config.js` gone; `foundationMaintain` on boot (local). |
 
 ## In flight
 
-1. **`.plans/37`** — migrate remaining DSF panels; then soft audit; then hide Configuration code tab.
-2. **`.plans/38`** — STRING-variable script storage (implementation tasks being written as code lands).
-3. **`.plans/39`** — boot maintenance + remove Foundation config script.
+1. **`.plans/37`** — Configuration code tab **hidden**; watch, then delete chrome / dual-pane.
+2. **`.plans/38`** — Local vs LocalStorage vs library folders; settings modal for stores/sync;
+   import refreshes in-session; canvas render to page `CodeFig Scripts`. Library banner next.
+3. **`.plans/39`** — ambiguous-collision product rule; prevent-over-repair in merge scripts.
 
 **Curve editor acceptance pass** — still in `DEFERRED.md`, hand-check on a real collection. Not
 blocking cornerstone work.

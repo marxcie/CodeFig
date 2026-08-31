@@ -1,0 +1,45 @@
+[
+  {
+    "type": "paragraph",
+    "text": "Action and scope."
+  },
+  {
+    "type": "field",
+    "name": "wrapperType",
+    "value": "frame",
+    "label": "Wrapper type",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "options": [
+      "frame",
+      "autoLayout"
+    ]
+  },
+  {
+    "type": "field",
+    "name": "removeSelectedType",
+    "value": false,
+    "label": "Remove selected type",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "recursively",
+    "value": true,
+    "label": "Recursively",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean",
+    "showWhenRules": [
+      {
+        "field": "removeSelectedType",
+        "values": [
+          "true"
+        ]
+      }
+    ]
+  }
+]

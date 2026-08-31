@@ -289,6 +289,10 @@ same correctness, cost paid only when the cache misses.
 
 ## 11. Figma's native group duplication copies a stamp, and now two groups claim one set
 
+**Still open — leave alone (plan 39).** Boot maintenance (`src/foundation-maintain.js`) detects
+this as `ambiguous-set-groups` and does **not** auto-pick a winner. Clear-case orphans (stamp with
+no manifest, manifest with no stamps) are repaired; this collision is not.
+
 **What.** `duplicate-variable-collection.js` (this repo's own script) is not the only way a token
 group gets duplicated — Figma's own Variables panel can duplicate a selection of variables (a
 "group", in the folder sense) natively, no plugin involved. Tested live: stamp a group's
@@ -306,11 +310,10 @@ functionally indistinguishable from the original until something re-stamps it.
 **How it was found.** Asked directly, live in Figma, per this task's own instruction: stamp a
 group, duplicate it through Figma's native UI (not this repo's script), read both copies' stamps.
 
-**Why it was left.** Instructed to log rather than fix. A real fix means either detecting the
-collision (two groups, one set id) and reporting it rather than silently picking one, or
-re-stamping a duplicate the moment it's created — and Figma gives a plugin no signal that a
-native duplicate just happened, so detection would have to be a periodic or on-open scan, not an
-event handler. That's a design question, not a one-line patch.
+**Why it was left.** A real fix means either detecting the collision (two groups, one set id) and
+reporting it in product UI rather than silently picking one, or re-stamping a duplicate the moment
+it's created — and Figma gives a plugin no signal that a native duplicate just happened. Boot
+scan detection exists now (log only); choosing a winner is still a product decision.
 
 **Mode duplication has no equivalent leak.** A stamp is per-variable, keyed by token; there is no
 per-mode stamp in this system for a native "Duplicate mode" to carry over. Tested alongside the
@@ -462,27 +465,14 @@ v1 shape appears. Whichever comes first.
 
 ---
 
-## Foundation config is scaffolding, and gets retired
+## ~~Foundation config is scaffolding, and gets retired~~ — CLOSED, script removed
 
-**Found:** walking through the whole DSF flow on one file (Aug 2026). The script exists because
-16b needed a runnable round trip before any generator wrote a manifest. Generators write manifests
-now, and once the portable config *is* the script's own `@CONFIG_START` block, `copy`, `to-canvas`,
-`from-canvas` and `check` are all ways of doing something you can do by selecting the block and
-pressing Cmd-C.
+**Closed (2026-08-28).** The shipped `scripts/EXAMPLE_SCRIPTS/Design System Foundations/config.js`
+script is deleted (plan 39). Portable helpers in `@foundation.js` remain for tests. A read-only
+"what does this file's foundation contain" diagnostic is still a possible future tool; it was not
+part of this removal.
 
-**The trigger:** both of these true — `adopt` has moved into the domain scripts, and the printed
-config is the script's block rather than a rendering of an object.
-
-**What moving `adopt` involves:** adopting a spacing scale is a spacing operation, and it pairs
-with the import button — the button reads the manifest, `adopt` reads the tokens, both from the
-script you are already in. So it becomes a mode of Spacing and Corner radius rather than a
-destination you navigate to. Plan it with 18/19-era work; it should not be left stranded in a
-script being retired.
-
-**The one part that may deserve to survive:** a read-only *what does this file's foundation
-contain* diagnostic — viewports, collections, sets, what has a manifest and what does not. That is
-a different tool from a config mover, and the case for it does not depend on any of the above. If
-it survives, it survives as that, with none of the four modes.
+**Was:** scaffolding for copy / park-on-canvas / adopt before generators wrote manifests.
 
 ---
 

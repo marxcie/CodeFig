@@ -1,0 +1,721 @@
+[
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Heading level 1"
+  },
+  {
+    "type": "paragraph",
+    "text": "The level every panel uses for its section titles: `// # Heading level 1`. Renders as `h1`, and it carries the 48px gap that separates one section from the next."
+  },
+  {
+    "type": "heading",
+    "level": 2,
+    "text": "Heading level 2"
+  },
+  {
+    "type": "paragraph",
+    "text": "Two hashes. A title *inside* a section, at 14px with half the gap above it."
+  },
+  {
+    "type": "heading",
+    "level": 3,
+    "text": "Heading level 3"
+  },
+  {
+    "type": "paragraph",
+    "text": "Three hashes: body size, told apart from a paragraph by its weight alone."
+  },
+  {
+    "type": "paragraph",
+    "text": "This is a paragraph — any comment line that is not a marker. **Bold**, *italic* and `code` work."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "paragraph",
+    "text": "Above: a short rule, from `// ---`."
+  },
+  {
+    "type": "divider",
+    "section": true
+  },
+  {
+    "type": "paragraph",
+    "text": "Above: a rule reaching both panel edges, from `// --- @section`."
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Text and numbers"
+  },
+  {
+    "type": "field",
+    "name": "textField",
+    "value": "Sample",
+    "label": "Text",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "helper": "var textField = \"Sample\";"
+  },
+  {
+    "type": "field",
+    "name": "withPlaceholder",
+    "value": "",
+    "label": "Text with a placeholder",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "Shown while empty",
+    "helper": "@placeholder=\"Shown while empty\""
+  },
+  {
+    "type": "field",
+    "name": "numberField",
+    "value": 12,
+    "label": "Number",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "number",
+    "helper": "a numeric default makes it a number input, 96px wide"
+  },
+  {
+    "type": "field",
+    "name": "longText",
+    "value": "",
+    "label": "Textarea",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "textarea",
+    "placeholder": "One per line",
+    "helper": "@textarea"
+  },
+  {
+    "type": "field",
+    "name": "nameList",
+    "value": [
+      "sm",
+      "md",
+      "lg"
+    ],
+    "label": "List of names",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "list",
+    "helper": "an array of strings or numbers — one input holding a comma list, and the config keeps the array"
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Choices"
+  },
+  {
+    "type": "field",
+    "name": "toggle",
+    "value": true,
+    "label": "Checkbox",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean",
+    "helper": "a true or false default"
+  },
+  {
+    "type": "field",
+    "name": "dropdown",
+    "value": "medium",
+    "label": "Dropdown",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "select",
+    "helper": "@options: small|medium|large",
+    "options": [
+      "small",
+      "medium",
+      "large"
+    ]
+  },
+  {
+    "type": "field",
+    "name": "radioChoice",
+    "value": "replace",
+    "label": "Radio group",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "radio",
+    "helper": "the same @options, plus @radio",
+    "options": [
+      "replace",
+      "append"
+    ]
+  },
+  {
+    "type": "field",
+    "name": "multiChoice",
+    "value": [
+      "small"
+    ],
+    "label": "Multi-select",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "multiselect",
+    "helper": "the same @options, plus @multi",
+    "options": [
+      "small",
+      "medium",
+      "large"
+    ]
+  },
+  {
+    "type": "field",
+    "name": "documentList",
+    "value": "",
+    "label": "From the document",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "select",
+    "helper": "@options: variableCollections — filled with this file's collections",
+    "optionSource": "variableCollections"
+  },
+  {
+    "type": "field",
+    "name": "dependent",
+    "value": "",
+    "label": "Only while Checkbox is on",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "helper": "@showWhen: toggle=true",
+    "showWhenRules": [
+      {
+        "field": "toggle",
+        "values": [
+          "true"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Collections and modes"
+  },
+  {
+    "type": "field",
+    "name": "collectionName",
+    "value": "Responsive System",
+    "label": "Collection",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "collection",
+    "helper": "@collection — this file's collections, plus New collection"
+  },
+  {
+    "type": "field",
+    "name": "collectionMode",
+    "value": "Desktop",
+    "label": "Mode",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "mode",
+    "helper": "@mode: collectionName — the modes of the collection above, plus New mode",
+    "collectionField": "collectionName"
+  },
+  {
+    "type": "chips",
+    "label": "Collection modes",
+    "from": "modes"
+  },
+  {
+    "type": "paragraph",
+    "text": "The chips read their names from the modes field below, so the two cannot disagree. Click a chip to rename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run."
+  },
+  {
+    "type": "field",
+    "name": "modes",
+    "value": [
+      {
+        "name": "Desktop",
+        "width": 1440,
+        "columns": 12
+      },
+      {
+        "name": "Tablet",
+        "width": 834,
+        "columns": 8
+      },
+      {
+        "name": "Mobile",
+        "width": 390,
+        "columns": 4
+      }
+    ],
+    "label": "Modes",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "rows",
+    "columns": [
+      {
+        "key": "name",
+        "label": "Mode",
+        "type": "text",
+        "labelSpelled": true
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "type": "number",
+        "labelSpelled": true
+      },
+      {
+        "key": "columns",
+        "label": "Columns",
+        "type": "number",
+        "labelSpelled": true
+      }
+    ],
+    "tabs": true,
+    "blocks": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "One thing set by several numbers"
+  },
+  {
+    "type": "paragraph",
+    "text": "`@group:` on an **object** — one labelled row, each part captioned at a number's own width. Use it when the parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three separate fields make you assemble that in your head. `@rows` cannot serve this, because that one needs an array — it is a *repeatable* group."
+  },
+  {
+    "type": "paragraph",
+    "text": "The same control appears nested inside `@rows`, written the same way, so an anchor in a mode block and a shared ladder above it are the same shape rather than two lookalikes."
+  },
+  {
+    "type": "field",
+    "name": "lightness",
+    "value": {
+      "bright": 98.5,
+      "middle": 62,
+      "dark": 18
+    },
+    "label": "Lightness",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "group",
+    "helper": "0 to 100 in the UI, 0 to 1 in the data",
+    "columns": [
+      {
+        "key": "bright",
+        "label": "Bright",
+        "type": "number",
+        "labelSpelled": true
+      },
+      {
+        "key": "middle",
+        "label": "Middle",
+        "type": "number",
+        "labelSpelled": true
+      },
+      {
+        "key": "dark",
+        "label": "Dark",
+        "type": "number",
+        "labelSpelled": true
+      }
+    ]
+  },
+  {
+    "type": "paragraph",
+    "text": "`@unit=\"%\"` prints a unit inside the input, at its right edge. It is **not** a placeholder — a placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back to `-1.5` can tell whether that is pixels or percent."
+  },
+  {
+    "type": "field",
+    "name": "lineHeight",
+    "value": {
+      "base": 150,
+      "max": 110
+    },
+    "label": "Line height",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "group",
+    "columns": [
+      {
+        "key": "base",
+        "label": "Base",
+        "type": "number",
+        "labelSpelled": true,
+        "unit": "%"
+      },
+      {
+        "key": "max",
+        "label": "Largest",
+        "type": "number",
+        "labelSpelled": true,
+        "unit": "%"
+      }
+    ]
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "A column that depends on its row"
+  },
+  {
+    "type": "paragraph",
+    "text": "Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the scale type and watch the fields change — each tab is judged on its own values, so two modes can be using different scale types at once."
+  },
+  {
+    "type": "field",
+    "name": "scales",
+    "value": [
+      {
+        "name": "Desktop",
+        "scaleType": "modular",
+        "ratio": 1.25,
+        "step": 4,
+        "mod": 3
+      },
+      {
+        "name": "Mobile",
+        "scaleType": "metric",
+        "ratio": 1.2,
+        "step": 2,
+        "mod": 3
+      }
+    ],
+    "label": "Scale per mode",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "rows",
+    "columns": [
+      {
+        "key": "name",
+        "label": "Mode",
+        "type": "text",
+        "labelSpelled": true
+      },
+      {
+        "key": "scaleType",
+        "label": "Scale type",
+        "type": "radio",
+        "labelSpelled": true,
+        "options": [
+          {
+            "value": "modular",
+            "label": "Modular scale"
+          },
+          {
+            "value": "metric",
+            "label": "Metric scale"
+          },
+          {
+            "value": "fibonacci",
+            "label": "Fibonacci"
+          }
+        ]
+      },
+      {
+        "key": "ratio",
+        "label": "Scaling method",
+        "type": "select",
+        "labelSpelled": true,
+        "showWhen": [
+          {
+            "field": "scaleType",
+            "values": [
+              "modular"
+            ]
+          }
+        ],
+        "options": [
+          {
+            "value": "1.2",
+            "label": "1.2 Minor third"
+          },
+          {
+            "value": "1.25",
+            "label": "1.25 Major third"
+          },
+          {
+            "value": "1.618",
+            "label": "1.618 Golden ratio"
+          }
+        ]
+      },
+      {
+        "key": "step",
+        "label": "Step",
+        "type": "number",
+        "labelSpelled": true,
+        "showWhen": [
+          {
+            "field": "scaleType",
+            "values": [
+              "metric",
+              "fibonacci"
+            ]
+          }
+        ]
+      },
+      {
+        "key": "mod",
+        "label": "Every N steps",
+        "type": "number",
+        "labelSpelled": true,
+        "showWhen": [
+          {
+            "field": "scaleType",
+            "values": [
+              "metric"
+            ]
+          }
+        ]
+      }
+    ],
+    "tabs": true,
+    "blocks": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Table rows"
+  },
+  {
+    "type": "paragraph",
+    "text": "The same annotation without @tabs: one line per entry, with Add and Remove."
+  },
+  {
+    "type": "field",
+    "name": "breakpoints",
+    "value": [
+      {
+        "label": "sm",
+        "min": 640
+      },
+      {
+        "label": "md",
+        "min": 834
+      }
+    ],
+    "label": "Breakpoints",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "rows",
+    "columns": [
+      {
+        "key": "label",
+        "label": "Name",
+        "type": "text",
+        "labelSpelled": true
+      },
+      {
+        "key": "min",
+        "label": "Min width",
+        "type": "number",
+        "labelSpelled": true
+      }
+    ],
+    "tabs": false,
+    "blocks": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "A curve you can drag"
+  },
+  {
+    "type": "paragraph",
+    "text": "`@curve` on an **array** of four numbers — the two handles of one cubic, exactly what `cubic-bezier()` carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the field underneath. All four are the same edit: the numbers are the value and everything on screen is a reading of them, which is why the dropdown says *Custom* the moment a curve stops being a preset."
+  },
+  {
+    "type": "field",
+    "name": "easing",
+    "value": [
+      0.37,
+      0,
+      0.63,
+      1
+    ],
+    "label": "Curve",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "curve",
+    "helper": "The dashed diagonal is the straight ramp — a curve is read as how far it departs from it."
+  },
+  {
+    "type": "paragraph",
+    "text": "**Add middle point** makes it a three-point curve: ten numbers, a middle anchor you can drag in both directions, and a handle either side of it. The split is exact, so adding the point does not move the curve. It is also what `easeInOut` has always been — the in-curve over the first half and the out-curve over the second is a middle anchor at the centre, written as an `if`."
+  },
+  {
+    "type": "field",
+    "name": "twoSegment",
+    "value": [
+      0.17,
+      0,
+      0.33,
+      0.23,
+      0.5,
+      0.5,
+      0.67,
+      0.77,
+      0.83,
+      1
+    ],
+    "label": "Two-segment curve",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "curve"
+  },
+  {
+    "type": "paragraph",
+    "text": "`@allowOriginal` adds *Original* to the preset list — the empty curve, for a script that has something to fall back on. Colors uses it to mean \"leave the steps this file already has\"."
+  },
+  {
+    "type": "field",
+    "name": "maybeCurve",
+    "value": [],
+    "label": "Curve or original",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "curve",
+    "helper": "Shown empty. Pick a preset to give it points.",
+    "allowOriginal": true
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "A curve on a real axis"
+  },
+  {
+    "type": "paragraph",
+    "text": "`@ends:` names the two fields the curve runs **between**, and `@range:` the limits of the quantity itself. Together they turn the y axis from a unit square into the thing being edited: the labels are percentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the two **square** handles are those ends — drag one and it types into its own field, because that is where the value lives. The round handles still only bend the shape between them."
+  },
+  {
+    "type": "paragraph",
+    "text": "The plot shows a **window** on the channel — the two ends with a little air — and two columns sit beside it. The **triangle** is the zoom: drag it up to close in, down to pull back, or step it with the buttons above and below. The bar to its right is the channel's own colours across that window, and it is a picture: it takes no input at all. Neither column moves when you drag the curve, because where you are looking is not a property of the ramp — and to follow a ramp that runs off the top or bottom, drag the empty chart vertically."
+  },
+  {
+    "type": "paragraph",
+    "text": "The ramp is clipped to the plot; the grips are clipped to the plot **plus their own radius**, so one on the boundary sits *on* the frame rather than being sliced in half by it. A drag stops at the edge of the window rather than pushing the curve out of sight."
+  },
+  {
+    "type": "field",
+    "name": "ladder",
+    "value": {
+      "bright": 98,
+      "dark": 19
+    },
+    "label": "Ends",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "group",
+    "columns": [
+      {
+        "key": "bright",
+        "label": "Bright",
+        "type": "number",
+        "labelSpelled": true
+      },
+      {
+        "key": "dark",
+        "label": "Dark",
+        "type": "number",
+        "labelSpelled": true
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "ladderCurve",
+    "value": [
+      0.4,
+      0,
+      0.7,
+      0.55
+    ],
+    "label": "Lightness",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "curve",
+    "helper": "Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.",
+    "ends": {
+      "from": "ladder.bright",
+      "to": "ladder.dark"
+    },
+    "range": {
+      "lo": 0,
+      "hi": 100
+    }
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "A scale with no far end"
+  },
+  {
+    "type": "paragraph",
+    "text": "`curve(growth:ratio)` inside `@rows` — the **open-ended** editor, for a scale whose largest value nobody knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last token the line carries on faintly, because it does — adding a token extends the scale rather than squeezing what is already generated into the same range."
+  },
+  {
+    "type": "paragraph",
+    "text": "**The dropdown is the shape control.** *Linear* means no shape and draws no handles; anything else reveals them, for when the growth should vary across the scale — tighter at the small end, looser at the top. The field underneath carries the whole scale, growth and shape together, so copying it out and pasting it back reproduces it."
+  },
+  {
+    "type": "paragraph",
+    "text": "The growth has **no field of its own**: one idea, one control. It is still written to the config under the name after the colon, so the block reads `ratio: 1.5` beside `curve: []`."
+  },
+  {
+    "type": "field",
+    "name": "openScale",
+    "value": [
+      {
+        "name": "Value",
+        "ratio": 1.5,
+        "curve": []
+      }
+    ],
+    "label": "Open-ended scale",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "rows",
+    "columns": [
+      {
+        "key": "name",
+        "label": "Mode",
+        "type": "text",
+        "labelSpelled": true
+      },
+      {
+        "key": "curve",
+        "label": "Scale",
+        "type": "curve",
+        "labelSpelled": true,
+        "growth": "ratio"
+      }
+    ],
+    "tabs": true,
+    "blocks": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "What the form cannot hold"
+  },
+  {
+    "type": "field",
+    "name": "nested",
+    "value": {
+      "outer": {
+        "inner": 1
+      }
+    },
+    "label": "Nested object",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "unsupported",
+    "helper": "an object with no @rows — the form says so rather than dropping it"
+  }
+]

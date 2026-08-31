@@ -59,13 +59,15 @@ const COMMANDS = {
   readForm: 'the rendered form: every control, its type, and what it holds',
   readPreview: 'the Configuration tab preview: whether it is shown, and its text',
   readTabs: 'which tabs this script has and which is current',
-  switchTab: 'open a tab — name=configUI|configCode|docs|source',
+  switchTab: 'open a tab — name=configUI|docs|source (configCode hidden pending delete)',
   setField: 'type into a control — name=<field> value=<...> [part=<cell|new|option|chip|chip-add>] [index=<n>]',
   clickControl: 'press part of a control — name=<field> part=add|remove|tab|chip-remove [index=<n>]',
   dragControl: 'drag a curve editor piece — name=<field> part=<cell>:zoom|end-from|end-to|handle-<n> ' +
     'dx=<px> dy=<px> [index=<n>]',
   readAutoImport: 'what auto-import last did — requested, refused, source, summary, note',
   readModeIntents: 'what a Run would do to the collection\'s modes — renames, removals, additions',
+  saveScript: 'SAVE the current user script — optional code=<...> (plan 38 storage verify)',
+  deleteScript: 'DELETE a user script by name — name=<script name> (no confirm dialog)',
 };
 
 function currentBuildId() {

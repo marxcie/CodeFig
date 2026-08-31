@@ -1,5 +1,5 @@
 /**
- * Four tabs, two of which are views of one config.
+ * Configuration tabs: form is the live surface; code tab chrome is kept but not offered (Plan 37).
  *
  * Plan 18 slice 1, and the paste-target gate's option B. The expensive part of B was always
  * "write a form's values back into a nested, commented object literal without wrecking it", and
@@ -27,7 +27,9 @@ function declaredTabs() {
     .filter((name, i, all) => all.indexOf(name) === i);
 }
 
-test('there are four tabs, in the designed order', () => {
+test('there are four tab buttons in markup (configCode kept for watch, not offered)', () => {
+  // Plan 37 hide step: the button stays in the DOM; updateTabVisibility hides it because it is
+  // not in the offered list. Delete comes after the watch period.
   assert.deepEqual(declaredTabs(), ['configUI', 'configCode', 'docs', 'source']);
 });
 
@@ -78,6 +80,7 @@ test('a config block that does not parse makes the form read-only', () => {
   assert.ok(fn, 'projectConfigIntoForm not found');
   assert.match(fn[0], /if \(!schema\) \{[\s\S]*?configFormReadOnly = true;/);
   assert.match(fn[0].replace(/\s+/g, ' '), /showing the last ' \+\s*'version it could read/);
+  assert.match(fn[0], /The config in Source has an error/);
 });
 
 test('whether a form exists is decided by the block, not by which marker it uses', () => {
@@ -90,16 +93,33 @@ test('whether a form exists is decided by the block, not by which marker it uses
   assert.equal(/if \(!scriptHasUIConfig\) \{/.test(fn), false,
     'the marker must not decide whether a form is shown');
   assert.match(fn, /no settings a form can show/, 'and the empty case still says so');
+  assert.match(fn, /Edit it in Source/, 'empty form points at Source, not Configuration code');
+});
+
+test('unsupported fields point at Source, not Configuration code', () => {
+  const fn = UI.match(/function projectConfigIntoForm\(\)[\s\S]*?\n      \}/)[0];
+  assert.match(fn, /only editable in Source/);
+  assert.equal(/only editable in Configuration code/.test(fn), false);
 });
 
 test('Configuration UI is the default for any script with a config', () => {
   assert.match(UI, /const initialTab = scriptHasConfig \? 'configUI' : 'source';/);
 });
 
-test('a script with a config always offers both views', () => {
-  // Not one tab or the other depending on which markers the script uses: the structure is the same
-  // for every script, and the form tab explains itself when there is no form.
-  assert.match(UI, /if \(parsedSections\.hasConfig\) \{ tabs\.push\('configUI'\); tabs\.push\('configCode'\); \}/);
+test('a script with a config offers Configuration UI, not Configuration code', () => {
+  // Plan 37: the code tab is hidden (chrome kept for a watch period). Soft-assert the active list
+  // only pushes configUI; the button/pane may still exist in markup.
+  assert.match(UI, /if \(parsedSections\.hasConfig\) tabs\.push\('configUI'\);/);
+  assert.equal(
+    /if \(parsedSections\.hasConfig\) \{ tabs\.push\('configUI'\); tabs\.push\('configCode'\); \}/.test(UI),
+    false,
+    'configCode must not be pushed into the offered tab list'
+  );
+  assert.equal(
+    /if \(nextHasConfig\) \{ tabs\.push\('configUI'\); tabs\.push\('configCode'\); \}/.test(UI),
+    false,
+    'structure sync must not re-offer configCode either'
+  );
 });
 
 test('the preview follows the active config tab, and there is one of it', () => {

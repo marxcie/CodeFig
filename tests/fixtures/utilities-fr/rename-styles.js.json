@@ -1,0 +1,96 @@
+[
+  {
+    "type": "field",
+    "name": "searchIn",
+    "value": "",
+    "label": "Search in",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "text/*"
+  },
+  {
+    "type": "paragraph",
+    "text": "Narrows the rename to styles whose name contains this — `color/`, `V4/*/Primary`. Leave it empty\nto search every style."
+  },
+  {
+    "type": "field",
+    "name": "searchFor",
+    "value": "",
+    "label": "Search for",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "font-"
+  },
+  {
+    "type": "field",
+    "name": "replaceWith",
+    "value": "",
+    "label": "Replace with",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "text-"
+  },
+  {
+    "type": "paragraph",
+    "text": "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, `$1` a capture group, `$n` counts up and `$N` counts down."
+  },
+  {
+    "type": "field",
+    "name": "matchCase",
+    "value": false,
+    "label": "Match case",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "useRegex",
+    "value": false,
+    "label": "Use regular expression",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
+  },
+  {
+    "type": "field",
+    "name": "previewOnly",
+    "value": true,
+    "label": "Preview only",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "**On by default.** Lists what would change and touches nothing. Untick and run again to apply."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "field",
+    "name": "batchReplacement",
+    "value": "",
+    "label": "Batch replacement",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "textarea"
+  },
+  {
+    "type": "paragraph",
+    "text": "Many renames in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas."
+  },
+  {
+    "type": "paragraph",
+    "text": "```\nSemiBold, semibold\nRegular, regular\nSmall, small\n```"
+  }
+]

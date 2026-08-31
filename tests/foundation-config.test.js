@@ -200,8 +200,6 @@ test('no shipped default block warns about itself', () => {
   const checked = [];
 
   for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.js'))) {
-    // Foundation config is not a foundation config; it configures the mover.
-    if (file === 'config.js') continue;
     const source = fs.readFileSync(path.join(dir, file), 'utf8');
     const start = source.indexOf('// @CONFIG_START');
     const end = source.indexOf('// @CONFIG_END');

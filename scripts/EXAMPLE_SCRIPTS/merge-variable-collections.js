@@ -18,16 +18,24 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// Source: emptied by merge. Target: receives a group named like the source collection.
-var sourceCollection = ''; // @options: localVariableCollections
-var collectionToMergeTo = ''; // @options: localVariableCollections
-//
-// Optional: map source modes to target modes. Example:
-// brand1 typography, brand1
-// brand2 typography, brand2
-// Empty: first source mode fills every target mode. With lines: unmapped source modes → target’s first mode.
-var preserveModes = ''; // @textarea
+var sourceCollection = '';
+var collectionToMergeTo = '';
+var preserveModes = '';
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "paragraph", attachTo: "next",
+//       text: "Source: emptied by merge. Target: receives a group named like the source collection." },
+//     { key: "sourceCollection", type: "select", options: "localVariableCollections" },
+//     { key: "collectionToMergeTo", type: "select", options: "localVariableCollections" },
+//     { type: "paragraph", attachTo: "next",
+//       text: "Optional: map source modes to target modes. Example:\nbrand1 typography, brand1\nbrand2 typography, brand2\nEmpty: first source mode fills every target mode. With lines: unmapped source modes → target’s first mode." },
+//     { key: "preserveModes", type: "textarea" }
+//   ]
+// }
+// @PANEL_END
 
 function normalizeVariableName(name) {
   if (typeof name !== 'string') return name;

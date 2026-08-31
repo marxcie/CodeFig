@@ -16,23 +16,39 @@
 
 // @UI_CONFIG_START
 var recursive = true;
-// ---
-// ## Styles
 var allStyles = true;
-//
 var fontStyles = true;
 var fillStyles = true;
 var strokeStyles = true;
 var effectStyles = true;
 var gridStyles = true;
-// ---
-// ## Variables
 var allVariables = true;
-//
 var typographicVariables = true;
 var numericVariables = true;
 var colorVariables = true;
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { key: "recursive", type: "boolean" },
+//     { type: "divider" },
+//     { type: "heading", level: 2, text: "Styles" },
+//     { key: "allStyles", type: "boolean" },
+//     { key: "fontStyles", type: "boolean" },
+//     { key: "fillStyles", type: "boolean" },
+//     { key: "strokeStyles", type: "boolean" },
+//     { key: "effectStyles", type: "boolean" },
+//     { key: "gridStyles", type: "boolean" },
+//     { type: "divider" },
+//     { type: "heading", level: 2, text: "Variables" },
+//     { key: "allVariables", type: "boolean" },
+//     { key: "typographicVariables", type: "boolean" },
+//     { key: "numericVariables", type: "boolean" },
+//     { key: "colorVariables", type: "boolean" }
+//   ]
+// }
+// @PANEL_END
 
 // Helper function to check if a property is typographic
 function isTypographicProperty(property) {

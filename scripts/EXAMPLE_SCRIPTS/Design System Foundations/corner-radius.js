@@ -71,18 +71,12 @@
 
 var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cornerRadiusConfigData : {
   // @CONFIG_START
-  // @fromFile: domains.radius
+// @fromFile: domains.radius
 
-  // # General
-  collectionName: "", // @collection @label: Collection
-  // @collectionModes: Collection modes
-  group: "Corner radius", // @label: Group within collection @placeholder="eg.: Corner radius"
-  radii: ["none", "xs", "sm", "md", "lg", "xl"], // @label: Tokens @helper: Named smallest to largest, and radius-{1,10} is a series of ten. 
-
-  // --- @section
-
-  // # Mode settings
-  generateOverview: false, // @label: Generate overview @helper: Builds the Corner radius overview frame
+  collectionName: "",
+  group: "Corner radius",
+  radii: ["none", "xs", "sm", "md", "lg", "xl"],
+  generateOverview: false,
   modes: [
     {
       name: "Value",
@@ -95,11 +89,47 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
       roundTo: 2,
       extras: [0]
     }
-  ], // @rows: name:text=Mode|scaleType:radio(bezier:Bezier scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|curve:curve(growth:ratio){scaleType=bezier}=Scale @helper: Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top.|step:number{scaleType=metric|fibonacci}=Step @helper: Metric. The amount each step adds, before it starts growing.\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it.|mod:number{scaleType=metric}=Every N steps @helper: How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down.|base:number=Base unit|roundTo:number=Round numbers to|extras:list=Extra values @helper: Values that are not part of the scale, merged in by size. Put a 0 here for a `none` token: it fills the smallest name and the scale takes over above it, so `none` needs no special case. @tabs @label: Modes
+  ]
+// @CONFIG_END
 
-  // # Preview
-  // @preview
-  // @CONFIG_END
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "heading", text: "General" },
+//     { key: "collectionName", type: "collection", label: "Collection" },
+//     { type: "chips", label: "Collection modes", from: "modes" },
+//     { key: "group", type: "string", label: "Group within collection",
+//       placeholder: "eg.: Corner radius" },
+//     { key: "radii", type: "list", label: "Tokens",
+//       helper: "Named smallest to largest, and radius-{1,10} is a series of ten." },
+//     { type: "divider", section: true },
+//     { type: "heading", text: "Mode settings" },
+//     { key: "generateOverview", type: "boolean", label: "Generate overview",
+//       helper: "Builds the Corner radius overview frame" },
+//     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+//       columns: [
+//         { key: "name", type: "text", label: "Mode" },
+//         { key: "scaleType", type: "radio", label: "Scale type",
+//           options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
+//         { key: "curve", type: "curve", label: "Scale", growth: "ratio",
+//           showWhen: { scaleType: "bezier" },
+//           helper: "Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top." },
+//         { key: "step", type: "number", label: "Step",
+//           showWhen: { scaleType: ["metric", "fibonacci"] },
+//           helper: "Metric. The amount each step adds, before it starts growing.\\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it." },
+//         { key: "mod", type: "number", label: "Every N steps",
+//           showWhen: { scaleType: "metric" },
+//           helper: "How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down." },
+//         { key: "base", type: "number", label: "Base unit" },
+//         { key: "roundTo", type: "number", label: "Round numbers to" },
+//         { key: "extras", type: "list", label: "Extra values",
+//           helper: "Values that are not part of the scale, merged in by size. Put a 0 here for a `none` token: it fills the smallest name and the scale takes over above it, so `none` needs no special case." }
+//       ] },
+//     { type: "heading", text: "Preview" },
+//     { type: "preview" }
+//   ]
+// }
+// @PANEL_END
 };
 
 

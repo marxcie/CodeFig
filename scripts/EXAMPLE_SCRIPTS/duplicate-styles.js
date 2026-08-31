@@ -39,16 +39,30 @@ if (typeof getAllStyles !== "function") {
 }
 
 // @UI_CONFIG_START
-// Path prefix (segments separated by /). All local styles under the source path are copied to the target path.
-var sourceStyleGroup = ""; // @placeholder="V1"
-var targetStyleGroup = ""; // @placeholder="V2"
-// ---
-var rebindTargetCollection = ""; // @options: variableCollections
-// Leave empty to keep bindings on the **original** variables. Choose a collection to point duplicated styles at same-named variables there (text / paint / effect).
-// ---
+var sourceStyleGroup = "";
+var targetStyleGroup = "";
+var rebindTargetCollection = "";
 var rebindBreakUnmatchedBindings = false;
-// If true: detach bindings that have no same-name variable in the target collection.
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "paragraph", attachTo: "next",
+//       text: "Path prefix (segments separated by /). All local styles under the source path are copied to the target path." },
+//     { key: "sourceStyleGroup", type: "string", placeholder: "V1" },
+//     { key: "targetStyleGroup", type: "string", placeholder: "V2" },
+//     { type: "divider" },
+//     { key: "rebindTargetCollection", type: "select", options: "variableCollections" },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "Leave empty to keep bindings on the **original** variables. Choose a collection to point duplicated styles at same-named variables there (text / paint / effect)." },
+//     { type: "divider" },
+//     { key: "rebindBreakUnmatchedBindings", type: "boolean" },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "If true: detach bindings that have no same-name variable in the target collection." }
+//   ]
+// }
+// @PANEL_END
 
 // ========================================
 // Path helpers (Figma groups = "A / B / C")

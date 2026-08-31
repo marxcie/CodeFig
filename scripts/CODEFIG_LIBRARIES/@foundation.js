@@ -69,6 +69,10 @@
 // | Config on canvas | writeConfigToTextLayer, readConfigFromTextLayer, findConfigTextLayers |
 // | Stamps | stampValue, readStampFrom, stampToken, readStamp, findByStamp, alignStampedTokens, stampGeneratedTokens, describeStampAlignment |
 //
+// Boot-time clear-case repair of orphan registry / manifest / stamp plugin data lives in
+// `src/foundation-maintain.js` (plan 39) — not here — so `reconcileFoundation` stays read-only
+// and the plugin main can run maintenance without `@import`.
+//
 // `requestClipboardCopy` and `createCopyResult` live in `@InfoPanel`, not here — putting the
 // clipboard plumbing in the results library is what lets a script use it without depending on
 // the foundation.

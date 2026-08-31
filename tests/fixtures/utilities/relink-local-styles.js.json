@@ -1,0 +1,16 @@
+[
+  {
+    "type": "field",
+    "name": "scope",
+    "value": "Selection",
+    "label": "Scope",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "radio",
+    "options": [
+      "Selection",
+      "This page",
+      "All pages"
+    ]
+  }
+]

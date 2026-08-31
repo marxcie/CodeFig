@@ -13,7 +13,7 @@
     if (Array.isArray(v)) {
       // **A list of names is editable; a list of objects is not.** `spacings: ["none", "px", …]` is the
       // Tokens field in Márton's frames — one input holding a comma list — and it used to fall through
-      // to `unsupported`, which renders read-only and sends you to Configuration code for a row of
+      // to `unsupported`, which renders read-only and sends you to Source for a row of
       // words. A list of *objects* is a different thing and still needs `@rows` to say what its columns
       // are.
       return isPrimitiveList(v) ? "list" : "array";
@@ -976,6 +976,9 @@
     if (block.disabledNote) column.disabledNote = block.disabledNote;
     if (block.helper) column.helper = block.helper;
     if (block.placeholder) column.placeholder = block.placeholder;
+    // `@unit="%"` in the one-liner — a unit printed inside the input at its right edge.
+    // Typography's letterSpacing / lineHeight groups carry it; Colors never needed one.
+    if (block.unit != null) column.unit = block.unit;
     if (block.ends) column.ends = panelEnds(block.ends);
     if (block.range) column.range = panelRange(block.range);
     if (block.ramp) column.ramp = block.ramp;
@@ -1137,16 +1140,16 @@
     return out;
   }
 
-  /** One plain `@UI_CONFIG` field, from its JSON block plus its live value from `@CONFIG_START`. */
+  /** One plain field, from its JSON panel block plus its live value from the values region. */
   function panelFieldRow(block, values, idx) {
     var row = {
       type: "field", name: block.key, value: values ? values[block.key] : undefined,
       label: block.label || labelFromName(block.key), labelSpelled: !!block.label, tooltip: "",
       inputType: block.type,
-      // `@CONFIG_START` is always the property-list shape for a `@PANEL_START`-backed script —
-      // there is no `@UI_CONFIG_START`/`var x = …;` form of this format. Set because it genuinely
-      // applies, not to make `serialize()`'s old per-row branch accept the row: this row carries
-      // no `.raw`, on purpose (see `serialize()`'s own comment on why one is never invented here),
+      // Placeholder only — `serializePanelValues` detects property-list vs `var` from the indexed
+      // raw of each key in `configText`, so a utility script's `@UI_CONFIG` values round-trip as
+      // `var name = …;` without this flag needing to be right. Set because the row carries no
+      // `.raw` on purpose (see `serialize()`'s own comment on why one is never invented here),
       // so the old branch's fast path never fires for it and its full-reconstruction path throws
       // rather than building a line from a spec grammar that cannot express `anchors` or nested
       // `tab` containers.
@@ -1154,7 +1157,19 @@
     };
     if (block.placeholder) row.placeholder = block.placeholder;
     if (block.helper) row.helper = block.helper;
-    if (block.options) row.options = panelFieldOptions(block.options, block.type);
+    // Dynamic lists (`@options: localVariableCollections`) are a string source name, not a
+    // static option array — same split the one-liner path makes on `|`. A bare string in
+    // `options` is that source; `optionSource` is accepted as an explicit spelling of the same
+    // fact. Feeding a string into `panelFieldOptions` used to treat it as an object and emit
+    // character-index "options" (0, 1, 2, …), which is how a migrated multiselect would open
+    // looking like a list of digits.
+    if (typeof block.options === "string") {
+      row.optionSource = block.options;
+    } else if (block.optionSource) {
+      row.optionSource = block.optionSource;
+    } else if (block.options) {
+      row.options = panelFieldOptions(block.options, block.type);
+    }
     var showWhen = panelConditionRules(block.showWhen);
     if (showWhen) row.showWhenRules = showWhen;
     if (block.type === "rows") {
@@ -1179,18 +1194,20 @@
       if (block.range) row.range = panelRange(block.range);
       if (block.allowOriginal) row.allowOriginal = true;
     }
+    // `@mode: targetCollection` — the mode picker names the collection field it follows. Recorded
+    // even when bare (`null`), matching the one-liner path: serialisation and the renderer both
+    // distinguish "explicitly unbound" from "never a mode field".
+    if (block.type === "mode") {
+      row.collectionField = block.collection != null ? block.collection : null;
+    }
     return row;
   }
 
   /**
    * `@PANEL_START`'s parsed JSON (a flat `blocks` array — see the module comment) plus the values
-   * `parseConfigBlockObject` already reads from `@CONFIG_START`, merged into the exact `{ rows }`
-   * shape `parse()` builds today. `renderer.js` does not change: this is the object it already
-   * consumes, assembled from two sources instead of one.
-   *
-   * Not implemented here: writing an edited value back (`serialize`'s job for the old format).
-   * Nothing ships with a `@PANEL_START` block yet, so there is nothing to round-trip against —
-   * see `.plans/31-panel-spec-json.md`.
+   * `parseConfigBlockObject` already reads from `@CONFIG_START` or `@UI_CONFIG_START`, merged into
+   * the exact `{ rows }` shape `parse()` builds today. `renderer.js` does not change: this is the
+   * object it already consumes, assembled from two sources instead of one.
    */
   /** Every block type `parsePanelSpec` knows how to draw something for, key-less blocks only. */
   var PANEL_MARKER_TYPES = {
@@ -1270,14 +1287,28 @@
   }
 
   /**
-   * Walks `@CONFIG_START`'s property-list text into `{ key, raw, trailingComma }` entries plus
-   * whatever sits between them, in source order — reusing `readPropertyEntry`'s own brace-depth
-   * scan rather than a second one, so a multi-line value (a `modes` array, a `bright: {...}`) is
-   * one entry here exactly as it is one property to the parser that already reads this text.
+   * One `var name = …;` line, same match shape the old one-line path uses, or null.
+   * Kept local so `indexConfigProperties` and `parseConfigBlockAssignments` cannot disagree.
+   */
+  function readOneLineVar(line) {
+    var m = String(line || "").match(/^\s*var\s+(\w+)\s*=\s*(.+?)\s*;(?:\s*\/\/\s*(.*))?$/);
+    return m || null;
+  }
+
+  /**
+   * Walks a values region's text into `{ key, raw, syntax, trailingComma }` entries plus
+   * whatever sits between them, in source order. Accepts both shapes a values block can have:
+   *
+   *   - property list (`key: value,`) — `@CONFIG_START`, DSF scripts
+   *   - `var` assignments (`var key = value;`) — `@UI_CONFIG_START`, utility scripts
+   *
+   * Reuses `readPropertyEntry` / `readMultiLineValue` rather than a second brace-depth scan, so a
+   * multi-line value is one entry here exactly as it is one value to the readers that already
+   * know these texts.
    *
    * This is what lets a `@PANEL_START`-backed save reprint an untouched value **verbatim** —
    * byte for byte, not reconstructed from the parsed shape — and an edited one in the same
-   * indentation and comma style the file already had, without a per-row `.raw` to carry it.
+   * indentation and comma/`var` style the file already had, without a per-row `.raw` to carry it.
    */
   function indexConfigProperties(text) {
     var lines = String(text == null ? "" : text).split(/\r?\n/);
@@ -1285,11 +1316,34 @@
     var byKey = {};
     var i = 0;
     while (i < lines.length) {
+      var oneLine = readOneLineVar(lines[i]);
+      if (oneLine) {
+        var varPart = { key: oneLine[1], raw: lines[i], syntax: "var", trailingComma: false };
+        parts.push(varPart);
+        byKey[varPart.key] = varPart;
+        i++;
+        continue;
+      }
+      if (/^\s*var\s+\w+\s*=/.test(lines[i])) {
+        var span = readMultiLineValue(lines, i);
+        if (span) {
+          var multiPart = {
+            key: span.match[1], raw: span.match[0], syntax: "var", trailingComma: false
+          };
+          parts.push(multiPart);
+          byKey[multiPart.key] = multiPart;
+          i = span.endLine + 1;
+          continue;
+        }
+      }
       var entry = readPropertyEntry(lines, i);
       if (entry) {
-        var part = { key: entry.match[1], raw: entry.match[0], trailingComma: entry.trailingComma };
-        parts.push(part);
-        byKey[part.key] = part;
+        var propPart = {
+          key: entry.match[1], raw: entry.match[0], syntax: "property",
+          trailingComma: entry.trailingComma
+        };
+        parts.push(propPart);
+        byKey[propPart.key] = propPart;
         i = entry.endLine + 1;
       } else {
         parts.push({ key: null, raw: lines[i] });
@@ -1300,7 +1354,7 @@
   }
 
   /**
-   * Whether `@PANEL_START`'s fields and `@CONFIG_START`'s values agree — the same comparison
+   * Whether `@PANEL_START`'s fields and the values region agree — the same comparison
    * `validatePanelKeyParity` makes in `validate-scripts.js`, at build time, over a script already
    * committed. This is the runtime half: a script pasted into `clientStorage` never goes through
    * a build, so nothing has checked it until now. Checked at **load**, not only at save, so a
@@ -1341,10 +1395,11 @@
     if (panelSpecText) {
       var values = parseConfigBlockObject(code) || {};
       var result = parsePanelSpec(panelSpecText, values);
-      // `fromPanelSpec` is what `serialize()` dispatches on, and `configText` is `@CONFIG_START`'s
-      // own raw text — carried on the schema rather than threaded through as a third argument to
-      // `serialize()`, so every existing call site (which passes exactly `(schema, values)`) is
-      // unaffected whether or not it ever touches a `@PANEL_START` script.
+      // `fromPanelSpec` is what `serialize()` dispatches on, and `configText` is the values
+      // region's own raw text (`@CONFIG_START` or `@UI_CONFIG_START`) — carried on the schema
+      // rather than threaded through as a third argument to `serialize()`, so every existing
+      // call site (which passes exactly `(schema, values)`) is unaffected whether or not it
+      // ever touches a `@PANEL_START` script.
       result.fromPanelSpec = true;
       result.configText = code;
       if (!result.error) result.driftWarning = panelKeyDrift(result.rows, values);
@@ -1882,16 +1937,22 @@
   }
 
   /**
-   * Values only, for a `@PANEL_START`-backed schema — `@CONFIG_START` has no annotations left to
-   * reprint, so this never builds one. Every property in `configText` is reprinted **verbatim**
-   * unless its value actually changed, and an edited one keeps the same indentation and comma
-   * style the file already had — `indexConfigProperties` (this file) reads that directly from
-   * `configText` per key, the same way a per-row `.raw` would have, if this format had one.
+   * Values only, for a `@PANEL_START`-backed schema — the values region has no annotations left
+   * to reprint as field specs (those live in `@PANEL_START`), so this never builds one. Every
+   * entry in `configText` is reprinted **verbatim** unless its value actually changed, and an
+   * edited one keeps the same indentation and syntax (`key: value,` or `var key = value;`) the
+   * file already had — `indexConfigProperties` (this file) reads that directly from `configText`
+   * per key, the same way a per-row `.raw` would have, if this format had one.
    *
    * A schema field with no matching key in `configText` throws: that is exactly the drift
    * `panelKeyDrift` warns about at load, and a save has no correct place to put a value with
    * nowhere to land. A `configText` key with no matching schema field is left alone, verbatim —
    * not this function's problem to solve, and never silently dropped.
+   *
+   * On edit of a `var` line, trailing `// …` annotations are dropped: they belong in
+   * `@PANEL_START` once the script has migrated, and reprinting them beside a new value would
+   * keep a second, stale copy of the field recipe. Unchanged lines stay byte-identical, comments
+   * and all.
    */
   function serializePanelValues(schema, values) {
     var configText = schema.configText;
@@ -1905,7 +1966,7 @@
 
     schema.rows.forEach(function (r) {
       if (r.type === "field" && !index.byKey[r.name]) {
-        throw new Error('serialize: field "' + r.name + '" has no value in @CONFIG_START to write back into');
+        throw new Error('serialize: field "' + r.name + '" has no value in the values block to write back into');
       }
     });
 
@@ -1916,6 +1977,9 @@
       var v = vm[r.name];
       if (v === undefined || JSON.stringify(v) === JSON.stringify(r.value)) return part.raw;
       var indent = /^[ \t]*/.exec(part.raw)[0];
+      if (part.syntax === "var") {
+        return indent + "var " + r.name + " = " + fmt(v, indent, part.raw, r.name) + ";";
+      }
       return indent + printKey(r.name) + ": " + fmt(v, indent, part.raw, r.name) +
         (part.trailingComma ? "," : "");
     });
@@ -3103,6 +3167,46 @@
     return itemText.slice(0, start) + lead + written + comma + trailingWs + after;
   }
 
+  /**
+   * Values from a values-region body that is not a property-list object — primarily
+   * `var name = value;` lines from `@UI_CONFIG_START`, also property entries when the JSON wrap
+   * path failed. Skips comments, headings and blank lines. → plain object, or null when nothing
+   * matched (so callers that treat null as "unreadable" keep that signal).
+   */
+  function parseConfigBlockAssignments(text) {
+    var lines = String(text == null ? "" : text).split(/\r?\n/);
+    var values = {};
+    var found = false;
+    var i = 0;
+    while (i < lines.length) {
+      var oneLine = readOneLineVar(lines[i]);
+      if (oneLine) {
+        values[oneLine[1]] = parseValue(oneLine[2].trim());
+        found = true;
+        i++;
+        continue;
+      }
+      if (/^\s*var\s+\w+\s*=/.test(lines[i])) {
+        var span = readMultiLineValue(lines, i);
+        if (span) {
+          values[span.match[1]] = parseValue(span.match[2].trim());
+          found = true;
+          i = span.endLine + 1;
+          continue;
+        }
+      }
+      var entry = readPropertyEntry(lines, i);
+      if (entry) {
+        values[entry.match[1]] = parseValue(entry.match[2].trim());
+        found = true;
+        i = entry.endLine + 1;
+        continue;
+      }
+      i++;
+    }
+    return found ? values : null;
+  }
+
   /** The config block's body as a plain object. Never evaluated — the tolerant reader does it. */
   function parseConfigBlockObject(text) {
     try {
@@ -3113,7 +3217,10 @@
       // and says nothing about why.
       return JSON.parse(looseJsonToJson("{" + text + "\n}"));
     } catch (e) {
-      return null;
+      // Property-list path failed: a `@UI_CONFIG` body is live `var` statements, not an object
+      // literal. Walk those (and any property entries the wrap could not swallow) instead of
+      // returning null — otherwise a `@PANEL_START` + `@UI_CONFIG` script opens every field blank.
+      return parseConfigBlockAssignments(text);
     }
   }
 

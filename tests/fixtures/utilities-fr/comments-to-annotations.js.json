@@ -1,0 +1,55 @@
+[
+  {
+    "type": "field",
+    "name": "tokenStorageKey",
+    "value": "",
+    "label": "Access token",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string"
+  },
+  {
+    "type": "paragraph",
+    "text": "Your Figma personal access token, or the name of a key you have already saved. Create one under\n**Help & Account → Account Settings → Security → Personal access tokens**, with the\n*Files / file_comments:read* scope."
+  },
+  {
+    "type": "field",
+    "name": "fileKeyOrUrl",
+    "value": "",
+    "label": "File key or URL",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "https://www.figma.com/design/3OL5s2KgkpD2RIGBXIJzst/CodeFig-test-ground?node-id=35-32&t=RqmlOo3sxABzx1pg"
+  },
+  {
+    "type": "paragraph",
+    "text": "The file to read comments from — paste its key, or any URL from it and the key is pulled out for\nyou. Easiest way: select a layer, right-click, **Copy link to selection**, paste it here."
+  },
+  {
+    "type": "field",
+    "name": "annotationAnchors",
+    "value": true,
+    "label": "Anchor to comment position",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Creates an invisible frame where each comment sits, so the annotation lands in the same place\nrather than near it."
+  },
+  {
+    "type": "field",
+    "name": "resolvedComments",
+    "value": false,
+    "label": "Include resolved comments",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Off by default, so only open comments become annotations."
+  }
+]

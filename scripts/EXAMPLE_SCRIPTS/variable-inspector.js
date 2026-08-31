@@ -39,34 +39,133 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-// # The report
-var onlyUsedVariables = true; // @label: Only variables in use
-// Hides any variable that nothing in the selection, and no style, refers to.
-var groupByCollection = true; // @label: Group by collection
-var showValuePreview = true; // @label: Show each value
-// Prints the value a variable resolves to beside its name.
-var maxNodesPreview = 5; // @label: Usages shown
-// How many layers to name per variable before the report offers *Show all*.
-//
-// ---
-//
-// # Which variables to list
-var typographicVariables = true; // @label: Typography
-// Text size, letter spacing, line height and the rest of a text layer's numbers.
-var colorVariables = true; // @label: Color
-// Anything bound to a fill or a stroke.
-var dimensionVariables = true; // @label: Dimensions and spacing
-var effectVariables = true; // @label: Effects and opacity
-var otherVariables = true; // @label: Everything else
-//
-// ---
-//
-// # Advanced
-var checkStyleUsage = true; // @label: Include styles
-// Counts a variable as used when a text, paint or effect style refers to it, not only a layer.
-var showHealthScore = false; // @label: Health score
-// Rates the collection out of 100 on naming, duplication and unused tokens.
+var onlyUsedVariables = true;
+var groupByCollection = true;
+var showValuePreview = true;
+var maxNodesPreview = 5;
+var typographicVariables = true;
+var colorVariables = true;
+var dimensionVariables = true;
+var effectVariables = true;
+var otherVariables = true;
+var checkStyleUsage = true;
+var showHealthScore = false;
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   "blocks": [
+//     {
+//       "type": "heading",
+//       "text": "The report"
+//     },
+//     {
+//       "key": "onlyUsedVariables",
+//       "type": "boolean",
+//       "label": "Only variables in use"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Hides any variable that nothing in the selection, and no style, refers to."
+//     },
+//     {
+//       "key": "groupByCollection",
+//       "type": "boolean",
+//       "label": "Group by collection"
+//     },
+//     {
+//       "key": "showValuePreview",
+//       "type": "boolean",
+//       "label": "Show each value"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Prints the value a variable resolves to beside its name."
+//     },
+//     {
+//       "key": "maxNodesPreview",
+//       "type": "number",
+//       "label": "Usages shown"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "How many layers to name per variable before the report offers *Show all*."
+//     },
+//     {
+//       "type": "divider"
+//     },
+//     {
+//       "type": "heading",
+//       "text": "Which variables to list"
+//     },
+//     {
+//       "key": "typographicVariables",
+//       "type": "boolean",
+//       "label": "Typography"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Text size, letter spacing, line height and the rest of a text layer's numbers."
+//     },
+//     {
+//       "key": "colorVariables",
+//       "type": "boolean",
+//       "label": "Color"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Anything bound to a fill or a stroke."
+//     },
+//     {
+//       "key": "dimensionVariables",
+//       "type": "boolean",
+//       "label": "Dimensions and spacing"
+//     },
+//     {
+//       "key": "effectVariables",
+//       "type": "boolean",
+//       "label": "Effects and opacity"
+//     },
+//     {
+//       "key": "otherVariables",
+//       "type": "boolean",
+//       "label": "Everything else"
+//     },
+//     {
+//       "type": "divider"
+//     },
+//     {
+//       "type": "heading",
+//       "text": "Advanced"
+//     },
+//     {
+//       "key": "checkStyleUsage",
+//       "type": "boolean",
+//       "label": "Include styles"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Counts a variable as used when a text, paint or effect style refers to it, not only a layer."
+//     },
+//     {
+//       "key": "showHealthScore",
+//       "type": "boolean",
+//       "label": "Health score"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Rates the collection out of 100 on naming, duplication and unused tokens."
+//     }
+//   ]
+// }
+// @PANEL_END
 
 // Variable Inspector
 // Detailed inspector showing all variables with their current values for visual identification

@@ -31,25 +31,87 @@
 @import { collectNodesAsync, showProgress, codefigRunOpBegin, finishCodefigRunProgress } from "@Core Library"
 
 // @UI_CONFIG_START
-// # Palettes
-var collections = []; // @options: variableCollections @multi
-// Tick every collection that might hold a matching colour token.
-// ---
-// # Loose matching
-var looseMatching = false; // @label: Match near misses
-// Off, a colour has to match a token exactly. On, it binds to the closest token within the tolerance
-// below — useful for finding colours that were nearly right.
-//
-var matchTolerance = "standard"; // @options: conservative|standard|aggressive|custom @showWhen: looseMatching=true
-// How far a colour may sit from a token and still count, measured as LAB ΔE: conservative 2,
-// standard 4, aggressive 6. Below about 2 the eye cannot tell them apart.
-//
-var maxDeltaE = 4; // @label: Custom tolerance (ΔE) @showWhen: looseMatching=true @showWhen: matchTolerance=custom
-//
-var verboseLogging = false; // @label: Verbose console output
-// Duplicates, near-ties and palette statistics, in the console. The summary stays in the Info panel
-// either way.
+var collections = [];
+var looseMatching = false;
+var matchTolerance = "standard";
+var maxDeltaE = 4;
+var verboseLogging = false;
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   "blocks": [
+//     {
+//       "type": "heading",
+//       "text": "Palettes"
+//     },
+//     {
+//       "key": "collections",
+//       "type": "multiselect",
+//       "options": "variableCollections"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Tick every collection that might hold a matching colour token."
+//     },
+//     {
+//       "type": "divider"
+//     },
+//     {
+//       "type": "heading",
+//       "text": "Loose matching"
+//     },
+//     {
+//       "key": "looseMatching",
+//       "type": "boolean",
+//       "label": "Match near misses"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Off, a colour has to match a token exactly. On, it binds to the closest token within the tolerance\nbelow — useful for finding colours that were nearly right."
+//     },
+//     {
+//       "key": "matchTolerance",
+//       "type": "select",
+//       "options": [
+//         "conservative",
+//         "standard",
+//         "aggressive",
+//         "custom"
+//       ],
+//       "showWhen": {
+//         "looseMatching": true
+//       }
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "How far a colour may sit from a token and still count, measured as LAB ΔE: conservative 2,\nstandard 4, aggressive 6. Below about 2 the eye cannot tell them apart."
+//     },
+//     {
+//       "key": "maxDeltaE",
+//       "type": "number",
+//       "label": "Custom tolerance (ΔE)",
+//       "showWhen": {
+//         "looseMatching": true,
+//         "matchTolerance": "custom"
+//       }
+//     },
+//     {
+//       "key": "verboseLogging",
+//       "type": "boolean",
+//       "label": "Verbose console output"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Duplicates, near-ties and palette statistics, in the console. The summary stays in the Info panel\neither way."
+//     }
+//   ]
+// }
+// @PANEL_END
 
 var MAX_ALPHA_DELTA = 0.08;
 /** Log when 2nd-best token is within this ΔE of the best (still binds best). */

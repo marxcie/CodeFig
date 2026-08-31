@@ -100,35 +100,45 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // @CONFIG_START
   // @fromFile: domains.grid
 
-  // # General
-  collectionName: "", // @collection @label: Collection @placeholder="eg. Responsive System"
-  // @collectionModes: Collection modes
-  group: "Grid", // @label: Group within collection @placeholder="eg. Grid"
-
-  // --- @section
-
-  // # Mode settings
-  extensionColumns: 0, // @label: Extra columns @helper: Added as numeric variables for overshoot layout
-  generateOverview: false, // @label: Generate overview @helper: Generate Figma frames for each mode
-
+  collectionName: "",
+  group: "Grid",
+  extensionColumns: 0,
+  generateOverview: false,
   modes: [
-    {
-      name: "Value",
-      containerWidth: 1920,
-      columns: 12,
-      gap: 40,
-      padding: 80
-    }
-  ], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes
+    { name: "Value", containerWidth: 1920, columns: 12, gap: 40, padding: 80 }
+  ]
+// @CONFIG_END
 
-  // # Suggested whole number divisions
-  // @suggestions
-
-  // # Preview
-  // @preview
-
-
-  // @CONFIG_END
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "heading", text: "General" },
+//     { key: "collectionName", type: "collection", label: "Collection",
+//       placeholder: "eg. Responsive System" },
+//     { type: "chips", label: "Collection modes", from: "modes" },
+//     { key: "group", type: "string", label: "Group within collection", placeholder: "eg. Grid" },
+//     { type: "divider", section: true },
+//     { type: "heading", text: "Mode settings" },
+//     { key: "extensionColumns", type: "number", label: "Extra columns",
+//       helper: "Added as numeric variables for overshoot layout" },
+//     { key: "generateOverview", type: "boolean", label: "Generate overview",
+//       helper: "Generate Figma frames for each mode" },
+//     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+//       columns: [
+//         { key: "name", type: "text", label: "Mode" },
+//         { key: "containerWidth", type: "number", label: "Width" },
+//         { key: "columns", type: "number", label: "Columns" },
+//         { key: "gap", type: "number", label: "Gap" },
+//         { key: "padding", type: "number", label: "Margins" }
+//       ] },
+//     { type: "heading", text: "Suggested whole number divisions" },
+//     { type: "suggestions" },
+//     { type: "heading", text: "Preview" },
+//     { type: "preview" }
+//   ]
+// }
+// @PANEL_END
+  ,
   // Variables to be created in Figma (function of config; max columns = viewport with most columns)
   // Second arg is the full grid config (optional); used for extensionColumns
   variables: function(innerConfig, gridConfig) {

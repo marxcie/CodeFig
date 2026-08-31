@@ -27,7 +27,9 @@ const { findAllScripts } = require('../validate-scripts.js');
 const TYPOGRAPHY = path.join(
   __dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'typography.js'
 );
-const BLOCK = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(fs.readFileSync(TYPOGRAPHY, 'utf8'))[1];
+const TYPOGRAPHY_SRC = fs.readFileSync(TYPOGRAPHY, 'utf8');
+const BLOCK = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(TYPOGRAPHY_SRC)[1];
+const PANEL = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(TYPOGRAPHY_SRC)[1];
 
 /** The script with its imports resolved, minus the execution tail — the way the sandbox sees it. */
 function load() {
@@ -77,7 +79,8 @@ function threeModeConfig() {
 }
 
 function render() {
-  const schema = P.parse(BLOCK);
+  // Values + panel recipe — the live script no longer carries inline annotations.
+  const schema = P.parse(BLOCK, PANEL);
   const container = document.createElement('div');
   R.buildForm(schema, container);
   const api = R.attachListeners(container, schema, () => {});
@@ -340,7 +343,7 @@ test('line height and letter spacing are percentages, and the old spelling still
 test('the percentage fields carry their unit in the input', () => {
   // A placeholder disappears the moment you type; a unit has to stay, or `-1.5` is unreadable as either
   // pixels or percent. Márton asked for it drawn inside the field at the right edge.
-  const schema = P.parse(BLOCK);
+  const schema = P.parse(BLOCK, PANEL);
   const modes = schema.rows.filter((r) => r.type === 'field' && r.inputType === 'rows')[0];
   const by = {};
   modes.columns.forEach((c) => { by[c.key] = c; });

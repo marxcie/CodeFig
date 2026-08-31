@@ -11,10 +11,11 @@
  *      from `getComputedStyle`, so no number on the page can drift from the CSS that produced it.
  *      A hand-written "15px" in a doc is a claim; a computed one is a reading.
  *
- * The controls section is **rendered by `src/config-ui/renderer.js`**, from the same config block the
- * plugin renders — via `tests/dom-shim.js`. Hand-written markup would be a third copy of the form's
- * structure, and the first to rot. This is also the only thing in the repo that *executes* the
- * renderer, which is worth knowing when it fails: a crash here is a real bug, not a build problem.
+ * The controls section is **rendered by `src/config-ui/renderer.js`**, from the same `@UI_CONFIG`
+ * values + `@PANEL_START` recipe the plugin renders — via `tests/dom-shim.js`. Hand-written markup
+ * would be a third copy of the form's structure, and the first to rot. This is also the only thing
+ * in the repo that *executes* the renderer, which is worth knowing when it fails: a crash here is a
+ * real bug, not a build problem.
  *
  * Regenerate with `npm run build:style-reference`. It is committed, because reviewing it is the point.
  */
@@ -57,15 +58,28 @@ global.window.marked = {
 const parser = require('./src/config-ui/parser.js');
 const renderer = require('./src/config-ui/renderer.js');
 
+function extractRegion(src, startMarker, endMarker) {
+  // Line-anchored: the DOC block mentions `// @UI_CONFIG_START` in prose, so a bare
+  // `indexOf` / lazy regex would cut the wrong region.
+  const start = new RegExp('^\\s*//\\s*' + startMarker + '\\s*$', 'm').exec(src);
+  const end = new RegExp('^\\s*//\\s*' + endMarker + '\\s*$', 'm').exec(src);
+  if (!start || !end || end.index <= start.index) {
+    throw new Error('help-documentation.js has no ' + startMarker + ' … ' + endMarker + ' block');
+  }
+  return src.slice(start.index + start[0].length, end.index).replace(/^\n/, '');
+}
+
 function configBlock() {
-  const src = fs.readFileSync(HELP, 'utf8');
-  const m = /@UI_CONFIG_START\n([\s\S]*?)\/\/ @UI_CONFIG_END/.exec(src);
-  if (!m) throw new Error('help-documentation.js has no @UI_CONFIG block to render');
-  return m[1];
+  return extractRegion(fs.readFileSync(HELP, 'utf8'), '@UI_CONFIG_START', '@UI_CONFIG_END');
+}
+
+function panelBlock() {
+  return extractRegion(fs.readFileSync(HELP, 'utf8'), '@PANEL_START', '@PANEL_END');
 }
 
 function renderControls() {
-  const schema = parser.parse(configBlock());
+  const schema = parser.parse(configBlock(), panelBlock());
+  if (schema.error) throw new Error('help-documentation.js panel: ' + schema.error);
   const container = document.createElement('div');
   renderer.buildForm(schema, container);
 

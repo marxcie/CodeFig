@@ -1,0 +1,61 @@
+[
+  {
+    "type": "paragraph",
+    "text": "Where the variables go. Pick a collection in this file, or choose \"New collection\" and type a\nname — a name that is not in this file is created on Run."
+  },
+  {
+    "type": "field",
+    "name": "targetCollection",
+    "value": "",
+    "label": "Collection",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "collection"
+  },
+  {
+    "type": "paragraph",
+    "text": "Which mode the values are written to. Empty means the collection's default mode."
+  },
+  {
+    "type": "field",
+    "name": "targetMode",
+    "value": "",
+    "label": "Mode",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "mode",
+    "collectionField": "targetCollection"
+  },
+  {
+    "type": "paragraph",
+    "text": "A group inside the collection that every variable goes under. Empty means the collection root."
+  },
+  {
+    "type": "field",
+    "name": "targetGroup",
+    "value": "",
+    "label": "Group within collection",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "eg.: primitives/bark"
+  },
+  {
+    "type": "field",
+    "name": "variableType",
+    "value": "Color",
+    "label": "Variable type",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "options": [
+      "Color",
+      "Number",
+      "String"
+    ]
+  },
+  {
+    "type": "paragraph",
+    "text": "Color: solid fill on shapes. Number / String: text layers."
+  }
+]

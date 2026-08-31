@@ -1,0 +1,39 @@
+[
+  {
+    "type": "paragraph",
+    "text": "Source: emptied by merge. Target: receives a group named like the source collection."
+  },
+  {
+    "type": "field",
+    "name": "sourceCollection",
+    "value": "",
+    "label": "Source collection",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "optionSource": "localVariableCollections"
+  },
+  {
+    "type": "field",
+    "name": "collectionToMergeTo",
+    "value": "",
+    "label": "Collection to merge to",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "optionSource": "localVariableCollections"
+  },
+  {
+    "type": "paragraph",
+    "text": "Optional: map source modes to target modes. Example:\nbrand1 typography, brand1\nbrand2 typography, brand2\nEmpty: first source mode fills every target mode. With lines: unmapped source modes → target’s first mode."
+  },
+  {
+    "type": "field",
+    "name": "preserveModes",
+    "value": "",
+    "label": "Preserve modes",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "textarea"
+  }
+]

@@ -1,0 +1,152 @@
+[
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "The report"
+  },
+  {
+    "type": "field",
+    "name": "onlyUsedVariables",
+    "value": true,
+    "label": "Only variables in use",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Hides any variable that nothing in the selection, and no style, refers to."
+  },
+  {
+    "type": "field",
+    "name": "groupByCollection",
+    "value": true,
+    "label": "Group by collection",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "showValuePreview",
+    "value": true,
+    "label": "Show each value",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Prints the value a variable resolves to beside its name."
+  },
+  {
+    "type": "field",
+    "name": "maxNodesPreview",
+    "value": 5,
+    "label": "Usages shown",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "number"
+  },
+  {
+    "type": "paragraph",
+    "text": "How many layers to name per variable before the report offers *Show all*."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Which variables to list"
+  },
+  {
+    "type": "field",
+    "name": "typographicVariables",
+    "value": true,
+    "label": "Typography",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Text size, letter spacing, line height and the rest of a text layer's numbers."
+  },
+  {
+    "type": "field",
+    "name": "colorVariables",
+    "value": true,
+    "label": "Color",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Anything bound to a fill or a stroke."
+  },
+  {
+    "type": "field",
+    "name": "dimensionVariables",
+    "value": true,
+    "label": "Dimensions and spacing",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "effectVariables",
+    "value": true,
+    "label": "Effects and opacity",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "otherVariables",
+    "value": true,
+    "label": "Everything else",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Advanced"
+  },
+  {
+    "type": "field",
+    "name": "checkStyleUsage",
+    "value": true,
+    "label": "Include styles",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Counts a variable as used when a text, paint or effect style refers to it, not only a layer."
+  },
+  {
+    "type": "field",
+    "name": "showHealthScore",
+    "value": false,
+    "label": "Health score",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Rates the collection out of 100 on naming, duplication and unused tokens."
+  }
+]

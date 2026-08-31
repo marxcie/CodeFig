@@ -16,9 +16,18 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-var normalize = false; // @label: Normalize (merge padding + gap when safe)
-var recursive = true; // @label: Process descendants
+var normalize = false;
+var recursive = true;
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { key: "normalize", type: "boolean", label: "Normalize (merge padding + gap when safe)" },
+//     { key: "recursive", type: "boolean", label: "Process descendants" }
+//   ]
+// }
+// @PANEL_END
 
 var PADDING_PROPS = ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom'];
 

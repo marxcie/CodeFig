@@ -8,18 +8,34 @@
 // @DOC_END
 
 // @UI_CONFIG_START
-var scaleOrResize = "scale"; // @options: scale|resize @radio
-// ## Scale @showWhen: scaleOrResize=scale
-var scaleMethod = "factor"; // @options: factor|width|height @radio @showWhen: scaleOrResize=scale
-var scaleFactor = 0.8; // @showWhen: scaleOrResize=scale @showWhen: scaleMethod=factor
-var scaleWidthTo = ""; // @showWhen: scaleOrResize=scale @showWhen: scaleMethod=width
-var scaleHeightTo = ""; // @showWhen: scaleOrResize=scale @showWhen: scaleMethod=height
-// ## Resize @showWhen: scaleOrResize=resize
-var resizeUnitMode = "pixels"; // @options: factor|pixels @radio @showWhen: scaleOrResize=resize
-var widthTo = ""; // @showWhen: scaleOrResize=resize
-var heightTo = ""; // @showWhen: scaleOrResize=resize
-var aspectRatio = ""; // @showWhen: scaleOrResize=resize
+var scaleOrResize = "scale";
+var scaleMethod = "factor";
+var scaleFactor = 0.8;
+var scaleWidthTo = "";
+var scaleHeightTo = "";
+var resizeUnitMode = "pixels";
+var widthTo = "";
+var heightTo = "";
+var aspectRatio = "";
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { key: "scaleOrResize", type: "radio", options: ["scale", "resize"] },
+//     { type: "heading", level: 2, text: "Scale", showWhen: { scaleOrResize: "scale" } },
+//     { key: "scaleMethod", type: "radio", options: ["factor", "width", "height"], showWhen: { scaleOrResize: "scale" } },
+//     { key: "scaleFactor", type: "number", showWhen: { scaleOrResize: "scale", scaleMethod: "factor" } },
+//     { key: "scaleWidthTo", type: "string", showWhen: { scaleOrResize: "scale", scaleMethod: "width" } },
+//     { key: "scaleHeightTo", type: "string", showWhen: { scaleOrResize: "scale", scaleMethod: "height" } },
+//     { type: "heading", level: 2, text: "Resize", showWhen: { scaleOrResize: "resize" } },
+//     { key: "resizeUnitMode", type: "radio", options: ["factor", "pixels"], showWhen: { scaleOrResize: "resize" } },
+//     { key: "widthTo", type: "string", showWhen: { scaleOrResize: "resize" } },
+//     { key: "heightTo", type: "string", showWhen: { scaleOrResize: "resize" } },
+//     { key: "aspectRatio", type: "string", showWhen: { scaleOrResize: "resize" } }
+//   ]
+// }
+// @PANEL_END
 
 // Random range helper function
 function random(min, max) {

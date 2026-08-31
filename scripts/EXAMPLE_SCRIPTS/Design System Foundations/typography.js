@@ -243,22 +243,16 @@ function validateTypographyScalingTypeConfig(config) {
 
 var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typographyConfigData : {
   // @CONFIG_START
-  // @fromFile: domains.typography
+// @fromFile: domains.typography
 
-  // # General
-  collectionName: "", // @collection @label: Collection
-  // @collectionModes: Collection modes
-  group: "Typography", // @label: Group within collection @placeholder="eg.: Typography"
-  fontScale: ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"], // @label: Tokens @helper: Named smallest to largest, and heading-{6,1} is a series of six. The Base unit below is the size of the first name here.
-  fontFamily: "Inter", // @label: Font family @placeholder="eg.: Inter Tight"
-  fontWeights: [400, 600], // @label: Font weights @helper: A number is a font weight; a word is a Figma font style name, e.g. Semi Bold. 
-  createStyles: true, // @label: Create and update text styles
-  styleNaming: "Typography/{$fontScale}/{$fontWeight}", // @label: Style naming @placeholder="eg.: Typography/{$fontScale}/{$fontWeight}"
-
-  // --- @section
-
-  // # Mode settings
-  generateOverview: false, // @label: Generate overview
+  collectionName: "",
+  group: "Typography",
+  fontScale: ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"],
+  fontFamily: "Inter",
+  fontWeights: [400, 600],
+  createStyles: true,
+  styleNaming: "Typography/{$fontScale}/{$fontWeight}",
+  generateOverview: false,
   modes: [
     {
       name: "Value",
@@ -270,15 +264,67 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
       lineHeight: { base: 150, max: 110 },
       roundTo: 2
     }
-  ], // @rows: name:text=Mode|scaleType:radio(bezier:Bezier scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|curve:curve(growth:ratio){scaleType=bezier}=Scale @helper: Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top.|step:number{scaleType=metric|fibonacci}=Step @helper: Metric. The amount each step adds, before it starts growing.\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it.|mod:number{scaleType=metric}=Every N steps @helper: How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down.|base:number=Base unit|letterSpacing:{base:number@unit="%"=Base|max:number@unit="%"=Largest}=Letter spacing @helper: A percentage of the font size, the way Figma spells it — so it still means the same thing when the scale grows. Interpolated between the two ends and written as pixels.|lineHeight:{base:number@unit="%"=Base|max:number@unit="%"=Largest}=Line height @helper: A percentage of the font size. 150 is a comfortable body line; large text usually wants less, which is what the second field is for.|roundTo:number=Round numbers to @tabs @label: Modes
+  ],
+  overviewPreviewText: "Sphinx of black quartz,\njudge my vow."
+// @CONFIG_END
 
-  // # Overview
-  // @suggestions
-
-  // # Preview
-  overviewPreviewText: "Sphinx of black quartz,\njudge my vow.", // @label: Preview text @textarea 
-  // @preview
-  // @CONFIG_END
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "heading", text: "General" },
+//     { key: "collectionName", type: "collection", label: "Collection" },
+//     { type: "chips", label: "Collection modes", from: "modes" },
+//     { key: "group", type: "string", label: "Group within collection",
+//       placeholder: "eg.: Typography" },
+//     { key: "fontScale", type: "list", label: "Tokens",
+//       helper: "Named smallest to largest, and heading-{6,1} is a series of six. The Base unit below is the size of the first name here." },
+//     { key: "fontFamily", type: "string", label: "Font family",
+//       placeholder: "eg.: Inter Tight" },
+//     { key: "fontWeights", type: "list", label: "Font weights",
+//       helper: "A number is a font weight; a word is a Figma font style name, e.g. Semi Bold." },
+//     { key: "createStyles", type: "boolean", label: "Create and update text styles" },
+//     { key: "styleNaming", type: "string", label: "Style naming",
+//       placeholder: "eg.: Typography/{$fontScale}/{$fontWeight}" },
+//     { type: "divider", section: true },
+//     { type: "heading", text: "Mode settings" },
+//     { key: "generateOverview", type: "boolean", label: "Generate overview" },
+//     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+//       columns: [
+//         { key: "name", type: "text", label: "Mode" },
+//         { key: "scaleType", type: "radio", label: "Scale type",
+//           options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
+//         { key: "curve", type: "curve", label: "Scale", growth: "ratio",
+//           showWhen: { scaleType: "bezier" },
+//           helper: "Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top." },
+//         { key: "step", type: "number", label: "Step",
+//           showWhen: { scaleType: ["metric", "fibonacci"] },
+//           helper: "Metric. The amount each step adds, before it starts growing.\\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it." },
+//         { key: "mod", type: "number", label: "Every N steps",
+//           showWhen: { scaleType: "metric" },
+//           helper: "How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down." },
+//         { key: "base", type: "number", label: "Base unit" },
+//         { key: "letterSpacing", type: "group", label: "Letter spacing",
+//           helper: "A percentage of the font size, the way Figma spells it — so it still means the same thing when the scale grows. Interpolated between the two ends and written as pixels.",
+//           fields: [
+//             { key: "base", type: "number", label: "Base", unit: "%" },
+//             { key: "max", type: "number", label: "Largest", unit: "%" }
+//           ] },
+//         { key: "lineHeight", type: "group", label: "Line height",
+//           helper: "A percentage of the font size. 150 is a comfortable body line; large text usually wants less, which is what the second field is for.",
+//           fields: [
+//             { key: "base", type: "number", label: "Base", unit: "%" },
+//             { key: "max", type: "number", label: "Largest", unit: "%" }
+//           ] },
+//         { key: "roundTo", type: "number", label: "Round numbers to" }
+//       ] },
+//     { type: "heading", text: "Overview" },
+//     { type: "suggestions" },
+//     { type: "heading", text: "Preview" },
+//     { key: "overviewPreviewText", type: "textarea", label: "Preview text" },
+//     { type: "preview" }
+//   ]
+// }
+// @PANEL_END
 };
 
 ensureCompatTypographyConfig(typographyConfigData);

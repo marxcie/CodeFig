@@ -33,7 +33,14 @@ function libs() {
 }
 
 const L = libs();
-const BLOCK = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(fs.readFileSync(SPACING, 'utf8'))[1];
+const SPACING_SRC = fs.readFileSync(SPACING, 'utf8');
+const BLOCK = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(SPACING_SRC)[1];
+const PANEL = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(SPACING_SRC)[1];
+
+/** Values + panel recipe — the live script no longer carries inline annotations. */
+function parsePanel() {
+  return P.parse(BLOCK, PANEL);
+}
 
 const MODES = [
   { name: 'desktop', scaleType: 'metric', base: 4, step: 4, mod: 3, roundTo: 2, extras: [1] },
@@ -63,7 +70,7 @@ function readout(html) {
 }
 
 test('the block renders the panel the frames show', () => {
-  const schema = P.parse(BLOCK);
+  const schema = parsePanel();
   const container = document.createElement('div');
   R.buildForm(schema, container);
 
@@ -81,7 +88,7 @@ test('the block renders the panel the frames show', () => {
 
 test('a mode shows the fields its scale type uses, and no others', () => {
   // Márton: "add the fields that are required, and remove the ones that are not used in that mode."
-  const schema = P.parse(BLOCK);
+  const schema = parsePanel();
   const container = document.createElement('div');
   R.buildForm(schema, container);
   R.attachListeners(container, schema, () => {});
@@ -124,7 +131,7 @@ test('a mode shows the fields its scale type uses, and no others', () => {
 
 test('Tokens and Extra spacings stay arrays in the config', () => {
   // A string there would read as an array of one to `rampExtras` and generate nothing.
-  const schema = P.parse(BLOCK);
+  const schema = parsePanel();
   const container = document.createElement('div');
   R.buildForm(schema, container);
   let values = null;

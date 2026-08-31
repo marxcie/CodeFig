@@ -73,32 +73,88 @@
 // ============================================================================
 
 // @UI_CONFIG_START
-var searchIn = ""; // @placeholder="Typography/Body"
-// Narrows the rename to one collection, group or path — `Typography/`, `Typography/Body`,
-// `Color/*/Accent`. Leave it empty to search every variable.
-//
-var searchFor = ""; // @placeholder="50"
-var replaceWith = ""; // @placeholder="050"
-// Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that
-// matched, `$1` a capture group, `$n` counts up and `$N` counts down.
-//
-var matchCase = false; // @label: Match case
-var useRegex = false; // @label: Use regular expression
-// Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards.
-//
-var previewOnly = true; // @label: Preview only
-// **On by default.** Lists what would change and touches nothing. Untick and run again to apply.
-// ---
-var batchReplacement = ""; // @textarea
-// Many renames in one run: one pair per line, search first, replace after the comma. Overrides
-// **Search for** and **Replace with**. No quotes, no trailing commas.
-//
-// ```
-// 50, 050
-// 100, 0100
-// 200, 0200
-// ```
+var searchIn = "";
+var searchFor = "";
+var replaceWith = "";
+var matchCase = false;
+var useRegex = false;
+var previewOnly = true;
+var batchReplacement = "";
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   "blocks": [
+//     {
+//       "key": "searchIn",
+//       "type": "string",
+//       "placeholder": "Typography/Body"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Narrows the rename to one collection, group or path — `Typography/`, `Typography/Body`,\n`Color/*/Accent`. Leave it empty to search every variable."
+//     },
+//     {
+//       "key": "searchFor",
+//       "type": "string",
+//       "placeholder": "50"
+//     },
+//     {
+//       "key": "replaceWith",
+//       "type": "string",
+//       "placeholder": "050"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, `$1` a capture group, `$n` counts up and `$N` counts down."
+//     },
+//     {
+//       "key": "matchCase",
+//       "type": "boolean",
+//       "label": "Match case"
+//     },
+//     {
+//       "key": "useRegex",
+//       "type": "boolean",
+//       "label": "Use regular expression"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
+//     },
+//     {
+//       "key": "previewOnly",
+//       "type": "boolean",
+//       "label": "Preview only"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "**On by default.** Lists what would change and touches nothing. Untick and run again to apply."
+//     },
+//     {
+//       "type": "divider"
+//     },
+//     {
+//       "key": "batchReplacement",
+//       "type": "textarea"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Many renames in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas."
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "```\n50, 050\n100, 0100\n200, 0200\n```"
+//     }
+//   ]
+// }
+// @PANEL_END
 
 // Batch replacement in script only mode:
 // var batchReplacement = [

@@ -1,26 +1,11 @@
 /**
- * `@PANEL_START`: the differential test `.plans/31-panel-spec-json.md` asks for before any real
- * panel migrates. Parse a real script's block with the old annotation parser, hand-author the
- * `@PANEL_START` equivalent, parse that with the new reader, and deep-equal the two on the fields
- * the renderer actually reads.
+ * Grid `@PANEL_START` migration (plan 37). Compares the live `@CONFIG` + `@PANEL`
+ * regions against the old annotation parser on a frozen pre-migration CONFIG body
+ * (captured from HEAD before migration). Same normalize / differential idea as
+ * Spacing and Typography.
  *
- * **Scope, stated plainly.** This proves the reader and the merge-with-live-values mechanism work
- * for a real, representative panel (Grid) — not that all six are migrated. Two things are
- * deliberately out of this pass:
- *
- * - The `@fromFile: domains.grid` directive. Something downstream of `parse()` reads that value
- *   out of the raw `@CONFIG_START` text by its own regex (per the comment on the directive branch
- *   in `parse()`); for the new format that value would need to move somewhere `@PANEL_START`-aware
- *   code can reach it, and finding every such reader was out of scope for the reader itself. The
- *   fixture below omits it, and the comparison strips the old parser's directive row to match.
- * - Wiring `parse(code, panelSpecText)`'s second argument into `src/ui.html`'s own
- *   `@CONFIG_START`/`@PANEL_START` extraction. No call site there passes it yet — see the comment
- *   above `parse()` in `src/config-ui/parser.js`.
- *
- * Not compared: `raw`, `syntax`, `trailingComma` — value-line reprinting artifacts specific to the
- * one-line-per-field format, meaningless once the spec lives in its own region.  `blank`/
- * `lineBreak` rows are also excluded from both sides — they exist only because the old format is
- * line-oriented text; a JSON block has no concept of "a blank source line" to preserve.
+ * Not compared: `raw`, `syntax`, `trailingComma` — value-line reprinting artifacts.
+ * `blank` / `lineBreak` / `directive` rows are stripped on both sides.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -33,75 +18,60 @@ const GRID_PATH = path.join(
   __dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'grid.js'
 );
 
-function oldParseGrid() {
-  const src = fs.readFileSync(GRID_PATH, 'utf8');
-  const m = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(src);
-  assert.ok(m, 'grid.js has no @CONFIG_START block — has it moved?');
-  return parser.parse(m[1]);
-}
-
-/** The @PANEL_START equivalent of grid.js's spec, hand-authored, @fromFile omitted (see header). */
-const GRID_PANEL_SPEC = [
-  '// @PANEL_START',
-  '// {',
-  '//   blocks: [',
-  '//     { type: "heading", text: "General" },',
-  '//     { key: "collectionName", type: "collection", label: "Collection",',
-  '//       placeholder: "eg. Responsive System" },',
-  '//     { type: "chips", label: "Collection modes", from: "modes" },',
-  '//     { key: "group", type: "string", label: "Group within collection", placeholder: "eg. Grid" },',
-  '//     { type: "divider", section: true },',
-  '//     { type: "heading", text: "Mode settings" },',
-  '//     { key: "extensionColumns", type: "number", label: "Extra columns",',
-  '//       helper: "Added as numeric variables for overshoot layout" },',
-  '//     { key: "generateOverview", type: "boolean", label: "Generate overview",',
-  '//       helper: "Generate Figma frames for each mode" },',
-  '//     { key: "modes", type: "rows", label: "Modes", layout: "tabs",',
-  '//       columns: [',
-  '//         { key: "name", type: "text", label: "Mode" },',
-  '//         { key: "containerWidth", type: "number", label: "Width" },',
-  '//         { key: "columns", type: "number", label: "Columns" },',
-  '//         { key: "gap", type: "number", label: "Gap" },',
-  '//         { key: "padding", type: "number", label: "Margins" }',
-  '//       ] },',
-  '//     { type: "heading", text: "Suggested whole number divisions" },',
-  '//     { type: "suggestions" },',
-  '//     { type: "heading", text: "Preview" },',
-  '//     { type: "preview" }',
-  '//   ]',
-  '// }',
-  '// @PANEL_END',
-].join('\n');
-
-/** Plain values only — what @CONFIG_START becomes once the spec moves to @PANEL_START. */
-const GRID_VALUES_BLOCK = [
-  '  collectionName: "",',
-  '  group: "Grid",',
-  '  extensionColumns: 0,',
-  '  generateOverview: false,',
+/**
+ * Pre-migration `@CONFIG_START` body (annotations + values), frozen from HEAD so
+ * `oldParseGrid` still works after the live file holds values only.
+ */
+const PRE_MIGRATION_GRID_CONFIG = [
+  '  // @fromFile: domains.grid',
+  '',
+  '  // # General',
+  '  collectionName: "", // @collection @label: Collection @placeholder="eg. Responsive System"',
+  '  // @collectionModes: Collection modes',
+  '  group: "Grid", // @label: Group within collection @placeholder="eg. Grid"',
+  '',
+  '  // --- @section',
+  '',
+  '  // # Mode settings',
+  '  extensionColumns: 0, // @label: Extra columns @helper: Added as numeric variables for overshoot layout',
+  '  generateOverview: false, // @label: Generate overview @helper: Generate Figma frames for each mode',
+  '',
   '  modes: [',
-  '    { name: "Value", containerWidth: 1920, columns: 12, gap: 40, padding: 80 }',
-  '  ]',
+  '    {',
+  '      name: "Value",',
+  '      containerWidth: 1920,',
+  '      columns: 12,',
+  '      gap: 40,',
+  '      padding: 80',
+  '    }',
+  '  ], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes',
+  '',
+  '  // # Suggested whole number divisions',
+  '  // @suggestions',
+  '',
+  '  // # Preview',
+  '  // @preview',
+  '',
 ].join('\n');
 
-/** `parse()`'s second argument is the region's *inner* text, the same convention @CONFIG_START's
- *  own extraction uses — the marker lines themselves are the caller's problem, not the reader's. */
-function innerPanelSpec(block) {
-  const m = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(block);
-  assert.ok(m, 'GRID_PANEL_SPEC fixture has no @PANEL_START/@PANEL_END markers');
+function extractRegion(src, startMarker, endMarker) {
+  const m = new RegExp(startMarker + '\\n([\\s\\S]*?)\\/\\/ ' + endMarker).exec(src);
+  assert.ok(m, 'grid.js is missing ' + startMarker + ' … ' + endMarker);
   return m[1];
 }
 
-function newParseGrid() {
-  return parser.parse(GRID_VALUES_BLOCK, innerPanelSpec(GRID_PANEL_SPEC));
+function oldParseGrid() {
+  return parser.parse(PRE_MIGRATION_GRID_CONFIG);
 }
 
-/**
- * Drops the format-specific noise both sides carry, per the header comment, plus any key whose
- * value is `undefined` — the old parser sets `showWhenRules: undefined` on a plain heading rather
- * than omitting the key, which `buildRow`'s `r.showWhenRules || …` reads identically to an absent
- * key. A test asserting object shape should not fail on a difference the renderer cannot see.
- */
+function newParseGrid() {
+  const src = fs.readFileSync(GRID_PATH, 'utf8');
+  return parser.parse(
+    extractRegion(src, '@CONFIG_START', '@CONFIG_END'),
+    extractRegion(src, '@PANEL_START', '@PANEL_END')
+  );
+}
+
 function stripUndefinedDeep(value) {
   if (Array.isArray(value)) return value.map(stripUndefinedDeep);
   if (value && typeof value === 'object') {
@@ -146,12 +116,17 @@ test('an unreadable @PANEL_START reports an error rather than throwing', () => {
   assert.deepStrictEqual(result.rows, []);
 });
 
-test('grid.js: the new reader matches the old parser field-by-field, section-heading-by-section-heading', () => {
+test('grid.js: live @PANEL matches the pre-migration annotation parse, field by field', () => {
   const oldRows = normalize(oldParseGrid().rows);
-  const newRows = normalize(newParseGrid().rows);
+  const live = newParseGrid();
+  assert.ok(!live.error, 'panel parse error: ' + live.error);
+  const newRows = normalize(live.rows);
   assert.strictEqual(newRows.length, oldRows.length, 'row count differs — see which rows below');
   oldRows.forEach((oldRow, i) => {
-    assert.deepStrictEqual(newRows[i], oldRow, `row ${i} (${oldRow.type}${oldRow.name ? ':' + oldRow.name : ''}) differs`);
+    assert.deepStrictEqual(
+      newRows[i], oldRow,
+      `row ${i} (${oldRow.type}${oldRow.name ? ':' + oldRow.name : ''}${oldRow.text ? ':' + oldRow.text.slice(0, 30) : ''}) differs`
+    );
   });
 });
 
@@ -161,4 +136,18 @@ test('grid.js: the rows/tabs field carries the live value from @CONFIG_START, no
   assert.deepStrictEqual(modesRow.value, [
     { name: 'Value', containerWidth: 1920, columns: 12, gap: 40, padding: 80 },
   ]);
+});
+
+test('grid.js: @fromFile stays in @CONFIG_START', () => {
+  const src = fs.readFileSync(GRID_PATH, 'utf8');
+  const config = extractRegion(src, '@CONFIG_START', '@CONFIG_END');
+  assert.match(config, /@fromFile:\s*domains\.grid/);
+});
+
+test('grid.js: variables function remains a sibling after @PANEL_END', () => {
+  const src = fs.readFileSync(GRID_PATH, 'utf8');
+  const panelEnd = src.indexOf('// @PANEL_END');
+  assert.ok(panelEnd !== -1);
+  const after = src.slice(panelEnd + '// @PANEL_END'.length);
+  assert.match(after, /^\s*,\s*(?:\/\/[^\n]*\n\s*)*variables:\s*function\s*\(/);
 });

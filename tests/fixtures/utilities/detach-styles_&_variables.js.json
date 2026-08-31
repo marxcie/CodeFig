@@ -1,0 +1,119 @@
+[
+  {
+    "type": "field",
+    "name": "recursive",
+    "value": true,
+    "label": "Recursive",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "heading",
+    "level": 2,
+    "text": "Styles"
+  },
+  {
+    "type": "field",
+    "name": "allStyles",
+    "value": true,
+    "label": "All styles",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "fontStyles",
+    "value": true,
+    "label": "Font styles",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "fillStyles",
+    "value": true,
+    "label": "Fill styles",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "strokeStyles",
+    "value": true,
+    "label": "Stroke styles",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "effectStyles",
+    "value": true,
+    "label": "Effect styles",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "gridStyles",
+    "value": true,
+    "label": "Grid styles",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "heading",
+    "level": 2,
+    "text": "Variables"
+  },
+  {
+    "type": "field",
+    "name": "allVariables",
+    "value": true,
+    "label": "All variables",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "typographicVariables",
+    "value": true,
+    "label": "Typographic variables",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "numericVariables",
+    "value": true,
+    "label": "Numeric variables",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "colorVariables",
+    "value": true,
+    "label": "Color variables",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  }
+]

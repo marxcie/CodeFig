@@ -302,7 +302,7 @@
       /* Script list sections */
       .system-scripts,
       .user-scripts {
-        padding: 12px 0;
+        /* padding: 12px 0; */
       }
       
       .script-section {
@@ -313,7 +313,7 @@
         margin-bottom: 20px;
       }
       
-      /* Section headers (Utility Scripts, User Scripts) */
+      /* Section headers (Utility Scripts, Local scripts) */
       .section-header {
         padding: var(--space-md) var(--space-xl) var(--space-xs) var(--space-xl);
         font: var(--font-size-body) var(--font-family-base);
@@ -403,7 +403,7 @@
       
       .group-header {
         font: var(--font-size-body) var(--font-family-base);
-        font-weight: var(--font-weight-medium);
+        font-weight: var(--font-weight-semibold);
         color: var(--text-muted);
         padding: var(--space-md) var(--space-xl) var(--space-sm) var(--space-xl);
         cursor: pointer;
@@ -442,6 +442,11 @@
       .group-content:not(.collapsed) {
         max-height: none;
       }
+
+      /* Path groups nested under Local scripts / library folders (marker class; indent via tree-depth-*) */
+      .script-group.nested-under-folder {
+        /* no extra padding — depth classes on the header/items own the indent */
+      }
       
       /* Individual script items */
       .script-item {
@@ -451,7 +456,7 @@
         align-items: center;
         font: 11px var(--font-family-base);
         font-weight: var(--font-weight-normal);
-        color: var(--text-muted);
+        color: var(--text-primary);
       }
       
       .script-item:hover { 
@@ -464,10 +469,27 @@
         color: #fff; 
       }
       
-      /* Indented scripts (system scripts and grouped scripts) */
+      /*
+       * Tree indent. Level 0 headers use --space-xl (20px) + chevron.
+       * Level 1 aligns with system-script / top-section category text (~36px).
+       * Each deeper level steps another 16px so Local scripts → group → script reads as a tree.
+       */
       .script-item.system-script,
-      .script-item.grouped {
+      .script-item.tree-depth-1,
+      .group-header.tree-depth-1 {
         padding-left: 36px;
+      }
+      .script-item.tree-depth-2,
+      .group-header.tree-depth-2 {
+        padding-left: 52px;
+      }
+      .script-item.tree-depth-3,
+      .group-header.tree-depth-3 {
+        padding-left: 68px;
+      }
+      .script-item.tree-depth-4,
+      .group-header.tree-depth-4 {
+        padding-left: 84px;
       }
       
       .script-item .name {
@@ -1053,6 +1075,194 @@
       .footer-right {
         display: flex;
         gap: 12px;
+        align-items: center;
+      }
+
+      /* Upward menus in the footer — panels open above the trigger so they stay on screen. */
+      .footer-menu {
+        position: relative;
+        display: inline-flex;
+      }
+
+      .footer-menu__trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .footer-menu__caret {
+        display: inline-block;
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-bottom: 5px solid currentColor;
+        opacity: 0.7;
+      }
+
+      .footer-menu.is-open .footer-menu__caret {
+        border-bottom: none;
+        border-top: 5px solid currentColor;
+      }
+
+      .footer-menu__panel {
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + 4px);
+        min-width: 100%;
+        width: max-content;
+        padding: 4px;
+        margin: 0;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-primary);
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 40;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .footer-menu__panel[hidden] {
+        display: none;
+      }
+
+      .footer-menu__item {
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding: 6px 10px;
+        border: none;
+        border-radius: calc(var(--radius-md) - 2px);
+        background: transparent;
+        color: var(--text-primary);
+        font: inherit;
+        font-size: var(--font-size-body);
+        text-align: left;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .footer-menu__item:hover:not(:disabled),
+      .footer-menu__item:focus-visible {
+        background: var(--bg-secondary, rgba(0, 0, 0, 0.06));
+        outline: none;
+      }
+
+      .footer-menu__item:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .settings-modal[hidden] {
+        display: none;
+      }
+
+      .settings-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+      }
+
+      .settings-modal__backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.35);
+      }
+
+      .settings-modal__panel {
+        position: relative;
+        width: min(420px, 100%);
+        max-height: min(90vh, 560px);
+        overflow: auto;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .settings-modal__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-light);
+      }
+
+      .settings-modal__header h2 {
+        margin: 0;
+        font: var(--font-size-body) var(--font-family-base);
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-primary);
+      }
+
+      .settings-modal__body {
+        padding: 12px 14px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .settings-modal__lead,
+      .settings-modal__hint {
+        margin: 0;
+        font-size: var(--font-size-small);
+        color: var(--text-secondary);
+        line-height: 1.4;
+      }
+
+      .settings-fieldset {
+        margin: 0;
+        padding: 10px 12px;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      /* `display: flex` above beats the UA `[hidden] { display: none }`. */
+      .settings-fieldset[hidden] {
+        display: none;
+      }
+
+      .settings-fieldset legend {
+        padding: 0 4px;
+        font-size: var(--font-size-small);
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-primary);
+      }
+
+      .settings-check,
+      .settings-radio {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: var(--font-size-small);
+        color: var(--text-primary);
+        cursor: pointer;
+        line-height: 1.35;
+      }
+
+      .settings-check input,
+      .settings-radio input {
+        margin-top: 2px;
+        flex-shrink: 0;
+      }
+
+      .settings-modal__footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 10px 14px 12px;
+        border-top: 1px solid var(--border-light);
       }
 
       /* Buy Me a Coffee (brand SVG); height matches .btn (32px) */

@@ -29,10 +29,20 @@
 @import { finishCodefigRunProgress } from "@Core Library"
 
 // @UI_CONFIG_START
-// Choose local collections, then optionally limit export to one or more mode names.
-var collections = []; // @options: localVariableCollections @multi
-var modeNames = ""; // @placeholder="Light, Dark"
+var collections = [];
+var modeNames = "";
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "paragraph", attachTo: "next",
+//       text: "Choose local collections, then optionally limit export to one or more mode names." },
+//     { key: "collections", type: "multiselect", options: "localVariableCollections" },
+//     { key: "modeNames", type: "string", placeholder: "Light, Dark" }
+//   ]
+// }
+// @PANEL_END
 
 function parseCollectionNames() {
   var names = [];

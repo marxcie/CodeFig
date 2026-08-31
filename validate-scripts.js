@@ -747,21 +747,28 @@ function validatePackageStylesheets(scriptsDir) {
 }
 
 /**
- * Every key `@PANEL_START` declares a field for must exist in `@CONFIG_START`'s values, and every
- * key `@CONFIG_START` holds a value for must be declared somewhere in `@PANEL_START` — otherwise
- * the two drift the way `spacing.js`'s `@DOC_START` table already has (see `DEFERRED.md`). Scoped
- * to top-level keys: a `@rows` field's own value is an array of row objects, and those keys are
- * already the columns spec's job to declare, not this gate's.
+ * Every key `@PANEL_START` declares a field for must exist in the values region, and every key
+ * the values region holds must be declared somewhere in `@PANEL_START` — otherwise the two drift
+ * the way `spacing.js`'s `@DOC_START` table already has (see `DEFERRED.md`). The values region is
+ * `@CONFIG_START` (property list, DSF) or `@UI_CONFIG_START` (`var` assignments, utility scripts)
+ * when `@PANEL_START` is present. Scoped to top-level keys: a `@rows` field's own value is an
+ * array of row objects, and those keys are already the columns spec's job to declare, not this
+ * gate's.
  *
- * A no-op today — no shipped script has a `@PANEL_START` block yet — but scans every script so it
- * starts working the moment one does, rather than needing to be remembered and wired in later.
+ * A no-op for scripts with no `@PANEL_START` — but scans every script so it starts working the
+ * moment one does, rather than needing to be remembered and wired in later.
  */
 function validatePanelKeyParity(scripts) {
   const errors = [];
   scripts.forEach((script) => {
     const panelMatch = /\/\/ @PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(script.code);
+    if (!panelMatch) return; // old-format script, or no panel at all
+
     const configMatch = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(script.code);
-    if (!panelMatch || !configMatch) return; // old-format script, or no config at all
+    const uiConfigMatch = /@UI_CONFIG_START\n([\s\S]*?)\/\/ @UI_CONFIG_END/.exec(script.code);
+    const valuesMatch = configMatch || uiConfigMatch;
+    if (!valuesMatch) return; // panel without a values region — not this gate's job
+    const valuesLabel = configMatch ? '@CONFIG_START' : '@UI_CONFIG_START';
 
     const panel = configUIParser.parsePanelSpec(panelMatch[1], {});
     if (panel.error) {
@@ -770,11 +777,11 @@ function validatePanelKeyParity(scripts) {
     }
     const panelKeys = new Set(panel.rows.filter((r) => r.type === 'field').map((r) => r.name));
 
-    const values = configUIParser.parseConfigBlockObject(configMatch[1]);
+    const values = configUIParser.parseConfigBlockObject(valuesMatch[1]);
     if (!values) {
       errors.push({
         type: 'panel-key-parity', file: script.name,
-        message: '@CONFIG_START does not parse as a plain values object', line: 'unknown'
+        message: valuesLabel + ' does not parse as a plain values object', line: 'unknown'
       });
       return;
     }
@@ -784,7 +791,7 @@ function validatePanelKeyParity(scripts) {
       if (!panelKeys.has(key)) {
         errors.push({
           type: 'panel-key-parity', file: script.name,
-          message: `"${key}" has a value in @CONFIG_START but no field in @PANEL_START`, line: 'unknown'
+          message: `"${key}" has a value in ${valuesLabel} but no field in @PANEL_START`, line: 'unknown'
         });
       }
     });
@@ -792,7 +799,7 @@ function validatePanelKeyParity(scripts) {
       if (!valueKeys.has(key)) {
         errors.push({
           type: 'panel-key-parity', file: script.name,
-          message: `"${key}" is a field in @PANEL_START but has no value in @CONFIG_START`, line: 'unknown'
+          message: `"${key}" is a field in @PANEL_START but has no value in ${valuesLabel}`, line: 'unknown'
         });
       }
     });

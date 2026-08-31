@@ -66,32 +66,107 @@
 // ========================================
 
 // @UI_CONFIG_START
-var rebindScope = "selection"; // @options: selection|variablesCollection|both @radio
-//
-var sourceCollection = ""; // @options: variableCollections
-var searchFor = ""; // @placeholder="color 2/*"
-// Rebinds only variables whose current name contains this — `color 1`. Leave it empty for every variable.
-// ---
-var targetCollection = ""; // @options: variableCollections
-var replaceWith = ""; // @placeholder="color 1"
-// The name to bind to instead. Leave it empty to keep each variable's own name and only change collection.
-//
-var matchCase = false; // @label: Match case
-var useRegex = false; // @label: Use regular expression
-// Reads **Search for** as a regular expression rather than plain text with `*` wildcards.
-//
-var previewOnly = true; // @label: Preview only
-// **On by default.** Lists the bindings that would be rebound and touches nothing. Untick and run again to apply.
-// ---
-var batchReplacement = ""; // @textarea
-// Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides
-// **Search for** and **Replace with**. No quotes, no trailing commas.
-//
-// ```
-// color 2, color 1
-// red, blue
-// ```
+var rebindScope = "selection";
+var sourceCollection = "";
+var searchFor = "";
+var targetCollection = "";
+var replaceWith = "";
+var matchCase = false;
+var useRegex = false;
+var previewOnly = true;
+var batchReplacement = "";
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   "blocks": [
+//     {
+//       "key": "rebindScope",
+//       "type": "radio",
+//       "options": [
+//         "selection",
+//         "variablesCollection",
+//         "both"
+//       ]
+//     },
+//     {
+//       "key": "sourceCollection",
+//       "type": "select",
+//       "options": "variableCollections"
+//     },
+//     {
+//       "key": "searchFor",
+//       "type": "string",
+//       "placeholder": "color 2/*"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Rebinds only variables whose current name contains this — `color 1`. Leave it empty for every variable."
+//     },
+//     {
+//       "type": "divider"
+//     },
+//     {
+//       "key": "targetCollection",
+//       "type": "select",
+//       "options": "variableCollections"
+//     },
+//     {
+//       "key": "replaceWith",
+//       "type": "string",
+//       "placeholder": "color 1"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "The name to bind to instead. Leave it empty to keep each variable's own name and only change collection."
+//     },
+//     {
+//       "key": "matchCase",
+//       "type": "boolean",
+//       "label": "Match case"
+//     },
+//     {
+//       "key": "useRegex",
+//       "type": "boolean",
+//       "label": "Use regular expression"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Reads **Search for** as a regular expression rather than plain text with `*` wildcards."
+//     },
+//     {
+//       "key": "previewOnly",
+//       "type": "boolean",
+//       "label": "Preview only"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "**On by default.** Lists the bindings that would be rebound and touches nothing. Untick and run again to apply."
+//     },
+//     {
+//       "type": "divider"
+//     },
+//     {
+//       "key": "batchReplacement",
+//       "type": "textarea"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas."
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "```\ncolor 2, color 1\nred, blue\n```"
+//     }
+//   ]
+// }
+// @PANEL_END
 //
 // Batch replacement in script only mode:
 // var batchReplacement = [

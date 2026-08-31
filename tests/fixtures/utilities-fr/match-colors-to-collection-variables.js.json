@@ -1,0 +1,106 @@
+[
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Palettes"
+  },
+  {
+    "type": "field",
+    "name": "collections",
+    "value": [],
+    "label": "Collections",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "multiselect",
+    "optionSource": "variableCollections"
+  },
+  {
+    "type": "paragraph",
+    "text": "Tick every collection that might hold a matching colour token."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Loose matching"
+  },
+  {
+    "type": "field",
+    "name": "looseMatching",
+    "value": false,
+    "label": "Match near misses",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Off, a colour has to match a token exactly. On, it binds to the closest token within the tolerance\nbelow — useful for finding colours that were nearly right."
+  },
+  {
+    "type": "field",
+    "name": "matchTolerance",
+    "value": "standard",
+    "label": "Match tolerance",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "options": [
+      "conservative",
+      "standard",
+      "aggressive",
+      "custom"
+    ],
+    "showWhenRules": [
+      {
+        "field": "looseMatching",
+        "values": [
+          "true"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "paragraph",
+    "text": "How far a colour may sit from a token and still count, measured as LAB ΔE: conservative 2,\nstandard 4, aggressive 6. Below about 2 the eye cannot tell them apart."
+  },
+  {
+    "type": "field",
+    "name": "maxDeltaE",
+    "value": 4,
+    "label": "Custom tolerance (ΔE)",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "number",
+    "showWhenRules": [
+      {
+        "field": "looseMatching",
+        "values": [
+          "true"
+        ]
+      },
+      {
+        "field": "matchTolerance",
+        "values": [
+          "custom"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "verboseLogging",
+    "value": false,
+    "label": "Verbose console output",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Duplicates, near-ties and palette statistics, in the console. The summary stays in the Info panel\neither way."
+  }
+]

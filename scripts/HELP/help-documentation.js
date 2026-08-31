@@ -269,6 +269,10 @@
 // - **`@preview` and `@suggestions`** render whatever the script's own `@PREVIEW:` / `@SUGGESTIONS:`
 //   function returns, so they are that panel's markup rather than a style primitive. Grid is the live
 //   example; critique them there, where the numbers are real.
+// - **`blank` / `lineBreak`** — spacer comment lines in the old one-line annotation format. A
+//   `@PANEL_START` recipe has no blank block; paragraph fold direction is `attachTo: "next"` or
+//   `"previous"` instead. The `//` row in the marker table above is still how non-migrated scripts
+//   write a gap; it is not something the specimen shelf can show once the panel is JSON.
 // - **InfoPanel and CodeFigUI** (`@InfoPanel`, `@codefig-ui`) style a script's *results*, which is a
 //   different surface with its own classes. Worth its own reference — ask and it gets one.
 // - **Sidebar, tab strip and footer** are panel chrome rather than anything a script can produce.
@@ -284,136 +288,159 @@
 // is a reference rather than a setting — the script reads none of these values, and running it does
 // nothing to your document.
 // @UI_CONFIG_START
-// @prose
-// # Heading level 1
-// The level every panel uses for its section titles: `// # Heading level 1`. Renders as `h1`, and it
-// carries the 48px gap that separates one section from the next.
-//
-// ## Heading level 2
-// Two hashes. A title *inside* a section, at 14px with half the gap above it.
-//
-// ### Heading level 3
-// Three hashes: body size, told apart from a paragraph by its weight alone.
-//
-// This is a paragraph — any comment line that is not a marker. **Bold**, *italic* and `code` work.
-// ---
-// Above: a short rule, from `// ---`.
-// --- @section
-// Above: a rule reaching both panel edges, from `// --- @section`.
-//
-// # Text and numbers
-var textField = "Sample"; // @label: Text @helper: var textField = "Sample";
-var withPlaceholder = ""; // @placeholder="Shown while empty" @label: Text with a placeholder @helper: @placeholder="Shown while empty"
-var numberField = 12; // @label: Number @helper: a numeric default makes it a number input, 96px wide
-var longText = ""; // @textarea @placeholder="One per line" @label: Textarea @helper: @textarea
-var nameList = ["sm", "md", "lg"]; // @label: List of names @helper: an array of strings or numbers — one input holding a comma list, and the config keeps the array
-//
-// # Choices
-var toggle = true; // @label: Checkbox @helper: a true or false default
-var dropdown = "medium"; // @options: small|medium|large @label: Dropdown @helper: @options: small|medium|large
-var radioChoice = "replace"; // @options: replace|append @radio @label: Radio group @helper: the same @options, plus @radio
-var multiChoice = ["small"]; // @options: small|medium|large @multi @label: Multi-select @helper: the same @options, plus @multi
-var documentList = ""; // @options: variableCollections @label: From the document @helper: @options: variableCollections — filled with this file's collections
-var dependent = ""; // @showWhen: toggle=true @label: Only while Checkbox is on @helper: @showWhen: toggle=true
-//
-// # Collections and modes
-var collectionName = "Responsive System"; // @collection @label: Collection @helper: @collection — this file's collections, plus New collection
-var collectionMode = "Desktop"; // @mode: collectionName @label: Mode @helper: @mode: collectionName — the modes of the collection above, plus New mode
-// @collectionModes: Collection modes
-// The chips read their names from the modes field below, so the two cannot disagree. Click a chip to
-// rename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run.
+var textField = "Sample";
+var withPlaceholder = "";
+var numberField = 12;
+var longText = "";
+var nameList = ["sm", "md", "lg"];
+var toggle = true;
+var dropdown = "medium";
+var radioChoice = "replace";
+var multiChoice = ["small"];
+var documentList = "";
+var dependent = "";
+var collectionName = "Responsive System";
+var collectionMode = "Desktop";
 var modes = [
   { name: "Desktop", width: 1440, columns: 12 },
   { name: "Tablet", width: 834, columns: 8 },
   { name: "Mobile", width: 390, columns: 4 },
-]; // @rows: name:text=Mode|width:number=Width|columns:number=Columns @tabs @label: Modes
-//
-// # One thing set by several numbers
-// `@group:` on an **object** — one labelled row, each part captioned at a number's own width. Use it when
-// the parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three
-// separate fields make you assemble that in your head. `@rows` cannot serve this, because that one needs an
-// array — it is a *repeatable* group.
-//
-// The same control appears nested inside `@rows`, written the same way, so an anchor in a mode block and a
-// shared ladder above it are the same shape rather than two lookalikes.
-var lightness = { bright: 98.5, middle: 62, dark: 18 }; // @group: bright:number=Bright|middle:number=Middle|dark:number=Dark @label: Lightness @helper: 0 to 100 in the UI, 0 to 1 in the data
-//
-// `@unit="%"` prints a unit inside the input, at its right edge. It is **not** a placeholder — a
-// placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back
-// to `-1.5` can tell whether that is pixels or percent.
-var lineHeight = { base: 150, max: 110 }; // @group: base:number@unit="%"=Base|max:number@unit="%"=Largest @label: Line height
-//
-// # A column that depends on its row
-// Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the
-// scale type and watch the fields change — each tab is judged on its own values, so two modes can be
-// using different scale types at once.
+];
+var lightness = { bright: 98.5, middle: 62, dark: 18 };
+var lineHeight = { base: 150, max: 110 };
 var scales = [
   { name: "Desktop", scaleType: "modular", ratio: 1.25, step: 4, mod: 3 },
   { name: "Mobile", scaleType: "metric", ratio: 1.2, step: 2, mod: 3 },
-]; // @rows: name:text=Mode|scaleType:radio(modular:Modular scale|metric:Metric scale|fibonacci:Fibonacci)=Scale type|ratio:(1.2:1.2 Minor third|1.25:1.25 Major third|1.618:1.618 Golden ratio){scaleType=modular}=Scaling method|step:number{scaleType=metric|fibonacci}=Step|mod:number{scaleType=metric}=Every N steps @tabs @label: Scale per mode
-//
-// # Table rows
-// The same annotation without @tabs: one line per entry, with Add and Remove.
+];
 var breakpoints = [
   { label: "sm", min: 640 },
   { label: "md", min: 834 },
-]; // @rows: label:text=Name|min:number=Min width @label: Breakpoints
-//
-// # A curve you can drag
-// `@curve` on an **array** of four numbers — the two handles of one cubic, exactly what `cubic-bezier()`
-// carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the
-// field underneath. All four are the same edit: the numbers are the value and everything on screen is a
-// reading of them, which is why the dropdown says *Custom* the moment a curve stops being a preset.
-var easing = [0.37, 0, 0.63, 1]; // @curve @label: Curve @helper: The dashed diagonal is the straight ramp — a curve is read as how far it departs from it.
-//
-// **Add middle point** makes it a three-point curve: ten numbers, a middle anchor you can drag in both
-// directions, and a handle either side of it. The split is exact, so adding the point does not move the
-// curve. It is also what `easeInOut` has always been — the in-curve over the first half and the out-curve
-// over the second is a middle anchor at the centre, written as an `if`.
-var twoSegment = [0.17, 0, 0.33, 0.23, 0.5, 0.5, 0.67, 0.77, 0.83, 1]; // @curve @label: Two-segment curve
-//
-// `@allowOriginal` adds *Original* to the preset list — the empty curve, for a script that has something
-// to fall back on. Colors uses it to mean "leave the steps this file already has".
-var maybeCurve = []; // @curve @allowOriginal @label: Curve or original @helper: Shown empty. Pick a preset to give it points.
-//
-// # A curve on a real axis
-// `@ends:` names the two fields the curve runs **between**, and `@range:` the limits of the quantity
-// itself. Together they turn the y axis from a unit square into the thing being edited: the labels are
-// percentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the
-// two **square** handles are those ends — drag one and it types into its own field, because that is where
-// the value lives. The round handles still only bend the shape between them.
-//
-// The plot shows a **window** on the channel — the two ends with a little air — and two columns sit beside
-// it. The **triangle** is the zoom: drag it up to close in, down to pull back, or step it with the buttons
-// above and below. The bar to its right is the channel's own colours across that window, and it is a
-// picture: it takes no input at all. Neither column moves when you drag the curve, because where you are
-// looking is not a property of the ramp — and to follow a ramp that runs off the top or bottom, drag the
-// empty chart vertically.
-//
-// The ramp is clipped to the plot; the grips are clipped to the plot **plus their own radius**, so one on
-// the boundary sits *on* the frame rather than being sliced in half by it. A drag stops at the edge of the
-// window rather than pushing the curve out of sight.
-var ladder = { bright: 98, dark: 19 }; // @group: bright:number=Bright|dark:number=Dark @label: Ends
-var ladderCurve = [0.4, 0, 0.7, 0.55]; // @curve @ends: ladder.bright..ladder.dark @range: 0..100 @label: Lightness @helper: Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.
-//
-// # A scale with no far end
-// `curve(growth:ratio)` inside `@rows` — the **open-ended** editor, for a scale whose largest value nobody
-// knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the
-// growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last
-// token the line carries on faintly, because it does — adding a token extends the scale rather than
-// squeezing what is already generated into the same range.
-//
-// **The dropdown is the shape control.** *Linear* means no shape and draws no handles; anything else
-// reveals them, for when the growth should vary across the scale — tighter at the small end, looser at the
-// top. The field underneath carries the whole scale, growth and shape together, so copying it out and
-// pasting it back reproduces it.
-//
-// The growth has **no field of its own**: one idea, one control. It is still written to the config under
-// the name after the colon, so the block reads `ratio: 1.5` beside `curve: []`.
+];
+var easing = [0.37, 0, 0.63, 1];
+var twoSegment = [0.17, 0, 0.33, 0.23, 0.5, 0.5, 0.67, 0.77, 0.83, 1];
+var maybeCurve = [];
+var ladder = { bright: 98, dark: 19 };
+var ladderCurve = [0.4, 0, 0.7, 0.55];
 var openScale = [
   { name: "Value", ratio: 1.5, curve: [] },
-]; // @rows: name:text=Mode|curve:curve(growth:ratio)=Scale @tabs @label: Open-ended scale
-//
-// # What the form cannot hold
-var nested = { outer: { inner: 1 } }; // @label: Nested object @helper: an object with no @rows — the form says so rather than dropping it
+];
+var nested = { outer: { inner: 1 } };
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "directive", name: "prose" },
+//     { type: "heading", level: 1, text: "Heading level 1" },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "The level every panel uses for its section titles: `// # Heading level 1`. Renders as `h1`, and it\ncarries the 48px gap that separates one section from the next." },
+//     { type: "heading", level: 2, text: "Heading level 2" },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "Two hashes. A title *inside* a section, at 14px with half the gap above it." },
+//     { type: "heading", level: 3, text: "Heading level 3" },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "Three hashes: body size, told apart from a paragraph by its weight alone." },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "This is a paragraph — any comment line that is not a marker. **Bold**, *italic* and `code` work." },
+//     { type: "divider" },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "Above: a short rule, from `// ---`." },
+//     { type: "divider", section: true },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "Above: a rule reaching both panel edges, from `// --- @section`." },
+//     { type: "heading", level: 1, text: "Text and numbers" },
+//     { key: "textField", type: "string", label: "Text", helper: "var textField = \"Sample\";" },
+//     { key: "withPlaceholder", type: "string", label: "Text with a placeholder", helper: "@placeholder=\"Shown while empty\"", placeholder: "Shown while empty" },
+//     { key: "numberField", type: "number", label: "Number", helper: "a numeric default makes it a number input, 96px wide" },
+//     { key: "longText", type: "textarea", label: "Textarea", helper: "@textarea", placeholder: "One per line" },
+//     { key: "nameList", type: "list", label: "List of names", helper: "an array of strings or numbers — one input holding a comma list, and the config keeps the array" },
+//     { type: "heading", level: 1, text: "Choices" },
+//     { key: "toggle", type: "boolean", label: "Checkbox", helper: "a true or false default" },
+//     { key: "dropdown", type: "select", label: "Dropdown", helper: "@options: small|medium|large", options: ["small","medium","large"] },
+//     { key: "radioChoice", type: "radio", label: "Radio group", helper: "the same @options, plus @radio", options: ["replace","append"] },
+//     { key: "multiChoice", type: "multiselect", label: "Multi-select", helper: "the same @options, plus @multi", options: ["small","medium","large"] },
+//     { key: "documentList", type: "select", label: "From the document", helper: "@options: variableCollections — filled with this file's collections", options: "variableCollections" },
+//     { key: "dependent", type: "string", label: "Only while Checkbox is on", helper: "@showWhen: toggle=true", showWhen: { toggle: true } },
+//     { type: "heading", level: 1, text: "Collections and modes" },
+//     { key: "collectionName", type: "collection", label: "Collection", helper: "@collection — this file's collections, plus New collection" },
+//     { key: "collectionMode", type: "mode", label: "Mode", helper: "@mode: collectionName — the modes of the collection above, plus New mode", collection: "collectionName" },
+//     { type: "chips", label: "Collection modes", from: "modes" },
+//     { type: "paragraph", attachTo: "next",
+//       text: "The chips read their names from the modes field below, so the two cannot disagree. Click a chip to\nrename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run." },
+//     { key: "modes", type: "rows", label: "Modes", layout: "tabs", columns: [
+//         { key: "name", type: "text", label: "Mode" },
+//         { key: "width", type: "number", label: "Width" },
+//         { key: "columns", type: "number", label: "Columns" },
+//       ] },
+//     { type: "heading", level: 1, text: "One thing set by several numbers" },
+//     { type: "paragraph", attachTo: "next",
+//       text: "`@group:` on an **object** — one labelled row, each part captioned at a number's own width. Use it when\nthe parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three\nseparate fields make you assemble that in your head. `@rows` cannot serve this, because that one needs an\narray — it is a *repeatable* group." },
+//     { type: "paragraph", attachTo: "next",
+//       text: "The same control appears nested inside `@rows`, written the same way, so an anchor in a mode block and a\nshared ladder above it are the same shape rather than two lookalikes." },
+//     { key: "lightness", type: "group", label: "Lightness", helper: "0 to 100 in the UI, 0 to 1 in the data", fields: [
+//         { key: "bright", type: "number", label: "Bright" },
+//         { key: "middle", type: "number", label: "Middle" },
+//         { key: "dark", type: "number", label: "Dark" },
+//       ] },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "`@unit=\"%\"` prints a unit inside the input, at its right edge. It is **not** a placeholder — a\nplaceholder disappears the moment you type, and the whole point of a unit is that a reader coming back\nto `-1.5` can tell whether that is pixels or percent." },
+//     { key: "lineHeight", type: "group", label: "Line height", fields: [
+//         { key: "base", type: "number", label: "Base", unit: "%" },
+//         { key: "max", type: "number", label: "Largest", unit: "%" },
+//       ] },
+//     { type: "heading", level: 1, text: "A column that depends on its row" },
+//     { type: "paragraph", attachTo: "next",
+//       text: "Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the\nscale type and watch the fields change — each tab is judged on its own values, so two modes can be\nusing different scale types at once." },
+//     { key: "scales", type: "rows", label: "Scale per mode", layout: "tabs", columns: [
+//         { key: "name", type: "text", label: "Mode" },
+//         { key: "scaleType", type: "radio", label: "Scale type", options: [{"modular":"Modular scale"},{"metric":"Metric scale"},{"fibonacci":"Fibonacci"}] },
+//         { key: "ratio", type: "select", label: "Scaling method", options: [{"1.2":"1.2 Minor third"},{"1.25":"1.25 Major third"},{"1.618":"1.618 Golden ratio"}], showWhen: { scaleType: "modular" } },
+//         { key: "step", type: "number", label: "Step", showWhen: { scaleType: ["metric","fibonacci"] } },
+//         { key: "mod", type: "number", label: "Every N steps", showWhen: { scaleType: "metric" } },
+//       ] },
+//     { type: "heading", level: 1, text: "Table rows" },
+//     { type: "paragraph", attachTo: "next",
+//       text: "The same annotation without @tabs: one line per entry, with Add and Remove." },
+//     { key: "breakpoints", type: "rows", label: "Breakpoints", columns: [
+//         { key: "label", type: "text", label: "Name" },
+//         { key: "min", type: "number", label: "Min width" },
+//       ] },
+//     { type: "heading", level: 1, text: "A curve you can drag" },
+//     { type: "paragraph", attachTo: "next",
+//       text: "`@curve` on an **array** of four numbers — the two handles of one cubic, exactly what `cubic-bezier()`\ncarries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the\nfield underneath. All four are the same edit: the numbers are the value and everything on screen is a\nreading of them, which is why the dropdown says *Custom* the moment a curve stops being a preset." },
+//     { key: "easing", type: "curve", label: "Curve", helper: "The dashed diagonal is the straight ramp — a curve is read as how far it departs from it." },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "**Add middle point** makes it a three-point curve: ten numbers, a middle anchor you can drag in both\ndirections, and a handle either side of it. The split is exact, so adding the point does not move the\ncurve. It is also what `easeInOut` has always been — the in-curve over the first half and the out-curve\nover the second is a middle anchor at the centre, written as an `if`." },
+//     { key: "twoSegment", type: "curve", label: "Two-segment curve" },
+//     { type: "paragraph", attachTo: "previous",
+//       text: "`@allowOriginal` adds *Original* to the preset list — the empty curve, for a script that has something\nto fall back on. Colors uses it to mean \"leave the steps this file already has\"." },
+//     { key: "maybeCurve", type: "curve", label: "Curve or original", helper: "Shown empty. Pick a preset to give it points.", allowOriginal: true },
+//     { type: "heading", level: 1, text: "A curve on a real axis" },
+//     { type: "paragraph", attachTo: "next",
+//       text: "`@ends:` names the two fields the curve runs **between**, and `@range:` the limits of the quantity\nitself. Together they turn the y axis from a unit square into the thing being edited: the labels are\npercentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the\ntwo **square** handles are those ends — drag one and it types into its own field, because that is where\nthe value lives. The round handles still only bend the shape between them." },
+//     { type: "paragraph", attachTo: "next",
+//       text: "The plot shows a **window** on the channel — the two ends with a little air — and two columns sit beside\nit. The **triangle** is the zoom: drag it up to close in, down to pull back, or step it with the buttons\nabove and below. The bar to its right is the channel's own colours across that window, and it is a\npicture: it takes no input at all. Neither column moves when you drag the curve, because where you are\nlooking is not a property of the ramp — and to follow a ramp that runs off the top or bottom, drag the\nempty chart vertically." },
+//     { type: "paragraph", attachTo: "next",
+//       text: "The ramp is clipped to the plot; the grips are clipped to the plot **plus their own radius**, so one on\nthe boundary sits *on* the frame rather than being sliced in half by it. A drag stops at the edge of the\nwindow rather than pushing the curve out of sight." },
+//     { key: "ladder", type: "group", label: "Ends", fields: [
+//         { key: "bright", type: "number", label: "Bright" },
+//         { key: "dark", type: "number", label: "Dark" },
+//       ] },
+//     { key: "ladderCurve", type: "curve", label: "Lightness", helper: "Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.", ends: "ladder.bright..ladder.dark", range: [0,100] },
+//     { type: "heading", level: 1, text: "A scale with no far end" },
+//     { type: "paragraph", attachTo: "next",
+//       text: "`curve(growth:ratio)` inside `@rows` — the **open-ended** editor, for a scale whose largest value nobody\nknows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the\ngrowth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last\ntoken the line carries on faintly, because it does — adding a token extends the scale rather than\nsqueezing what is already generated into the same range." },
+//     { type: "paragraph", attachTo: "next",
+//       text: "**The dropdown is the shape control.** *Linear* means no shape and draws no handles; anything else\nreveals them, for when the growth should vary across the scale — tighter at the small end, looser at the\ntop. The field underneath carries the whole scale, growth and shape together, so copying it out and\npasting it back reproduces it." },
+//     { type: "paragraph", attachTo: "next",
+//       text: "The growth has **no field of its own**: one idea, one control. It is still written to the config under\nthe name after the colon, so the block reads `ratio: 1.5` beside `curve: []`." },
+//     { key: "openScale", type: "rows", label: "Open-ended scale", layout: "tabs", columns: [
+//         { key: "name", type: "text", label: "Mode" },
+//         { key: "curve", type: "curve", label: "Scale", growth: "ratio" },
+//       ] },
+//     { type: "heading", level: 1, text: "What the form cannot hold" },
+//     { key: "nested", type: "unsupported", label: "Nested object", helper: "an object with no @rows — the form says so rather than dropping it" },
+//   ]
+// }
+// @PANEL_END
+

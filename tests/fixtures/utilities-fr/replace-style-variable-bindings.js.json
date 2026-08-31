@@ -1,0 +1,96 @@
+[
+  {
+    "type": "field",
+    "name": "searchIn",
+    "value": "",
+    "label": "Search in",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "V5/*"
+  },
+  {
+    "type": "paragraph",
+    "text": "Only styles whose name contains this, ignoring case, with `*` allowed. Empty means every local text,\npaint and effect style."
+  },
+  {
+    "type": "field",
+    "name": "matchCase",
+    "value": false,
+    "label": "Match case",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "useRegex",
+    "value": false,
+    "label": "Use regular expression",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Reads **Search in** as a regular expression rather than plain text with `*` wildcards."
+  },
+  {
+    "type": "field",
+    "name": "sourceCollection",
+    "value": "",
+    "label": "Source collection",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "optionSource": "variableCollections"
+  },
+  {
+    "type": "paragraph",
+    "text": "Bindings pointing at this collection are the ones that move. Pick a real collection — *(all\ncollections)* does nothing here."
+  },
+  {
+    "type": "field",
+    "name": "targetCollection",
+    "value": "",
+    "label": "Target collection",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "optionSource": "variableCollections"
+  },
+  {
+    "type": "paragraph",
+    "text": "Each binding moves to the same-named variable in this collection."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "field",
+    "name": "previewOnly",
+    "value": true,
+    "label": "Preview only",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "**On by default.** Lists the bindings that would change and touches nothing. Untick and run again to apply."
+  },
+  {
+    "type": "field",
+    "name": "breakUnmatchedBindings",
+    "value": false,
+    "label": "Break unmatched bindings",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "What to do when the target has no variable of that name. **On** removes the binding and leaves the\nraw value behind; **off** leaves the binding pointing where it already does."
+  }
+]

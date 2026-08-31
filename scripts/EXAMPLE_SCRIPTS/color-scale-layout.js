@@ -12,8 +12,18 @@
 // @UI_CONFIG_START
 var startingSize = 250;
 var horizontalScale = false;
-var increment = 50; // @showWhen: horizontalScale=false
+var increment = 50;
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { key: "startingSize", type: "number" },
+//     { key: "horizontalScale", type: "boolean" },
+//     { key: "increment", type: "number", showWhen: { horizontalScale: "false" } }
+//   ]
+// }
+// @PANEL_END
 
 function hasBounds(node) {
   return "x" in node && "y" in node && "width" in node && "height" in node;

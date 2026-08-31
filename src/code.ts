@@ -55,6 +55,884 @@ figma.showUI(__html__, {
   // Note: resizable is not in the official Figma API types but works in practice
 } as any);
 
+// Boot cleanup: clear-case foundation plugin-data hygiene (plan 39). Fire-and-forget so first
+// paint is not blocked; logs only — no toast / InfoPanel. Sibling modules are inlined into
+// dist/code.js by build-scripts.js as `__codefigMainRequire` — Figma's JSVM has no Node
+// `require`, and assigning `var require = …` is unreliable there (and bare `tsc` wipes a
+// prepended shim). Always load siblings through this name, never `require`.
+declare function __codefigMainRequire(moduleId: string): any;
+try {
+  const foundationMaintain = __codefigMainRequire('./foundation-maintain') as {
+    runFoundationMaintain: (
+      figmaApi: PluginAPI,
+      log?: (message: string) => void
+    ) => Promise<unknown>;
+  };
+  void foundationMaintain
+    .runFoundationMaintain(figma, (message: string) => {
+      // Quiet housekeeping: plugin console + bridge (dev), never toast / InfoPanel.
+      console.log(message);
+      forwardToConsoleBridge('log', [message]);
+    })
+    .catch((err: unknown) => {
+      const text =
+        'foundationMaintain failed: ' +
+        (err instanceof Error ? err.message : String(err));
+      console.log(text);
+      forwardToConsoleBridge('log', [text]);
+    });
+} catch (err) {
+  const text =
+    'foundationMaintain unavailable: ' +
+    (err instanceof Error ? err.message : String(err));
+  console.log(text);
+  forwardToConsoleBridge('log', [text]);
+}
+
+/**
+ * Plan 38 — STRING-variable script storage (`.plans/38-script-storage-variables.md`).
+ * Pure helpers live in `src/script-storage.js`.
+ *
+ * Parallel mode (flag true): Variables + clientStorage both hold bodies.
+ *   - SAVE / DELETE / explicit Sync dual-write both
+ *   - LIST dual-reads (local Variables preferred on name collision) + remote
+ *     library stubs (name only until opened)
+ *   - LIST does **not** auto-write clientStorage → local Variables (no silent
+ *     local copies). Explicit Sync / SAVE create or update the local collection.
+ * Flip false only to disable the Variables path entirely.
+ */
+const SCRIPT_STORAGE_VARIABLES: boolean = true;
+
+const SCRIPT_STORAGE_SETTINGS_KEY = 'codefigScriptStorageSettings';
+
+type ScriptStorageSettings = {
+  useVariables: boolean;
+  useLocalStorage: boolean;
+  syncMode: 'dual-write' | 'variables-preferred' | 'localstorage-preferred';
+};
+
+function defaultScriptStorageSettings(): ScriptStorageSettings {
+  return {
+    useVariables: true,
+    useLocalStorage: true,
+    syncMode: 'dual-write'
+  };
+}
+
+function normalizeScriptStorageSettings(raw: unknown): ScriptStorageSettings {
+  const d = defaultScriptStorageSettings();
+  if (!raw || typeof raw !== 'object') return d;
+  const o = raw as Record<string, unknown>;
+  let useVariables = o.useVariables !== false;
+  let useLocalStorage = o.useLocalStorage !== false;
+  if (!useVariables && !useLocalStorage) {
+    useVariables = true;
+    useLocalStorage = true;
+  }
+  const syncMode =
+    o.syncMode === 'variables-preferred' || o.syncMode === 'localstorage-preferred'
+      ? o.syncMode
+      : 'dual-write';
+  return { useVariables, useLocalStorage, syncMode };
+}
+
+async function loadScriptStorageSettings(): Promise<ScriptStorageSettings> {
+  try {
+    const raw = await figma.clientStorage.getAsync(SCRIPT_STORAGE_SETTINGS_KEY);
+    return normalizeScriptStorageSettings(raw);
+  } catch {
+    return defaultScriptStorageSettings();
+  }
+}
+
+/** Where SAVE / Sync should write, given user prefs. */
+async function getScriptWriteTargets(isExplicitSync: boolean): Promise<{
+  vars: boolean;
+  client: boolean;
+  settings: ScriptStorageSettings;
+}> {
+  const settings = await loadScriptStorageSettings();
+  const flagOn = SCRIPT_STORAGE_VARIABLES;
+  let vars = false;
+  let client = false;
+  if (isExplicitSync) {
+    vars = flagOn && settings.useVariables;
+    client = settings.useLocalStorage && settings.syncMode === 'dual-write';
+  } else {
+    vars =
+      flagOn &&
+      settings.useVariables &&
+      settings.syncMode !== 'localstorage-preferred';
+    client =
+      settings.useLocalStorage && settings.syncMode !== 'variables-preferred';
+  }
+  if (!vars && !client) client = true;
+  return { vars, client, settings };
+}
+
+type ScriptStorageModule = {
+  COLLECTION_NAME: string;
+  INDEX_VARIABLE: string;
+  SCRIPT_VARIABLE_SCOPES: VariableScope[];
+  parseIndex: (json: unknown) => { v: number; scripts: ScriptIndexEntry[] };
+  listScriptsFromValues: (
+    valueByKey: Record<string, string>
+  ) => { scripts: ScriptIndexEntry[]; listItems: ScriptListItem[] };
+  planScriptWrite: (script: {
+    id: string;
+    name: string;
+    type?: string;
+    code: string;
+  }) => {
+    entry: ScriptIndexEntry;
+    variables: Array<{ key: string; value: string }>;
+  };
+  readScriptBody: (
+    entry: ScriptIndexEntry,
+    valueByKey: Record<string, string>
+  ) => string;
+  orphanedKeysFor: (
+    previousChunkKeys: string[] | undefined,
+    nextChunkKeys: string[] | undefined
+  ) => string[];
+  findEntryByName: (
+    scripts: ScriptIndexEntry[],
+    name: string
+  ) => ScriptIndexEntry | null;
+  findIndexEntryByName: (
+    scripts: ScriptIndexEntry[],
+    name: string
+  ) => ScriptIndexEntry | null;
+  mintScriptId: () => string;
+  toListItem: (script: unknown) => ScriptListItem | null;
+  shouldParallelSync: (
+    variableScripts: unknown[],
+    clientScripts: unknown[]
+  ) => boolean;
+  planParallelSync: (
+    variableScripts: unknown[],
+    clientScripts: unknown[],
+    mintId?: () => string
+  ) => {
+    toVariables: ScriptListItem[];
+    writes: Array<{
+      entry: ScriptIndexEntry;
+      variables: Array<{ key: string; value: string }>;
+    }>;
+    toClient: ScriptListItem[];
+    toVariablesCount: number;
+    toClientCount: number;
+  };
+  mergeScriptsByName: (
+    preferred: unknown[],
+    fallback: unknown[]
+  ) => ScriptListItem[];
+  listRemoteScriptStubs: (
+    libraryVariables: Array<{ name: string; key: string; resolvedType: string }>,
+    libraryName: string,
+    collectionKey: string
+  ) => ScriptListItem[];
+  mergeScriptInventory: (
+    localItems: unknown[],
+    clientItems: unknown[],
+    remoteItems: unknown[]
+  ) => ScriptListItem[];
+  planLegacyIndexToPathMigration: (
+    indexScripts: ScriptIndexEntry[],
+    valueByKey: Record<string, string>
+  ) => {
+    scripts: ScriptIndexEntry[];
+    writes: Array<{
+      entry: ScriptIndexEntry;
+      variables: Array<{ key: string; value: string }>;
+    }>;
+    listItems: ScriptListItem[];
+    orphanedKeys: string[];
+    count: number;
+  };
+};
+
+type ScriptIndexEntry = {
+  id: string;
+  name: string;
+  type: string;
+  chunkKeys: string[];
+  path?: string;
+};
+
+type ScriptListItem = {
+  name: string;
+  code: string;
+  type: string;
+  origin?: string;
+  libraryName?: string;
+  storageId?: string;
+  remote?: {
+    collectionKey: string;
+    libraryName: string;
+    variables: Array<{ name: string; key: string }>;
+  };
+};
+
+// Required only when the flag is on — keeps the false path free of a load-time dependency.
+const scriptStorage: ScriptStorageModule | null = SCRIPT_STORAGE_VARIABLES
+  ? (__codefigMainRequire('./script-storage') as ScriptStorageModule)
+  : null;
+
+function scriptStorageLog(message: string) {
+  console.log(message);
+  forwardToConsoleBridge('log', [message]);
+}
+
+/** Find or create the local "CodeFig Scripts" collection (STRING vars). */
+async function ensureScriptsCollection(
+  storage: ScriptStorageModule
+): Promise<VariableCollection> {
+  const existing = await findLocalScriptsCollection(storage);
+  if (existing) return existing;
+  return figma.variables.createVariableCollection(storage.COLLECTION_NAME);
+}
+
+/** Local collection only — never creates. LIST uses this so open is read-only. */
+async function findLocalScriptsCollection(
+  storage: ScriptStorageModule
+): Promise<VariableCollection | null> {
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  const want = storage.COLLECTION_NAME;
+  for (const c of collections || []) {
+    if (c && c.name === want) return c;
+  }
+  return null;
+}
+
+async function loadCollectionVariablesByName(
+  collection: VariableCollection
+): Promise<Map<string, Variable>> {
+  const byName = new Map<string, Variable>();
+  const ids = collection.variableIds || [];
+  for (const id of ids) {
+    const v = await figma.variables.getVariableByIdAsync(id);
+    if (v) byName.set(v.name, v);
+  }
+  return byName;
+}
+
+function collectionModeId(collection: VariableCollection): string {
+  return collection.modes[0].modeId;
+}
+
+function readStringModeValue(variable: Variable, modeId: string): string {
+  const raw = variable.valuesByMode[modeId];
+  return typeof raw === 'string' ? raw : '';
+}
+
+async function setStringVariableValue(
+  collection: VariableCollection,
+  byName: Map<string, Variable>,
+  modeId: string,
+  key: string,
+  value: string,
+  scopes?: VariableScope[]
+): Promise<void> {
+  let variable = byName.get(key);
+  if (!variable) {
+    variable = figma.variables.createVariable(key, collection, 'STRING');
+    byName.set(key, variable);
+  }
+  // Script bodies must not appear as bindable text/layout tokens.
+  if (scopes) variable.scopes = scopes;
+  variable.setValueForMode(modeId, value == null ? '' : String(value));
+}
+
+/** Clear orphaned chunk values in place — never delete variables (project invariant). */
+async function clearOrphanedChunkValues(
+  byName: Map<string, Variable>,
+  modeId: string,
+  orphanedKeys: string[]
+): Promise<void> {
+  for (const key of orphanedKeys || []) {
+    const variable = byName.get(key);
+    if (variable) variable.setValueForMode(modeId, '');
+  }
+}
+
+function valueMapFromCollection(
+  byName: Map<string, Variable>,
+  modeId: string
+): Record<string, string> {
+  const valueByKey: Record<string, string> = Object.create(null);
+  byName.forEach((variable, name) => {
+    valueByKey[name] = readStringModeValue(variable, modeId);
+  });
+  return valueByKey;
+}
+
+async function writeScriptVariables(
+  storage: ScriptStorageModule,
+  collection: VariableCollection,
+  byName: Map<string, Variable>,
+  modeId: string,
+  variables: Array<{ key: string; value: string }>,
+  orphanedKeys: string[]
+): Promise<void> {
+  const scopes = storage.SCRIPT_VARIABLE_SCOPES || [];
+  for (const pair of variables) {
+    await setStringVariableValue(
+      collection,
+      byName,
+      modeId,
+      pair.key,
+      pair.value,
+      scopes
+    );
+  }
+  await clearOrphanedChunkValues(byName, modeId, orphanedKeys);
+}
+
+/**
+ * Read path-named script variables. If a legacy `@index` is still present and
+ * there are no path scripts yet, rewrite into path envelopes and clear the old
+ * keys (values only — variables are never deleted).
+ */
+async function readScriptsFromCollection(
+  storage: ScriptStorageModule,
+  collection: VariableCollection
+): Promise<{ indexScripts: ScriptIndexEntry[]; listItems: ScriptListItem[] }> {
+  let byName = await loadCollectionVariablesByName(collection);
+  const modeId = collectionModeId(collection);
+  let valueByKey = valueMapFromCollection(byName, modeId);
+  let listed = storage.listScriptsFromValues(valueByKey);
+
+  const indexVar = byName.get(storage.INDEX_VARIABLE);
+  const indexJson = indexVar ? readStringModeValue(indexVar, modeId) : '';
+  const legacy = storage.parseIndex(indexJson);
+
+  if (listed.scripts.length === 0 && legacy.scripts.length > 0) {
+    const planned = storage.planLegacyIndexToPathMigration(
+      legacy.scripts,
+      valueByKey
+    );
+    if (planned.count > 0) {
+      await writeScriptVariables(
+        storage,
+        collection,
+        byName,
+        modeId,
+        planned.writes.reduce(
+          (acc: Array<{ key: string; value: string }>, w) => {
+            for (const pair of w.variables) acc.push(pair);
+            return acc;
+          },
+          []
+        ),
+        planned.orphanedKeys
+      );
+      scriptStorageLog(
+        'CodeFig: rewrote ' +
+          planned.count +
+          ' script(s) from @index into path-named variables'
+      );
+      byName = await loadCollectionVariablesByName(collection);
+      valueByKey = valueMapFromCollection(byName, modeId);
+      listed = storage.listScriptsFromValues(valueByKey);
+    }
+  }
+
+  // Ensure every script variable has empty scopes (including ones created
+  // before this policy, and path vars just written above).
+  const scopes = storage.SCRIPT_VARIABLE_SCOPES || [];
+  for (const entry of listed.scripts) {
+    for (const key of entry.chunkKeys || []) {
+      const variable = byName.get(key);
+      if (variable) variable.scopes = scopes;
+    }
+  }
+
+  return { indexScripts: listed.scripts, listItems: listed.listItems };
+}
+
+/**
+ * Keep Variables and clientStorage in parallel: write any name that exists on
+ * only one side. Never overwrites an existing body (SAVE dual-write owns content).
+ * Used only by explicit Sync — LIST must not call this (no silent local copies).
+ */
+async function syncParallelScriptStores(
+  storage: ScriptStorageModule,
+  collection: VariableCollection,
+  variableListItems: ScriptListItem[],
+  clientScripts: unknown[]
+): Promise<{
+  listItems: ScriptListItem[];
+  clientScripts: unknown[];
+  toVariables: number;
+  toClient: number;
+}> {
+  const planned = storage.planParallelSync(variableListItems, clientScripts);
+  let nextClient = (clientScripts || []).slice() as any[];
+  let nextVariableItems = variableListItems.slice();
+
+  if (planned.toVariablesCount > 0) {
+    const byName = await loadCollectionVariablesByName(collection);
+    const modeId = collectionModeId(collection);
+    const variables: Array<{ key: string; value: string }> = [];
+    for (const write of planned.writes) {
+      for (const pair of write.variables) variables.push(pair);
+    }
+    await writeScriptVariables(storage, collection, byName, modeId, variables, []);
+    nextVariableItems = storage.mergeScriptsByName(
+      nextVariableItems,
+      planned.toVariables
+    );
+  }
+
+  if (planned.toClientCount > 0) {
+    for (const item of planned.toClient) {
+      nextClient = upsertClientStorageScripts(nextClient, item);
+    }
+    await figma.clientStorage.setAsync('userScripts', nextClient);
+  }
+
+  if (planned.toVariablesCount > 0 || planned.toClientCount > 0) {
+    scriptStorageLog(
+      'CodeFig: synced scripts — ' +
+        planned.toVariablesCount +
+        ' → "' +
+        storage.COLLECTION_NAME +
+        '", ' +
+        planned.toClientCount +
+        ' → clientStorage'
+    );
+  }
+
+  return {
+    listItems: nextVariableItems,
+    clientScripts: nextClient,
+    toVariables: planned.toVariablesCount,
+    toClient: planned.toClientCount
+  };
+}
+
+/**
+ * Name stubs for published "CodeFig Scripts" collections from enabled libraries.
+ * Does not import variables (no local subscription write on LIST).
+ */
+async function listRemoteScriptStubsFromLibraries(
+  storage: ScriptStorageModule
+): Promise<ScriptListItem[]> {
+  if (
+    !figma.teamLibrary ||
+    typeof figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync !==
+      'function'
+  ) {
+    return [];
+  }
+  let collections: LibraryVariableCollection[] = [];
+  try {
+    collections =
+      await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+  } catch (err) {
+    scriptStorageLog(
+      'CodeFig: team library collections unavailable: ' +
+        (err instanceof Error ? err.message : String(err))
+    );
+    return [];
+  }
+  const want = storage.COLLECTION_NAME;
+  const matches = (collections || []).filter((c) => c && c.name === want);
+  const remoteItems: ScriptListItem[] = [];
+  for (const col of matches) {
+    try {
+      const libVars =
+        await figma.teamLibrary.getVariablesInLibraryCollectionAsync(col.key);
+      const stubs = storage.listRemoteScriptStubs(
+        libVars || [],
+        col.libraryName || '',
+        col.key
+      );
+      for (const stub of stubs) remoteItems.push(stub);
+    } catch (err) {
+      scriptStorageLog(
+        'CodeFig: could not list scripts from library "' +
+          (col.libraryName || col.name) +
+          '": ' +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
+  }
+  return remoteItems;
+}
+
+/**
+ * Import remote script chunk variables and reassemble the body.
+ * Import is the only way to read library STRING values; it subscribes those
+ * variables in this file but does not create a local "CodeFig Scripts" collection.
+ */
+async function loadRemoteScriptBody(
+  storage: ScriptStorageModule,
+  remote: NonNullable<ScriptListItem['remote']>
+): Promise<string> {
+  const valueByKey: Record<string, string> = Object.create(null);
+  for (const chunk of remote.variables || []) {
+    if (!chunk || !chunk.key) continue;
+    const imported = await figma.variables.importVariableByKeyAsync(chunk.key);
+    if (!imported) continue;
+    const coll = await figma.variables.getVariableCollectionByIdAsync(
+      imported.variableCollectionId
+    );
+    if (!coll) continue;
+    const modeId = collectionModeId(coll);
+    valueByKey[imported.name] = readStringModeValue(imported, modeId);
+  }
+  const listed = storage.listScriptsFromValues(valueByKey);
+  if (listed.listItems.length === 1) return listed.listItems[0].code || '';
+  // Prefer entry whose display name matches any chunk's primary path.
+  if (listed.listItems.length > 0) {
+    return listed.listItems[0].code || '';
+  }
+  return '';
+}
+
+/** Dual-write mirror: keep clientStorage in sync while the flag is on. */
+function upsertClientStorageScripts(
+  existing: any[],
+  scriptData: ScriptListItem,
+  searchName?: string
+): any[] {
+  const userScripts = (existing || []).slice();
+  const lookFor = searchName != null ? searchName : scriptData.name;
+  const existingIndex = userScripts.findIndex((s: any) => s.name === lookFor);
+  if (existingIndex >= 0) {
+    userScripts[existingIndex] = {
+      name: scriptData.name,
+      code: scriptData.code,
+      type: scriptData.type
+    };
+  } else {
+    userScripts.push({
+      name: scriptData.name,
+      code: scriptData.code,
+      type: scriptData.type
+    });
+  }
+  return userScripts;
+}
+
+async function saveScriptToVariableStore(
+  storage: ScriptStorageModule,
+  scriptData: ScriptListItem,
+  oldName?: string
+): Promise<ScriptListItem> {
+  const collection = await ensureScriptsCollection(storage);
+  const byName = await loadCollectionVariablesByName(collection);
+  const modeId = collectionModeId(collection);
+  const valueByKey = valueMapFromCollection(byName, modeId);
+  const listed = storage.listScriptsFromValues(valueByKey);
+  const searchName = oldName || scriptData.name;
+  const existing = storage.findEntryByName(listed.scripts, searchName);
+  const id = existing ? existing.id : storage.mintScriptId();
+  const planned = storage.planScriptWrite({
+    id,
+    name: scriptData.name,
+    code: scriptData.code,
+    type: scriptData.type
+  });
+  const orphanedKeys = storage.orphanedKeysFor(
+    existing ? existing.chunkKeys : undefined,
+    planned.entry.chunkKeys
+  );
+  // Renaming to a new path: also clear the old path if findEntryByName used oldName.
+  if (oldName && oldName !== scriptData.name) {
+    const oldEntry = storage.findEntryByName(listed.scripts, oldName);
+    if (oldEntry) {
+      for (const key of storage.orphanedKeysFor(oldEntry.chunkKeys, planned.entry.chunkKeys)) {
+        if (orphanedKeys.indexOf(key) === -1) orphanedKeys.push(key);
+      }
+    }
+  }
+  await writeScriptVariables(
+    storage,
+    collection,
+    byName,
+    modeId,
+    planned.variables,
+    orphanedKeys
+  );
+  return scriptData;
+}
+
+async function saveBatchToVariableStore(
+  storage: ScriptStorageModule,
+  scripts: ScriptListItem[]
+): Promise<ScriptListItem[]> {
+  const collection = await ensureScriptsCollection(storage);
+  let byName = await loadCollectionVariablesByName(collection);
+  const modeId = collectionModeId(collection);
+  let valueByKey = valueMapFromCollection(byName, modeId);
+  let listed = storage.listScriptsFromValues(valueByKey);
+  const allOrphans: string[] = [];
+  const allVariables: Array<{ key: string; value: string }> = [];
+  for (const scriptData of scripts) {
+    const existing = storage.findEntryByName(listed.scripts, scriptData.name);
+    const id = existing ? existing.id : storage.mintScriptId();
+    const planned = storage.planScriptWrite({
+      id,
+      name: scriptData.name,
+      code: scriptData.code,
+      type: scriptData.type
+    });
+    for (const key of storage.orphanedKeysFor(
+      existing ? existing.chunkKeys : undefined,
+      planned.entry.chunkKeys
+    )) {
+      allOrphans.push(key);
+    }
+    for (const pair of planned.variables) allVariables.push(pair);
+    // Keep subsequent lookups in this batch aware of paths we just planned.
+    const without = listed.scripts.filter((s) => s.name !== scriptData.name);
+    without.push(planned.entry);
+    listed = { scripts: without, listItems: listed.listItems };
+  }
+  await writeScriptVariables(
+    storage,
+    collection,
+    byName,
+    modeId,
+    allVariables,
+    allOrphans
+  );
+  return scripts;
+}
+
+async function deleteScriptFromVariableStore(
+  storage: ScriptStorageModule,
+  name: string
+): Promise<void> {
+  const collection = await ensureScriptsCollection(storage);
+  const byName = await loadCollectionVariablesByName(collection);
+  const modeId = collectionModeId(collection);
+  const valueByKey = valueMapFromCollection(byName, modeId);
+  const listed = storage.listScriptsFromValues(valueByKey);
+  const existing = storage.findEntryByName(listed.scripts, name);
+  if (!existing) return;
+  await writeScriptVariables(
+    storage,
+    collection,
+    byName,
+    modeId,
+    [],
+    existing.chunkKeys || []
+  );
+}
+
+async function listScriptsWithVariableStore(
+  storage: ScriptStorageModule
+): Promise<{ items: ScriptListItem[]; lastOpenedScript: unknown }> {
+  const settings = await loadScriptStorageSettings();
+  const [clientScriptsRaw, lastOpenedScript] = await Promise.all([
+    settings.useLocalStorage
+      ? figma.clientStorage.getAsync('userScripts')
+      : Promise.resolve([]),
+    figma.clientStorage.getAsync('lastOpenedScript')
+  ]);
+  const clientList = settings.useLocalStorage
+    ? ((clientScriptsRaw || []) as unknown[])
+    : [];
+
+  let localItems: ScriptListItem[] = [];
+  if (settings.useVariables) {
+    try {
+      const collection = await findLocalScriptsCollection(storage);
+      if (collection) {
+        const { listItems } = await readScriptsFromCollection(storage, collection);
+        localItems = listItems;
+      }
+    } catch (err) {
+      scriptStorageLog(
+        'CodeFig: local script variables unavailable: ' +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
+  }
+
+  let remoteItems: ScriptListItem[] = [];
+  if (settings.useVariables) {
+    try {
+      remoteItems = await listRemoteScriptStubsFromLibraries(storage);
+    } catch (err) {
+      scriptStorageLog(
+        'CodeFig: remote script list failed: ' +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
+  }
+
+  // Read-only merge — no gap-fill writes on LIST.
+  const items = storage.mergeScriptInventory(localItems, clientList, remoteItems);
+  scriptStorageLog(
+    'CodeFig: scripts LIST — localVars=' +
+      localItems.length +
+      ' clientStorage=' +
+      (Array.isArray(clientList) ? clientList.length : 0) +
+      ' remote=' +
+      remoteItems.length +
+      (remoteItems.length
+        ? ' [' +
+          remoteItems
+            .map(function (r) {
+              return (r.libraryName || '?') + ':' + r.name;
+            })
+            .join(', ') +
+          ']'
+        : '')
+  );
+  return { items, lastOpenedScript: lastOpenedScript || null };
+}
+
+const CODEFIG_SCRIPTS_PAGE = 'CodeFig Scripts';
+const CANVAS_TEXT_CHUNK = 900;
+
+async function loadCanvasFonts(): Promise<{ regular: FontName; bold: FontName }> {
+  const regular: FontName = { family: 'Inter', style: 'Regular' };
+  const bold: FontName = { family: 'Inter', style: 'Bold' };
+  try {
+    await figma.loadFontAsync(regular);
+    await figma.loadFontAsync(bold);
+    return { regular, bold };
+  } catch {
+    const fallback: FontName = { family: 'Roboto', style: 'Regular' };
+    const fallbackBold: FontName = { family: 'Roboto', style: 'Bold' };
+    await figma.loadFontAsync(fallback);
+    try {
+      await figma.loadFontAsync(fallbackBold);
+      return { regular: fallback, bold: fallbackBold };
+    } catch {
+      return { regular: fallback, bold: fallback };
+    }
+  }
+}
+
+async function ensureCodeFigScriptsPage(): Promise<PageNode> {
+  for (const page of figma.root.children) {
+    if (page.type === 'PAGE' && page.name === CODEFIG_SCRIPTS_PAGE) {
+      await page.loadAsync();
+      return page;
+    }
+  }
+  const page = figma.createPage();
+  page.name = CODEFIG_SCRIPTS_PAGE;
+  return page;
+}
+
+function createCanvasText(
+  chars: string,
+  font: FontName,
+  size: number,
+  color: RGB
+): TextNode {
+  const t = figma.createText();
+  t.fontName = font;
+  t.fontSize = size;
+  t.characters = chars == null ? '' : String(chars);
+  t.fills = [{ type: 'SOLID', color }];
+  t.layoutAlign = 'STRETCH';
+  t.textAutoResize = 'HEIGHT';
+  return t;
+}
+
+function chunkTextForCanvas(text: string, limit: number): string[] {
+  const s = String(text || '');
+  if (!s) return [''];
+  if (s.length <= limit) return [s];
+  const out: string[] = [];
+  for (let i = 0; i < s.length; i += limit) {
+    out.push(s.slice(i, i + limit));
+  }
+  return out;
+}
+
+async function renderOneScriptFrame(
+  script: { name: string; code: string; docs?: string; uiSummary?: string },
+  fonts: { regular: FontName; bold: FontName },
+  x: number,
+  y: number
+): Promise<FrameNode> {
+  const ink: RGB = { r: 0.12, g: 0.12, b: 0.12 };
+  const muted: RGB = { r: 0.4, g: 0.4, b: 0.4 };
+  const frame = figma.createFrame();
+  frame.name = script.name || 'Script';
+  frame.layoutMode = 'VERTICAL';
+  frame.primaryAxisSizingMode = 'AUTO';
+  frame.counterAxisSizingMode = 'FIXED';
+  frame.resize(720, 100);
+  frame.itemSpacing = 12;
+  frame.paddingTop = 24;
+  frame.paddingBottom = 24;
+  frame.paddingLeft = 24;
+  frame.paddingRight = 24;
+  frame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+  frame.strokes = [{ type: 'SOLID', color: { r: 0.88, g: 0.88, b: 0.88 } }];
+  frame.strokeWeight = 1;
+  frame.cornerRadius = 8;
+  frame.x = x;
+  frame.y = y;
+
+  frame.appendChild(createCanvasText(script.name || 'Untitled', fonts.bold, 20, ink));
+
+  frame.appendChild(createCanvasText('Documentation', fonts.bold, 14, ink));
+  const docs = String(script.docs || '').trim() || '(No documentation block in this script.)';
+  for (const chunk of chunkTextForCanvas(docs, CANVAS_TEXT_CHUNK)) {
+    frame.appendChild(createCanvasText(chunk, fonts.regular, 12, muted));
+  }
+
+  frame.appendChild(createCanvasText('Configuration UI', fonts.bold, 14, ink));
+  const ui =
+    String(script.uiSummary || '').trim() ||
+    'Open this script in CodeFig to use its Configuration UI.';
+  frame.appendChild(createCanvasText(ui, fonts.regular, 12, muted));
+
+  frame.appendChild(createCanvasText('Source code', fonts.bold, 14, ink));
+  for (const chunk of chunkTextForCanvas(script.code || '', CANVAS_TEXT_CHUNK)) {
+    const block = createCanvasText(chunk, fonts.regular, 11, ink);
+    block.fills = [{ type: 'SOLID', color: ink }];
+    frame.appendChild(block);
+  }
+
+  return frame;
+}
+
+async function renderScriptsOnCanvasPage(
+  scripts: Array<{ name: string; code: string; docs?: string; uiSummary?: string }>
+): Promise<number> {
+  const page = await ensureCodeFigScriptsPage();
+  await figma.setCurrentPageAsync(page);
+  const fonts = await loadCanvasFonts();
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  const gap = 40;
+  const colWidth = 760;
+  let count = 0;
+  const created: FrameNode[] = [];
+  for (const script of scripts) {
+    if (!script || !String(script.code || '').trim()) continue;
+    const frame = await renderOneScriptFrame(script, fonts, x, y);
+    page.appendChild(frame);
+    created.push(frame);
+    rowHeight = Math.max(rowHeight, frame.height);
+    x += colWidth;
+    if (x > colWidth * 2) {
+      x = 0;
+      y += rowHeight + gap;
+      rowHeight = 0;
+    }
+    count++;
+  }
+  if (created.length > 0) {
+    figma.viewport.scrollAndZoomIntoView(created.slice(0, Math.min(3, created.length)));
+  }
+  return count;
+}
+
 // Extract script metadata from code (name, type)
 function extractScriptMetadata(code: string, filePath: string): { name: string; type: string } {
   const filename = filePath.split('/').pop() || '';
@@ -238,7 +1116,35 @@ figma.ui.onmessage = (msg) => {
   }
   
   if (msg.type === 'LIST') {
-    // Get saved scripts and last opened script from client storage
+    // clientStorage remains canonical while SCRIPT_STORAGE_VARIABLES is false (plan 38).
+    if (SCRIPT_STORAGE_VARIABLES && scriptStorage) {
+      listScriptsWithVariableStore(scriptStorage)
+        .then(({ items, lastOpenedScript }) => {
+          figma.ui.postMessage({
+            type: 'LIST',
+            items,
+            lastOpenedScript: lastOpenedScript || null
+          });
+        })
+        .catch((err) => {
+          debugError('LIST (variable store) failed:', err);
+          figma.clientStorage.getAsync('userScripts').then((scripts) => {
+            figma.clientStorage.getAsync('lastOpenedScript').then((lastOpenedScript) => {
+              const items = (scripts || []).map((s: any) => ({
+                name: s.name,
+                code: s.code,
+                type: (s.name && String(s.name).startsWith('@')) ? 'library' : 'user'
+              }));
+              figma.ui.postMessage({
+                type: 'LIST',
+                items,
+                lastOpenedScript: lastOpenedScript || null
+              });
+            });
+          });
+        });
+      return;
+    }
     Promise.all([
       figma.clientStorage.getAsync('userScripts'),
       figma.clientStorage.getAsync('lastOpenedScript')
@@ -254,6 +1160,107 @@ figma.ui.onmessage = (msg) => {
         lastOpenedScript: lastOpenedScript || null
       });
     });
+    return;
+  }
+
+  if (msg.type === 'LOAD_REMOTE_SCRIPT') {
+    if (!SCRIPT_STORAGE_VARIABLES || !scriptStorage) {
+      figma.ui.postMessage({
+        type: 'REMOTE_SCRIPT_FAILED',
+        storageId: msg.storageId || '',
+        error: 'Variable script storage is off'
+      });
+      return;
+    }
+    const storage = scriptStorage;
+    const remote = msg.remote as ScriptListItem['remote'];
+    const storageId = String(msg.storageId || '');
+    const name = String(msg.name || '');
+    if (!remote || !Array.isArray(remote.variables) || remote.variables.length === 0) {
+      figma.ui.postMessage({
+        type: 'REMOTE_SCRIPT_FAILED',
+        storageId,
+        name,
+        error: 'Missing remote variable keys'
+      });
+      return;
+    }
+    loadRemoteScriptBody(storage, remote)
+      .then((code) => {
+        figma.ui.postMessage({
+          type: 'REMOTE_SCRIPT_LOADED',
+          storageId,
+          name,
+          code,
+          libraryName: remote.libraryName || '',
+          scriptType: name.charAt(0) === '@' ? 'library' : 'user'
+        });
+      })
+      .catch((error) => {
+        figma.ui.postMessage({
+          type: 'REMOTE_SCRIPT_FAILED',
+          storageId,
+          name,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    return;
+  }
+
+  if (msg.type === 'LOAD_SCRIPT_STORAGE_SETTINGS') {
+    loadScriptStorageSettings().then((settings) => {
+      figma.ui.postMessage({ type: 'SCRIPT_STORAGE_SETTINGS', settings });
+    });
+    return;
+  }
+
+  if (msg.type === 'SAVE_SCRIPT_STORAGE_SETTINGS') {
+    const settings = normalizeScriptStorageSettings(
+      (msg as { settings?: unknown }).settings != null
+        ? (msg as { settings: unknown }).settings
+        : msg
+    );
+    figma.clientStorage
+      .setAsync(SCRIPT_STORAGE_SETTINGS_KEY, settings)
+      .then(() => {
+        figma.ui.postMessage({
+          type: 'SCRIPT_STORAGE_SETTINGS_SAVED',
+          settings
+        });
+      })
+      .catch((error) => {
+        figma.ui.postMessage({
+          type: 'NOTIFY',
+          message:
+            'Could not save settings: ' +
+            (error instanceof Error ? error.message : String(error))
+        });
+      });
+    return;
+  }
+
+  if (msg.type === 'RENDER_SCRIPTS_ON_CANVAS') {
+    const raw = Array.isArray((msg as { scripts?: unknown }).scripts)
+      ? (msg as { scripts: any[] }).scripts
+      : [];
+    const scripts = raw
+      .filter((s) => s && typeof s.name === 'string' && s.code != null)
+      .map((s) => ({
+        name: String(s.name),
+        code: typeof s.code === 'string' ? s.code : String(s.code),
+        docs: s.docs != null ? String(s.docs) : '',
+        uiSummary: s.uiSummary != null ? String(s.uiSummary) : ''
+      }));
+    renderScriptsOnCanvasPage(scripts)
+      .then((count) => {
+        figma.ui.postMessage({ type: 'CANVAS_RENDER_DONE', count });
+      })
+      .catch((error) => {
+        figma.ui.postMessage({
+          type: 'CANVAS_RENDER_FAILED',
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
     return;
   }
 
@@ -368,6 +1375,108 @@ figma.ui.onmessage = (msg) => {
     return;
   }
 
+    if (msg.type === 'SYNC_SCRIPT_TO_VARIABLES') {
+      if (!SCRIPT_STORAGE_VARIABLES || !scriptStorage) {
+        figma.ui.postMessage({ type: 'SYNC_TO_VARIABLES_UNAVAILABLE' });
+        return;
+      }
+      const scriptData = {
+        name: String(msg.name || '').trim(),
+        code: msg.code == null ? '' : String(msg.code),
+        type: (msg.name && String(msg.name).startsWith('@')) ? 'library' : 'user'
+      };
+      if (!scriptData.name) {
+        figma.ui.postMessage({
+          type: 'SAVE_FAILED',
+          error: 'No script name',
+          scriptName: ''
+        });
+        return;
+      }
+      const storage = scriptStorage;
+      getScriptWriteTargets(true)
+        .then(async (targets) => {
+          if (!targets.vars) {
+            figma.ui.postMessage({ type: 'SYNC_TO_VARIABLES_UNAVAILABLE' });
+            return;
+          }
+          await saveScriptToVariableStore(storage, scriptData);
+          if (targets.client) {
+            const scripts = await figma.clientStorage.getAsync('userScripts');
+            const userScripts = upsertClientStorageScripts(scripts || [], scriptData);
+            await figma.clientStorage.setAsync('userScripts', userScripts);
+          }
+          figma.ui.postMessage({ type: 'SAVE_CONFIRMED', scriptData: scriptData });
+        })
+        .catch((error) => {
+          figma.ui.postMessage({
+            type: 'SAVE_FAILED',
+            error: error instanceof Error ? error.message : String(error),
+            scriptName: scriptData.name
+          });
+        });
+      return;
+    }
+
+    if (msg.type === 'SYNC_ALL_TO_VARIABLES') {
+      if (!SCRIPT_STORAGE_VARIABLES || !scriptStorage) {
+        figma.ui.postMessage({ type: 'SYNC_TO_VARIABLES_UNAVAILABLE' });
+        return;
+      }
+      const rawItems = Array.isArray((msg as { scripts?: unknown }).scripts)
+        ? (msg as { scripts: any[] }).scripts
+        : [];
+      const normalized: { name: string; code: string; type: string }[] = [];
+      for (const item of rawItems) {
+        if (!item || typeof item.name !== 'string' || item.code === undefined || item.code === null) {
+          continue;
+        }
+        const name = String(item.name).trim();
+        if (!name) continue;
+        const code = typeof item.code === 'string' ? item.code : String(item.code);
+        if (!code.trim()) continue;
+        const isAtLib = name.startsWith('@');
+        const type =
+          isAtLib ? 'library' : item.type === 'library' ? 'library' : 'user';
+        normalized.push({ name, code, type });
+      }
+      if (normalized.length === 0) {
+        figma.ui.postMessage({
+          type: 'BATCH_SAVE_FAILED',
+          error: 'No scripts to sync'
+        });
+        return;
+      }
+      const storage = scriptStorage;
+      getScriptWriteTargets(true)
+        .then(async (targets) => {
+          if (!targets.vars) {
+            figma.ui.postMessage({ type: 'SYNC_TO_VARIABLES_UNAVAILABLE' });
+            return;
+          }
+          await saveBatchToVariableStore(storage, normalized);
+          if (targets.client) {
+            const scripts = await figma.clientStorage.getAsync('userScripts');
+            let userScripts = (scripts || []).slice();
+            for (const scriptData of normalized) {
+              userScripts = upsertClientStorageScripts(userScripts, scriptData);
+            }
+            await figma.clientStorage.setAsync('userScripts', userScripts);
+          }
+          figma.ui.postMessage({
+            type: 'BATCH_SAVE_CONFIRMED',
+            scripts: normalized
+          });
+        })
+        .catch((error) => {
+          figma.ui.postMessage({
+            type: 'BATCH_SAVE_FAILED',
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      return;
+    }
+
     if (msg.type === 'SAVE') {
       // Save a script
       debugLog('Backend: Received SAVE request for:', msg.name);
@@ -377,6 +1486,50 @@ figma.ui.onmessage = (msg) => {
         codePreview: msg.code ? msg.code.substring(0, 50) + '...' : 'undefined',
         type: msg.type
       });
+
+      const scriptData = {
+        name: msg.name,
+        code: msg.code,
+        type: (msg.name && String(msg.name).startsWith('@')) ? 'library' : 'user'
+      };
+
+      if (SCRIPT_STORAGE_VARIABLES && scriptStorage) {
+        const storage = scriptStorage;
+        const searchName = msg.oldName || msg.name;
+        getScriptWriteTargets(false)
+          .then((targets) => {
+            const chain = targets.vars
+              ? saveScriptToVariableStore(storage, scriptData, msg.oldName)
+              : Promise.resolve(scriptData);
+            return chain.then(() => {
+              if (!targets.client) return;
+              return figma.clientStorage.getAsync('userScripts').then((scripts) => {
+                const userScripts = upsertClientStorageScripts(
+                  scripts || [],
+                  scriptData,
+                  searchName
+                );
+                return figma.clientStorage.setAsync('userScripts', userScripts);
+              });
+            });
+          })
+          .then(() => {
+            debugLog('Backend: Save successful, sending confirmation');
+            figma.ui.postMessage({
+              type: 'SAVE_CONFIRMED',
+              scriptData: scriptData
+            });
+          })
+          .catch((error) => {
+            debugError('Backend: Save failed:', error);
+            figma.ui.postMessage({
+              type: 'SAVE_FAILED',
+              error: error instanceof Error ? error.message : String(error),
+              scriptName: msg.name
+            });
+          });
+        return;
+      }
       
       figma.clientStorage.getAsync('userScripts').then((scripts) => {
         const userScripts = scripts || [];
@@ -385,12 +1538,6 @@ figma.ui.onmessage = (msg) => {
         // Otherwise, look for the script by current name
         const searchName = msg.oldName || msg.name;
         const existingIndex = userScripts.findIndex((s: any) => s.name === searchName);
-        
-        const scriptData = {
-          name: msg.name,
-          code: msg.code,
-          type: (msg.name && String(msg.name).startsWith('@')) ? 'library' : 'user'
-        };
 
         if (existingIndex >= 0) {
           userScripts[existingIndex] = scriptData;
@@ -451,6 +1598,41 @@ figma.ui.onmessage = (msg) => {
         });
         return;
       }
+
+      if (SCRIPT_STORAGE_VARIABLES && scriptStorage) {
+        const storage = scriptStorage;
+        getScriptWriteTargets(false)
+          .then((targets) => {
+            const chain = targets.vars
+              ? saveBatchToVariableStore(storage, normalized)
+              : Promise.resolve(normalized);
+            return chain.then(() => {
+              if (!targets.client) return;
+              return figma.clientStorage.getAsync('userScripts').then((scripts) => {
+                let userScripts = (scripts || []).slice();
+                for (const scriptData of normalized) {
+                  userScripts = upsertClientStorageScripts(userScripts, scriptData);
+                }
+                return figma.clientStorage.setAsync('userScripts', userScripts);
+              });
+            });
+          })
+          .then(() => {
+            figma.ui.postMessage({
+              type: 'BATCH_SAVE_CONFIRMED',
+              scripts: normalized
+            });
+          })
+          .catch((error) => {
+            debugError('BATCH_SAVE failed:', error);
+            figma.ui.postMessage({
+              type: 'BATCH_SAVE_FAILED',
+              error: error instanceof Error ? error.message : String(error)
+            });
+          });
+        return;
+      }
+
       figma.clientStorage
         .getAsync('userScripts')
         .then((scripts) => {
@@ -482,6 +1664,21 @@ figma.ui.onmessage = (msg) => {
 
   if (msg.type === 'DELETE') {
     // Delete a script
+    if (SCRIPT_STORAGE_VARIABLES && scriptStorage) {
+      const storage = scriptStorage;
+      const name = msg.name;
+      deleteScriptFromVariableStore(storage, name)
+        .then(() => figma.clientStorage.getAsync('userScripts'))
+        .then((scripts) => {
+          const userScripts = scripts || [];
+          const filteredScripts = userScripts.filter((s: any) => s.name !== name);
+          return figma.clientStorage.setAsync('userScripts', filteredScripts);
+        })
+        .catch((error) => {
+          debugError('DELETE (variable store) failed:', error);
+        });
+      return;
+    }
     figma.clientStorage.getAsync('userScripts').then((scripts) => {
       const userScripts = scripts || [];
       const filteredScripts = userScripts.filter((s: any) => s.name !== msg.name);

@@ -19,23 +19,58 @@
 // ============================================================================
 
 // @UI_CONFIG_START
-
-var tokenStorageKey = ""; // @label: Access token
-// Your Figma personal access token, or the name of a key you have already saved. Create one under
-// **Help & Account → Account Settings → Security → Personal access tokens**, with the
-// *Files / file_comments:read* scope.
-//
-var fileKeyOrUrl = ""; // @placeholder="https://www.figma.com/design/3OL5s2KgkpD2RIGBXIJzst/CodeFig-test-ground?node-id=35-32&t=RqmlOo3sxABzx1pg"
-// The file to read comments from — paste its key, or any URL from it and the key is pulled out for
-// you. Easiest way: select a layer, right-click, **Copy link to selection**, paste it here.
-//
-var annotationAnchors = true; // @label: Anchor to comment position
-// Creates an invisible frame where each comment sits, so the annotation lands in the same place
-// rather than near it.
-//
-var resolvedComments = false; // @label: Include resolved comments
-// Off by default, so only open comments become annotations.
+var tokenStorageKey = "";
+var fileKeyOrUrl = "";
+var annotationAnchors = true;
+var resolvedComments = false;
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   "blocks": [
+//     {
+//       "key": "tokenStorageKey",
+//       "type": "string",
+//       "label": "Access token"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Your Figma personal access token, or the name of a key you have already saved. Create one under\n**Help & Account → Account Settings → Security → Personal access tokens**, with the\n*Files / file_comments:read* scope."
+//     },
+//     {
+//       "key": "fileKeyOrUrl",
+//       "type": "string",
+//       "placeholder": "https://www.figma.com/design/3OL5s2KgkpD2RIGBXIJzst/CodeFig-test-ground?node-id=35-32&t=RqmlOo3sxABzx1pg"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "The file to read comments from — paste its key, or any URL from it and the key is pulled out for\nyou. Easiest way: select a layer, right-click, **Copy link to selection**, paste it here."
+//     },
+//     {
+//       "key": "annotationAnchors",
+//       "type": "boolean",
+//       "label": "Anchor to comment position"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Creates an invisible frame where each comment sits, so the annotation lands in the same place\nrather than near it."
+//     },
+//     {
+//       "key": "resolvedComments",
+//       "type": "boolean",
+//       "label": "Include resolved comments"
+//     },
+//     {
+//       "type": "paragraph",
+//       "attachTo": "previous",
+//       "text": "Off by default, so only open comments become annotations."
+//     }
+//   ]
+// }
+// @PANEL_END
 
 // ============================================================================
 // MAIN ENTRY POINT

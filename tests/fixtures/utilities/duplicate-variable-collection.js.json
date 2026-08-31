@@ -1,0 +1,26 @@
+[
+  {
+    "type": "paragraph",
+    "text": "Source collection (choose from existing). New name for the copy."
+  },
+  {
+    "type": "field",
+    "name": "sourceCollectionName",
+    "value": "website V3",
+    "label": "Source collection name",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "optionSource": "localVariableCollections"
+  },
+  {
+    "type": "field",
+    "name": "newCollectionName",
+    "value": "",
+    "label": "New collection name",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "website V4"
+  }
+]

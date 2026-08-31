@@ -1,0 +1,22 @@
+[
+  {
+    "type": "field",
+    "name": "styleGroup",
+    "value": "",
+    "label": "Style group",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "Text styles"
+  },
+  {
+    "type": "field",
+    "name": "previewText",
+    "value": "Sphinx of black quartz,\njudge my vow.",
+    "label": "Preview text",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "textarea",
+    "placeholder": "Preview for text styles — Enter = soft line break"
+  }
+]

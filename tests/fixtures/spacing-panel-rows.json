@@ -1,0 +1,194 @@
+[
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "General"
+  },
+  {
+    "type": "field",
+    "name": "collectionName",
+    "value": "",
+    "label": "Collection",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "collection"
+  },
+  {
+    "type": "chips",
+    "label": "Collection modes",
+    "from": "modes"
+  },
+  {
+    "type": "field",
+    "name": "group",
+    "value": "Spacing",
+    "label": "Group within collection",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "eg.: Spacing"
+  },
+  {
+    "type": "field",
+    "name": "spacings",
+    "value": [
+      "px",
+      "xs",
+      "sm",
+      "md",
+      "lg",
+      "xl"
+    ],
+    "label": "Tokens",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "list",
+    "helper": "Named smallest to largest, and spacing-{1,10} is a series of ten."
+  },
+  {
+    "type": "divider",
+    "section": true
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Mode settings"
+  },
+  {
+    "type": "field",
+    "name": "generateOverview",
+    "value": false,
+    "label": "Generate overview",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean",
+    "helper": "Generate Figma frames for each mode"
+  },
+  {
+    "type": "field",
+    "name": "modes",
+    "value": [
+      {
+        "name": "Value",
+        "scaleType": "bezier",
+        "base": 4,
+        "ratio": 1.5,
+        "curve": [],
+        "step": 4,
+        "mod": 3,
+        "roundTo": 2,
+        "extras": [
+          1
+        ]
+      }
+    ],
+    "label": "Modes",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "rows",
+    "columns": [
+      {
+        "key": "name",
+        "label": "Mode",
+        "type": "text",
+        "labelSpelled": true
+      },
+      {
+        "key": "scaleType",
+        "label": "Scale type",
+        "type": "radio",
+        "labelSpelled": true,
+        "options": [
+          {
+            "value": "bezier",
+            "label": "Bezier scale"
+          },
+          {
+            "value": "metric",
+            "label": "Metric scale"
+          },
+          {
+            "value": "fibonacci",
+            "label": "Fibonacci"
+          }
+        ]
+      },
+      {
+        "key": "curve",
+        "label": "Scale",
+        "type": "curve",
+        "labelSpelled": true,
+        "showWhen": [
+          {
+            "field": "scaleType",
+            "values": [
+              "bezier"
+            ]
+          }
+        ],
+        "helper": "Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top.",
+        "growth": "ratio"
+      },
+      {
+        "key": "step",
+        "label": "Step",
+        "type": "number",
+        "labelSpelled": true,
+        "showWhen": [
+          {
+            "field": "scaleType",
+            "values": [
+              "metric",
+              "fibonacci"
+            ]
+          }
+        ],
+        "helper": "Metric. The amount each step adds, before it starts growing.\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it."
+      },
+      {
+        "key": "mod",
+        "label": "Every N steps",
+        "type": "number",
+        "labelSpelled": true,
+        "showWhen": [
+          {
+            "field": "scaleType",
+            "values": [
+              "metric"
+            ]
+          }
+        ],
+        "helper": "How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down."
+      },
+      {
+        "key": "base",
+        "label": "Base unit",
+        "type": "number",
+        "labelSpelled": true
+      },
+      {
+        "key": "roundTo",
+        "label": "Round numbers to",
+        "type": "number",
+        "labelSpelled": true
+      },
+      {
+        "key": "extras",
+        "label": "Extra spacings",
+        "type": "list",
+        "labelSpelled": true,
+        "helper": "Values that are not part of the scale, merged in by size — a 1px hairline below a base of 4. They fill the smallest token names and the scale takes over above them, so an extra without an extra token name pushes the largest generated value off the end of the list."
+      }
+    ],
+    "tabs": true,
+    "blocks": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Preview"
+  },
+  {
+    "type": "preview"
+  }
+]

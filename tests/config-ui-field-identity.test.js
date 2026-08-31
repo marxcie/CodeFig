@@ -108,9 +108,12 @@ test('a prebuilt panel (Spacing) renders every field with a key and a type', () 
     path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'spacing.js'),
     'utf8'
   );
-  const m = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(src);
-  assert.ok(m, 'spacing.js has no @CONFIG_START block');
-  const container = render(m[1]);
+  const config = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(src);
+  const panel = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(src);
+  assert.ok(config, 'spacing.js has no @CONFIG_START block');
+  assert.ok(panel, 'spacing.js has no @PANEL_START block');
+  const container = document.createElement('div');
+  renderer.buildForm(parser.parse(config[1], panel[1]), container);
   const fields = container.querySelectorAll('[data-key]');
   assert.ok(fields.length > 0, 'no fields carried data-key');
   fields.forEach((el) => {

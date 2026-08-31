@@ -17,8 +17,9 @@ alwaysApply: true
   library, autosave policy. **Executing (go-ahead 2026-08-28).** Read before changing how user
   scripts are saved, loaded, or shared.
 - `.plans/39-foundation-maintenance.md` — DSF metadata hygiene on plugin open (auto-clear, no UI
-  noise); Foundation config script removal. **Executing (go-ahead 2026-08-28).** Read before
-  changing `readFoundation` / `reconcileFoundation` repair behaviour or plugin boot cleanup.
+  noise); Foundation config script removal. **Part A+B landed locally (go-ahead 2026-08-28);
+  ambiguous stamp collisions still deferred.** Read before changing `readFoundation` /
+  `reconcileFoundation` repair behaviour or plugin boot cleanup.
 - **Do not commit `.plans/`.** They are gitignored and stay local. Update `ROADMAP.md` when a plan
   moves.
 - **Ramp recognition is deferred** — manifest load + recreate is enough; do not prioritise it.

@@ -466,7 +466,7 @@ test('serialize refuses when a @PANEL_START field has no matching value in @CONF
   const parsed = parser.parsePanelSpec(innerPanelSpec(COLORS_PANEL_SPEC), {});
   parsed.fromPanelSpec = true;
   parsed.configText = '  group: "",'; // only one of the real keys
-  assert.throws(() => parser.serialize(parsed, { group: 'x' }), /has no value in @CONFIG_START/);
+  assert.throws(() => parser.serialize(parsed, { group: 'x' }), /has no value in the values block/);
 });
 
 test('parse() reports drift on load, not only on save', () => {

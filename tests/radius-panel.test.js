@@ -27,7 +27,14 @@ const R = require('../src/config-ui/renderer.js');
 
 const ROOT = path.join(__dirname, '..');
 const RADIUS = path.join(ROOT, 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'corner-radius.js');
-const BLOCK = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(fs.readFileSync(RADIUS, 'utf8'))[1];
+const RADIUS_SRC = fs.readFileSync(RADIUS, 'utf8');
+const BLOCK = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(RADIUS_SRC)[1];
+const PANEL = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(RADIUS_SRC)[1];
+
+/** Values + panel recipe — the live script no longer carries inline annotations. */
+function parsePanel() {
+  return P.parse(BLOCK, PANEL);
+}
 
 /** The libraries, loaded the way a script loads them — the ramp's calls resolve in its consumer. */
 function libs() {
@@ -73,7 +80,7 @@ function readout(html) {
 }
 
 test('the block renders the panel the frame shows', () => {
-  const schema = P.parse(BLOCK);
+  const schema = parsePanel();
   const container = document.createElement('div');
   R.buildForm(schema, container);
 
@@ -97,7 +104,7 @@ test('the frame has three radios, which settles what the Spacing frames left ope
   // Spacing's frames only ever show Modular and Metric. This one draws Fibonacci too, so the third option
   // is the design's rather than mine. Modular has since become **Bezier** — a straight curve is a constant
   // ratio, so the model that was there is the new one's default shape rather than a fourth option.
-  const schema = P.parse(BLOCK);
+  const schema = parsePanel();
   const modes = schema.rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];
   const by = {};
   modes.columns.forEach((c) => { by[c.key] = c; });
@@ -108,7 +115,7 @@ test('the frame has three radios, which settles what the Spacing frames left ope
 });
 
 test('a mode shows the fields its scale type uses', () => {
-  const schema = P.parse(BLOCK);
+  const schema = parsePanel();
   const container = document.createElement('div');
   R.buildForm(schema, container);
   R.attachListeners(container, schema, () => {});

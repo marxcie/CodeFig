@@ -54,11 +54,16 @@ function configBlock() {
   return section('@UI_CONFIG_START', '@UI_CONFIG_END').replace(/^\n/, '');
 }
 
+function panelBlock() {
+  return section('@PANEL_START', '@PANEL_END').replace(/^\n/, '');
+}
+
 function docBlock() {
   return section('@DOC_START', '@DOC_END');
 }
 
-const SCHEMA = parser.parse(configBlock());
+const SCHEMA = parser.parse(configBlock(), panelBlock());
+assert.ok(!SCHEMA.error, 'help panel parse error: ' + SCHEMA.error);
 const ROW_TYPES = new Set(SCHEMA.rows.map((r) => r.type));
 const INPUT_TYPES = new Set(
   SCHEMA.rows.filter((r) => r.type === 'field').map((r) => r.inputType)
@@ -91,7 +96,9 @@ test('every marker row the parser emits is demonstrated, or exempt for a stated 
   //     says so.
   //   directive (`@fromFile:`) — renders as nothing by design; there is no appearance to check.
   //   unparsed — a line the parser could not read. An error state, not something to author.
-  const exempt = new Set(['preview', 'suggestions', 'directive', 'unparsed']);
+  //   blank / lineBreak — old-format spacer comments (`//` / wrap). `@PANEL_START` has no blank
+  //     block; paragraph fold direction is `attachTo` instead. Documented under Not in here.
+  const exempt = new Set(['preview', 'suggestions', 'directive', 'unparsed', 'blank', 'lineBreak']);
 
   const missing = [...emitted].filter((t) => !ROW_TYPES.has(t) && !exempt.has(t));
   assert.deepEqual(missing, [],
@@ -101,6 +108,7 @@ test('every marker row the parser emits is demonstrated, or exempt for a stated 
   const doc = docBlock();
   assert.match(doc, /Not in here, on purpose/);
   assert.match(doc, /@preview` and `@suggestions/);
+  assert.match(doc, /blank|lineBreak|attachTo/);
 });
 
 test('the reference reaches the plugin: it ships and it parses', () => {
@@ -110,6 +118,7 @@ test('the reference reaches the plugin: it ships and it parses', () => {
     'the reference does not parse the way the sandbox parses it');
   assert.match(REF, /## Style & UI reference/, 'the documentation section is gone');
   assert.match(REF, /^\/\/ @UI_CONFIG_START$/m, 'the specimen block is gone');
+  assert.match(REF, /^\/\/ @PANEL_START$/m, 'the panel spec block is gone');
 
   // `hasSection` is an `indexOf`, so this file's *prose* about `// @UI_CONFIG_START` already made the
   // plugin think it had a config block. `extractSection` is line-anchored, so extraction is not

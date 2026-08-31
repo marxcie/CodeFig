@@ -1,0 +1,68 @@
+[
+  {
+    "type": "field",
+    "name": "searchFor",
+    "value": "",
+    "label": "Search for",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "Text/*/Regular"
+  },
+  {
+    "type": "paragraph",
+    "text": "Part of a style or variable name — `Regular`, `Text/5xl`, `Text/*/Bold`."
+  },
+  {
+    "type": "field",
+    "name": "matchCase",
+    "value": false,
+    "label": "Match case",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "useRegex",
+    "value": false,
+    "label": "Use regular expression",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Reads **Search for** as a regular expression rather than plain text with `*` wildcards."
+  },
+  {
+    "type": "field",
+    "name": "selectMixed",
+    "value": false,
+    "label": "Include mixed layers",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Layers using more than one style or variable at once — a text layer that is part bold, part regular."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "field",
+    "name": "selectionOnly",
+    "value": true,
+    "label": "Selection only",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Off searches the whole page."
+  }
+]

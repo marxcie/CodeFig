@@ -1,0 +1,105 @@
+[
+  {
+    "type": "field",
+    "name": "mode",
+    "value": "Export",
+    "label": "Mode",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "radio",
+    "options": [
+      "Export",
+      "Import"
+    ]
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Export",
+    "showWhenRules": [
+      {
+        "field": "mode",
+        "values": [
+          "Export"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "collections",
+    "value": [],
+    "label": "Collections",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "multiselect",
+    "optionSource": "localVariableCollections",
+    "showWhenRules": [
+      {
+        "field": "mode",
+        "values": [
+          "Export"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "paragraph",
+    "text": "Every collection you tick goes into the payload, with its modes and values.",
+    "showWhenRules": [
+      {
+        "field": "mode",
+        "values": [
+          "Export"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "Import",
+    "showWhenRules": [
+      {
+        "field": "mode",
+        "values": [
+          "Import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "importPayload",
+    "value": "",
+    "label": "Import payload",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "textarea",
+    "placeholder": "Paste JSON exported from another file",
+    "showWhenRules": [
+      {
+        "field": "mode",
+        "values": [
+          "Import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "paragraph",
+    "text": "The JSON that Export produced in the other file. Collections that do not exist here are created.",
+    "showWhenRules": [
+      {
+        "field": "mode",
+        "values": [
+          "Import"
+        ]
+      }
+    ]
+  }
+]

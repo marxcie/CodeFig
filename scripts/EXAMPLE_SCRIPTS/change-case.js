@@ -33,14 +33,27 @@
 @import { collectNodesAsync } from "@Core Library"
 
 // @UI_CONFIG_START
-// # Change case
-var caseStyle = "lower case"; // @options: lower case|Capital case|camel Case @label: Case style
-var frames = true; // @label: Frames
-var groups = true; // @label: Groups
-var variantLabels = true; // @label: Variant labels
-var variantValues = true; // @label: Variant values
-var renameInstances = false; // @label: Rename instances
+var caseStyle = "lower case";
+var frames = true;
+var groups = true;
+var variantLabels = true;
+var variantValues = true;
+var renameInstances = false;
 // @UI_CONFIG_END
+
+// @PANEL_START
+// {
+//   blocks: [
+//     { type: "heading", text: "Change case" },
+//     { key: "caseStyle", type: "select", label: "Case style", options: ["lower case", "Capital case", "camel Case"] },
+//     { key: "frames", type: "boolean", label: "Frames" },
+//     { key: "groups", type: "boolean", label: "Groups" },
+//     { key: "variantLabels", type: "boolean", label: "Variant labels" },
+//     { key: "variantValues", type: "boolean", label: "Variant values" },
+//     { key: "renameInstances", type: "boolean", label: "Rename instances" }
+//   ]
+// }
+// @PANEL_END
 
 function splitWords(text) {
   return String(text || "").split(/[\s\-_]+/).filter(function (part) {

@@ -1,0 +1,61 @@
+[
+  {
+    "type": "paragraph",
+    "text": "Path prefix (segments separated by /). All local styles under the source path are copied to the target path."
+  },
+  {
+    "type": "field",
+    "name": "sourceStyleGroup",
+    "value": "",
+    "label": "Source style group",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "V1"
+  },
+  {
+    "type": "field",
+    "name": "targetStyleGroup",
+    "value": "",
+    "label": "Target style group",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "V2"
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "field",
+    "name": "rebindTargetCollection",
+    "value": "",
+    "label": "Rebind target collection",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "select",
+    "optionSource": "variableCollections"
+  },
+  {
+    "type": "paragraph",
+    "text": "Leave empty to keep bindings on the **original** variables. Choose a collection to point duplicated styles at same-named variables there (text / paint / effect)."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "field",
+    "name": "rebindBreakUnmatchedBindings",
+    "value": false,
+    "label": "Rebind break unmatched bindings",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "If true: detach bindings that have no same-name variable in the target collection."
+  }
+]

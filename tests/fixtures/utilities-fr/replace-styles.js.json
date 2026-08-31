@@ -1,0 +1,105 @@
+[
+  {
+    "type": "field",
+    "name": "searchIn",
+    "value": "",
+    "label": "Search in",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "color/*"
+  },
+  {
+    "type": "paragraph",
+    "text": "Rebinds only styles whose name contains this — `color/`, `Typography/`. Leave it empty for every style."
+  },
+  {
+    "type": "heading",
+    "level": 2,
+    "text": "Library styles must already be in the file"
+  },
+  {
+    "type": "paragraph",
+    "text": "Figma caches styles per file, so a library style can only be rebound once the document has seen it.\nRun **Render styles overview** in the library file, then copy the frame it makes into this one. The\nstyles become available and the rebind works. Local styles need none of this."
+  },
+  {
+    "type": "field",
+    "name": "searchFor",
+    "value": "",
+    "label": "Search for",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "Text V1"
+  },
+  {
+    "type": "field",
+    "name": "replaceWith",
+    "value": "",
+    "label": "Replace with",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "Text V2"
+  },
+  {
+    "type": "paragraph",
+    "text": "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, and `$1` `$2` are capture groups when **Use regular expression** is on."
+  },
+  {
+    "type": "field",
+    "name": "matchCase",
+    "value": false,
+    "label": "Match case",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "useRegex",
+    "value": false,
+    "label": "Use regular expression",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
+  },
+  {
+    "type": "field",
+    "name": "previewOnly",
+    "value": true,
+    "label": "Preview only",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "paragraph",
+    "text": "**On by default.** Lists the bindings that would be rebound and touches nothing. Untick and run again to apply."
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "field",
+    "name": "batchReplacement",
+    "value": "",
+    "label": "Batch replacement",
+    "labelSpelled": false,
+    "tooltip": "",
+    "inputType": "textarea"
+  },
+  {
+    "type": "paragraph",
+    "text": "Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas."
+  },
+  {
+    "type": "paragraph",
+    "text": "```\nText V1, Text V2\nHeading V1, Heading V2\n```"
+  }
+]

@@ -195,9 +195,130 @@ function updateUIHtml() {
   console.log(`✅ dist/ui.html (${scripts.length} scripts, vendors inlined)`);
 }
 
-// Run the build (vendors inlined into dist/ui.html from src/ui.html)
-console.log('🔨 Building...' + (isDev ? ' (dev: localhost allowed)' : ' (build: localhost not allowed)'));
-clearFigmaConsoleLog();
-writeManifest();
-updateUIHtml();
-console.log('✅ Build completed successfully!');
+/**
+ * Plugin-main sibling modules tsc does not emit.
+ *
+ * Figma's plugin main runs in a JSVM with **no** Node `require` (2026-08-29). Copying
+ * siblings next to `code.js` is not enough. After `tsc`, prepend `__codefigMainRequire`
+ * (inlined CommonJS factories). Call sites in `src/code.ts` use that name on purpose —
+ * do **not** alias it to `require` (unreliable in the JSVM) and do **not** leave bare
+ * `tsc` as the Figma entry: a later `tsc` overwrite without this step breaks boot.
+ *
+ * `tsc` writes `dist/code.js`; this step must run after every emit. `npm run build:dev`
+ * does. A stray IDE `tsc` alone will produce a `code.js` that throws
+ * `__codefigMainRequire is not defined` — that is intentional and loud.
+ */
+function copyMainSiblings() {
+  // script-storage.js: plan 38 helpers — required from code.js when SCRIPT_STORAGE_VARIABLES is true.
+  const files = ['foundation-maintain.js', 'script-storage.js'];
+  const distDir = path.join(__dirname, 'dist');
+  fs.mkdirSync(distDir, { recursive: true });
+  for (const name of files) {
+    const src = path.join(__dirname, 'src', name);
+    const dest = path.join(distDir, name);
+    if (!fs.existsSync(src)) {
+      console.warn('⚠️  missing main sibling:', name);
+      continue;
+    }
+    fs.copyFileSync(src, dest);
+    console.log(`✅ dist/${name}`);
+  }
+}
+
+function wrapCjsModuleFactory(source) {
+  // Sibling files are strict CommonJS (`module.exports = …`). Run them inside a
+  // factory that supplies `module` / `exports`, same shape Node would.
+  return (
+    'function (module, exports) {\n' +
+    source.replace(/\r\n/g, '\n') +
+    '\n}'
+  );
+}
+
+function inlineMainRequireShim() {
+  const distDir = path.join(__dirname, 'dist');
+  const codePath = path.join(distDir, 'code.js');
+  if (!fs.existsSync(codePath)) {
+    console.warn('⚠️  dist/code.js missing — skip require shim');
+    return;
+  }
+  let code = fs.readFileSync(codePath, 'utf8');
+  // Idempotent: strip a previous shim so a second pass never nests factories.
+  const startMarker = '/* CodeFig: Figma main has no Node require';
+  const endMarker = '/* CodeFig: end main-require shim */';
+  if (code.indexOf(startMarker) === 0) {
+    const endAt = code.indexOf(endMarker);
+    if (endAt !== -1) {
+      code = code.slice(endAt + endMarker.length).replace(/^\n+/, '');
+    }
+  }
+  const modules = [
+    { id: './foundation-maintain', file: 'foundation-maintain.js' },
+    { id: './script-storage', file: 'script-storage.js' },
+  ];
+  const entries = [];
+  for (const mod of modules) {
+    const srcPath = path.join(__dirname, 'src', mod.file);
+    if (!fs.existsSync(srcPath)) {
+      console.warn('⚠️  missing shim module:', mod.file);
+      continue;
+    }
+    const body = fs.readFileSync(srcPath, 'utf8');
+    entries.push(
+      '  ' + JSON.stringify(mod.id) + ': ' + wrapCjsModuleFactory(body)
+    );
+  }
+  const shim =
+    startMarker + ' — inlined sibling modules */\n' +
+    'var __codefigMainRequire = (function () {\n' +
+    '  var cache = Object.create(null);\n' +
+    '  var factories = {\n' +
+    entries.join(',\n') +
+    '\n  };\n' +
+    '  return function codefigMainRequire(id) {\n' +
+    '    if (cache[id]) return cache[id].exports;\n' +
+    '    var factory = factories[id];\n' +
+    '    if (!factory) throw new Error("Cannot find module \'" + id + "\'");\n' +
+    '    var module = { exports: {} };\n' +
+    '    cache[id] = module;\n' +
+    '    factory(module, module.exports);\n' +
+    '    return module.exports;\n' +
+    '  };\n' +
+    '})();\n' +
+    endMarker + '\n' +
+    '\n';
+  if (code.indexOf('__codefigMainRequire(') === -1) {
+    console.warn(
+      '⚠️  dist/code.js has no __codefigMainRequire(…) call sites — shim will be unused'
+    );
+  }
+  // Refuse a code.js that still calls Node require for our siblings (tsc of an old
+  // source, or a bad merge). Those throw in Figma even with the shim present if we
+  // no longer alias `var require`.
+  if (/\brequire\s*\(\s*['"]\.\/(foundation-maintain|script-storage)['"]\s*\)/.test(code)) {
+    throw new Error(
+      'dist/code.js still calls require("./foundation-maintain|script-storage") — ' +
+        'src/code.ts must use __codefigMainRequire (Figma JSVM has no require)'
+    );
+  }
+  fs.writeFileSync(codePath, shim + code);
+  console.log('✅ dist/code.js (require shim for main siblings)');
+}
+
+/** Exported for tests — same transform build:dev runs after tsc. */
+module.exports = {
+  inlineMainRequireShim,
+  copyMainSiblings,
+  wrapCjsModuleFactory,
+};
+
+if (require.main === module) {
+  // Run the build (vendors inlined into dist/ui.html from src/ui.html)
+  console.log('🔨 Building...' + (isDev ? ' (dev: localhost allowed)' : ' (build: localhost not allowed)'));
+  clearFigmaConsoleLog();
+  writeManifest();
+  copyMainSiblings();
+  inlineMainRequireShim();
+  updateUIHtml();
+  console.log('✅ Build completed successfully!');
+}

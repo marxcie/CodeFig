@@ -19,8 +19,96 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Delete is local user scripts only.** The Delete control is hidden for `@` libraries and
+  for scripts loaded from a remote `"CodeFig Scripts"` library; the handler refuses those too.
+- **Sidebar no longer rebuilds on every autosave.** `updateScriptList` skips `innerHTML` when
+  the visible inventory is unchanged (name / type / origin / selection / collapse / search) —
+  only script bodies changing no longer thrash DevTools inspection.
+- **"Local scripts" means this file’s Variables only.** `clientStorage` scripts (per machine,
+  not the open `.fig`) show under **LocalStorage**, not Local. Remote folders still come from
+  enabled libraries that publish a `"CodeFig Scripts"` collection — if a script appears there,
+  Figma’s library catalog still has that STRING var even when the library source file looks empty.
+- **Import shows in the same session.** Batch save now tags imported scripts as `origin: local`
+  and forces a sidebar rebuild (they were written to Variables but missing an origin, so the list
+  filter hid them until reopen).
+- **Settings gear** (left of the export menus) opens stores prefs: Variables / LocalStorage on or
+  off, and dual-write vs preferred-store SAVE behaviour. Stored in `clientStorage`.
+- **Render on canvas** (This script / All user scripts): builds page `CodeFig Scripts` with one
+  frame per script — Documentation, a Configuration UI note, and Source code.
+- **Foundation housekeeping actually runs on plugin open.** The boot path called
+  `require('./foundation-maintain')`, but Figma's main JSVM has no Node `require`, so every
+  open logged `foundationMaintain unavailable` and did nothing. The build inlines those
+  sibling modules as `__codefigMainRequire` in `dist/code.js` (same for `script-storage.js`).
+  Do not run bare `tsc` against `dist/` — it overwrites the shim; use `npm run build:dev`.
+  Quiet clear-case repairs work as documented.
+
+### Removed
+
+- **Foundation config** — the Design System Foundations script that copied / parked / read a
+  portable config between files is gone. Generators already write manifests; paste between
+  `@CONFIG` blocks (and future script storage) covers sharing. Portable helpers in
+  `@Foundation` remain for tests.
+
+### Changed
+
+- **Footer export menus open upward.** **This script** and **All user scripts** each offer
+  Export to JSON and Sync to variables (or Sync all). Sync pushes into the path-named
+  `"CodeFig Scripts"` collection and dual-writes `clientStorage`. ⌘E still exports the open
+  script as JSON. Import stays its own button.
+- **User scripts: read-only LIST, explicit Sync.** Opening the plugin no longer gap-fills
+  `clientStorage` into a local `"CodeFig Scripts"` collection (that was creating silent local
+  copies). LIST merges local Variables + `clientStorage` + enabled library collections named
+  `"CodeFig Scripts"` for display only. Sidebar: **Local scripts** folder, then one folder per
+  remote library name (not a library label on every row). Bodies import when you open a remote
+  script. Autosave never writes remotes — use **Save as local copy** (Sync). SAVE / DELETE /
+  Sync still dual-write local Variables + `clientStorage`.
+- **User scripts sync in parallel** between path-named `"CodeFig Scripts"` STRING variables
+  and `clientStorage` on SAVE / Sync (not on open). Variables win on name collision for
+  display. Scopes stay empty so script vars are not bindable text tokens. Local vs Library
+  banner / navigate-away still pending.
+- **Configuration code tab is hidden.** Configuration UI is the only config surface users see
+  (Documentation + Source still available). Tab chrome and the dual-pane editor stay in the build
+  for a watch period, then delete. Unsupported / empty-form notes point at Source. Form edits still
+  write into `@CONFIG_START`.
+- **Quiet foundation housekeeping on every plugin open.** Clear-case CodeFig plugin-data drift
+  is repaired with no toast or InfoPanel: orphan registry viewports, manifest keys with no
+  stamped tokens left, stamps whose set id has no manifest on that collection. Variables,
+  collections and styles are never deleted. Ambiguous stamp collisions (two groups, one set id)
+  are left alone.
+
 ### Added
 
+- **Script-storage helpers (developer).** Pure chunk / index / export helpers for the planned
+  `"CodeFig Scripts"` STRING-variable store (`src/script-storage.js`, `CHUNK_CHAR_LIMIT` 90_000).
+- **`figma:ui` `saveScript` / `deleteScript`.** Drive SAVE / DELETE from the terminal for storage
+  verification (delete skips the confirm dialog).
+- **Script-storage sandbox dual-read.** LIST / SAVE / SAVE_BATCH / DELETE prefer the local
+  `"CodeFig Scripts"` STRING collection (with one-shot migrate from `clientStorage` and dual-write
+  back). `SCRIPT_STORAGE_VARIABLES` is true after Figma verify.
+- **Help & documentation Configuration UI uses `@PANEL_START`.** The Style & UI reference
+  specimen shelf keeps values in `@UI_CONFIG_START` and moves control specs into `@PANEL_START`.
+  Same live controls (including the intentional unsupported nested object); `artifacts/style-reference.html`
+  regenerates from the new split.
+- **Every other shipped EXAMPLE_SCRIPT with a config form uses `@PANEL_START` too.** Values stay
+  as `var` lines in `@UI_CONFIG_START` (runtime needs those names); the form recipe is JSON in
+  `@PANEL_START`. Find/replace, rename, merge, scale-selection, and the smaller utilities all
+  match this shape — same architecture as DSF, without rewriting how each script reads its knobs.
+- **Spacing and Corner radius Configuration UIs use `@PANEL_START`.** Same split as Colors:
+  `@CONFIG_START` holds values only (still with `// @fromFile: domains.spacing` /
+  `domains.radius`), and the panel recipe is JSON in `@PANEL_START`. Behaviour is unchanged —
+  collection chips, token lists, scale-type tabs, bezier/metric/fibonacci fields, and the preview
+  all match the previous panels.
+- **Typography's Configuration UI uses `@PANEL_START`.** Same split as Colors: `@CONFIG_START`
+  holds values only (still with `// @fromFile: domains.typography`), and the panel recipe is JSON
+  in `@PANEL_START`. Behaviour is unchanged — list tokens/weights, letter-spacing and line-height
+  percent groups, overview suggestions, and the preview textarea all match the previous panel.
+- **Grid's Configuration UI uses `@PANEL_START`.** Same split as Colors: `@CONFIG_START` holds
+  values only (still with `// @fromFile: domains.grid`), and the panel recipe is JSON in
+  `@PANEL_START`. Behaviour is unchanged — collection chips, mode tabs, suggestions, and the
+  preview all match the previous panel. The `variables` function stays a sibling after the panel
+  region.
 - **Colors Run writes colour variables.** The panel strip is the preview; Run creates or updates
   the group's COLOR tokens in place, skips aliases and non-opaque cells, reports orphans when the
   step list shrinks, and records the set with the same stamp bracket Spacing and Radius use. The
@@ -582,15 +670,16 @@ a plain statement of the new default.
   When given, the config form is read from a `@PANEL_START` JSON block instead of the one-line
   annotation syntax — see `.plans/31-panel-spec-json.md`. `src/ui.html` now looks for this region
   alongside `@CONFIG_START` at every real call site and passes it through; a script without one
-  (every shipped script except Colors) takes exactly the old path. **Colors has migrated** — its
-  spec now lives in `@PANEL_START`, `@CONFIG_START` holds only values, and the panel renders,
-  edits and saves identically to before (proved twice: a DOM diff against the old parser's own
-  render, and a live Figma session against a throwaway copy of the script, before the real one was
-  touched). A paragraph in the new format states which neighbouring field it explains
+  (every shipped script except Colors and Typography) takes exactly the old path. **Colors and
+  Typography have migrated** — their specs live in `@PANEL_START`, `@CONFIG_START` holds only
+  values, and the panel renders, edits and saves identically to before (Colors proved twice: a DOM
+  diff against the old parser's own render, and a live Figma session against a throwaway copy of
+  the script, before the real one was touched; Typography against its pre-migration rows dump). A
+  paragraph in the new format states which neighbouring field it explains
   (`attachTo: "next" | "previous"`, required, no default) — the one thing a blank comment line
   could say that JSON otherwise couldn't, and the gap a DOM-level render comparison
-  (`npm run devtools:dom-diff-panel`, new) found before anything shipped. Typography, Spacing,
-  Corner Radius and the rest stay on the old path until Colors has been used in anger.
+  (`npm run devtools:dom-diff-panel`, new) found before anything shipped. Spacing, Corner Radius
+  and Grid stay on the old path for now.
 - **A CSS scoping module (`src/style-scoper.js`) is inlined into the build, unused.** Rewrites a
   stylesheet's selectors under an owner attribute, namespaces `@keyframes`, and rejects any
   non-`data:` `url()` and `position: fixed` outright rather than stripping them silently. Nothing

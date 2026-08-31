@@ -139,7 +139,11 @@ test('the Spacing panel tells the reader the series exists', () => {
     path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'spacing.js'),
     'utf8'
   );
-  const line = source.split('\n').filter((l) => l.indexOf('@label: Tokens') !== -1)[0];
-  assert.ok(line, 'the Tokens field is still there');
-  assert.match(line, /\{1,10\}/, 'and its helper shows the series form');
+  const P = require('../src/config-ui/parser.js');
+  const config = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(source)[1];
+  const panel = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(source)[1];
+  const schema = P.parse(config, panel);
+  const tokens = schema.rows.filter((r) => r.type === 'field' && r.name === 'spacings')[0];
+  assert.ok(tokens, 'the Tokens field is still there');
+  assert.match(tokens.helper || '', /\{1,10\}/, 'and its helper shows the series form');
 });

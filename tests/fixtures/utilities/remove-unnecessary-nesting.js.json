@@ -1,0 +1,20 @@
+[
+  {
+    "type": "field",
+    "name": "normalize",
+    "value": false,
+    "label": "Normalize (merge padding + gap when safe)",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  },
+  {
+    "type": "field",
+    "name": "recursive",
+    "value": true,
+    "label": "Process descendants",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "boolean"
+  }
+]
