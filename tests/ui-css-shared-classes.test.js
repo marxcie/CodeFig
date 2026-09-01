@@ -22,6 +22,29 @@ const path = require('path');
 
 const CSS = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.css'), 'utf8');
 
+/** Strip a script's `// @STYLE_START` … `// @STYLE_END` block to plain CSS (same as the injector). */
+function extractStyleBlock(code) {
+  const start = code.indexOf('// @STYLE_START');
+  const end = code.indexOf('// @STYLE_END');
+  if (start < 0 || end < 0 || end <= start) return '';
+  return code
+    .slice(start + '// @STYLE_START'.length, end)
+    .split('\n')
+    .map((line) => {
+      const m = line.match(/^\s*\/\/\s?(.*)$/);
+      return m ? m[1] : line;
+    })
+    .join('\n')
+    .trim();
+}
+
+const TYPE_SCALE_CSS = extractStyleBlock(
+  fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES', '@type-scale.js'),
+    'utf8'
+  )
+);
+
 /**
  * `selector { body }` pairs, as a flat list.
  *
@@ -274,11 +297,11 @@ test('an oversized type sample is clipped by its own cell, not by the specimen a
   //
   // `overflow: hidden` on `.type-specimen` could not fix it. By the time that box clips, the grid
   // inside it has already been laid out wide; clipping the outer edge does not put the columns back.
-  const sample = CSS.match(/\.type-specimen-sample \{([^}]*)\}/);
-  assert.ok(sample, 'the sample rule is gone');
+  const sample = TYPE_SCALE_CSS.match(/\.type-specimen-sample \{([^}]*)\}/);
+  assert.ok(sample, 'the sample rule lives on @Type Scale @STYLE_START, not ui.css');
   assert.match(sample[1], /min-width: 0/,
     'without this the sample widens its own column and the ramp stops lining up');
-  assert.match(sample[1], /overflow: hidden/, 'and the clip belongs on the box that overflows');
+  assert.match(sample[1], /overflow-x: clip/, 'clip belongs on the box that overflows sideways');
   assert.match(sample[1], /white-space: nowrap/,
     'still one sample per line — wrapping would turn two lines into four and destroy the comparison');
 });

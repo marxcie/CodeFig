@@ -89,9 +89,9 @@ test('a real missing import is still an error', () => {
     const noPackage = Object.assign({}, s, { packageId: undefined, packageVisibility: undefined });
     if (s !== spacing) return noPackage;
     return Object.assign(noPackage, {
-      // Just the two names, not the tail of the line: pinning the whole import list made this fixture
+      // Just one name, not the tail of the line: pinning the whole import list made this fixture
       // fail every time a script gained an unrelated import.
-      code: s.code.replace(', expandTokenList, tokenListHasSeries', ''),
+      code: s.code.replace(', runLinearRamp', ''),
     });
   });
   assert.notEqual(broken.filter((s) => /spacing\.js$/.test(s.path))[0].code, spacing.code,
@@ -99,5 +99,5 @@ test('a real missing import is still an error', () => {
 
   const unresolved = validateResolvedCalls(broken).filter((e) => e.type === 'unresolved-call');
   assert.ok(unresolved.length > 0, 'a call with no declaration after resolution is an error');
-  assert.match(unresolved.map((e) => e.message).join('\n'), /expandTokenList|tokenListHasSeries/);
+  assert.match(unresolved.map((e) => e.message).join('\n'), /runLinearRamp/);
 });
