@@ -21,6 +21,22 @@ a plain statement of the new default.
 
 ### Changed
 
+- **Colors / config typing: keystrokes no longer rewrite Source or force a preview.** `input`
+  events hold the form values (same as a curve drag); Source merge and auto-import wait for
+  `change` (blur / Enter / select). Preview’s 120ms “max wait” bypass applies only to live curve
+  drags — typing keeps the 400ms quiet debounce. Collection select still runs a full auto-import
+  (one-shot cost).
+- **Collection switch resets the form immediately.** Choosing a new collection (or committing a
+  new Group) writes pristine defaults for that address before the silent read returns (~0.9s),
+  so the previous collection’s modes/curves do not linger. Auto-import no longer waits an extra
+  350ms debounce after a settled select. Import resolution for silent runs (auto-import, preview,
+  quick-fit) is cached per open script so a collection switch does not re-expand Colors’ package
+  graph on the UI thread (~1s) every time; the first open still pays once. The import kick is
+  deferred with `setTimeout(0)` so the pristine reset can paint before that work.
+- **Collection load no longer loses to a stale detectOnly import.** Address reset claims the
+  address before reprojecting (so `scheduleGroupDetection` does not queue a rival), and
+  `requestAutoImport` clears its timer with `clearTimeout` instead of orphaning it.
+
 - **Copy or move variables** (was Merge variable collections): Source/Target sections with
   collection, group, and mode; **Move** or **Copy**. Matching names in the target overwrite.
   Move rebinds this file and removes the source variables (collection too when empty and

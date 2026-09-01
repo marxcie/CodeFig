@@ -1049,14 +1049,70 @@
                 if (committed) {
                   configLastAddress = { collectionName: values.collectionName, group: values.group };
                 }
-                // **A live edit is held, not written.** `syncUIToCode` replaces the whole config editor
-                // document and then re-merges it into the script source — two CodeMirror `setValue` calls,
-                // which is far too much to run per frame of a drag. Nothing reads that text until the
-                // preview runs or the drag ends, and both of those flush first.
-                if (opts && opts.live) _configSyncPending = values;
+                // **Keystrokes are held, not written.** Curve drags already set `live`. Text `input`
+                // events are neither live nor committed — they used to call `syncUIToCode` every
+                // character (two CodeMirror `setValue`s on the Colors block) and, after 120ms of
+                // typing, `PREVIEW_MAX_WAIT` bypassed the debounce so every further keystroke also
+                // kicked a silent Colors preview. That is the freeze / lost-characters report.
+                // Hold until `change` (blur / Enter / select), same as a drag until mouseup.
+                var hold = !!(opts && opts.live) || !committed;
+                var t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                if (hold) _configSyncPending = values;
                 else { _configSyncPending = null; syncUIToCode(values); }
-                scheduleConfigPreview();
-                if (addressChanged) scheduleAutoImport();
+                scheduleConfigPreview({ live: !!(opts && opts.live) });
+                if (addressChanged) {
+                  // **Reset the form now, load in the background.** Waiting for the silent run
+                  // (~1s RTT even on a miss) left the *previous* collection's modes and curves on
+                  // screen after a dropdown change — the 1–2s freeze when switching collections.
+                  // Pristine is cheap and local; the sandbox fill lands on top when it arrives.
+                  // `pristineConfigForAddress` returns null once we are already at defaults, so the
+                  // import path will not write the same reset a second time.
+                  if (autoImportTimer) {
+                    clearTimeout(autoImportTimer);
+                    autoImportTimer = null;
+                  }
+                  var addrCollection = values.collectionName;
+                  var addrGroup = values.group;
+                  if (addrCollection && addrCollection !== lastReadCollection) addrGroup = '';
+                  // **Claim before the reset reprojects.** `projectConfigIntoForm` →
+                  // `scheduleGroupDetection`, which would otherwise claim this address and queue a
+                  // competing `detectOnly` import 400ms later — stealing the seq from the fill below.
+                  if (addrCollection && String(addrCollection).trim()) {
+                    detectedFor[addrCollection + '\u0000' + (addrGroup == null ? '' : addrGroup)] = true;
+                  }
+                  var resetText = (addrCollection && String(addrCollection).trim())
+                    ? pristineConfigForAddress(addrCollection, addrGroup)
+                    : null;
+                  if (resetText) {
+                    var r0 = (typeof performance !== 'undefined' && performance.now)
+                      ? performance.now() : Date.now();
+                    writeConfigBlockText(resetText, 'address-reset');
+                    window.codefigProbe('perf:address-reset', {
+                      ms: Math.round((((typeof performance !== 'undefined' && performance.now)
+                        ? performance.now() : Date.now()) - r0) * 10) / 10,
+                      collection: addrCollection,
+                      group: addrGroup == null ? '' : addrGroup
+                    });
+                  }
+                  // Kick the sandbox off the click stack so the pristine form can paint first.
+                  // Import resolution for Colors is ~1s the first time; caching makes later switches
+                  // cheap, but even the first resolve must not block the dropdown close / reset.
+                  if (autoImportTimer) clearTimeout(autoImportTimer);
+                  autoImportTimer = setTimeout(function () {
+                    autoImportTimer = null;
+                    requestAutoImport();
+                  }, 0);
+                }
+                var dt = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
+                if (dt > 16 || addressChanged) {
+                  window.codefigProbe('perf:onChange', {
+                    ms: Math.round(dt * 10) / 10,
+                    committed: committed,
+                    hold: hold,
+                    addressChanged: addressChanged,
+                    live: !!(opts && opts.live)
+                  });
+                }
               }
             });
             // `driftWarning` only exists on a @PANEL_START-backed schema, and only when its two
@@ -2228,6 +2284,7 @@
         // form that switch had just built, on every script in the plugin.
         if (configUIContainer) configUIContainer.innerHTML = '';
         configUIInstance = null;
+        clearResolvedImportsCache();
         const fullCode = script.code || '';
 
         // Remote library scripts list as stubs; import values only when opened (no LIST write).
@@ -2471,12 +2528,61 @@
       }
 
       /** A run nobody sees: no console bridge, no notify, no InfoPanel. */
-      function runSilentSnippet(snippet) {
+            // Map of cache-key → resolved text. Preview (no extras) and auto-import (extra
+      // `@import` lines) are different keys; a single-slot cache made them thrash each other
+      // on every collection switch (~0.5s + ~0.9s resolve again).
+      var _resolvedImportsCache = Object.create(null);
+
+      function clearResolvedImportsCache() {
+        _resolvedImportsCache = Object.create(null);
+      }
+
+      function resolvedImportsPreamble(extraImports) {
+        var extras = extraImports || [];
+        var scriptKey = currentScript && (currentScript.storageId || currentScript.name) || '';
+        var key = scriptKey + '\n' + extras.join('\n');
+        if (Object.prototype.hasOwnProperty.call(_resolvedImportsCache, key)) {
+          var hit = _resolvedImportsCache[key];
+          window.codefigProbe('perf:resolveImports', {
+            ms: 0, cached: true, chars: hit.length
+          });
+          return hit;
+        }
+        var raw = scriptImportLines().concat(extras).join('\n');
+        if (!raw) {
+          _resolvedImportsCache[key] = '';
+          return '';
+        }
+        var t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        var text = processRuntimeImports(raw + '\n');
+        var dt = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
+        window.codefigProbe('perf:resolveImports', {
+          ms: Math.round(dt * 10) / 10,
+          cached: false,
+          chars: text.length
+        });
+        _resolvedImportsCache[key] = text;
+        return text;
+      }
+
+      function runSilentSnippet(snippet, opts) {
         if (!window.CodeFigImports || typeof window.CodeFigImports.resolveImports !== 'function') return false;
         if (codefigJob.active || codefigRunSession.active || silentRunInFlight) return false;
         let resolved;
         try {
-          resolved = processRuntimeImports(snippet);
+          if (opts && opts.bodyOnly) {
+            resolved = resolvedImportsPreamble(opts.extraImports) + '\n' + String(snippet || '');
+          } else {
+            var t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            resolved = processRuntimeImports(snippet);
+            window.codefigProbe('perf:resolveImports', {
+              ms: Math.round((((typeof performance !== 'undefined' && performance.now)
+                ? performance.now() : Date.now()) - t0) * 10) / 10,
+              cached: false,
+              chars: (resolved || '').length,
+              full: true
+            });
+          }
         } catch (e) {
           return false;
         }
@@ -2769,12 +2875,16 @@
       const PREVIEW_MAX_WAIT_MS = 120;
       let _previewWaitingSince = 0;
 
-      function scheduleConfigPreview() {
+      function scheduleConfigPreview(opts) {
         if (!currentScript || !scriptPreviewFunction(currentScript.code || '')) return;
         const now = Date.now();
         if (!_previewWaitingSince) _previewWaitingSince = now;
         if (_previewTimer) clearTimeout(_previewTimer);
-        if (now - _previewWaitingSince >= PREVIEW_MAX_WAIT_MS) {
+        // **Max-wait bypass is for live curve drags only.** Text keystrokes used to hit this after
+        // 120ms and fire a full Colors silent run on every further character — main-thread freeze,
+        // dropped keystrokes. Typing keeps the quiet debounce; a drag still gets a timely redraw.
+        var allowMaxWait = !!(opts && opts.live);
+        if (allowMaxWait && now - _previewWaitingSince >= PREVIEW_MAX_WAIT_MS) {
           _previewTimer = null;
           requestConfigPreview();
           return;
@@ -3039,7 +3149,8 @@
           curve: forPreview && forPreview.curve,
           existing: existingProbe });
         const started = runSilentSnippet(
-          buildPreviewSnippet(currentScript.code || '', fn, forPreview, configPreviewDomain(), seq));
+          buildPreviewSnippet(currentScript.code || '', fn, forPreview, configPreviewDomain(), seq),
+          { bodyOnly: true });
         // Busy is not a failure: another silent run is in flight and the next edit will ask again.
         if (!started && _previewTimer === null) _previewTimer = setTimeout(requestConfigPreview, 400);
       }
@@ -3306,6 +3417,12 @@
       var pendingPristine = null;
 
       function requestAutoImport(attempt, detectOnly) {
+        // **Must clear, not only null.** `scheduleGroupDetection` (and the 350ms address debounce)
+        // park a timer on this variable; assigning `null` without `clearTimeout` leaves that timer
+        // armed. It then fires mid-flight, bumps `autoImportSeq`, and the *real* fill's answer is
+        // discarded as stale — probes showed `detectOnly: true` winning after every collection
+        // select that had just written an address-reset.
+        if (autoImportTimer) clearTimeout(autoImportTimer);
         autoImportTimer = null;
         if (!scriptHasConfig || !configUIInstance) return;
         var values = configUIInstance.getValues();
@@ -3318,6 +3435,15 @@
         }
         var domain = configPreviewDomain();
         if (!domain) return;
+
+        var _autoImportStarted = (typeof performance !== 'undefined' && performance.now)
+          ? performance.now() : Date.now();
+        autoImportStartedAt = _autoImportStarted;
+        window.codefigProbe('perf:autoImport:start', {
+          collection: collection,
+          group: group == null ? '' : group,
+          detectOnly: !!detectOnly
+        });
 
         // **A group belongs to the collection it was typed for.** Point the panel somewhere else and the
         // old group name is a path into a collection that no longer applies: it reads nothing, and the panel
@@ -3401,8 +3527,7 @@
           ? '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ', __codefigIndex);'
           : '  var modes = await foundationCollectionModes(' + JSON.stringify(collection) + ');';
 
-        var started = runSilentSnippet(scriptImportLines().concat([
-          importLine,
+        var started = runSilentSnippet([
           '(async function () {',
           indexSetup,
           call,
@@ -3412,7 +3537,7 @@
           '    detectOnly: ' + (detectOnly ? 'true' : 'false'),
           '  });',
           '})();'
-        ]).join('\n'));
+        ].join('\n'), { bodyOnly: true, extraImports: [importLine] });
         // **Refused is not the same as failed, and it used to look the same.** One silent run may be
         // in flight, and the live preview is debounced 50ms behind this — so a fill could simply be
         // dropped on the floor whenever the preview got there first. Retried rather than lost.
@@ -3483,8 +3608,7 @@
         // fires, and `silentRunInFlight` stays claimed for the rest of the session (the watchdog
         // above recovers the lock either way, but recovering the lock is not the same as this
         // request ever answering).
-        var started = runSilentSnippet(scriptImportLines().concat([
-          '@import { foundationColorsAutoImport } from "@Foundation"',
+        var started = runSilentSnippet([
           '(async function () {',
           '  try {',
           '    var found = await foundationColorsAutoImport(' +
@@ -3497,7 +3621,10 @@
             ', quickFitRowIndex: ' + JSON.stringify(rowIndex) + ' });',
           '  }',
           '})();'
-        ]).join('\n'));
+        ].join('\n'), {
+          bodyOnly: true,
+          extraImports: ['@import { foundationColorsAutoImport } from "@Foundation"']
+        });
 
         // Refused (a preview or another read already in flight) — the same retry shape
         // `requestAutoImport` uses, and the claim above is released so the retry can re-claim it.
@@ -6461,6 +6588,17 @@
               }
               if (data.autoImport !== undefined) {
                 if (data.autoImportSeq === autoImportSeq) {
+                  var autoImportMs = autoImportStartedAt
+                    ? Math.round((((typeof performance !== 'undefined' && performance.now)
+                      ? performance.now() : Date.now()) - autoImportStartedAt) * 10) / 10
+                    : null;
+                  window.codefigProbe('perf:autoImport:done', {
+                    ms: autoImportMs,
+                    source: data.autoImport && data.autoImport.source,
+                    detectOnly: !!data.detectOnly,
+                    seq: data.autoImportSeq
+                  });
+                  autoImportStartedAt = 0;
                   applyFileModes(data.fileModes);
                   if (data.detectOnly) {
                     // **Also re-derives `existing`, never writes the config.** This is the read that
