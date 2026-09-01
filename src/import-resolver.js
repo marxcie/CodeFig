@@ -503,13 +503,18 @@
       if (!foundHere && siblingLookup && !extractedSet.has(functionName)) {
         var sibling = siblingLookup(functionName);
         if (sibling) {
+          // Depth increments only on a *cross-file* hop. Same-file dependency walks below keep
+          // `depth` unchanged: a package path like Linear Ramp → Scale Models → Bezier was burning
+          // the budget before `@Bezier`'s own tree (bezierAt → … → bezierFinite) finished, so
+          // Spacing's trimmed imports resolved `bezierStore` without `bezierFinite` and failed
+          // validateResolvedCalls. Cycles are already cut by `extractedSet`.
           crossFileCode += extractFunctions(sibling.code, [functionName], extractedSet, depth + 1, siblingLookup);
         }
       }
     });
 
     if (newFunctionsToExtract.length > 0) {
-      var dependencyCode = extractFunctions(sourceCode, newFunctionsToExtract, extractedSet, depth + 1, siblingLookup);
+      var dependencyCode = extractFunctions(sourceCode, newFunctionsToExtract, extractedSet, depth, siblingLookup);
       extractedCode = dependencyCode + extractedCode;
     }
 
@@ -771,6 +776,41 @@
     return processedCode;
   }
 
+  /**
+   * Style authoring tiers (plan 30 follow-through): CodeFig `ui.css` → library `@STYLE_START`
+   * (shared components) → script `@STYLE_START` (script-only). The panel injector concatenates
+   * imported libraries' sheets (dependency-first) with the open script's sheet so a user who
+   * `@import`s a library gets its component look without a special `package.css`.
+   *
+   * `extractStyle(code)` returns the stripped CSS text for one source (empty string if none).
+   * Returns an array of non-empty CSS strings; join with `\n\n` before scoping.
+   */
+  function collectStyleSheets(rootCode, scripts, packageId, extractStyle) {
+    if (typeof extractStyle !== 'function') {
+      throw new Error('collectStyleSheets requires extractStyle(code)');
+    }
+    var parts = [];
+    var seen = {};
+
+    function visit(code, pkgId) {
+      findImports(code || '').forEach(function (imp) {
+        var src = findScript(scripts || [], imp.scriptName, pkgId);
+        if (!src) return;
+        var key = src.storageId || src.name || imp.scriptName;
+        if (seen[key]) return;
+        seen[key] = true;
+        visit(src.code || '', src.packageId || pkgId);
+        var css = extractStyle(src.code || '');
+        if (css) parts.push(css);
+      });
+    }
+
+    visit(rootCode || '', packageId);
+    var own = extractStyle(rootCode || '');
+    if (own) parts.push(own);
+    return parts;
+  }
+
   return {
     PATTERNS: PATTERNS,
     DEFAULT_LIBRARY: DEFAULT_LIBRARY,
@@ -783,6 +823,7 @@
     extractFunctions: extractFunctions,
     extractFunctionMap: extractFunctionMap,
     resolveImports: resolveImports,
+    collectStyleSheets: collectStyleSheets,
     // Package-scoped resolution (.plans/32-packages.md). Exported so the collision and
     // cross-member extraction cases are directly testable.
     packageSiblingLookup: packageSiblingLookup

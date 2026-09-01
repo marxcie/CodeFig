@@ -7,6 +7,7 @@ const { inlineImportResolver } = require('./build-import-resolver.js');
 const { inlineStyleScoper } = require('./build-style-scoper.js');
 const { inlineAppCSS } = require('./build-app-css.js');
 const { inlineCanvasPayload } = require('./build-canvas-payload.js');
+const { stampPackageMembership } = require('./stamp-package-membership.js');
 
 const isDev = process.argv.includes('--dev') || process.env.BUILD_DEV === '1';
 /** Identifies this build, so a stale plugin can be told apart from a broken one. */
@@ -138,6 +139,18 @@ function updateUIHtml() {
   }
   
   readScripts(scriptsDir);
+
+  const stamped = stampPackageMembership(scripts);
+  if (stamped.errors.length) {
+    stamped.errors.forEach((e) => console.error('❌ package stamp:', e));
+    process.exit(1);
+  }
+  if (stamped.manifests.length) {
+    console.log(
+      '✅ packages:',
+      stamped.manifests.map((m) => m.id + ' (' + m.members.length + ' members)').join(', ')
+    );
+  }
 
   // Read src only; inline the config-ui bundle, the @import resolver, the app
   // stylesheet and vendors (CodeMirror, marked) into the string; write result only

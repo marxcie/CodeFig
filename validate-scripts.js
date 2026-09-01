@@ -200,6 +200,15 @@ function findAllScripts(scriptsDir, options) {
   }
   
   scanDirectory(scriptsDir);
+  const { stampPackageMembership } = require('./stamp-package-membership.js');
+  const stamped = stampPackageMembership(scripts);
+  if (stamped.errors.length) {
+    stamped.errors.forEach((e) => {
+      // Surfaced as validate errors by the caller that checks package stamps — keep findAllScripts
+      // itself free of process.exit so tests can assert on the list.
+      scripts._packageStampErrors = (scripts._packageStampErrors || []).concat(e);
+    });
+  }
   return scripts;
 }
 
@@ -242,7 +251,9 @@ function validateResolvedParse(script, scripts) {
   if (findImports(script.code).length === 0) return null;
 
   // A soft-failed import leaves a comment; any surviving marker is prose, not code.
-  const resolved = stripImports(resolveImports(script.code, scripts, {}));
+  const resolved = stripImports(resolveImports(script.code, scripts, {
+    packageId: script.packageId || undefined
+  }));
 
   try {
     new Function('figma', 'console', 'window', resolved);
@@ -348,7 +359,9 @@ function validateResolvedCalls(scripts) {
 
     let resolved;
     try {
-      resolved = resolveImports(script.code, scripts, {});
+      resolved = resolveImports(script.code, scripts, {
+        packageId: script.packageId || undefined
+      });
     } catch (e) {
       return; // validateResolvedParse already reports resolution failures
     }
@@ -819,7 +832,8 @@ function validatePanelKeyParity(scripts) {
  * much as two scripts named "Foo" outright, and a validator using a narrower check than the
  * resolver it is guarding would pass exactly the case it exists to catch.
  *
- * A no-op today — no shipped script has a `packageId` yet.
+ * Validates that a package member name does not also resolve outside the package
+ * via the same fuzzy match `findScript` uses.
  */
 function validatePackageImportCollisions(scripts) {
   const errors = [];

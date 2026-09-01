@@ -153,16 +153,28 @@ test('mutually recursive functions terminate without stack overflow', () => {
 });
 
 test('extractFunctions stops at the dependency depth limit', () => {
+  // Depth increments only on cross-file sibling hops (same-file calls stay free so Bezier
+  // trees survive package extraction). Guard the hop case with a chain of package siblings.
   const chainLength = resolver.MAX_DEPENDENCY_DEPTH + 5;
-  const links = [];
+  const members = [];
   for (let i = 0; i < chainLength; i++) {
-    links.push('function link' + i + '() { return link' + (i + 1) + '(); }');
+    members.push({
+      name: 'Link ' + i,
+      packageId: 'depth-pkg',
+      code: 'function link' + i + '() { return link' + (i + 1) + '(); }\n',
+    });
   }
-  links.push('function link' + chainLength + '() { return 0; }');
-  const out = resolver.extractFunctions(links.join('\n'), ['link0']);
+  members.push({
+    name: 'Link ' + chainLength,
+    packageId: 'depth-pkg',
+    code: 'function link' + chainLength + '() { return 0; }\n',
+  });
+  const siblingLookup = resolver.packageSiblingLookup(members, 'depth-pkg');
+  const out = resolver.extractFunctions(members[0].code, ['link0'], undefined, undefined, siblingLookup);
   const extracted = (out.match(/function link\d+\(/g) || []).length;
   assert.ok(extracted > 1, 'should follow at least some of the chain');
-  assert.ok(extracted <= chainLength, 'must not run away past the depth guard');
+  assert.ok(extracted <= resolver.MAX_DEPENDENCY_DEPTH + 1,
+    'must not run away past the depth guard (got ' + extracted + ')');
 });
 
 // ---------------------------------------------------------------------------

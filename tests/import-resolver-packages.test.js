@@ -3,12 +3,10 @@
  * `findScript`'s third argument and `extractFunctions`'s fifth are both new and optional, so
  * `tests/import-resolver.test.js`'s full existing suite is the real regression net — it stays
  * green, unedited, proving single-file/global-list resolution is unchanged for every script that
- * exists today. These tests cover only the new, additive behaviour.
+ * is not a package member. These tests cover only the new, additive behaviour.
  *
- * Steps 1, 2, 5 and 6 (manifest compilation, hiding package members from the Libraries list,
- * trimming the five DSF scripts' import blocks) are not implemented in this pass — see the plan's
- * Status note. `scripts[].packageId` here is set by hand, standing in for what a compiled
- * manifest would attach; nothing produces it yet.
+ * Steps 1–2, 5–6 (manifest, hiding package members, DSF import trim) are wired separately —
+ * see `stamp-package-membership.test.js` and the plan's Status note.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -166,4 +164,35 @@ test('resolveImports without a packageId option resolves exactly like plain find
   const resolved = resolveImports(consumer, scripts);
   const expected = findScript(scripts, '@Helpers');
   assert.match(resolved, expected === scripts[0] ? /"first"/ : /"second"/);
+});
+
+test('same-file dependency depth is not burned by prior sibling hops', () => {
+  // Regression for plan 32 step 6: Linear Ramp → Scale Models → Bezier used to hit
+  // MAX_DEPENDENCY_DEPTH mid-tree, so bezierStore landed without bezierFinite.
+  // Depth must increment only on cross-file hops.
+  const deep =
+    'function a() { return b(); }\n' +
+    'function b() { return c(); }\n' +
+    'function c() { return d(); }\n' +
+    'function d() { return e(); }\n' +
+    'function e() { return f(); }\n' +
+    'function f() { return g(); }\n' +
+    'function g() { return h(); }\n' +
+    'function h() { return i(); }\n' +
+    'function i() { return j(); }\n' +
+    'function j() { return k(); }\n' +
+    'function k() { return 1; }\n';
+  const mid = 'function bridge() { return a(); }\n';
+  const top = 'function entry() { return bridge(); }\n';
+  const lookup = function (name) {
+    if (name === 'bridge') return { code: mid };
+    if (name === 'a' || name === 'b' || name === 'c' || name === 'd' || name === 'e' ||
+        name === 'f' || name === 'g' || name === 'h' || name === 'i' || name === 'j' ||
+        name === 'k') {
+      return { code: deep };
+    }
+    return null;
+  };
+  const code = extractFunctions(top, ['entry'], undefined, undefined, lookup);
+  assert.match(code, /function k\s*\(/, 'deep same-file leaf must survive two sibling hops');
 });
