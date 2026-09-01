@@ -196,9 +196,11 @@ test('the section heading rule names the tag the renderer actually emits', () =>
   const renderer = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
   );
-  const map = renderer.match(/var tag = r\.level >= 3 \? "(\w+)" : r\.level === 2 \? "(\w+)" : "(\w+)"/);
+  const map = renderer.match(
+    /function configHeadingTag\(level\) \{\s*var n = typeof level === "number" \? level : 1;\s*return n <= 1 \? "(\w+)" : "(\w+)";/
+  );
   assert.ok(map, 'the heading tag mapping is not where this test can read it');
-  const tag = level >= 3 ? map[1] : level === 2 ? map[2] : map[3];
+  const tag = level <= 1 ? map[1] : map[2];
 
   // Matched on the **whole** selector, not a substring of one: the shared rule's selector list ends
   // with the form's selector, so a substring match finds the wrong rule and reports the wrong thing.
@@ -259,8 +261,8 @@ test('a section gap arrives with or without a divider', () => {
   assert.match(divider, /var\(--section-gap\)/, 'a divider spends the gap');
   // And where both a divider and a heading follow each other, only one of them pays.
   assert.match(CSS,
-    /\.config-ui-row--divider \+ \.config-ui-row--heading h1,\s*\n\s*\.config-ui-row--divider \+ \.config-ui-row--heading h2 \{\s*\n\s*margin-top: 0;/,
-    'a heading after a divider must drop its own top margin, h1 included');
+    /\.config-ui-row--divider \+ \.config-ui-row--heading h2,\s*\n\s*\.config-ui-row--divider \+ \.config-ui-row--heading h3 \{\s*\n\s*margin-top: 0;/,
+    'a heading after a divider must drop its own top margin, section h2 included');
 });
 
 test('an oversized type sample is clipped by its own cell, not by the specimen around it', () => {

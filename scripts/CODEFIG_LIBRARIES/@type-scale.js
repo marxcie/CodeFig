@@ -1,28 +1,129 @@
 // @Type Scale
 // @DOC_START
-// The typography ramp as the panel writes it: one scale per mode, plus the line height and tracking
-// that travel with a font size. Also the Overview table and the specimen the Typography panel draws.
+// # Builds typography size, line-height, and tracking ladders per mode for preview and Overview
 //
-// ## What a mode holds
+// ## Overview
+//
+// The typography ramp as the panel writes it: one scale per mode, plus line height and tracking that travel with font size. Also the Overview table and the specimen the Typography panel draws.
+//
+// ### What a mode holds
+//
 // | Key | Meaning |
 // |-----|---------|
-// | `scaleType` | `bezier` (base + growth ratio + curve), `metric` or `fibonacci` — the same three the Spacing panel offers. `modular` is still accepted and generates what it always did. |
-// | `ratio` | Modular only: the step ratio (1.2, 1.25 …). |
-// | `step`, `mod` | Metric and fibonacci: the increment, and how often it grows. |
-// | `base` | The size of the **first** token. The scale grows from there, so tokens are named smallest to largest. |
-// | `lineHeight` | Line height in **px at the base step**. |
-// | `lineHeightAtTop` | Optional. Line height in px at the largest step; the steps between are interpolated. Left out, the base *ratio* is held instead, so line height grows with size. |
-// | `letterSpacing` | Tracking in px at the base step. |
-// | `letterSpacingAtTop` | Optional. Tracking at the largest step. Left out, tracking is constant. |
-// | `roundTo` | Rounding grid for size and line height. Tracking is left fractional. |
+// | `scaleType` | `bezier`, `metric`, or `fibonacci` (same three as Spacing). `modular` is still accepted. |
+// | `ratio` | Modular / bezier growth ratio |
+// | `step`, `mod` | Metric and fibonacci: increment, and how often it grows |
+// | `base` | Size of the **first** token (smallest → largest names) |
+// | `lineHeight` | Line height in **px at the base step** |
+// | `lineHeightAtTop` | Optional px at the largest step; intermediates interpolate. Omitted → hold the base *ratio* |
+// | `letterSpacing` | Tracking in px at the base step |
+// | `letterSpacingAtTop` | Optional tracking at the largest step. Omitted → tracking stays constant |
+// | `roundTo` | Rounding grid for size and line height (tracking stays fractional) |
 //
-// ## Why the optional pair exists
-// Márton, on precise-type.com's charts: *"how font size increase, line height increase and letter
-// spacing decrease interact… optical consistency and stability is what we aim for."* None of the six
-// scale generators surveyed computes that — they take both as fixed numbers. Two numbers per property
-// reproduce both curves: line height rises in absolute terms while its **ratio** falls, and tracking
-// tightens as the size grows. Leave the second number empty and nothing changes from today's behaviour.
+// Optional top values let line height rise in absolute terms while its **ratio** falls, and let tracking tighten as size grows — leave them empty for constant-ratio / constant-tracking behaviour.
+//
+// ## Exported functions
+//
+// | Category | Functions |
+// |----------|-----------|
+// | Config | typeScaleModes, typeScaleModeNamed, typeScaleTokens, typeScaleModeIsScaled |
+// | Ladders | typeScaleSizes, typeScaleLineHeights, typeScaleTrackings |
+// | Tables / preview | typeScaleTable, typographyOverviewHtml, typographyPreviewHtml |
 // @DOC_END
+// Shared component styles for markup this library emits (tier 2: library @STYLE_START).
+// Opening a script that @imports this library injects these with the script sheet.
+// @STYLE_START
+// /* ============================================================
+//    TYPOGRAPHY OVERVIEW AND SPECIMEN  (plan 20)
+//
+//    The table is the only place a run's variable *names* appear, which is what earns it a section
+//    of its own beside a preview that shows their effect.
+//    ============================================================ */
+// .type-overview {
+//   width: 100%;
+//   border-collapse: collapse;
+//   font-size: var(--font-size-body);
+// }
+//
+// .type-overview th {
+//   text-align: left;
+//   font-weight: var(--font-weight-normal);
+//   color: var(--text-secondary);
+//   font-size: var(--font-size-small);
+//   padding: 0 var(--space-md) 6px 0;
+// }
+//
+// .type-overview td {
+//   padding: 6px var(--space-md) 6px 0;
+//   border-top: 1px solid var(--border-light);
+//   font-variant-numeric: tabular-nums;
+// }
+//
+// .type-overview td:last-child {
+//   font-size: var(--font-size-small);
+//   opacity: 0.7;
+//   font-variant-numeric: normal;
+// }
+//
+// .type-specimen {
+//   width: 100%;
+//   /* **Cut off, not wrapped and not scrolled.** A heading ramp's top step is wider than the panel
+//      by design, and the frame shows it running off the right edge mid-word. Wrapping would make a
+//      two-line sample four lines and destroy the comparison the specimen exists for; scrolling
+//      would hide the overflow behind a gesture. Clipping says "this is bigger than the panel",
+//      which is true and is part of what you are judging. */
+//   overflow: hidden;
+// }
+//
+// .type-specimen-family {
+//   font-size: var(--font-size-subheadline);
+//   font-weight: var(--font-weight-semibold);
+// }
+//
+// .type-specimen-note {
+//   font-size: var(--font-size-small);
+//   opacity: 0.6;
+//   margin-bottom: var(--space-lg);
+// }
+//
+// /* Same proportions again: the metadata sits in the label column and the sample starts where a
+//    control would. A type specimen is the one place a reader compares sizes down a page, and a
+//    ragged left edge on the samples defeats it. */
+// .type-specimen-step {
+//   display: grid;
+//   grid-template-columns: 3fr 7fr;
+//   column-gap: var(--space-md);
+//   align-items: start;
+//   margin-bottom: var(--space-xl);
+// }
+//
+// .type-specimen-meta {
+//   font-size: var(--font-size-small);
+//   line-height: 1.6;
+//   opacity: 0.6;
+// }
+//
+// .type-specimen-sample {
+//   white-space: nowrap;
+//   /* **The clip belongs here, on the box that overflows.** A grid item's `min-width` is `auto`,
+//      which means it refuses to shrink below its content — so a `nowrap` sample at 78px widened
+//      its own `7fr` column, squeezed the `3fr` beside it, and ran past the panel. Each step is its
+//      own grid, so every row resolved a different split and the samples' left edges stopped
+//      lining up, which is the one thing this layout exists to guarantee.
+//      `overflow: hidden` on `.type-specimen` could not fix that: by then the grid had already been
+//      laid out wide, and clipping the outer box does not put the columns back. */
+//   min-width: 0;
+//   /* **Clipped sideways only.** `overflow: hidden` clips both axes, and a line height below the font
+//      size — tight display type — puts the glyphs outside their own line box, so the top and bottom of
+//      every large step were cut off. `clip` is the one that does not force the other axis to `auto`,
+//      so the sample can be as tall as it needs while the long line still stops at the panel edge.
+//      The height it needs is reserved by a `min-height` the generator computes, since only it knows
+//      the size, the leading and the line count. */
+//   overflow-x: clip;
+//   overflow-y: visible;
+// }
+// @STYLE_END
+
 
 /** Does this mode use the panel's per-mode scale, rather than the older min/base/max shape? */
 function typeScaleModeIsScaled(mode) {

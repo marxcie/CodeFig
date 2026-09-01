@@ -240,7 +240,6 @@
       }
 
 
-
       /* ============================================================
          5. SIDEBAR & SCRIPT LIST
          Left sidebar with search and script navigation
@@ -513,7 +512,6 @@
       }
 
 
-
       /* ============================================================
          6. MAIN CONTENT AREA & EDITOR (CodeMirror)
          Central editor area with tabs, header, and CodeMirror
@@ -669,44 +667,13 @@
         flex: 1;
       }
       
-      /* Config containers (code and UI) */
-      .config-code-container,
+      /* Config UI container */
       .config-ui-container {
         flex: 1;
         overflow: hidden;
         display: flex;
         flex-direction: column;
         min-height: 0;
-      }
-
-      .config-code-container .CodeMirror {
-        flex: 1;
-      }
-
-      /* The @PANEL_START pane above Configuration code's values — read-only, so it takes a bounded
-         share of the tab rather than competing with the editor underneath for space. */
-      .config-panel-spec-container {
-        flex: 0 0 auto;
-        max-height: 38%;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        border-bottom: 1px solid var(--border-color);
-      }
-
-      .config-panel-spec-label {
-        flex: 0 0 auto;
-        padding: var(--space-xs) var(--space-md);
-        font-size: var(--font-size-small);
-        color: var(--text-secondary);
-        background: var(--bg-secondary);
-        border-bottom: 1px solid var(--border-color);
-      }
-
-      .config-panel-spec-container .CodeMirror {
-        flex: 1;
-        min-height: 0;
-        background: var(--bg-secondary);
       }
       
       /* Documentation rendered view (markdown) */
@@ -738,16 +705,18 @@
          had to restate its own size — a third place a heading size lived. */
       .docs-rendered h1,
       h1.config-ui-heading {
-        font-size: var(--font-size-title);
+        font-size: var(--font-size-display);
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
+        line-height: 120%;
       }
 
       .docs-rendered h2,
       h2.config-ui-heading {
-        font-size: var(--font-size-subheadline);
+        font-size: var(--font-size-title);
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
+        line-height: 120%;
       }
 
       /* The bottom of the ladder: body size, and **weight is the only thing separating it from the
@@ -755,9 +724,10 @@
          which is a caption, not a heading. */
       .docs-rendered h3,
       h3.config-ui-heading {
-        font-size: var(--font-size-body);
+        font-size: var(--font-size-subheadline);
         font-weight: var(--font-weight-semibold);
         color: var(--text-primary);
+        line-height: 120%;
       }
 
       /* Spacing, in the Documentation tab. **The numbers are the form's** — `--section-gap` above a
@@ -775,7 +745,7 @@
       }
 
       .docs-rendered h3 {
-        margin: var(--space-md) 0 var(--space-xs) 0;
+        margin: var(--space-lg) 0 0 0;
       }
 
       /* Nothing above the first heading on the page but the tab strip and the container's own padding. */
@@ -785,7 +755,7 @@
 
       /* Body text (docs) and config form labels when stacked; row layout labels use margin: 0 below */
       .docs-rendered p {
-        margin: 0 0 var(--space-sm) 0;
+        margin: var(--space-md) 0 0 0;
         color: var(--text-primary);
       }
       .config-ui-form .config-ui-field__label {
@@ -1357,8 +1327,8 @@
         margin-bottom: calc(var(--section-gap) / 2);
       }
 
-      .config-ui-row--divider + .config-ui-row--heading h1,
-      .config-ui-row--divider + .config-ui-row--heading h2 {
+      .config-ui-row--divider + .config-ui-row--heading h2,
+      .config-ui-row--divider + .config-ui-row--heading h3 {
         margin-top: 0;
       }
 
@@ -1382,25 +1352,22 @@
       }
       /* Config-block headings: **spacing only.** Every size, weight and colour comes from the shared
          ladder in the typography section — if you are here to change how a heading looks, it is the
-         wrong rule. `// # Heading` parses as level 1, so h1 is *the* section title and carries the
-         section gap; h2 is a title inside a section.
+         wrong rule. The Configuration UI never emits h1: `// # Heading` / panel level 1 renders as
+         h2 (section title); nested headings are h3. Docs keep the full h1–h3 ladder.
          Why the arithmetic differs from the Documentation tab's: a form is a **flex column**, where
          margins do not collapse but add to the row's own 12px `margin-bottom`. Each gap is therefore
          stated 12px short, to land on the same 48 and 24 the docs tab reaches by collapsing. */
-      .config-ui-form--rows .config-ui-row--heading h1 {
+      .config-ui-form--rows .config-ui-row--heading h2 {
         /* Below: 16px to the content, measured — the frame's title sits at y=24 and is 21 tall, and the
            content slot starts at y=61. */
         margin: calc(var(--section-gap) - var(--space-md)) 0 var(--space-lg) 0;
       }
-      .config-ui-form--rows .config-ui-row--heading h2 {
-        margin: calc(var(--section-gap) / 2 - var(--space-md)) 0 var(--space-sm) 0;
-      }
       .config-ui-form--rows .config-ui-row--heading h3 {
-        margin: var(--space-md) 0 var(--space-xs) 0;
+        margin: calc(var(--section-gap) / 2 - var(--space-md)) 0 var(--space-sm) 0;
       }
       /* The first heading has no previous section to be separated from: the form's own top padding
          plus this is the frame's 24 to the first title. */
-      .config-ui-form--rows .config-ui-row--heading:first-child h1 {
+      .config-ui-form--rows .config-ui-row--heading:first-child h2 {
         margin-top: var(--space-sm);
       }
       
@@ -1601,6 +1568,11 @@
         background: var(--figma-color-bg, #fff);
         width: 100%;
         box-sizing: border-box;
+      }
+      .config-ui-multiselect-empty {
+        font-size: var(--font-size-body);
+        color: var(--text-muted, rgba(29, 29, 31, 0.55));
+        padding: 4px 0;
       }
       .config-ui-multiselect-group {
         margin-bottom: 8px;
@@ -2519,366 +2491,6 @@
       }
 
       /* ============================================================
-         GRID PANEL — preview and suggestions
-
-         Written against artifacts/mockup-panels/grid-target.html, which links this stylesheet, so
-         the mockup and the plugin cannot disagree about how these look. Colours from the frames:
-         margins purple, columns green.
-         ============================================================ */
-      /* 7 & 8. **One grid.** Row N holds the span bar and its col-N value, so they share a line by
-         construction rather than because two stacks were given matching gaps — which is what they had,
-         7px against 5px, and matching the numbers would only have hidden the fact that nothing tied
-         them together.
-
-         The diagram and the Total line are the first row; the twelve span rows follow.
-
-         8. Every width is a **proportion of the total**, read from the frame: at 1440/80/24/12 the
-         frame draws 716 wide with 40px margins, 12px gaps and 42px columns — which is 1440 at 49.7%,
-         exactly the "(50%)" the Total line reports. So the scale is not decoration, it is the
-         diagram, and the inline widths the renderer writes come straight from the arithmetic. */
-      .grid-preview {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        column-gap: var(--space-xl);
-        row-gap: 6px;
-        width: 100%;
-        align-items: center;
-      }
-
-      .grid-preview-diagram {
-        grid-column: 1;
-        display: flex;
-        height: 44px;
-        margin-bottom: 6px;
-      }
-
-      /* **The drawing is in real pixels now, so it can be wider than the panel.** Half of a 1920 grid is
-         960, and a panel narrower than that must scroll rather than squash — squashing is what made the
-         old percentage drawing unmeasurable in the first place. */
-      .grid-preview {
-        overflow-x: auto;
-      }
-
-      /* A filled band, not a dashed edge. The dashed guides still run down the spans area at the
-         content edges — the frame has both — but the band is the margin. */
-      /* `flex: 0 0 auto` because these widths *are* the drawing: a flex item that shrinks turns a
-         proportional diagram into an approximate one, and at a narrow width the margin band rounds
-         away to nothing — which is exactly how it went missing. */
-      .grid-preview-margin,
-      .grid-preview-col,
-      .grid-preview-gap {
-        flex: 0 0 auto;
-      }
-
-      .grid-preview-margin { background: #b7a8f0; }
-      .grid-preview-col { background: #17976a; }
-      .grid-preview-gap { background: transparent; }
-
-      .grid-preview-total {
-        grid-column: 2;
-        align-self: center;
-        margin-bottom: 6px;
-        white-space: nowrap;
-      }
-
-      /* The guides: one item spanning every span row, behind the bars. Drawn once rather than per row,
-         so they are continuous the way the frame shows them. */
-      .grid-preview-guides {
-        grid-column: 1;
-        grid-row: 2 / -1;
-        align-self: stretch;
-        border-left: 1px dashed rgba(120, 100, 200, 0.7);
-        border-right: 1px dashed rgba(120, 100, 200, 0.7);
-        background: rgba(183, 168, 240, 0.09);
-        pointer-events: none;
-      }
-
-      .grid-preview-bar {
-        grid-column: 1;
-        height: 8px;
-        border-radius: var(--radius-sm);
-        background: #17976a;
-      }
-
-      .grid-preview-value {
-        grid-column: 2;
-        white-space: nowrap;
-        font-size: var(--font-size-body);
-      }
-
-      /* No target chosen yet. The Start and New frames are grey even with modes set, so this is about
-         whether there is somewhere to write, not whether the fields are filled. */
-      .grid-preview.is-unset .grid-preview-margin { background: #dcdcdf; }
-      .grid-preview.is-unset .grid-preview-col { background: #8a8a8e; }
-      .grid-preview.is-unset .grid-preview-bar { background: #dcdcdf; }
-      .grid-preview.is-unset .grid-preview-guides {
-        border-color: rgba(140, 140, 145, 0.6);
-        background: rgba(140, 140, 145, 0.05);
-      }
-      .grid-preview.is-unset .grid-preview-value,
-      .grid-preview.is-unset .grid-preview-total { opacity: 0.55; }
-
-      /* **Three across, two down.** Márton's revision: the cards speak for the mode you are looking at
-         and nothing else, so they carry no badges — and without a right-hand column of tags there is no
-         reason for a card to be a full-width row. `repeat(3, 1fr)` rather than `auto-fill`, because six
-         cards in a 3x2 grid is the design; a card count that reflows with the panel width would make the
-         section a different shape at every size. */
-      .grid-suggestions {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: var(--space-sm);
-        width: 100%;
-      }
-
-      .grid-suggestion {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 0;
-        padding: 10px 14px;
-        border: 1px solid var(--border-color, #e1e5e9);
-        border-radius: var(--radius-md);
-        background: var(--input-bg, #fff);
-        font: inherit;
-        font-size: var(--font-size-body);
-        color: inherit;
-        text-align: left;
-        cursor: pointer;
-      }
-
-      /* Selected means *currently applied*, computed from the fields rather than remembered. */
-      .grid-suggestion.is-selected {
-        border-color: var(--active-bg, #0a84ff);
-        box-shadow: 0 0 0 1px var(--active-bg, #0a84ff);
-      }
-
-      .grid-suggestion-spans {
-        font-size: var(--font-size-small);
-        opacity: 0.6;
-      }
-
-      .grid-suggestions-empty,
-      .grid-suggestions-more {
-        grid-column: 1 / -1;
-        margin: 0;
-        font-size: var(--font-size-small);
-        opacity: 0.7;
-      }
-
-      /* ============================================================
-         SPACING PREVIEW  (@Foundation → spacingPreviewHtml)
-
-         A row per token: the name, a bar whose **height** is the value, the value, and the note where
-         the generator had to move a number. Height rather than width because that is what the frames
-         draw — and it is the better choice: a spacing scale is read as a rhythm down the page, and a
-         row of equal-width bars makes the steps between them the thing you see.
-         ============================================================ */
-      .spacing-preview {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        width: 100%;
-      }
-
-      .spacing-preview.is-unset .spacing-preview-bar {
-        background: var(--border-color);
-      }
-
-      /* **The same 3fr / 7fr as every field**, so the token names line up with the labels above them
-         and the bars start where the controls do. A preview that sets its own proportions reads as a
-         different page: Márton spotted it immediately, and it is the kind of misalignment that is
-         invisible in a frame and obvious in a browser. The inner grid is the preview's own business —
-         bar, value, note — and it lives entirely in the control column. */
-      .spacing-preview-row {
-        display: grid;
-        grid-template-columns: 3fr 7fr;
-        column-gap: var(--space-md);
-        /* Centred, so a token name sits level with the middle of its bar. At `4xl` the bar is 356px
-           tall and a top-aligned label reads as belonging to the row above it. */
-        align-items: center;
-        min-height: 18px;
-      }
-
-      .spacing-preview-track {
-        display: grid;
-        grid-template-columns: 140px 56px 1fr;
-        column-gap: var(--space-md);
-        align-items: center;
-      }
-
-      .spacing-preview-name {
-        font-size: var(--font-size-body);
-        font-weight: var(--font-weight-semibold);
-      }
-
-      /* `min-height: 1px` so a token worth 0 still occupies its row rather than collapsing it: the
-         absence of a bar is the honest drawing of zero, and a missing row is not. */
-      .spacing-preview-bar {
-        width: 140px;
-        min-height: 1px;
-        background: #17976a;
-      }
-
-      .spacing-preview-value {
-        font-size: var(--font-size-body);
-        font-variant-numeric: tabular-nums;
-      }
-
-      .spacing-preview-note {
-        font-size: var(--font-size-small);
-        opacity: 0.6;
-      }
-
-      /* ============================================================
-         CORNER RADIUS PREVIEW  (frame 2065:3045)
-
-         The same row skeleton as the spacing preview — 3fr / 7fr outside, the preview's own business
-         inside the control column — because Márton's instruction covers both: *"spacing preview rows …
-         doesn't follow the same left/right proportions as the default ui fields, it should be aligned."*
-         Its own classes, though: appending to `.spacing-preview-*` would tie a box's size to a bar's.
-
-         Sizes are the frame's: a 200x120 box, the value 24px past it, and 6px between rows.
-         ============================================================ */
-      .radius-preview {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        width: 100%;
-      }
-
-      .radius-preview.is-unset .radius-preview-box {
-        background: var(--border-color);
-      }
-
-      .radius-preview-row {
-        display: grid;
-        grid-template-columns: 3fr 7fr;
-        column-gap: var(--space-md);
-        align-items: center;
-      }
-
-      .radius-preview-track {
-        display: grid;
-        grid-template-columns: 200px 54px 1fr;
-        column-gap: var(--space-lg);
-        align-items: center;
-      }
-
-      .radius-preview-name {
-        font-size: var(--font-size-body);
-        font-weight: var(--font-weight-semibold);
-      }
-
-      /* The corner is the subject, so the box is drawn at the frame's size and the radius at its real
-         one. `box-sizing` matters here in a way it does not for a bar: a border would eat the 120px the
-         radius is measured against. */
-      .radius-preview-box {
-        display: block;
-        box-sizing: border-box;
-        background: var(--bg-tertiary, #e8eaed);
-      }
-
-      .radius-preview-value {
-        font-size: var(--font-size-body);
-        font-variant-numeric: tabular-nums;
-      }
-
-      .radius-preview-note {
-        font-size: var(--font-size-small);
-        opacity: 0.6;
-      }
-
-      /* ============================================================
-         TYPOGRAPHY OVERVIEW AND SPECIMEN  (plan 20)
-
-         The table is the only place a run's variable *names* appear, which is what earns it a section
-         of its own beside a preview that shows their effect.
-         ============================================================ */
-      .type-overview {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: var(--font-size-body);
-      }
-
-      .type-overview th {
-        text-align: left;
-        font-weight: var(--font-weight-normal);
-        color: var(--text-secondary);
-        font-size: var(--font-size-small);
-        padding: 0 var(--space-md) 6px 0;
-      }
-
-      .type-overview td {
-        padding: 6px var(--space-md) 6px 0;
-        border-top: 1px solid var(--border-light);
-        font-variant-numeric: tabular-nums;
-      }
-
-      .type-overview td:last-child {
-        font-size: var(--font-size-small);
-        opacity: 0.7;
-        font-variant-numeric: normal;
-      }
-
-      .type-specimen {
-        width: 100%;
-        /* **Cut off, not wrapped and not scrolled.** A heading ramp's top step is wider than the panel
-           by design, and the frame shows it running off the right edge mid-word. Wrapping would make a
-           two-line sample four lines and destroy the comparison the specimen exists for; scrolling
-           would hide the overflow behind a gesture. Clipping says "this is bigger than the panel",
-           which is true and is part of what you are judging. */
-        overflow: hidden;
-      }
-
-      .type-specimen-family {
-        font-size: var(--font-size-subheadline);
-        font-weight: var(--font-weight-semibold);
-      }
-
-      .type-specimen-note {
-        font-size: var(--font-size-small);
-        opacity: 0.6;
-        margin-bottom: var(--space-lg);
-      }
-
-      /* Same proportions again: the metadata sits in the label column and the sample starts where a
-         control would. A type specimen is the one place a reader compares sizes down a page, and a
-         ragged left edge on the samples defeats it. */
-      .type-specimen-step {
-        display: grid;
-        grid-template-columns: 3fr 7fr;
-        column-gap: var(--space-md);
-        align-items: start;
-        margin-bottom: var(--space-xl);
-      }
-
-      .type-specimen-meta {
-        font-size: var(--font-size-small);
-        line-height: 1.6;
-        opacity: 0.6;
-      }
-
-      .type-specimen-sample {
-        white-space: nowrap;
-        /* **The clip belongs here, on the box that overflows.** A grid item's `min-width` is `auto`,
-           which means it refuses to shrink below its content — so a `nowrap` sample at 78px widened
-           its own `7fr` column, squeezed the `3fr` beside it, and ran past the panel. Each step is its
-           own grid, so every row resolved a different split and the samples' left edges stopped
-           lining up, which is the one thing this layout exists to guarantee.
-           `overflow: hidden` on `.type-specimen` could not fix that: by then the grid had already been
-           laid out wide, and clipping the outer box does not put the columns back. */
-        min-width: 0;
-        /* **Clipped sideways only.** `overflow: hidden` clips both axes, and a line height below the font
-           size — tight display type — puts the glyphs outside their own line box, so the top and bottom of
-           every large step were cut off. `clip` is the one that does not force the other axis to `auto`,
-           so the sample can be as tall as it needs while the long line still stops at the panel edge.
-           The height it needs is reserved by a `min-height` the generator computes, since only it knows
-           the size, the leading and the line count. */
-        overflow-x: clip;
-        overflow-y: visible;
-      }
-
-      /* ============================================================
          COLOR PANEL — the third `@rows` display, and the ramp preview
          (frames 2065:4154 and 2065:6267)
 
@@ -3030,271 +2642,6 @@
          so from the part's side rather than relying on two numbers happening to match. */
       .config-ui-rows-group .config-ui-input--number {
         width: 100%;
-      }
-
-      /* ---- The ramp preview ----
-
-         The first preview in the plugin that reads **across** rather than down, and it has to: a colour
-         ramp is judged by the joins between neighbours, which is a thing you can only see when they are
-         adjacent. So one card per token in a row, and the anchors marked above the tokens they land on
-         rather than listed beside the strip.
-
-         Sizes from the frames: cards share the width, 8px apart, a 74px swatch, and the token name and
-         hex stacked under it. */
-      .color-ramp-preview {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        width: 100%;
-      }
-
-      /* Inside a mode block the strip is a flex child beside the cells, not a row of the form, so it
-         gets the same top gap the cells have and no padding of its own. */
-      .config-ui-rows-item .color-ramp-preview {
-        margin-top: var(--space-sm);
-      }
-
-      /* ---- Remove, in a block ----
-
-         No frame has a Remove button at all. The capability has to exist — Add without it is a one-way door —
-         but a bar the width of the panel competes with Add for attention and reads as the block's primary
-         action, which for a block several hundred pixels tall it certainly is not. So a `×` beside the title,
-         about *this* block, quiet until wanted. */
-      .config-ui-rows-item-title {
-        display: flex;
-        align-items: baseline;
-        gap: var(--space-sm);
-        /* **The same height with an icon and without.** The chevron's line box is shorter than the title's,
-           so a block that has one would otherwise sit a pixel or two tighter than one that does not — and
-           `@blocks` controls exist in both shapes. Pinned to the title's own line height instead of to
-           whatever the icon happens to measure. */
-        min-height: calc(var(--font-size-title) * 1.4);
-      }
-
-      .config-ui-rows-remove--block {
-        margin-left: auto;
-        padding: 0 4px;
-        border: 0;
-        background: none;
-        color: var(--text-secondary);
-        font-size: var(--font-size-subheadline);
-        line-height: 1;
-        cursor: pointer;
-        opacity: 0.5;
-      }
-
-      .config-ui-rows-remove--block:hover {
-        opacity: 1;
-        color: #c0392b;
-      }
-
-      /* ---- A step that would change ----
-
-         One strip, two hexes. Frame 2091:6810 draws a changed step with a second hex under the first and
-         leaves the unchanged ones alone, so the current-versus-updated display and the
-         existing-versus-generated comparison are the same component rather than two strips stacked. Built
-         once, which is also why there is no second strip below any more.
-
-         The swatch splits horizontally: the file's colour on top, the run's below, so the pair reads before
-         either hex does. The split is drawn by the gradient in `colorsSwatch`, so there is no rule here —
-         the swatches carry no border of their own now that the bar around them carries one. */
-
-      /* ---- Two strips, when the file already holds a set ----
-
-         Reading an existing collection cannot recover a curve — an eleven-step ramp made by hand may sit on
-         no curve at all — so the panel does not guess one. It draws what is in the file underneath what it
-         would generate, and the gap between the two strips is the answer to the only question worth asking
-         before pressing Run. Same shape as the zinc comparison that made the curve problem visible in the
-         first place; this is that trick promoted from a one-off to a feature.
-
-         Each strip keeps its own caption, because two unlabelled ramps one above the other is a puzzle. */
-      .color-ramp-preview-caption {
-        font-size: var(--font-size-small);
-        font-weight: var(--font-weight-semibold);
-        opacity: 0.6;
-      }
-
-      /* New with `.plans/36-lazy-fit-on-demand.md`'s Original-unavailable guard, so there is nothing
-         to check this against yet — no Figma frame shows this state. Full opacity on purpose (unlike
-         the caption above): this replaces the whole strip, not a note beside it, so it needs to read
-         as the answer rather than as decoration. Revisit once a frame exists to match. */
-      .color-ramp-preview-unavailable {
-        font-size: var(--font-size-small);
-        font-weight: var(--font-weight-semibold);
-        padding: var(--space-sm) 0;
-      }
-
-      /* Tighter to the strip above it: the pair reads as one comparison rather than two previews, so the
-         gap within a pair is smaller than the gap to whatever follows. */
-      .color-ramp-preview--existing {
-        margin-top: var(--space-md);
-      }
-
-      /* A dashed edge, so a swatch that is *reported* rather than *proposed* is distinguishable at a glance
-         from the ones a Run would write — the two strips otherwise differ only in their numbers. */
-      /* A read of the file rather than a generated ramp. The frame says so now — a dashed border per
-         swatch would be eleven dashed hairlines through the middle of the thing being read. */
-      .color-ramp-preview--existing .color-ramp-preview-bar {
-        border-style: dashed;
-      }
-
-      /* The per-step lightness gap, which is the whole point of drawing the second strip. Tabular so a
-         column of them can be scanned, and only shown where it is big enough to matter. */
-      .color-ramp-preview-delta {
-        font-size: var(--font-size-small);
-        font-variant-numeric: tabular-nums;
-        opacity: 0.6;
-      }
-
-      /* Amber past the point where a step has visibly moved. Not red: an existing set differing from the
-         ladder is the normal state of affairs before adoption, not a fault. */
-      .color-ramp-preview-delta--wide {
-        opacity: 1;
-        color: #a8620a;
-      }
-
-      .color-ramp-preview.is-unset .color-ramp-preview-swatch {
-        background: var(--border-color);
-      }
-
-      /* One track shared with the strip below it, so a marker sits over its own card by construction
-         rather than by a percentage that has to be recomputed whenever the step count changes. */
-      /* `start`, so the swatches share a top edge. The seed's card is a line taller than the rest — it
-         carries the *Seed color* note — and any other alignment lifts that one swatch out of the row,
-         which is the opposite of what the strip is for. */
-      /* **No column gap, on all three.** The bar's swatches touch, so a gap on the rows above and below
-         would slide every label and marker off the colour it names — by half a gap at one end and half
-         at the other. The breathing room a hex needs is padding inside its own cell instead, where it
-         cannot move anything. */
-      .color-ramp-preview-anchors,
-      .color-ramp-preview-strip {
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: 1fr;
-        column-gap: 0;
-        align-items: start;
-      }
-
-      /* An anchor is drawn in the column of the token it lands on, and it points at it. `justify-self`
-         puts *Bright* against the left edge of the first card and *Dark* against the right edge of the
-         last, which is what the frames show — the outer two anchors are the ends of the ramp, so they
-         read better flush than centred over a card. */
-      .color-ramp-preview-anchor {
-        display: flex;
-        flex-direction: column;
-        gap: 1px;
-        font-size: var(--font-size-small);
-        line-height: 1.2;
-      }
-
-      .color-ramp-preview-anchor--start {
-        align-items: flex-start;
-      }
-
-      .color-ramp-preview-anchor--middle {
-        align-items: center;
-      }
-
-      .color-ramp-preview-anchor--end {
-        align-items: flex-end;
-      }
-
-      /* The triangle, drawn rather than typed: a `▾` glyph is a font's opinion about size and baseline,
-         and it sat two pixels off the label in every browser tried. */
-      .color-ramp-preview-anchor-mark {
-        width: 0;
-        height: 0;
-        border-left: 3px solid transparent;
-        border-right: 3px solid transparent;
-        border-top: 4.5px solid currentColor;
-      }
-
-      /* A seed always lands somewhere; a curve does not always bend there. Dimmed rather than dropped,
-         the same 0.45 the curve editor's own middle box uses when its curve has none — the text and the
-         triangle both, since the triangle is `currentColor` and opacity reaches the whole label as one. */
-      .color-ramp-preview-anchor--middle[data-shown="false"] {
-        opacity: 0.45;
-      }
-
-      .color-ramp-preview-card {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-        /* The gap the grid no longer carries, on the inside where it cannot shift the column. */
-        padding: 6px 8px 0 0;
-      }
-
-      /* `box-sizing` and an inset border rather than an outline: #FAFAFA on white is invisible without
-         an edge, and a swatch that is 74px plus a border is no longer the height the frame measured. */
-      /* **The bar carries the frame; a swatch carries nothing.**
-         A ramp is judged by the joins between neighbouring steps, so a border and a radius on every
-         swatch put a hairline and two rounded corners between every pair of colours being compared.
-         The frame goes round the whole bar and the swatches are clipped to it, which is how a palette
-         is drawn everywhere else — Márton's reference frame included. */
-      .color-ramp-preview-bar {
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: 1fr;
-        /* The one line in the whole strip. Kept at 10% black rather than --border-color so it frames the
-           colours without competing with them — the swatches are the subject, the frame is not. */
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        border-radius: var(--radius-md);
-        overflow: hidden;
-      }
-
-      /* 10% black is invisible on the dark panel's #2c2c2c ground, and this is the only line the strip has —
-         losing it loses the frame. Same weight, other direction. */
-      @media (prefers-color-scheme: dark) {
-        .color-ramp-preview-bar { border-color: rgba(255, 255, 255, 0.14); }
-      }
-
-      .color-ramp-preview-swatch {
-        box-sizing: border-box;
-        height: 74px;
-        min-width: 0;
-      }
-
-      /* **The token is the label, so it reads like one.** It was the same weight and the same 60% as the
-         hex beside it, in a caption that also carried a struck-through old value and a delta — four things
-         of equal weight under every swatch. The name is what you look for; the rest is detail. */
-      .color-ramp-preview-token {
-        margin-top: 4px;
-        font-size: var(--font-size-small);
-        font-variant-numeric: tabular-nums;
-        font-weight: 600;
-        color: var(--text-primary);
-      }
-
-      .color-ramp-preview-hex {
-        font-size: var(--font-size-small);
-        font-variant-numeric: tabular-nums;
-        color: var(--text-primary);
-        opacity: 1;
-      }
-
-      /* Modifiers share `.color-ramp-preview-hex` — must follow the base rule or `color` loses. */
-      .color-ramp-preview-hex.color-ramp-preview-hex--was {
-        text-decoration: line-through;
-        color: var(--text-secondary);
-      }
-
-      .color-ramp-preview-hex.color-ramp-preview-hex--now {
-        color: var(--text-primary);
-      }
-
-      /* Green, and the only colour in the strip that is not a swatch: it names the one token the user
-         typed, among ten the generator wrote. */
-      .color-ramp-preview-seed {
-        font-size: var(--font-size-small);
-        font-weight: var(--font-weight-semibold);
-        color: #17976a;
-      }
-
-      /* A swatch whose chroma the gamut would not take. The only note left on a card: `overrides` and the
-         pins that went with them are gone, because reproducing Tailwind zinc's ladder was never the goal. */
-      .color-ramp-preview-pin {
-        font-size: var(--font-size-small);
-        opacity: 0.45;
       }
 
 
@@ -4199,3 +3546,38 @@
         /* Decoration: the click belongs to the input underneath it. */
         pointer-events: none;
       }
+
+/* ---- Remove, in a block ----
+
+   No frame has a Remove button at all. The capability has to exist — Add without it is a one-way door —
+   but a bar the width of the panel competes with Add for attention and reads as the block's primary
+   action, which for a block several hundred pixels tall it certainly is not. So a `×` beside the title,
+   about *this* block, quiet until wanted. */
+.config-ui-rows-item-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  /* **The same height with an icon and without.** The chevron's line box is shorter than the title's,
+     so a block that has one would otherwise sit a pixel or two tighter than one that does not — and
+     `@blocks` controls exist in both shapes. Pinned to the title's own line height instead of to
+     whatever the icon happens to measure. */
+  min-height: calc(var(--font-size-title) * 1.4);
+}
+
+.config-ui-rows-remove--block {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-subheadline);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.config-ui-rows-remove--block:hover {
+  opacity: 1;
+  color: #c0392b;
+}
+

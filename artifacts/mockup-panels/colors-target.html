@@ -872,20 +872,19 @@ function fieldRow(label, control, note) {
   '</div>';
 }
 
-/* A section heading of the form. Level 1 only: the two headings inside a mode block are the control's
+/* A section heading of the form. Section titles are h2: the two headings inside a mode block are the control's
    own, not the form's — see `subtitle`. */
 function heading(text) {
   return '<div class="config-ui-row config-ui-row--heading">' +
-    '<h1 class="config-ui-heading">' + esc(text) + '</h1>' +
+    '<h2 class="config-ui-heading">' + esc(text) + '</h2>' +
   '</div>';
 }
 
 /* *Seed* and *Palette*. The **form's own heading**, one level down and unwrapped: `#Seed` among the columns
-   parses to the same `{ type: "heading", level }` a `// ## Heading` line does, and the renderer builds this
-   element for both — so the two size ladders cannot drift. A form *row* around it would bring the panel's
+   parses as a nested heading and the renderer builds an h3 — so the two size ladders cannot drift. A form *row* around it would bring the panel's
    inline padding and indent the heading past the fields it names. */
 function subtitle(text) {
-  return '<h2 class="config-ui-heading">' + esc(text) + '</h2>';
+  return '<h3 class="config-ui-heading">' + esc(text) + '</h3>';
 }
 
 function renderGeneral() {

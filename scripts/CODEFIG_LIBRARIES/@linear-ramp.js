@@ -1,14 +1,15 @@
 // @Linear Ramp
 // @DOC_START
-// One generator behind **Spacing** and **Corner radius**, which were thirty near-identical
-// functions apart. Both are now thin wrappers over this, differing only in a **ramp spec**.
+// # Generates spacing and corner-radius variable ramps from a shared ramp spec
 //
-// ## What a ramp is
-// A list of tokens whose value ramps from a `min` to a `max` per viewport, along a curve. The
-// curve, the piecewise handling, the monotonic guard and the rounding ladder are all shared; what
-// a domain brings is its own tokens, name template, variable scopes and config spelling.
+// ## Overview
 //
-// ## The ramp spec
+// One generator behind **Spacing** and **Corner radius**. Both scripts are thin wrappers over this library; they differ only in a **ramp spec** (tokens, name template, scopes, scaling aliases).
+//
+// A ramp is a list of tokens whose value runs from `min` to `max` per viewport along a curve. Curve handling, piecewise behaviour, the monotonic guard, and rounding are shared.
+//
+// ### Ramp spec
+//
 // | Field | Spacing | Corner radius |
 // |---|---|---|
 // | `domain` | `spacing` | `radius` |
@@ -19,32 +20,148 @@
 // | `scopes` | `WIDTH_HEIGHT`, `GAP` | `CORNER_RADIUS` |
 // | `scalingAliases` | `spacingScaling`, `fontScaling` | `cornerRadiusScaling`, `radiusScaling`, `fontScaling` |
 //
-// `scalingAliases` is in precedence order — the first one present wins, which is what each script
-// did separately. The two had already drifted: radius accepts `cornerRadiusScaling` and spacing
-// never has. Collapsing them must not quietly change that, so the list is per domain.
+// `scalingAliases` is precedence order — first present wins. The lists differ on purpose so collapsing the scripts does not change accepted config spellings.
 //
-// ## Companion imports
-// `@import` does not follow calls across scripts, so a wrapper must import everything this calls
-// on its behalf:
-//
-// ```js
-// @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
-// @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, readFoundation, registryViewportLabels, writeManifest, readManifest, findFoundationSet, writeRegistry, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
-// @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
-// ```
-//
-// `npm run validate` fails the build when a runnable script misses one.
+// Wrappers must also import what this library calls: collection/mode helpers from `@Variables`, foundation helpers from `@Foundation`, and `generateScale` / `isPiecewiseScaleType` / `snapScaleGrid` from `@Math Helpers`.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
 // | Specs | spacingRampSpec, radiusRampSpec |
 // | Config | ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, resolveRampRoundTo, validateRampScalingType |
-// | Seeing it | rampPreviewHtml, rampScaleTable, rampScaleHtml, rampGaps, rampCaptions, rampModelCaption |
+// | Preview | rampPreviewHtml, rampScaleTable, rampScaleHtml, rampGaps, rampCaptions, rampModelCaption, spacingPreviewHtml, radiusPreviewHtml |
 // | Sets | resolveRampSets, rampSetsFromConfig, rampModePlan, rampModeNames, collapseRampSets, describeRampSetPlan |
 // | Scale | buildRampScaleOpts, calculateRampValue, generateRampVariables |
-// | Run | runLinearRamp, describeUndeclaredModes, describeRampModels, describeRampAdjustments |
+// | Run | runLinearRamp, describeUndeclaredModes, describeRampModels, describeRampAdjustments, adoptRamp |
 // @DOC_END
+// Shared component styles for markup this library emits (tier 2: library @STYLE_START).
+// Opening a script that @imports this library injects these with the script sheet.
+// @STYLE_START
+// /* ============================================================
+//    SPACING PREVIEW  (@Foundation → spacingPreviewHtml)
+//
+//    A row per token: the name, a bar whose **height** is the value, the value, and the note where
+//    the generator had to move a number. Height rather than width because that is what the frames
+//    draw — and it is the better choice: a spacing scale is read as a rhythm down the page, and a
+//    row of equal-width bars makes the steps between them the thing you see.
+//    ============================================================ */
+// .spacing-preview {
+//   display: flex;
+//   flex-direction: column;
+//   gap: 6px;
+//   width: 100%;
+// }
+//
+// .spacing-preview.is-unset .spacing-preview-bar {
+//   background: var(--border-color);
+// }
+//
+// /* **The same 3fr / 7fr as every field**, so the token names line up with the labels above them
+//    and the bars start where the controls do. A preview that sets its own proportions reads as a
+//    different page: Márton spotted it immediately, and it is the kind of misalignment that is
+//    invisible in a frame and obvious in a browser. The inner grid is the preview's own business —
+//    bar, value, note — and it lives entirely in the control column. */
+// .spacing-preview-row {
+//   display: grid;
+//   grid-template-columns: 3fr 7fr;
+//   column-gap: var(--space-md);
+//   /* Centred, so a token name sits level with the middle of its bar. At `4xl` the bar is 356px
+//      tall and a top-aligned label reads as belonging to the row above it. */
+//   align-items: center;
+//   min-height: 18px;
+// }
+//
+// .spacing-preview-track {
+//   display: grid;
+//   grid-template-columns: 140px 56px 1fr;
+//   column-gap: var(--space-md);
+//   align-items: center;
+// }
+//
+// .spacing-preview-name {
+//   font-size: var(--font-size-body);
+//   font-weight: var(--font-weight-semibold);
+// }
+//
+// /* `min-height: 1px` so a token worth 0 still occupies its row rather than collapsing it: the
+//    absence of a bar is the honest drawing of zero, and a missing row is not. */
+// .spacing-preview-bar {
+//   width: 140px;
+//   min-height: 1px;
+//   background: #17976a;
+// }
+//
+// .spacing-preview-value {
+//   font-size: var(--font-size-body);
+//   font-variant-numeric: tabular-nums;
+// }
+//
+// .spacing-preview-note {
+//   font-size: var(--font-size-small);
+//   opacity: 0.6;
+// }
+//
+// /* ============================================================
+//    CORNER RADIUS PREVIEW  (frame 2065:3045)
+//
+//    The same row skeleton as the spacing preview — 3fr / 7fr outside, the preview's own business
+//    inside the control column — because Márton's instruction covers both: *"spacing preview rows …
+//    doesn't follow the same left/right proportions as the default ui fields, it should be aligned."*
+//    Its own classes, though: appending to `.spacing-preview-*` would tie a box's size to a bar's.
+//
+//    Sizes are the frame's: a 200x120 box, the value 24px past it, and 6px between rows.
+//    ============================================================ */
+// .radius-preview {
+//   display: flex;
+//   flex-direction: column;
+//   gap: 6px;
+//   width: 100%;
+// }
+//
+// .radius-preview.is-unset .radius-preview-box {
+//   background: var(--border-color);
+// }
+//
+// .radius-preview-row {
+//   display: grid;
+//   grid-template-columns: 3fr 7fr;
+//   column-gap: var(--space-md);
+//   align-items: center;
+// }
+//
+// .radius-preview-track {
+//   display: grid;
+//   grid-template-columns: 200px 54px 1fr;
+//   column-gap: var(--space-lg);
+//   align-items: center;
+// }
+//
+// .radius-preview-name {
+//   font-size: var(--font-size-body);
+//   font-weight: var(--font-weight-semibold);
+// }
+//
+// /* The corner is the subject, so the box is drawn at the frame's size and the radius at its real
+//    one. `box-sizing` matters here in a way it does not for a bar: a border would eat the 120px the
+//    radius is measured against. */
+// .radius-preview-box {
+//   display: block;
+//   box-sizing: border-box;
+//   background: var(--bg-tertiary, #e8eaed);
+// }
+//
+// .radius-preview-value {
+//   font-size: var(--font-size-body);
+//   font-variant-numeric: tabular-nums;
+// }
+//
+// .radius-preview-note {
+//   font-size: var(--font-size-small);
+//   opacity: 0.6;
+// }
+// @STYLE_END
+
 
 // ============================================================================
 // RAMP SPECS
@@ -1189,7 +1306,7 @@ function rampEscapeHtml(text) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** The table as one HTML block. Inline styles: the panel's stylesheet is not ours to extend. */
+/** The table as one HTML block. Still inline: no classed sheet for this comparison table yet. */
 function rampScaleHtml(table, captions) {
   var cellStyle = 'padding:4px 10px 4px 0;vertical-align:middle;';
   var html = ['<div style="font-size:11px;line-height:1.5;">'];

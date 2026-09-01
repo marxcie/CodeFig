@@ -1,27 +1,259 @@
 // @Color Ramp
 // @DOC_START
-// A colour ramp, generated: the arithmetic that turns a config into swatches, and the two strips that draw
-// them. No Figma API, so the preview can run in the UI and a test can run it in Node.
+// # Generates colour ramp values from config and draws preview strips without calling the Figma API
 //
-// The split from **`@OKLCH`** is the one that matters. That library is colour space and nothing else —
-// matrices, gamut fitting, ladders. This one knows what a *config* looks like: which key holds the steps,
-// that lightness is 0–100 in the UI and 0–1 in the maths, that a mode has three anchors, and what a seed
-// does to them. Colour maths has no opinion about any of that, and a panel should not have to hold both.
+// ## Overview
 //
-// Two consumers by design, the way `@Linear Ramp` has two: **Colors** generates with it, and the eventual
-// cross-collection alignment report measures existing sets against a ladder with the same functions. Two
-// implementations of one ramp drift the way spacing and radius did.
+// Turns a Colors-style config into swatches and HTML strips. No Figma API, so the panel preview and Node tests share one path.
+//
+// Colour-space maths lives elsewhere (`@OKLCH`). This library owns **config shape**: step lists, lightness 0–100 in the UI vs 0–1 in the maths, three anchors per mode, and how a seed moves them.
+//
+// `colorsGenerateMode` is the shared path for panel and run — they cannot disagree about where a seed landed. `colorsBuildVariableMap` turns the same rows into the COLOR map `processVariables` writes. `colorsAlignment` measures an existing set against a ladder built the same way.
+//
+// ## Exported functions
 //
 // | Area | Functions |
 // |---|---|
-// | Config reading | `colorsParseSteps`, `colorsLightnessAnchors`, `colorsNumber`, `colorsMidIndex`, `colorsChannel` |
-// | Generation | `colorsGenerateMode`, `colorsBuildVariableMap` |
-// | Preview | `colorsPreviewHtml`, `colorsAnchorStrip`, `colorsCard`, `colorsExistingStrip` |
-//
-// `colorsGenerateMode` is the load-bearing one: the panel and the run both go through it, so they cannot
-// disagree about where a seed landed or what the gamut refused. `colorsBuildVariableMap` turns the same
-// rows into the COLOR map `processVariables` writes.
+// | Config reading | colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
+// | Generation | colorsGenerateMode, colorsBuildVariableMap, colorsManifestSlice |
+// | Alignment | colorsAlignment, colorsBestAnchor, colorsAnchorFits |
+// | Preview | colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip |
 // @DOC_END
+// Shared component styles for markup this library emits (tier 2: library @STYLE_START).
+// Opening a script that @imports this library injects these with the script sheet.
+// @STYLE_START
+// /* ---- The ramp preview ----
+//
+//    The first preview in the plugin that reads **across** rather than down, and it has to: a colour
+//    ramp is judged by the joins between neighbours, which is a thing you can only see when they are
+//    adjacent. So one card per token in a row, and the anchors marked above the tokens they land on
+//    rather than listed beside the strip.
+//
+//    Sizes from the frames: cards share the width, 8px apart, a 74px swatch, and the token name and
+//    hex stacked under it. */
+// .color-ramp-preview {
+//   display: flex;
+//   flex-direction: column;
+//   gap: 8px;
+//   width: 100%;
+// }
+//
+// /* Inside a mode block the strip is a flex child beside the cells, not a row of the form, so it
+//    gets the same top gap the cells have and no padding of its own. */
+// .config-ui-rows-item .color-ramp-preview {
+//   margin-top: var(--space-sm);
+// }
+//
+// /* ---- A step that would change ----
+//
+//    One strip, two hexes. Frame 2091:6810 draws a changed step with a second hex under the first and
+//    leaves the unchanged ones alone, so the current-versus-updated display and the
+//    existing-versus-generated comparison are the same component rather than two strips stacked. Built
+//    once, which is also why there is no second strip below any more.
+//
+//    The swatch splits horizontally: the file's colour on top, the run's below, so the pair reads before
+//    either hex does. The split is drawn by the gradient in `colorsSwatch`, so there is no rule here —
+//    the swatches carry no border of their own now that the bar around them carries one. */
+//
+// /* ---- Two strips, when the file already holds a set ----
+//
+//    Reading an existing collection cannot recover a curve — an eleven-step ramp made by hand may sit on
+//    no curve at all — so the panel does not guess one. It draws what is in the file underneath what it
+//    would generate, and the gap between the two strips is the answer to the only question worth asking
+//    before pressing Run. Same shape as the zinc comparison that made the curve problem visible in the
+//    first place; this is that trick promoted from a one-off to a feature.
+//
+//    Each strip keeps its own caption, because two unlabelled ramps one above the other is a puzzle. */
+// .color-ramp-preview-caption {
+//   font-size: var(--font-size-small);
+//   font-weight: var(--font-weight-semibold);
+//   opacity: 0.6;
+// }
+//
+// /* New with `.plans/36-lazy-fit-on-demand.md`'s Original-unavailable guard, so there is nothing
+//    to check this against yet — no Figma frame shows this state. Full opacity on purpose (unlike
+//    the caption above): this replaces the whole strip, not a note beside it, so it needs to read
+//    as the answer rather than as decoration. Revisit once a frame exists to match. */
+// .color-ramp-preview-unavailable {
+//   font-size: var(--font-size-small);
+//   font-weight: var(--font-weight-semibold);
+//   padding: var(--space-sm) 0;
+// }
+//
+// /* Tighter to the strip above it: the pair reads as one comparison rather than two previews, so the
+//    gap within a pair is smaller than the gap to whatever follows. */
+// .color-ramp-preview--existing {
+//   margin-top: var(--space-md);
+// }
+//
+// /* A dashed edge, so a swatch that is *reported* rather than *proposed* is distinguishable at a glance
+//    from the ones a Run would write — the two strips otherwise differ only in their numbers. */
+// /* A read of the file rather than a generated ramp. The frame says so now — a dashed border per
+//    swatch would be eleven dashed hairlines through the middle of the thing being read. */
+// .color-ramp-preview--existing .color-ramp-preview-bar {
+//   border-style: dashed;
+// }
+//
+// /* The per-step lightness gap, which is the whole point of drawing the second strip. Tabular so a
+//    column of them can be scanned, and only shown where it is big enough to matter. */
+// .color-ramp-preview-delta {
+//   font-size: var(--font-size-small);
+//   font-variant-numeric: tabular-nums;
+//   opacity: 0.6;
+// }
+//
+// /* Amber past the point where a step has visibly moved. Not red: an existing set differing from the
+//    ladder is the normal state of affairs before adoption, not a fault. */
+// .color-ramp-preview-delta--wide {
+//   opacity: 1;
+//   color: #a8620a;
+// }
+//
+// .color-ramp-preview.is-unset .color-ramp-preview-swatch {
+//   background: var(--border-color);
+// }
+//
+// /* One track shared with the strip below it, so a marker sits over its own card by construction
+//    rather than by a percentage that has to be recomputed whenever the step count changes. */
+// /* `start`, so the swatches share a top edge. The seed's card is a line taller than the rest — it
+//    carries the *Seed color* note — and any other alignment lifts that one swatch out of the row,
+//    which is the opposite of what the strip is for. */
+// /* **No column gap, on all three.** The bar's swatches touch, so a gap on the rows above and below
+//    would slide every label and marker off the colour it names — by half a gap at one end and half
+//    at the other. The breathing room a hex needs is padding inside its own cell instead, where it
+//    cannot move anything. */
+// .color-ramp-preview-anchors,
+// .color-ramp-preview-strip {
+//   display: grid;
+//   grid-auto-flow: column;
+//   grid-auto-columns: 1fr;
+//   column-gap: 0;
+//   align-items: start;
+// }
+//
+// /* An anchor is drawn in the column of the token it lands on, and it points at it. `justify-self`
+//    puts *Bright* against the left edge of the first card and *Dark* against the right edge of the
+//    last, which is what the frames show — the outer two anchors are the ends of the ramp, so they
+//    read better flush than centred over a card. */
+// .color-ramp-preview-anchor {
+//   display: flex;
+//   flex-direction: column;
+//   gap: 1px;
+//   font-size: var(--font-size-small);
+//   line-height: 1.2;
+// }
+//
+// .color-ramp-preview-anchor--start {
+//   align-items: flex-start;
+// }
+//
+// .color-ramp-preview-anchor--middle {
+//   align-items: center;
+// }
+//
+// .color-ramp-preview-anchor--end {
+//   align-items: flex-end;
+// }
+//
+// /* The triangle, drawn rather than typed: a `▾` glyph is a font's opinion about size and baseline,
+//    and it sat two pixels off the label in every browser tried. */
+// .color-ramp-preview-anchor-mark {
+//   width: 0;
+//   height: 0;
+//   border-left: 3px solid transparent;
+//   border-right: 3px solid transparent;
+//   border-top: 4.5px solid currentColor;
+// }
+//
+// /* A seed always lands somewhere; a curve does not always bend there. Dimmed rather than dropped,
+//    the same 0.45 the curve editor's own middle box uses when its curve has none — the text and the
+//    triangle both, since the triangle is `currentColor` and opacity reaches the whole label as one. */
+// .color-ramp-preview-anchor--middle[data-shown="false"] {
+//   opacity: 0.45;
+// }
+//
+// .color-ramp-preview-card {
+//   display: flex;
+//   flex-direction: column;
+//   min-width: 0;
+//   /* The gap the grid no longer carries, on the inside where it cannot shift the column. */
+//   padding: 6px 8px 0 0;
+// }
+//
+// /* `box-sizing` and an inset border rather than an outline: #FAFAFA on white is invisible without
+//    an edge, and a swatch that is 74px plus a border is no longer the height the frame measured. */
+// /* **The bar carries the frame; a swatch carries nothing.**
+//    A ramp is judged by the joins between neighbouring steps, so a border and a radius on every
+//    swatch put a hairline and two rounded corners between every pair of colours being compared.
+//    The frame goes round the whole bar and the swatches are clipped to it, which is how a palette
+//    is drawn everywhere else — Márton's reference frame included. */
+// .color-ramp-preview-bar {
+//   display: grid;
+//   grid-auto-flow: column;
+//   grid-auto-columns: 1fr;
+//   /* The one line in the whole strip. Kept at 10% black rather than --border-color so it frames the
+//      colours without competing with them — the swatches are the subject, the frame is not. */
+//   border: 1px solid rgba(0, 0, 0, 0.1);
+//   border-radius: var(--radius-md);
+//   overflow: hidden;
+// }
+//
+// /* 10% black is invisible on the dark panel's #2c2c2c ground, and this is the only line the strip has —
+//    losing it loses the frame. Same weight, other direction. */
+// @media (prefers-color-scheme: dark) {
+//   .color-ramp-preview-bar { border-color: rgba(255, 255, 255, 0.14); }
+// }
+//
+// .color-ramp-preview-swatch {
+//   box-sizing: border-box;
+//   height: 74px;
+//   min-width: 0;
+// }
+//
+// /* **The token is the label, so it reads like one.** It was the same weight and the same 60% as the
+//    hex beside it, in a caption that also carried a struck-through old value and a delta — four things
+//    of equal weight under every swatch. The name is what you look for; the rest is detail. */
+// .color-ramp-preview-token {
+//   margin-top: 4px;
+//   font-size: var(--font-size-small);
+//   font-variant-numeric: tabular-nums;
+//   font-weight: 600;
+//   color: var(--text-primary);
+// }
+//
+// .color-ramp-preview-hex {
+//   font-size: var(--font-size-small);
+//   font-variant-numeric: tabular-nums;
+//   color: var(--text-primary);
+//   opacity: 1;
+// }
+//
+// /* Modifiers share `.color-ramp-preview-hex` — must follow the base rule or `color` loses. */
+// .color-ramp-preview-hex.color-ramp-preview-hex--was {
+//   text-decoration: line-through;
+//   color: var(--text-secondary);
+// }
+//
+// .color-ramp-preview-hex.color-ramp-preview-hex--now {
+//   color: var(--text-primary);
+// }
+//
+// /* Green, and the only colour in the strip that is not a swatch: it names the one token the user
+//    typed, among ten the generator wrote. */
+// .color-ramp-preview-seed {
+//   font-size: var(--font-size-small);
+//   font-weight: var(--font-weight-semibold);
+//   color: #17976a;
+// }
+//
+// /* A swatch whose chroma the gamut would not take. The only note left on a card: `overrides` and the
+//    pins that went with them are gone, because reproducing Tailwind zinc's ladder was never the goal. */
+// .color-ramp-preview-pin {
+//   font-size: var(--font-size-small);
+//   opacity: 0.45;
+// }
+// @STYLE_END
+
 
 @import { bezierAt, bezierNormalise, bezierFromEase } from "@Bezier"
 @import { oklchFromHex, oklchHslFromHex, oklchHslToHex, oklchToHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare } from "@OKLCH"
@@ -29,6 +261,15 @@
 // ========================================
 // GENERATION — pure, and shared by the preview and (later) the run
 // ========================================
+
+/**
+ * Read a hex in the model in play. Named calls (not a ternary of function values) so `@import`
+ * extraction follows both readers into `@OKLCH` — handing `oklchFromHex` / `oklchHslFromHex` as
+ * values is invisible to the extractor and left Colors preview as `oklchHslFromHex is not defined`.
+ */
+function colorsReadHex(hex, oklch) {
+  return oklch ? oklchFromHex(hex) : oklchHslFromHex(hex);
+}
 
 /**
  * What the Steps field suggests when it is empty, and what the preview draws from until it is filled.
@@ -92,9 +333,8 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // from the mode in HSL, which is the whole of that distinction.
   var held = (config.existing && config.existing[mode.name]) ? config.existing[mode.name] : null;
   var last = steps.length - 1;
-  var read = oklch ? oklchFromHex : oklchHslFromHex;
   var seedHex = (mode.seed && mode.seed.hex) ? String(mode.seed.hex).trim() : '';
-  var seed = seedHex ? read(seedHex) : null;
+  var seed = seedHex ? colorsReadHex(seedHex, oklch) : null;
   var invalidHex = !!(seedHex && !seed);
 
   var anchors = colorsLightnessAnchors(config);
@@ -255,8 +495,8 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   } else if (segments.original && held && held.length !== steps.length) {
     originalUnavailable = 'mismatched';
   } else if (held && held.length === steps.length) {
-    var brightReal = read(held[0]);
-    var darkReal = read(held[held.length - 1]);
+    var brightReal = colorsReadHex(held[0], oklch);
+    var darkReal = colorsReadHex(held[held.length - 1], oklch);
     // **Shared ladder (not Original): empty colour curve → file H/C.** Recognition noise on end
     // anchors (~0.6° / ~0.0005 C between float RGB and 8-bit hex) must not mark every step
     // touched when the ladder is shared across models — that was the OKLCH switch grey-out.
@@ -278,7 +518,7 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
     for (var oi = 0; oi < rows.length; oi++) {
       var wasHex = held[oi];
       if (!wasHex) continue;
-      var seenIt = read(wasHex);
+      var seenIt = colorsReadHex(wasHex, oklch);
       if (!seenIt) continue;
       var row = rows[oi];
       // Full Original: both colour channels still match the file → keep the file's own bytes.
@@ -732,10 +972,9 @@ function colorsFitCurve(hexes, oklch) {
 /** The lightness of each step, in the model asked for. `[]` if any step is unreadable. */
 function colorsLightnessOf(hexes, oklch) {
   if (!hexes || hexes.length < 3) return [];
-  var read = oklch ? oklchFromHex : oklchHslFromHex;
   var out = [];
   for (var i = 0; i < hexes.length; i++) {
-    var seen = read(hexes[i]);
+    var seen = colorsReadHex(hexes[i], oklch);
     if (!seen) return [];
     out.push(seen.L);
   }
@@ -831,10 +1070,9 @@ function colorsFitHueCurve(hexes, oklch, middleIndex) {
 /** One channel of a ramp, read in the model that is in play. `[]` if any step is unreadable. */
 function colorsChannelSeries(hexes, oklch, which) {
   if (!hexes || hexes.length < 5) return [];
-  var read = oklch ? oklchFromHex : oklchHslFromHex;
   var out = [];
   for (var i = 0; i < hexes.length; i++) {
-    var seen = read(hexes[i]);
+    var seen = colorsReadHex(hexes[i], oklch);
     if (!seen) return [];
     out.push(which === 'hue' ? seen.H : seen.C);
   }
@@ -972,10 +1210,9 @@ function colorsCurve(config, mode, oklch, steps, anchors, joinIndex) {
  * those come back empty rather than absent.
  */
 function colorsOriginalMode(hexes, steps, oklch) {
-  var read = oklch ? oklchFromHex : oklchHslFromHex;
   var rows = steps.map(function (step, i) {
     var hex = hexes[i] || '#000000';
-    var seen = read(hex) || { L: 0, C: 0, H: 0 };
+    var seen = colorsReadHex(hex, oklch) || { L: 0, C: 0, H: 0 };
     return { step: step, hex: hex, L: seen.L, C: seen.C, H: seen.H, chroma: seen.C, clamped: false };
   });
   var last = rows.length - 1;
@@ -1218,13 +1455,12 @@ function colorsAlignment(config) {
       //
       // Computed with the comparison rather than beside it, for the reason the banner and the strip already
       // share one: two places working out the same fact is how they come to disagree about it.
-      var readL = oklch ? oklchFromHex : oklchHslFromHex;
       made.rows.forEach(function (row, i) {
         var was = existing[i];
         if (!was) return;
         var distance = oklchDistance(was, row.hex);
         if (distance > tolerance) {
-          var before = readL(was);
+          var before = colorsReadHex(was, oklch);
           changed.push({
             index: i, step: row.step, was: was, now: row.hex, distance: distance,
             // Positive means the file is lighter than what a run would write, which the strip prints as a

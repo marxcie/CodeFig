@@ -22,13 +22,31 @@ const root = path.join(__dirname, '..');
 const DIR = path.join(root, 'artifacts', 'mockup-panels');
 
 const CSS = fs.readFileSync(path.join(root, 'src', 'ui.css'), 'utf8');
+const DSF_DIR = path.join(root, 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations');
+const LIB_DIR = path.join(root, 'scripts', 'CODEFIG_LIBRARIES');
+/** Preview CSS: script and/or library `@STYLE_START` (not `package.css` / not only `ui.css`). */
+function styleRegionsFrom(dir) {
+  return fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => fs.readFileSync(path.join(dir, f), 'utf8'))
+    .map((src) => {
+      const start = src.indexOf('// @STYLE_START');
+      const end = src.indexOf('// @STYLE_END');
+      if (start < 0 || end < 0 || end <= start) return '';
+      return src.slice(start, end);
+    })
+    .join('\n');
+}
+const DSF_STYLE = styleRegionsFrom(DSF_DIR) + '\n' + styleRegionsFrom(LIB_DIR);
 const SOURCES = [
   fs.readFileSync(path.join(root, 'src', 'config-ui', 'renderer.js'), 'utf8'),
   fs.readFileSync(path.join(root, 'scripts', 'CODEFIG_LIBRARIES', '@foundation.js'), 'utf8'),
   fs.readFileSync(path.join(root, 'src', 'ui.html'), 'utf8'),
 ].join('\n');
 
-const styled = new Set([...CSS.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+const styled = new Set(
+  [...(CSS + '\n' + DSF_STYLE).matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1])
+);
 
 /** A class counts as emitted if the source mentions it — including built by concatenation. */
 function isEmitted(name) {
@@ -90,31 +108,22 @@ test('a mockup links the real stylesheet and carries no styling of its own', () 
   });
 });
 
-test('a section heading in a mockup is an h1, the way the plugin renders one', () => {
-  // `// # Title` parses as level 1, so the plugin emits `h1`. A mockup using `h2` for a *section* is styled
-  // as a within-section title and reads a size too small — the same mismatch that made a heading fix land on
-  // a rule that never fired.
-  //
-  // **A heading inside a `@blocks` row is the exception, and an `h2` there is correct.** `#Seed` among the
-  // columns parses to level 2 and the renderer builds an `h2`, because it groups *rows* one level below the
-  // block's own title. So the rule is about where the heading sits, not about the tag alone: a heading in a
-  // `config-ui-row--heading` wrapper is a section and must be `h1`; anything else is nested and may not be.
+test('a section heading in a mockup is an h2, the way the plugin renders one', () => {
+  // Configuration UI never emits h1: `// # Title` is level 1 and renders as `h2`. Docs keep h1.
+  // A heading inside a `@blocks` row is `h3` (`#Seed` among columns is nested one level below the
+  // section). A heading in a `config-ui-row--heading` wrapper is a section and must be `h2`.
   mockups().forEach((file) => {
     const html = fs.readFileSync(path.join(DIR, file), 'utf8');
     const levels = new Set([...html.matchAll(/<(h\d) class="config-ui-heading"/g)].map((m) => m[1]));
     assert.ok(levels.size > 0, file + ' has no headings at all, which cannot be right');
 
-    // Checked by level rather than by position, because one of these files *generates* its markup and the
-    // wrapper and the heading are never adjacent in its source. Two levels are legitimate and no more: h1 for
-    // a section, h2 for a heading inside a `@blocks` row. An h3 in a mockup is styled by a rule the panel
-    // never fires and reads a size that exists nowhere in the plugin.
-    const stray = [...levels].filter((tag) => tag !== 'h1' && tag !== 'h2');
+    const stray = [...levels].filter((tag) => tag !== 'h2' && tag !== 'h3');
     assert.deepEqual(stray, [], file + ' uses heading levels the plugin does not emit: ' + stray.join(', '));
 
-    // And an h2 only earns its place in a panel that has blocks to nest it in.
-    if (levels.has('h2')) {
+    // Nested h3 only earns its place in a panel that has blocks to nest it in.
+    if (levels.has('h3')) {
       assert.match(html, /config-ui-rows--blocks/,
-        file + ' uses an h2 with no @blocks row to nest it in, so it is a section heading a size too small');
+        file + ' uses an h3 with no @blocks row to nest it in');
     }
   });
 });

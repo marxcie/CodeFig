@@ -1,82 +1,199 @@
 // @Foundation
 // @DOC_START
-// One viewport registry per file, one manifest per generated token set, and one copy of the
-// helpers the Design System Foundations scripts each used to carry.
+// # Stores Design System Foundations manifests, viewport registry, stamps, and portable config
 //
 // ## Overview
-// A **viewport** is `{ key, label, width }` and nothing else — columns, gaps and spacing scales
-// are each domain's own payload. The **registry** is the file's list of viewports, stored on
-// `figma.root`. A **set** is one run's output: `{ collection, group, domain, config }`, recorded
-// as a **manifest** on the collection it wrote to. Two collections can hold two sets ("Spacing A"
-// and "Spacing B") while sharing the one registry.
 //
-// Storage is *shared* plugin data in the `codefig` namespace, so the values are readable by other
-// tooling and through the REST API rather than being locked to this plugin's id. Every entry is
-// capped at 100 kB by Figma; writes that would exceed it are reported, not thrown.
+// One **viewport registry** per file (on `figma.root`), one **manifest** per generated token set (on the collection), and the helpers Design System Foundations scripts share.
 //
-// ## Nothing here deletes
-// There is no collection- or variable-removal helper in this library, and adding one has a price
-// of entry. A variable's id and published key are minted at creation, so removing and recreating
-// breaks every binding in this file and leaves subscribing files with missing variables they
-// cannot relink. Renaming is safe; deleting is not.
+// A **viewport** is `{ key, label, width }` — columns, gaps, and scales stay in each domain's payload. A **set** is one run's output: `{ collection, group, domain, config }`. Two collections can hold two sets while sharing one registry.
 //
-// If a removal helper is ever needed here, it **refuses** when the collection is published
-// (`getPublishStatusAsync() !== 'UNPUBLISHED'`) or when its variables have consumers, and it takes
-// an explicit `force`. Test scratch passes on its own merits: unpublished, unconsumed.
+// Storage is shared plugin data in the `codefig` namespace (readable by other tooling / REST). Each entry is capped at 100 kB; oversize writes are reported, not thrown.
 //
-// ## The manifest is a cache. The file wins.
-// `readFoundation` reads the registry, the collections' modes and the `viewport-width` variables,
-// and reconciles them. Where they disagree the file is believed and the disagreement is reported;
-// a manifest is never trusted over what is actually in the document. Call `describeFoundation`
-// and print it, so state that is invisible in Figma's UI is at least visible in a run's output.
+// ### Nothing here deletes
 //
-// ## Companion imports
-// `@import` does not follow calls across scripts, so a script that uses the mode helpers must
-// import them from `@Variables` itself:
+// No collection- or variable-removal helper. A variable's id and published key are minted at creation — delete and recreate breaks bindings in this file and leaves subscribers with missing variables. Rename is safe; update in place.
 //
-// | If you call | Also import |
-// |---|---|
-// | `planFoundationModes` | `planModes` from `@Variables` |
-// | `applyFoundationModes` | `setupModes` from `@Variables` |
+// ### The file wins over the manifest
 //
-// `npm run validate` fails the build when a runnable script misses one.
+// `readFoundation` reconciles registry, modes, and `viewport-width` variables. Where they disagree, the document wins and the disagreement is reported. Use `describeFoundation` so invisible state shows up in a run's output.
 //
-// ## The portable config
-// One v1 shape does three jobs: the blob you paste between files, the `config` slice a manifest
-// records, and what Copy config puts on the clipboard or writes to a text layer.
-// `normaliseConfig` accepts every shape CodeFig has ever taken — the current top level, the
-// legacy `structure.*`, the internal `{collectionName, group, config, variables}` wrapper,
-// `spacingScaling` / `fontScaling`, `figmaStyles`, every `roundTo` spelling — and reports what it
-// translated. `toDomainConfig(v1, domain)` converts back to the shape today's unrewritten scripts
-// read, which is what keeps the two normalisation paths from disagreeing until phases 3-5.
+// Mode helpers need companions from `@Variables`: `planFoundationModes` → `planModes`; `applyFoundationModes` → `setupModes`.
 //
-// **v1 carries declared inputs only.** A run mutates its config in place (`materializeSpacingSizes`
-// and friends), and exporting a derivation freezes it: paste that elsewhere and `steps: 6`
-// regenerates nothing. Derived fields are dropped on the way in and reported.
+// ### Portable config
+//
+// One v1 shape covers paste-between-files, the manifest `config` slice, and Copy config. `normaliseConfig` accepts older spellings and reports translations. `toDomainConfig` converts back for domain scripts. Derived fields are dropped on the way in so a paste cannot freeze a one-shot derivation.
+//
+// Token identity is a **stamp** (`{ owner, domain, set, token }`), not a name. Bracket writes with `alignStampedTokens` then `stampGeneratedTokens` after `writeManifest`.
+//
+// Boot-time repair of orphan plugin data lives in the plugin main (`foundation-maintain`), not here — `reconcileFoundation` stays read-only.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
 // | Storage keys | foundationNamespace, foundationRegistryKey, foundationSetKey, foundationSetIdFromKey, foundationMintSetId, foundationEntrySizeLimit |
-// | Helpers | viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup |
-// | Registry shape | normaliseViewport, sortViewports, parseRegistry, serialiseRegistry |
-// | Manifest shape | parseManifest, serialiseManifest |
+// | Helpers | viewportLabel, viewportKeyFromLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries |
+// | Registry / manifest | normaliseViewport, sortViewports, parseRegistry, serialiseRegistry, parseManifest, serialiseManifest |
 // | Reconciliation | reconcileFoundation, describeFoundation, deriveSetGroup |
 // | Figma | readFoundation, registryViewportLabels, writeRegistry, readManifest, writeManifest, findFoundationSet |
 // | Modes | planFoundationModes, applyFoundationModes, foundationModeIds |
 // | Config | normaliseConfig, toDomainConfig, toPortableConfig, emptyPortableConfig, configDomainOf |
 // | Config text | serialisePortableConfig, parsePortableConfig, describeConfigTranslations |
 // | Config on canvas | writeConfigToTextLayer, readConfigFromTextLayer, findConfigTextLayers |
-// | Stamps | stampValue, readStampFrom, stampToken, readStamp, findByStamp, alignStampedTokens, stampGeneratedTokens, describeStampAlignment |
-//
-// Boot-time clear-case repair of orphan registry / manifest / stamp plugin data lives in
-// `src/foundation-maintain.js` (plan 39) — not here — so `reconcileFoundation` stays read-only
-// and the plugin main can run maintenance without `@import`.
-//
-// `requestClipboardCopy` and `createCopyResult` live in `@InfoPanel`, not here — putting the
-// clipboard plumbing in the results library is what lets a script use it without depending on
-// the foundation.
+// | Stamps | stampValue, readStampFrom, stampToken, readStamp, planCopyMoveSetIdentity, findByStamp, alignStampedTokens, stampGeneratedTokens, describeStampAlignment |
 // @DOC_END
+// Shared component styles for markup this library emits (tier 2: library @STYLE_START).
+// Opening a script that @imports this library injects these with the script sheet.
+// @STYLE_START
+// /* ============================================================
+//    GRID PANEL — preview and suggestions
+//
+//    Written against artifacts/mockup-panels/grid-target.html, which links this stylesheet, so
+//    the mockup and the plugin cannot disagree about how these look. Colours from the frames:
+//    margins purple, columns green.
+//    ============================================================ */
+// /* 7 & 8. **One grid.** Row N holds the span bar and its col-N value, so they share a line by
+//    construction rather than because two stacks were given matching gaps — which is what they had,
+//    7px against 5px, and matching the numbers would only have hidden the fact that nothing tied
+//    them together.
+//
+//    The diagram and the Total line are the first row; the twelve span rows follow.
+//
+//    8. Every width is a **proportion of the total**, read from the frame: at 1440/80/24/12 the
+//    frame draws 716 wide with 40px margins, 12px gaps and 42px columns — which is 1440 at 49.7%,
+//    exactly the "(50%)" the Total line reports. So the scale is not decoration, it is the
+//    diagram, and the inline widths the renderer writes come straight from the arithmetic. */
+// .grid-preview {
+//   display: grid;
+//   grid-template-columns: 1fr auto;
+//   column-gap: var(--space-xl);
+//   row-gap: 6px;
+//   width: 100%;
+//   align-items: center;
+// }
+//
+// .grid-preview-diagram {
+//   grid-column: 1;
+//   display: flex;
+//   height: 44px;
+//   margin-bottom: 6px;
+// }
+//
+// /* **The drawing is in real pixels now, so it can be wider than the panel.** Half of a 1920 grid is
+//    960, and a panel narrower than that must scroll rather than squash — squashing is what made the
+//    old percentage drawing unmeasurable in the first place. */
+// .grid-preview {
+//   overflow-x: auto;
+// }
+//
+// /* A filled band, not a dashed edge. The dashed guides still run down the spans area at the
+//    content edges — the frame has both — but the band is the margin. */
+// /* `flex: 0 0 auto` because these widths *are* the drawing: a flex item that shrinks turns a
+//    proportional diagram into an approximate one, and at a narrow width the margin band rounds
+//    away to nothing — which is exactly how it went missing. */
+// .grid-preview-margin,
+// .grid-preview-col,
+// .grid-preview-gap {
+//   flex: 0 0 auto;
+// }
+//
+// .grid-preview-margin { background: #b7a8f0; }
+// .grid-preview-col { background: #17976a; }
+// .grid-preview-gap { background: transparent; }
+//
+// .grid-preview-total {
+//   grid-column: 2;
+//   align-self: center;
+//   margin-bottom: 6px;
+//   white-space: nowrap;
+// }
+//
+// /* The guides: one item spanning every span row, behind the bars. Drawn once rather than per row,
+//    so they are continuous the way the frame shows them. */
+// .grid-preview-guides {
+//   grid-column: 1;
+//   grid-row: 2 / -1;
+//   align-self: stretch;
+//   border-left: 1px dashed rgba(120, 100, 200, 0.7);
+//   border-right: 1px dashed rgba(120, 100, 200, 0.7);
+//   background: rgba(183, 168, 240, 0.09);
+//   pointer-events: none;
+// }
+//
+// .grid-preview-bar {
+//   grid-column: 1;
+//   height: 8px;
+//   border-radius: var(--radius-sm);
+//   background: #17976a;
+// }
+//
+// .grid-preview-value {
+//   grid-column: 2;
+//   white-space: nowrap;
+//   font-size: var(--font-size-body);
+// }
+//
+// /* No target chosen yet. The Start and New frames are grey even with modes set, so this is about
+//    whether there is somewhere to write, not whether the fields are filled. */
+// .grid-preview.is-unset .grid-preview-margin { background: #dcdcdf; }
+// .grid-preview.is-unset .grid-preview-col { background: #8a8a8e; }
+// .grid-preview.is-unset .grid-preview-bar { background: #dcdcdf; }
+// .grid-preview.is-unset .grid-preview-guides {
+//   border-color: rgba(140, 140, 145, 0.6);
+//   background: rgba(140, 140, 145, 0.05);
+// }
+// .grid-preview.is-unset .grid-preview-value,
+// .grid-preview.is-unset .grid-preview-total { opacity: 0.55; }
+//
+// /* **Three across, two down.** Márton's revision: the cards speak for the mode you are looking at
+//    and nothing else, so they carry no badges — and without a right-hand column of tags there is no
+//    reason for a card to be a full-width row. `repeat(3, 1fr)` rather than `auto-fill`, because six
+//    cards in a 3x2 grid is the design; a card count that reflows with the panel width would make the
+//    section a different shape at every size. */
+// .grid-suggestions {
+//   display: grid;
+//   grid-template-columns: repeat(3, 1fr);
+//   gap: var(--space-sm);
+//   width: 100%;
+// }
+//
+// .grid-suggestion {
+//   display: flex;
+//   flex-direction: column;
+//   gap: 2px;
+//   min-width: 0;
+//   padding: 10px 14px;
+//   border: 1px solid var(--border-color, #e1e5e9);
+//   border-radius: var(--radius-md);
+//   background: var(--input-bg, #fff);
+//   font: inherit;
+//   font-size: var(--font-size-body);
+//   color: inherit;
+//   text-align: left;
+//   cursor: pointer;
+// }
+//
+// /* Selected means *currently applied*, computed from the fields rather than remembered. */
+// .grid-suggestion.is-selected {
+//   border-color: var(--active-bg, #0a84ff);
+//   box-shadow: 0 0 0 1px var(--active-bg, #0a84ff);
+// }
+//
+// .grid-suggestion-spans {
+//   font-size: var(--font-size-small);
+//   opacity: 0.6;
+// }
+//
+// .grid-suggestions-empty,
+// .grid-suggestions-more {
+//   grid-column: 1 / -1;
+//   margin: 0;
+//   font-size: var(--font-size-small);
+//   opacity: 0.7;
+// }
+// @STYLE_END
+
 
 // ============================================================================
 // STORAGE KEYS
@@ -1644,6 +1761,103 @@ function stampToken(target, domain, tokenKey, rev, setId) {
 
 function readStamp(target) {
   return readStampFrom(target.getSharedPluginData(foundationNamespace(), 'stamp'));
+}
+
+/**
+ * Pure plan for stamp / manifest identity when CodeFig copies or moves variables.
+ *
+ * **Copy** → new set identity (mint); originals keep stamps. **Move** of a whole set → keep
+ * the set id. **Partial Move** (some tokens of a set left behind) → mint for the moved
+ * portion so one set id is never filed in two places. Unstamped sources stay unstamped. A
+ * stamp whose set has no source manifest is left alone rather than guessed.
+ *
+ * `transfers`: [{ sourceStamp, destName, destCreated, destRef? }]
+ * `manifestsBySetId`: { [setId]: { domain, group, modes, modeIds, tokens, config, key? } }
+ * `isMove`: boolean
+ * `partialSetIds`: optional `{ [setId]: true }` — Move treats these like Copy (mint).
+ *
+ * → `{ actions: [{ oldSetId, newSetId, mint, domain, targetGroup, tokens, config, modes,
+ *   modeIds, sourceKey, stampTargets: [{ destRef, destName, domain, token, rev }] }] }`
+ * When `mint` is true, `newSetId` is '' (caller calls `foundationMintSetId`).
+ */
+function planCopyMoveSetIdentity(transfers, manifestsBySetId, isMove, partialSetIds) {
+  var bySet = {};
+  var order = [];
+  var partial = partialSetIds || {};
+  for (var i = 0; i < (transfers || []).length; i++) {
+    var t = transfers[i];
+    if (!t) continue;
+    var stamp = t.sourceStamp;
+    if (!stamp || !stamp.set) continue;
+    var sid = String(stamp.set);
+    var mintLike = !isMove || !!partial[sid];
+    // Copy / partial-move only stamps newly created variables; full Move relocates identity.
+    if (mintLike && !t.destCreated) continue;
+    if (!bySet[sid]) {
+      bySet[sid] = [];
+      order.push(sid);
+    }
+    bySet[sid].push(t);
+  }
+
+  var actions = [];
+  var manifests = manifestsBySetId || {};
+  for (var oi = 0; oi < order.length; oi++) {
+    var oldSetId = order[oi];
+    var group = bySet[oldSetId];
+    var sourceManifest = manifests[oldSetId] || null;
+    if (!sourceManifest) continue;
+
+    var stampTargets = [];
+    var destStampsForGroup = [];
+    var tokenList = [];
+    var tokenSeen = {};
+    for (var gi = 0; gi < group.length; gi++) {
+      var item = group[gi];
+      var st = item.sourceStamp;
+      var token = String(st.token || '');
+      stampTargets.push({
+        destRef: item.destRef,
+        destName: item.destName,
+        domain: st.domain,
+        token: token,
+        rev: typeof st.rev === 'number' ? st.rev : 1
+      });
+      destStampsForGroup.push({
+        name: item.destName,
+        domain: st.domain,
+        set: oldSetId,
+        token: token
+      });
+      if (token && !tokenSeen[token]) {
+        tokenSeen[token] = true;
+        tokenList.push(token);
+      }
+    }
+
+    var derived = deriveSetGroup(destStampsForGroup, sourceManifest.domain, oldSetId);
+    var targetGroup = derived && derived.group != null
+      ? derived.group
+      : (sourceManifest.group == null ? '' : String(sourceManifest.group));
+
+    var mint = !isMove || !!partial[oldSetId];
+    actions.push({
+      oldSetId: oldSetId,
+      newSetId: mint ? '' : oldSetId,
+      mint: mint,
+      domain: sourceManifest.domain,
+      targetGroup: targetGroup,
+      tokens: tokenList.length ? tokenList : (Array.isArray(sourceManifest.tokens) ? sourceManifest.tokens.slice() : []),
+      config: sourceManifest.config && typeof sourceManifest.config === 'object' ? sourceManifest.config : {},
+      modes: Array.isArray(sourceManifest.modes) ? sourceManifest.modes.slice() : [],
+      modeIds: sourceManifest.modeIds && typeof sourceManifest.modeIds === 'object'
+        ? sourceManifest.modeIds
+        : {},
+      sourceKey: sourceManifest.key || foundationSetKey(sourceManifest.domain, oldSetId),
+      stampTargets: stampTargets
+    });
+  }
+  return { actions: actions };
 }
 
 /**
