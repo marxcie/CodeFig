@@ -1,32 +1,27 @@
 // Duplicate variable collection
 // @DOC_START
-// Clones a local variable collection (modes, variables, values, descriptions, scopes, and any DSF
-// set the source collection carries).
+// # Clones a local variable collection including modes, values, metadata, and Design System Foundations sets
 //
 // ## Overview
-// Finds a collection by name, creates a new collection with the given new name, copies all modes and variables with their values and metadata. No recursive option; run once per copy.
 //
-// Figma has no native way to duplicate a collection, which is why this script exists. Because of
-// that, it is also the only place a DSF set's record can be carried across the copy — nothing else
-// runs when a collection is duplicated. A source with no DSF set copies exactly as before; there
-// is nothing extra to carry.
+// Figma has no native duplicate for collections. Pick a source collection and a name for the copy.
+// The script creates a new collection and copies all modes and variables with their values,
+// descriptions, and scopes.
 //
-// **Copies the intent, not the identity.** Every set the source collection has a manifest for
-// (Colors, Grid, Spacing, Radius, Typography — whichever are present) is copied to the duplicate
-// with its config, tokens and modes intact, but under a **new, freshly minted set id** — carrying
-// the source's id over would file one set under two collections, which `readFoundation` counts as
-// two sets rather than one copied. The duplicate's variables are re-stamped to match, so the new
-// set's identity is consistent with itself from the moment it exists.
+// If the source carries Design System Foundations sets (Colors, Grid, Spacing, Radius, Typography),
+// those configs are copied too under **new set ids**. The duplicate's variables are re-stamped to
+// match. A source with no Foundations set copies as plain variables only.
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | sourceCollectionName | Exact name of the collection to duplicate. |
-// | newCollectionName | Name for the new collection. |
+// **Source collection name** is an exact collection picker, not a search pattern.
 //
-// **Not a search pattern.** `sourceCollectionName` is a collection picker — compared with `===`, not with the
-// `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
-// identifier, not a search.
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Source collection name**<br>`sourceCollectionName` | Local collection to duplicate. |
+// | **New collection name**<br>`newCollectionName` | Name for the new collection. |
 // @DOC_END
 
 // @UI_CONFIG_START

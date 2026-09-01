@@ -61,33 +61,45 @@ figma.showUI(__html__, {
 // `require`, and assigning `var require = …` is unreliable there (and bare `tsc` wipes a
 // prepended shim). Always load siblings through this name, never `require`.
 declare function __codefigMainRequire(moduleId: string): any;
-try {
-  const foundationMaintain = __codefigMainRequire('./foundation-maintain') as {
-    runFoundationMaintain: (
-      figmaApi: PluginAPI,
-      log?: (message: string) => void
-    ) => Promise<unknown>;
-  };
-  void foundationMaintain
-    .runFoundationMaintain(figma, (message: string) => {
-      // Quiet housekeeping: plugin console + bridge (dev), never toast / InfoPanel.
-      console.log(message);
-      forwardToConsoleBridge('log', [message]);
-    })
-    .catch((err: unknown) => {
-      const text =
-        'foundationMaintain failed: ' +
-        (err instanceof Error ? err.message : String(err));
-      console.log(text);
-      forwardToConsoleBridge('log', [text]);
-    });
-} catch (err) {
-  const text =
-    'foundationMaintain unavailable: ' +
-    (err instanceof Error ? err.message : String(err));
-  console.log(text);
-  forwardToConsoleBridge('log', [text]);
+/**
+ * Foundation maintain on open can race Figma's variable graph (stamps missing → empty plan).
+ * Schedule again from LIST once the document answers; empty plans stay silent.
+ */
+function scheduleFoundationMaintain(reason: string): void {
+  try {
+    const foundationMaintain = __codefigMainRequire('./foundation-maintain') as {
+      runFoundationMaintain: (
+        figmaApi: PluginAPI,
+        log?: (message: string) => void
+      ) => Promise<unknown>;
+    };
+    void foundationMaintain
+      .runFoundationMaintain(figma, (message: string) => {
+        // Quiet housekeeping: plugin console + bridge (dev), never toast / InfoPanel.
+        console.log(message);
+        forwardToConsoleBridge('log', [message]);
+      })
+      .catch((err: unknown) => {
+        const text =
+          'foundationMaintain failed (' +
+          reason +
+          '): ' +
+          (err instanceof Error ? err.message : String(err));
+        console.log(text);
+        forwardToConsoleBridge('log', [text]);
+      });
+  } catch (err) {
+    const text =
+      'foundationMaintain unavailable (' +
+      reason +
+      '): ' +
+      (err instanceof Error ? err.message : String(err));
+    console.log(text);
+    forwardToConsoleBridge('log', [text]);
+  }
 }
+
+scheduleFoundationMaintain('boot');
 
 /**
  * Plan 38 — STRING-variable script storage (`.plans/38-script-storage-variables.md`).
@@ -1269,7 +1281,11 @@ async function loadExampleScripts() {
         name: metadata.name, // Use extracted name (from comments or filename)
         code: script.code,
         type: script.type || metadata.type, // Use provided type or extracted type
-        filename: script.filename || script.filePath?.split('/').pop() || 'unknown'
+        filename: script.filename || script.filePath?.split('/').pop() || 'unknown',
+        // Plan 32: stamped at build time onto the embed; must survive this remap or packages
+        // stay inert at run time.
+        packageId: script.packageId || undefined,
+        packageVisibility: script.packageVisibility || undefined
       };
     });
     
@@ -1318,6 +1334,7 @@ figma.ui.onmessage = (msg) => {
   }
   
   if (msg.type === 'LIST') {
+    scheduleFoundationMaintain('list');
     // clientStorage remains canonical while SCRIPT_STORAGE_VARIABLES is false (plan 38).
     if (SCRIPT_STORAGE_VARIABLES && scriptStorage) {
       listScriptsWithVariableStore(scriptStorage)

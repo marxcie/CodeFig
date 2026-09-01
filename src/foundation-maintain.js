@@ -5,10 +5,12 @@
  * without going through `@import`. Keep `reconcileFoundation` read-only; this is the write
  * path for housekeeping only.
  *
- * Rules (plan 39):
+ * Rules (plan 39 / DEFERRED §11):
  * - Never delete variables, collections, or styles
  * - No UI toast / InfoPanel — caller logs to console / bridge only
- * - Ambiguous cases (e.g. two groups claiming one set id while a manifest still exists) → leave alone
+ * - Duplicate / copy = new identity: when two+ groups share one set id, keep stamp+manifest on
+ *   the original group; restamp the others under a new set id (forked manifest). When the
+ *   original cannot be chosen without inventing, leave alone (`skippedAmbiguous`).
  *
  * `planFoundationMaintenance(snapshot)` is pure and unit-tested. `runFoundationMaintain(figma, log)`
  * gathers a snapshot from the document and applies the plan.
@@ -137,6 +139,73 @@ function groupOfStamp(name, token) {
 }
 
 /**
+ * Figma's native "Duplicate group" appends ` 2`, ` 3`, …; some paste paths use ` Copy`.
+ * Used only to break ties when choosing which group keeps a colliding set id.
+ */
+function looksLikeFigmaCopySuffix(groupName) {
+  var g = String(groupName == null ? '' : groupName);
+  if (!g) return false;
+  if (/\s+\d+$/.test(g)) return true;
+  if (/\s+copy$/i.test(g)) return true;
+  return false;
+}
+
+/**
+ * Which group keeps the existing set id when several claim it.
+ * Prefer the manifest's last-known `group`; else the single name that is not a Figma copy
+ * suffix. Returns null when still ambiguous — do not invent a winner.
+ */
+function pickKeepGroupForAmbiguousSet(groups, manifestGroup) {
+  var list = [];
+  var seen = {};
+  for (var i = 0; i < (groups || []).length; i++) {
+    var g = groups[i] == null ? '' : String(groups[i]);
+    if (seen[g]) continue;
+    seen[g] = true;
+    list.push(g);
+  }
+  if (list.length < 2) return list.length === 1 ? list[0] : null;
+
+  var want = manifestGroup == null ? '' : String(manifestGroup);
+  if (want) {
+    for (var m = 0; m < list.length; m++) {
+      if (list[m] === want) return list[m];
+    }
+  }
+
+  var nonCopy = [];
+  for (var j = 0; j < list.length; j++) {
+    if (!looksLikeFigmaCopySuffix(list[j])) nonCopy.push(list[j]);
+  }
+  if (nonCopy.length === 1) return nonCopy[0];
+  return null;
+}
+
+/** Mint a set id (same shape as `@Foundation` `foundationMintSetId`). */
+function mintSetId() {
+  var noise = function () {
+    var n = Math.floor(Math.random() * 1679616).toString(36);
+    while (n.length < 4) n = '0' + n;
+    return n;
+  };
+  return Date.now().toString(36) + '-' + noise() + noise();
+}
+
+function stampValue(domain, tokenKey, rev, setId) {
+  return JSON.stringify({
+    owner: 'dsf',
+    domain: String(domain || ''),
+    set: setId == null ? '' : String(setId),
+    token: String(tokenKey || ''),
+    rev: typeof rev === 'number' ? rev : 1
+  });
+}
+
+function foundationSetKey(domain, setId) {
+  return 'set:' + String(domain || '') + ':' + String(setId == null ? '' : setId);
+}
+
+/**
  * True when a registry viewport matches a collection mode name (label or key).
  */
 function modeMatchesViewport(modeName, viewport) {
@@ -156,8 +225,8 @@ function modeMatchesViewport(modeName, viewport) {
  *   modes: [{ name }]  // every local collection mode (flat is enough for materialisation)
  *   collections: [{
  *     id, name,
- *     manifests: [{ key, id, domain }],  // id may be derived from key when missing on the blob
- *     stamps: [{ variableId, domain, set, token, name }]
+ *     manifests: [{ key, id, domain, group }],  // id may be derived from key when missing on the blob
+ *     stamps: [{ variableId, domain, set, token, name, rev? }]
  *   }]
  * }
  *
@@ -166,6 +235,10 @@ function modeMatchesViewport(modeName, viewport) {
  *   keepRegistryViewports: [...] | null,  // null = leave registry untouched
  *   deleteManifestKeys: [{ collectionId, collectionName, key, setId }],
  *   clearStamps: [{ collectionId, collectionName, variableId, setId, reason }],
+ *   forkSetGroups: [{
+ *     collectionId, collectionName, keepGroup, oldSetId, domain, manifestKey,
+ *     forks: [{ group, newSetId, stamps: [{ variableId, domain, token, rev }] }]
+ *   }],
  *   skippedAmbiguous: [{ code, detail }]
  * }
  */
@@ -175,6 +248,7 @@ function planFoundationMaintenance(snapshot) {
   var keepRegistryViewports = null;
   var deleteManifestKeys = [];
   var clearStamps = [];
+  var forkSetGroups = [];
   var skippedAmbiguous = [];
 
   var modes = src.modes || [];
@@ -218,9 +292,9 @@ function planFoundationMaintenance(snapshot) {
       manifestBySetId[setId] = mf;
     }
 
-    // Count stamped tokens per set id, and groups claiming each set id.
+    // Count stamped tokens per set id, and stamps per (set id, group).
     var stampCountBySet = {};
-    var groupsBySet = {};
+    var stampsBySetGroup = {};
     for (var si = 0; si < stamps.length; si++) {
       var st = stamps[si];
       if (!st) continue;
@@ -229,16 +303,22 @@ function planFoundationMaintenance(snapshot) {
       stampCountBySet[sid] = (stampCountBySet[sid] || 0) + 1;
       var g = groupOfStamp(st.name, st.token);
       if (g == null) g = '';
-      if (!groupsBySet[sid]) groupsBySet[sid] = {};
-      groupsBySet[sid][g] = true;
+      if (!stampsBySetGroup[sid]) stampsBySetGroup[sid] = {};
+      if (!stampsBySetGroup[sid][g]) stampsBySetGroup[sid][g] = [];
+      stampsBySetGroup[sid][g].push(st);
     }
 
-    // Ambiguous: two+ groups claim one set id that still has a manifest → leave alone.
-    for (var ambId in groupsBySet) {
-      if (!Object.prototype.hasOwnProperty.call(groupsBySet, ambId)) continue;
-      if (!manifestBySetId[ambId]) continue;
-      var groupNames = Object.keys(groupsBySet[ambId]);
-      if (groupNames.length > 1) {
+    // Two+ groups claim one set id that still has a manifest → fork copies (new set ids);
+    // keep stamp+manifest on the original when we can name it; otherwise skip.
+    for (var ambId in stampsBySetGroup) {
+      if (!Object.prototype.hasOwnProperty.call(stampsBySetGroup, ambId)) continue;
+      var mfLive = manifestBySetId[ambId];
+      if (!mfLive) continue;
+      var groupNames = Object.keys(stampsBySetGroup[ambId]);
+      if (groupNames.length < 2) continue;
+
+      var keepGroup = pickKeepGroupForAmbiguousSet(groupNames, mfLive.group);
+      if (!keepGroup) {
         skippedAmbiguous.push({
           code: 'ambiguous-set-groups',
           detail: {
@@ -247,7 +327,41 @@ function planFoundationMaintenance(snapshot) {
             groups: groupNames
           }
         });
+        continue;
       }
+
+      var forks = [];
+      for (var gi = 0; gi < groupNames.length; gi++) {
+        var forkGroup = groupNames[gi];
+        if (forkGroup === keepGroup) continue;
+        var groupStamps = stampsBySetGroup[ambId][forkGroup] || [];
+        var forkStampPlan = [];
+        for (var fsi = 0; fsi < groupStamps.length; fsi++) {
+          var gs = groupStamps[fsi];
+          forkStampPlan.push({
+            variableId: gs.variableId,
+            domain: gs.domain,
+            token: gs.token,
+            rev: typeof gs.rev === 'number' ? gs.rev : 1
+          });
+        }
+        forks.push({
+          group: forkGroup,
+          newSetId: mintSetId(),
+          stamps: forkStampPlan
+        });
+      }
+      if (forks.length === 0) continue;
+
+      forkSetGroups.push({
+        collectionId: col.id,
+        collectionName: col.name || '',
+        keepGroup: keepGroup,
+        oldSetId: ambId,
+        domain: mfLive.domain || '',
+        manifestKey: mfLive.key,
+        forks: forks
+      });
     }
 
     // 2. Manifest set:* with no remaining stamped tokens for that set id → delete key.
@@ -264,11 +378,24 @@ function planFoundationMaintenance(snapshot) {
     }
 
     // 3. Stamp whose set id has no matching manifest on the same collection → clear stamp.
-    //    Leave legacy (empty set) alone. Leave alone is automatic when a manifest exists,
-    //    including the ambiguous multi-group case above.
+    //    Leave legacy (empty set) alone. Stamps being forked still have a live manifest for the
+    //    old set id until apply — do not clear them here.
+    var forkingVariableIds = {};
+    for (var fi = 0; fi < forkSetGroups.length; fi++) {
+      if (forkSetGroups[fi].collectionId !== col.id) continue;
+      var forksList = forkSetGroups[fi].forks || [];
+      for (var fj = 0; fj < forksList.length; fj++) {
+        var fstamps = forksList[fj].stamps || [];
+        for (var fk = 0; fk < fstamps.length; fk++) {
+          forkingVariableIds[fstamps[fk].variableId] = true;
+        }
+      }
+    }
+
     for (var sti = 0; sti < stamps.length; sti++) {
       var stamp = stamps[sti];
       if (!stamp || stamp.variableId == null) continue;
+      if (forkingVariableIds[stamp.variableId]) continue;
       var stampSet = stamp.set == null ? '' : String(stamp.set);
       if (!stampSet) continue;
       if (manifestBySetId[stampSet]) continue;
@@ -287,6 +414,7 @@ function planFoundationMaintenance(snapshot) {
     keepRegistryViewports: keepRegistryViewports,
     deleteManifestKeys: deleteManifestKeys,
     clearStamps: clearStamps,
+    forkSetGroups: forkSetGroups,
     skippedAmbiguous: skippedAmbiguous
   };
 }
@@ -296,6 +424,7 @@ function planIsEmpty(plan) {
   if (plan.removeRegistryKeys && plan.removeRegistryKeys.length) return false;
   if (plan.deleteManifestKeys && plan.deleteManifestKeys.length) return false;
   if (plan.clearStamps && plan.clearStamps.length) return false;
+  if (plan.forkSetGroups && plan.forkSetGroups.length) return false;
   return true;
 }
 
@@ -365,7 +494,8 @@ async function runFoundationMaintain(figmaApi, log) {
         name: variable.name,
         domain: stamp.domain,
         set: stamp.set || '',
-        token: stamp.token
+        token: stamp.token,
+        rev: typeof stamp.rev === 'number' ? stamp.rev : 1
       });
     }
 
@@ -390,6 +520,7 @@ async function runFoundationMaintain(figmaApi, log) {
       return d.collectionName + '/' + d.key;
     }),
     clearedStamps: plan.clearStamps.length,
+    forkedSetGroups: 0,
     skippedAmbiguous: plan.skippedAmbiguous.length
   };
 
@@ -433,6 +564,73 @@ async function runFoundationMaintain(figmaApi, log) {
     }
   }
 
+  // Fork copy groups that shared a set id: restamp under a new id + write forked manifest.
+  var forkList = plan.forkSetGroups || [];
+  for (var fi = 0; fi < forkList.length; fi++) {
+    var forkJob = forkList[fi];
+    var forkCol = colById[forkJob.collectionId];
+    if (!forkCol) continue;
+
+    var sourceRaw = '';
+    try {
+      sourceRaw = forkCol.getSharedPluginData(NS, forkJob.manifestKey) || '';
+    } catch (e8) {
+      sourceRaw = '';
+    }
+    var sourceParsed = null;
+    try {
+      sourceParsed = sourceRaw ? JSON.parse(sourceRaw) : null;
+    } catch (e9) {
+      sourceParsed = null;
+    }
+    if (!sourceParsed || typeof sourceParsed !== 'object') {
+      say('foundationMaintain: fork skipped (unreadable manifest): ' + forkJob.manifestKey);
+      continue;
+    }
+
+    for (var fj = 0; fj < forkJob.forks.length; fj++) {
+      var fork = forkJob.forks[fj];
+      var newId = fork.newSetId || mintSetId();
+      for (var fsi = 0; fsi < fork.stamps.length; fsi++) {
+        var fs = fork.stamps[fsi];
+        try {
+          var variable3 = await figma.variables.getVariableByIdAsync(fs.variableId);
+          if (!variable3) continue;
+          variable3.setSharedPluginData(
+            NS,
+            STAMP_KEY,
+            stampValue(fs.domain, fs.token, fs.rev, newId)
+          );
+        } catch (e10) {
+          say('foundationMaintain: restamp failed: ' + fs.variableId);
+        }
+      }
+
+      var forkedBlob = {
+        v: 1,
+        updated: new Date().toISOString(),
+        id: newId,
+        domain: String(sourceParsed.domain || forkJob.domain || ''),
+        group: fork.group,
+        modes: Array.isArray(sourceParsed.modes) ? sourceParsed.modes.slice() : [],
+        modeIds: sourceParsed.modeIds && typeof sourceParsed.modeIds === 'object'
+          ? sourceParsed.modeIds
+          : {},
+        tokens: Array.isArray(sourceParsed.tokens) ? sourceParsed.tokens.slice() : [],
+        config: sourceParsed.config && typeof sourceParsed.config === 'object'
+          ? sourceParsed.config
+          : {}
+      };
+      var forkKey = foundationSetKey(forkedBlob.domain, newId);
+      try {
+        forkCol.setSharedPluginData(NS, forkKey, JSON.stringify(forkedBlob));
+        summary.forkedSetGroups++;
+      } catch (e11) {
+        say('foundationMaintain: fork manifest write failed: ' + forkKey);
+      }
+    }
+  }
+
   if (!planIsEmpty(plan) || plan.skippedAmbiguous.length) {
     say(
       'foundationMaintain: removedRegistry=' +
@@ -441,6 +639,8 @@ async function runFoundationMaintain(figmaApi, log) {
         summary.deletedManifestKeys.length +
         ' clearedStamps=' +
         summary.clearedStamps +
+        ' forkedSets=' +
+        summary.forkedSetGroups +
         ' skippedAmbiguous=' +
         summary.skippedAmbiguous
     );
@@ -460,6 +660,10 @@ module.exports = {
   foundationSetIdFromKey: foundationSetIdFromKey,
   parseManifest: parseManifest,
   readStampFrom: readStampFrom,
+  groupOfStamp: groupOfStamp,
+  looksLikeFigmaCopySuffix: looksLikeFigmaCopySuffix,
+  pickKeepGroupForAmbiguousSet: pickKeepGroupForAmbiguousSet,
+  mintSetId: mintSetId,
   planFoundationMaintenance: planFoundationMaintenance,
   planIsEmpty: planIsEmpty,
   runFoundationMaintain: runFoundationMaintain

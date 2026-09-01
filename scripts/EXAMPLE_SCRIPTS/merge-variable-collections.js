@@ -1,25 +1,42 @@
 // Copy or move variables
 // @DOC_START
-// Copies or moves variable **definitions** from a source collection (optional group and mode)
-// into a target collection (optional group and mode). Matching names in the target are
-// overwritten. **Move** rebinds this file’s layers and local styles to the new variables, then
-// removes the source variables (and the source collection when it is empty and unpublished).
-// **Copy** leaves the source and its bindings alone.
+// # Copies or moves variable definitions from a source collection into a target collection
 //
 // ## Overview
-// Empty **Group** = every variable in the collection. Empty **Mode** on both sides = every source
-// mode, matched by name on the target (missing target modes are created). Source mode set + target
-// mode set = only that mode’s values are written. Target mode may be a new name.
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | sourceCollection / targetCollection | Local collections (pickers, exact name). |
-// | sourceGroup / targetGroup | Path prefix filter / destination prefix. Empty = none. |
-// | sourceMode / targetMode | Mode filter / destination mode. Empty = all / match by name. |
-// | moveOrCopy | **Move** (rebind + remove source) or **Copy** (duplicate only). |
+// Copies or moves variables from a source collection (optional group and mode) into a target
+// collection (optional group and mode). Matching names in the target are overwritten.
 //
-// **Not a search pattern.** Collection pickers are identifiers, not `*` / regex matching.
+// **Move** rebinds this file's layers and local styles to the new variables, then removes the
+// source variables (and the source collection when it is empty and unpublished). **Copy** leaves
+// the source and its bindings alone.
+//
+// Empty **Group** means every variable in the collection. Empty **Mode** on both sides means every
+// source mode, matched by name on the target (missing target modes are created). Source mode set
+// plus target mode set writes only that mode's values. Target mode may be a new name.
+//
+// ### Design System Foundations stamps
+//
+// **Copy** mints a new set id for each Foundations set that appears on the new variables, writes
+// forked manifests, and restamps the copies. Originals keep their stamps. **Move** keeps the same
+// set id (identity follows the relocated definitions). Unstamped hand-made variables stay
+// unstamped. A stamp with no source manifest is left alone rather than guessed.
+//
+// Collection pickers are exact names, not search patterns.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Collection**<br>`sourceCollection` | Source local collection. |
+// | **Group**<br>`sourceGroup` | Only variables under this path. Leave empty for the whole collection. |
+// | **Mode**<br>`sourceMode` | Only this mode's values. Leave empty to take every mode. |
+// | **Collection**<br>`targetCollection` | Destination local collection. |
+// | **Group**<br>`targetGroup` | Destination path prefix. Leave empty to keep each variable's name under the source group. |
+// | **Mode**<br>`targetMode` | Mode to write into. Pick an existing one or New mode. Leave empty to match source modes by name. |
+// | **Move or copy**<br>`moveOrCopy` | **Move** rebinds this file and removes the source variables. **Copy** leaves the source alone. |
 // @DOC_END
 
 // @UI_CONFIG_START
@@ -55,11 +72,12 @@ var moveOrCopy = 'Move';
 //     { "type": "divider" },
 //     { "key": "moveOrCopy", "type": "radio", "label": "Move or copy", "options": ["Move", "Copy"] },
 //     { "type": "paragraph", "attachTo": "previous",
-//       "text": "Move rebinds this file and removes the source variables. Copy leaves the source alone." }
+//       "text": "Move rebinds this file and removes the source variables. Copy leaves the source alone. Design System Foundations stamps: Copy gets a new set id; Move keeps the same one." }
 //   ]
 // }
 // @PANEL_END
 
+@import { foundationNamespace, parseManifest, writeManifest, foundationMintSetId, foundationSetIdFromKey, foundationModeIds, stampToken, readStamp, planCopyMoveSetIdentity } from "@Foundation"
 function normalizeVariableName(name) {
   if (typeof name !== 'string') return name;
   return name.replace(/\/+/g, '/').replace(/^\//, '').replace(/\/$/, '');
@@ -520,6 +538,100 @@ async function findVariableByNameInCollection(col, name) {
 }
 
 /**
+ * Read every DSF set manifest on a collection, keyed by set id.
+ */
+function readManifestsBySetId(collection) {
+  var out = {};
+  if (!collection) return out;
+  var ns = foundationNamespace();
+  var keys = [];
+  try {
+    keys = collection.getSharedPluginDataKeys(ns) || [];
+  } catch (e) {
+    return out;
+  }
+  for (var k = 0; k < keys.length; k++) {
+    if (String(keys[k]).indexOf('set:') !== 0) continue;
+    var read = parseManifest(collection.getSharedPluginData(ns, keys[k]));
+    if (!read.manifest) continue;
+    var id = read.manifest.id || foundationSetIdFromKey(keys[k]);
+    if (!id) continue;
+    out[id] = {
+      key: keys[k],
+      id: id,
+      domain: read.manifest.domain,
+      group: read.manifest.group,
+      modes: read.manifest.modes,
+      modeIds: read.manifest.modeIds,
+      tokens: read.manifest.tokens,
+      config: read.manifest.config
+    };
+  }
+  return out;
+}
+
+/**
+ * Apply Copy (mint new set ids) or Move (keep set ids) stamp + manifest identity.
+ * Runs after values are written and before Move deletes source variables.
+ * → `{ setsHandled, sourceKeysToClear }` — caller clears source keys after vars are removed.
+ */
+function applyFoundationIdentity(transfers, sourceCol, targetCol, isMove, partialSetIds) {
+  var manifestsBySetId = readManifestsBySetId(sourceCol);
+  var planned = planCopyMoveSetIdentity(transfers, manifestsBySetId, isMove, partialSetIds);
+  var actions = planned.actions || [];
+  var setsHandled = 0;
+  var sourceKeysToClear = [];
+  var partial = partialSetIds || {};
+
+  for (var ai = 0; ai < actions.length; ai++) {
+    var action = actions[ai];
+    var setId = action.mint ? foundationMintSetId() : action.newSetId;
+    if (!setId) continue;
+
+    for (var si = 0; si < action.stampTargets.length; si++) {
+      var target = action.stampTargets[si];
+      if (!target.destRef) continue;
+      try {
+        stampToken(target.destRef, target.domain, target.token, target.rev, setId);
+      } catch (e) {
+        console.warn('Copy/move: stamp failed', target.destName, e && e.message);
+      }
+    }
+
+    try {
+      writeManifest(targetCol, {
+        id: setId,
+        domain: action.domain,
+        group: action.targetGroup,
+        modes: action.modes,
+        modeIds: foundationModeIds(targetCol, Object.keys(action.modeIds || {})),
+        tokens: action.tokens,
+        config: action.config
+      });
+      setsHandled++;
+    } catch (e2) {
+      console.warn('Copy/move: manifest write failed', action.domain, e2 && e2.message);
+    }
+
+    // Full Move across collections: clear the source manifest after vars are gone.
+    // Partial Move mints a new id — leave the source manifest for the tokens that stay.
+    if (
+      isMove &&
+      sourceCol.id !== targetCol.id &&
+      action.sourceKey &&
+      !action.mint &&
+      !partial[action.oldSetId]
+    ) {
+      if (sourceKeysToClear.indexOf(action.sourceKey) === -1) {
+        sourceKeysToClear.push(action.sourceKey);
+      }
+    }
+  }
+
+  return { setsHandled: setsHandled, sourceKeysToClear: sourceKeysToClear };
+}
+
+/**
  * @param {{ sourceCol, targetCol, sourceGroup, targetGroup, sourceMode, targetMode, isMove }} opts
  */
 async function copyOrMoveVariables(opts) {
@@ -534,6 +646,7 @@ async function copyOrMoveVariables(opts) {
   var updated = 0;
   var skipped = 0;
   var sourceIdsToRemove = [];
+  var identityTransfers = [];
 
   for (var vi = 0; vi < sourceCol.variableIds.length; vi++) {
     var vid = sourceCol.variableIds[vi];
@@ -550,10 +663,12 @@ async function copyOrMoveVariables(opts) {
 
     var sameSlot = sourceCol.id === targetCol.id && normalizeVariableName(srcVar.name) === normalizeVariableName(newName);
     var destVar = sameSlot ? srcVar : await findVariableByNameInCollection(targetCol, newName);
+    var destCreated = false;
 
     if (!destVar) {
       destVar = figma.variables.createVariable(newName, targetCol, srcVar.resolvedType);
       created++;
+      destCreated = true;
     } else if (!sameSlot) {
       if (destVar.resolvedType !== srcVar.resolvedType) {
         console.warn('Skip (type mismatch):', newName, srcVar.resolvedType, 'vs', destVar.resolvedType);
@@ -599,8 +714,63 @@ async function copyOrMoveVariables(opts) {
     if (!sameSlot) {
       oldIdToNew[srcVar.id] = destVar;
       if (isMove) sourceIdsToRemove.push(srcVar);
+      identityTransfers.push({
+        sourceStamp: readStamp(srcVar),
+        sourceVariableId: srcVar.id,
+        destName: newName,
+        destCreated: destCreated,
+        destRef: destVar
+      });
+    } else if (isMove) {
+      // Same slot in the same collection: identity already sits on this variable.
+      identityTransfers.push({
+        sourceStamp: readStamp(srcVar),
+        sourceVariableId: srcVar.id,
+        destName: newName,
+        destCreated: false,
+        destRef: destVar
+      });
     }
   }
+
+  // Sets only partly included in this Move keep their id on the leftover tokens; the moved
+  // portion gets a new id (same as Copy) so one set is never filed in two places.
+  var partialSetIds = {};
+  if (isMove) {
+    var transferredIds = {};
+    var transferredSets = {};
+    for (var ti2 = 0; ti2 < identityTransfers.length; ti2++) {
+      var tr = identityTransfers[ti2];
+      if (tr.sourceVariableId) transferredIds[tr.sourceVariableId] = true;
+      if (tr.sourceStamp && tr.sourceStamp.set) {
+        transferredSets[String(tr.sourceStamp.set)] = true;
+      }
+    }
+    for (var setKey in transferredSets) {
+      if (!Object.prototype.hasOwnProperty.call(transferredSets, setKey)) continue;
+      for (var svi = 0; svi < sourceCol.variableIds.length; svi++) {
+        var sidCheck = sourceCol.variableIds[svi];
+        if (transferredIds[sidCheck]) continue;
+        var leftover = await figma.variables.getVariableByIdAsync(sidCheck);
+        if (!leftover) continue;
+        var leftoverStamp = readStamp(leftover);
+        if (leftoverStamp && String(leftoverStamp.set) === setKey) {
+          partialSetIds[setKey] = true;
+          break;
+        }
+      }
+    }
+  }
+
+  // Stamp + manifest before Move deletes sources (stamps were read above; manifests still on source).
+  var identityResult = applyFoundationIdentity(
+    identityTransfers,
+    sourceCol,
+    targetCol,
+    isMove,
+    partialSetIds
+  );
+  var foundationSets = identityResult.setsHandled;
 
   var rebindStats = { replaced: 0, skipped: 0 };
   var styleBindings = 0;
@@ -619,6 +789,33 @@ async function copyOrMoveVariables(opts) {
         variablesRemoved++;
       } catch (e) {
         console.warn('Copy/move: could not remove source variable', sourceIdsToRemove[ri].name, e && e.message);
+      }
+    }
+  }
+
+  // After source vars are gone, drop set manifests on the source only when no stamp
+  // for that set remains (partial moves leave the rest of the set alone).
+  if (isMove && identityResult.sourceKeysToClear && identityResult.sourceKeysToClear.length) {
+    var nsClear = foundationNamespace();
+    var remainingBySet = {};
+    for (var rvi = 0; rvi < sourceCol.variableIds.length; rvi++) {
+      try {
+        var remainVar = await figma.variables.getVariableByIdAsync(sourceCol.variableIds[rvi]);
+        if (!remainVar) continue;
+        var remainStamp = readStamp(remainVar);
+        if (remainStamp && remainStamp.set) remainingBySet[String(remainStamp.set)] = true;
+      } catch (eRem) {
+        /* leave key; safer than clearing */
+      }
+    }
+    for (var ski = 0; ski < identityResult.sourceKeysToClear.length; ski++) {
+      var clearKey = identityResult.sourceKeysToClear[ski];
+      var clearSetId = foundationSetIdFromKey(clearKey);
+      if (clearSetId && remainingBySet[clearSetId]) continue;
+      try {
+        sourceCol.setSharedPluginData(nsClear, clearKey, '');
+      } catch (eClear) {
+        console.warn('Copy/move: source manifest clear failed', clearKey, eClear && eClear.message);
       }
     }
   }
@@ -654,6 +851,7 @@ async function copyOrMoveVariables(opts) {
     created: created,
     updated: updated,
     skipped: skipped,
+    foundationSets: foundationSets,
     rebindReplaced: rebindStats.replaced,
     rebindSkipped: rebindStats.skipped,
     styleBindings: styleBindings,

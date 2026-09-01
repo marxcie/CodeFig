@@ -15,7 +15,9 @@
 // 1. Registry viewport with no mode → pruned after plugin reopen (check figma-console.log).
 // 2. Orphan set:* key with no stamps → deleted on reopen.
 // 3. Stamp whose set id has no manifest → stamp cleared on reopen.
-// 4. Two groups, one set id, manifest present → left alone (DEFERRED §11).
+// 4. Two groups, one set id, clear original (manifest group / non-`… 2` name) → copy restamped
+//    under a new set id on reopen; original keeps stamps (DEFERRED §11).
+// 5. Two groups, one set id, no clear original → still skippedAmbiguous.
 
 @import { testBegin, it, itInTestFile, expect, testFinish, cleanupTestArtifacts } from "@Test Harness"
 @import { foundationNamespace, foundationRegistryKey, writeRegistry, writeManifest, stampToken, readStamp, foundationMintSetId } from "@Foundation"
