@@ -1,66 +1,39 @@
 // @Bezier
 // @DOC_START
-// A curve as **points you can drag**, rather than a family name and an easing word. One shape serves
-// every consumer: `@Color Ramp`'s lightness ladder, and the scale models behind spacing, corner radius
-// and typography.
+// # Evaluates and edits cubic bezier curves as flat number arrays for scale and colour ladders
 //
-// ## The shape
-// A curve is a **flat array of numbers**, and its length says how many anchors it has:
+// ## Overview
+//
+// Import when a script or panel needs a **curve as coordinates** rather than a named easing family. One shape serves colour lightness ladders and the scale models behind spacing, corner radius, and typography.
+//
+// ### Curve shape
+//
+// A curve is a **flat array of numbers**. Length says how many anchors it has:
 //
 // | Length | Anchors | Meaning |
 // |---|---|---|
-// | `[]` | none | no curve — the consumer decides what that means (Colors reads the file's own steps) |
-// | 4 | two | `x1,y1, x2,y2` — the two handles of one cubic. Exactly CSS `cubic-bezier()`. |
-// | 10 | three | `x1,y1, x2,y2, mx,my, x3,y3, x4,y4` — a middle anchor with a handle either side |
+// | `[]` | none | No curve — the consumer decides what that means |
+// | 4 | two | `x1,y1, x2,y2` — one cubic (CSS `cubic-bezier()`) |
+// | 10 | three | `x1,y1, x2,y2, mx,my, x3,y3, x4,y4` — middle anchor with a handle either side |
 //
-// The end anchors are always `(0,0)` and `(1,1)` and are never stored: a scale curve that did not start
-// at the start would not be a scale curve. Everything in between is yours.
+// End anchors are always `(0,0)` and `(1,1)` and are never stored.
 //
-// **A three-point curve is not a luxury — it is what `easeInOut` always was.** `applyEase` defines
-// `inout` as *the in-curve over the first half, the out-curve over the second*, which is a middle anchor
-// at `(0.5, 0.5)` written as an `if`. Building it as two segments is the same curve with the anchor
-// exposed, which is why `bezierFromEase` returns ten numbers for `inout` and `outin` and four for the rest.
+// ### Reading and editing
 //
-// ## The handles either side of the middle are independent
-// Drag one and the other stays put. There is no mirror mode and no smoothing flag, because a kink at the
-// middle is a thing people want: Colors has shipped two independent segment curves since the ladder
-// existed, on the evidence that a real neutral ramp fits an exponent of 1.71 below the middle and 0.84
-// above. A smooth curve is one you can still draw; a mode that enforced it would be a setting that
-// re-derives what the coordinates already say.
+// `bezierAt(curve, x)` returns *y as a function of x*, the same way a browser reads `cubic-bezier()`. `bezierNormalise` clamps each handle's `x` into its segment so a step never has two answers.
 //
-// ## Reading a curve
-// `bezierAt(curve, x)` answers *"at this fraction along, what fraction of the range?"* — it solves
-// `Bx(s) = x` for `s` and returns `By(s)`, the same way a browser reads `cubic-bezier()`. It is `y` as a
-// function of `x`, not of the parameter, so a handle dragged sideways changes pacing rather than shape.
-// That requires `x` to advance monotonically, which `bezierNormalise` enforces by clamping each handle's
-// `x` into its own segment's span. A curve that doubled back would have two answers at one step.
+// Handles either side of a middle anchor are **independent** — there is no mirror mode. A kink at the middle is allowed on purpose.
 //
-// ## Presets are a starting point, not a second truth
-// `bezierFromEase(type, ease, amount)` converts any `applyEase` pair into coordinates, and that is the
-// only direction that exists. Once a curve is stored it is coordinates; `bezierEaseName` looks a curve
-// back up in the table so a panel can *say* "Sine · easeInOut" without storing it. Nothing reads a family
-// name at generation time, so a dragged curve and a chosen preset cannot disagree.
+// ### Presets
 //
-// **Where the conversion is exact, and where it is not.** `linear`, `quad` and `cubic` are cubics already,
-// so their curves are the functions: pin the `x` handles at `1/3` and `2/3` and `Bx(s) = s`, leaving `y` to
-// be read straight off. Nothing else is a cubic. `sine`, `circ`, `quart`, `quint`, `exponential` and
-// `goldenRatio` are fitted, worst-gap-first, and carry between 0.0006 and 0.0099 — see the table on
-// `bezierEaseTable`. `bezierEaseError` returns the real figure for a given pair, in the units of the value
-// being eased, so a migration reports what it cost instead of claiming it was free.
+// `bezierFromEase(type, ease, amount)` converts an `applyEase` pair into coordinates. That is the only direction that exists: once stored, only coordinates matter. `bezierEaseName` looks a curve up so a panel can label it without storing a family name.
 //
-// `amount` blends toward linear and survives exactly: with the `x` handles fixed, pulling each handle's
-// `y` toward its own `x` is the same operation as `t + (eased - t) × amount` on the output.
+// `linear`, `quad`, and `cubic` convert exactly. Other families are fitted; `bezierEaseError` reports the gap. `amount` blends toward linear.
 //
-// ## Companion imports
-// `@import` does not follow calls across scripts. The fit reads `applyEaseBaseIn`, so a consumer that
-// converts presets needs it too:
-//
-// ```js
-// @import { bezierAt, bezierNormalise, bezierFromEase, bezierParse, bezierFormat } from "@Bezier"
-// @import { applyEaseBaseIn, clamp01 } from "@Math Helpers"
-// ```
+// When converting presets, also import `applyEaseBaseIn` and `clamp01` from `@Math Helpers` — `@import` does not pull cross-script calls.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
 // | Reading | bezierAt, bezierNormalise, bezierIsEmpty, bezierAnchorCount |

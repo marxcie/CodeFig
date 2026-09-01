@@ -1,53 +1,56 @@
 // Typography
 // @DOC_START
-// Responsive type scale: one scale per mode, plus the line height and tracking that travel with a size.
+// # Creates a type scale per Variable Mode with precise control of the font-size, line-height and letter-spacing ladder
 //
 // ## Overview
-// Creates a `font-size`, `line-height` and `letter-spacing` variable per token, a variable per font
-// weight, a font family variable, and — optionally — a text style per token and weight bound to them.
-// No canvas frames.
 //
-// **Each mode carries its own scale**: `bezier` (a ramp along a curve you draw), `metric` (a step that grows every N
-// tokens) or `fibonacci` (each step the sum of the two before it). `base` is the size of the **first**
-// token, so tokens are named smallest to largest and nothing has to say where the base sits.
+// The script generates font size, line height, and letter-spacing variables per token, plus font family
+// and weight variables. When **Create and update text styles** is on, it also creates text styles bound
+// to those variables.
 //
-// **Line height and letter spacing take two numbers each**, both in px: the value at the smallest step
-// and, optionally, the value at the largest. The steps between are interpolated — line height as a
-// *ratio* and tracking as a *share of the size*, which is what makes absolute line height rise while
-// its ratio falls and tracking tighten as type grows. Fill in only the first and line height keeps the
-// base ratio while tracking stays flat, which is what this script has always done.
+// Enable **Generate overview** to also create a specimen frame on the Figma canvas.
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | collectionName | Figma variable collection (e.g. same as grid: `Responsive System`). |
-// | group | Variable name prefix folder; empty = collection root. |
-// | fontScale | Ordered token names, smallest to largest. A series works: `heading-{1,6}`, and it mixes with names you write. |
-// | fontFamily | Font family name (e.g. Inter). |
-// | fontWeights | A list where a number is a weight and a word is a Figma font style name: `[400, "Semi Bold"]`. Legacy: a map from name to either. |
-// | createStyles, styleNaming | Whether to create and update text styles, and their naming (`Typography/{$fontScale}/{$fontWeight}`). Legacy: `figmaStyles.createAndUpdateStyles` / `.styleNaming`. |
-// | modes | Per mode: `scaleType`, `ratio`/`curve` or `step`/`mod`, `base`, `lineHeight`, `letterSpacing`, `roundTo`. Rounding applies to size and line height; tracking is left fractional. |
+// Each mode can use its own **Scale type**:
 //
-// **Line height and letter spacing are percentages of the font size**, written as `{ base, max }` and interpolated between the smallest and largest token. Percent is Figma's own unit for both, and unlike a pixel value it still means the same thing after the scale grows. The variables are written in pixels either way, computed per token.
+// - **Bezier scale** — follows a custom curve
+// - **Metric scale** — increases by a fixed amount every N tokens
+// - **Fibonacci** — each step is the sum of the previous two
 //
-// A config from before the panel spells these as bare numbers — an absolute value *at* the base and at the top (`lineHeight: 12, lineHeightAtTop: 66`) — and keeps generating exactly what it always did. The two are told apart by shape rather than by range, because `-1.2` is equally plausible as −1.2px or −1.2%.
-// | generateOverview | Optional boolean (default `false`). When `true`, fills **Render styles — overview** inside **`Design System Foundations`** (see `@Foundation overview`). |
-// | overviewStyleFilter | Optional substring for text style names (case-insensitive). When empty, defaults to styles containing `group/` (e.g. `Typography/`). |
-// | overviewPreviewText | The specimen's copy, and the overview tiles' when you generate one. A newline becomes a soft line break in Figma. |
+// **Base unit** is the size of the first token. Name tokens from smallest to largest.
 //
-// ## The older shape still runs
-// A config written before the panel — per-mode `minFont`/`baseFont`/`maxFont` with a top-level
-// `fontScaling` curve — generates exactly what it always did, and is pinned by
-// `tests/typography-legacy-config.test.js`. Those keys have no controls in the panel; nothing else about
-// them changed.
+// ### Line height and letter spacing
 //
-// | Legacy option | Description |
-// |--------|--------------|
-// | modes[].minFont / baseFont / maxFont | `{ size, lineHeight, letterSpacing }`; `baseFont.level` must name a token. Legacy alias: a `fontSizes` object. |
-// | fontScaling.type | **Range curve** (min→base→max): linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise:** `piecewise`, `piecewise2`, `piecewise4`. **Modular** (typescale.com): minorSecond … phi. |
-// | fontScaling.rangeMode | `full` — single min→max ramp (default for piecewise). `twoSegment` — min→base→max (default for range curves). |
-// | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for piecewise/modular font size. |
-// | fontScaling.roundLowerValuesTo, roundUpperValuesTo | Rounding grid below and above the base step. |
+// Both use two numbers each, as a **percent of font size**: the value at the smallest step (**Base**)
+// and, optionally, at the largest (**Largest**). Steps between are interpolated.
+//
+// If you fill in only **Base**, line height keeps that ratio and tracking stays flat. Variables are
+// written in pixels, computed per token. Percent is Figma's unit for both.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Collection**<br>`collectionName` | Name of the Figma variable collection, e.g. `Responsive System`. |
+// | **Collection modes** | Chips for modes in the collection. Add, remove, or rename here. Each mode gets its own settings below. |
+// | **Group within collection**<br>`group` | Prefix used to group variables. Empty means the collection root. |
+// | **Tokens**<br>`fontScale` | Token names from smallest to largest. A series works: `heading-{1,6}`, and it can mix with names you write. |
+// | **Font family**<br>`fontFamily` | Font family name, e.g. `Inter`. |
+// | **Font weights**<br>`fontWeights` | A number is a weight (`400`). A word is a Figma style name, e.g. `Semi Bold`. |
+// | **Create and update text styles**<br>`createStyles` | When on, creates and updates text styles bound to the variables. |
+// | **Style naming**<br>`styleNaming` | Naming pattern for text styles, e.g. `Typography/{$fontScale}/{$fontWeight}`. |
+// | **Generate overview**<br>`generateOverview` | When on, creates a typography overview on the canvas: one specimen tile per text style, grouped by weight. Off by default. |
+// | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
+// | **Scale type**<br>`modes[].scaleType` | Bezier, Metric, or Fibonacci for this mode. |
+// | **Scale**<br>`modes[].curve` | Bezier only. Curve that shapes the type scale. |
+// | **Step**<br>`modes[].step` | Metric: how much each step adds before growth starts. Fibonacci: the first increment. |
+// | **Every N steps**<br>`modes[].mod` | Metric only. How often the step size grows. |
+// | **Base unit**<br>`modes[].base` | Font size of the first token. |
+// | **Letter spacing**<br>`modes[].letterSpacing` | Percent of font size at **Base** and optionally **Largest**. Interpolated between tokens; written in pixels. |
+// | **Line height**<br>`modes[].lineHeight` | Percent of font size at **Base** and optionally **Largest**. 150 suits body text; use **Largest** when big sizes need less. |
+// | **Round numbers to**<br>`modes[].roundTo` | Rounding for size and line height. Tracking stays fractional. |
+// | **Preview text**<br>`overviewPreviewText` | Specimen copy for the preview and overview tiles. A newline becomes a soft line break in Figma. |
 // @DOC_END
 
 // The Configuration tab redraws these as you type. Both are pure: they generate in memory and read the
@@ -56,13 +59,12 @@
 // @PREVIEW: typographyPreviewHtml
 
 // Import functions from libraries
+
 @import { getOrCreateCollection, setupModes, extractModes, processVariables, getCollectionVariables } from "@Variables"
 @import { applyEase, applyEaseWithExponents, lerp, generateScale, isPiecewiseScaleType, getModularScaleRatio, snapScaleGrid } from "@Math Helpers"
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
 @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, findFoundationSet, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
-@import { scaleSequence, resolveModularRatio } from "@Scale Models"
-@import { bezierAt } from "@Bezier"
-@import { typeScaleTokens, typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleProgress, typeScaleLineHeights, typeScaleTrackings, typeScaleTable, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
+@import { typeScaleTokens, typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleLineHeights, typeScaleTrackings, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
 
 // ========================================
 // CONFIG HELPERS (collection, modes, fontSizes)
@@ -277,17 +279,18 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
 //     { key: "group", type: "string", label: "Group within collection",
 //       placeholder: "eg.: Typography" },
 //     { key: "fontScale", type: "list", label: "Tokens",
-//       helper: "Named smallest to largest, and heading-{6,1} is a series of six. The Base unit below is the size of the first name here." },
+//       helper: "Names from smallest to largest. heading-{6,1} expands to six sizes. Base unit is the size of the first name." },
 //     { key: "fontFamily", type: "string", label: "Font family",
 //       placeholder: "eg.: Inter Tight" },
 //     { key: "fontWeights", type: "list", label: "Font weights",
-//       helper: "A number is a font weight; a word is a Figma font style name, e.g. Semi Bold." },
+//       helper: "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold." },
 //     { key: "createStyles", type: "boolean", label: "Create and update text styles" },
 //     { key: "styleNaming", type: "string", label: "Style naming",
 //       placeholder: "eg.: Typography/{$fontScale}/{$fontWeight}" },
 //     { type: "divider", section: true },
 //     { type: "heading", text: "Mode settings" },
-//     { key: "generateOverview", type: "boolean", label: "Generate overview" },
+//     { key: "generateOverview", type: "boolean", label: "Generate overview",
+//       helper: "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight." },
 //     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
 //       columns: [
 //         { key: "name", type: "text", label: "Mode" },
@@ -295,22 +298,22 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
 //           options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
 //         { key: "curve", type: "curve", label: "Scale", growth: "ratio",
 //           showWhen: { scaleType: "bezier" },
-//           helper: "Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top." },
+//           helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
 //         { key: "step", type: "number", label: "Step",
 //           showWhen: { scaleType: ["metric", "fibonacci"] },
-//           helper: "Metric. The amount each step adds, before it starts growing.\\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it." },
+//           helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
 //         { key: "mod", type: "number", label: "Every N steps",
 //           showWhen: { scaleType: "metric" },
-//           helper: "How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down." },
+//           helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
 //         { key: "base", type: "number", label: "Base unit" },
 //         { key: "letterSpacing", type: "group", label: "Letter spacing",
-//           helper: "A percentage of the font size, the way Figma spells it — so it still means the same thing when the scale grows. Interpolated between the two ends and written as pixels.",
+//           helper: "Percent of font size (as Figma shows it). Interpolated between the two ends, then written in pixels.",
 //           fields: [
 //             { key: "base", type: "number", label: "Base", unit: "%" },
 //             { key: "max", type: "number", label: "Largest", unit: "%" }
 //           ] },
 //         { key: "lineHeight", type: "group", label: "Line height",
-//           helper: "A percentage of the font size. 150 is a comfortable body line; large text usually wants less, which is what the second field is for.",
+//           helper: "Percent of font size. 150 suits body text; use the second field when large sizes need less.",
 //           fields: [
 //             { key: "base", type: "number", label: "Base", unit: "%" },
 //             { key: "max", type: "number", label: "Largest", unit: "%" }

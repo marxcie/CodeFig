@@ -1,15 +1,20 @@
 // @InfoPanel
 // @DOC_START
-// Display script results in the plugin InfoPanel with grouping and filtering.
+// # Displays script results in the plugin InfoPanel with grouping, filters, and selectable rows
 //
 // ## Overview
-// Import to show results (displayResults), create result items (createResult, createSelectableResult, createHtmlResult), and configure grouping. Used by scripts that report variable usage, font scales, etc. No configuration; use via @import.
+//
+// Import to show run output in the plugin InfoPanel. `displayResults` also signals run completion. Use the result builders for plain rows, selectable nodes, HTML blocks, or copy-to-clipboard rows.
+//
+// `displayResults(data)` expects `{ title, results, type, grouping, showFilters, autoOpen }`.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
-// | Display | displayResults(data) – data: { title, results, type, grouping, showFilters, autoOpen } |
-// | Result builders | createResult, createSelectableResult, createHtmlResult |
+// | Display | displayResults, displayMessage, displayError, displayWarning, displaySuccess, clearResults |
+// | Result builders | createResult, createSelectableResult, createHtmlResult, createCopyResult |
+// | Clipboard | requestClipboardCopy |
 // | Grouping | createGrouping, groupResults |
 // @DOC_END
 var shared = true;

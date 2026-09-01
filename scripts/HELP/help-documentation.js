@@ -1,18 +1,29 @@
 // @Help & documentation
 // @DOC_START
-// Your JavaScript Figma scripting environment (scripts are plain JS files).
+// # Documents CodeFig scripting: Documentation and Script tabs, imports, shortcuts, and the Style and UI reference
+//
+// ## Overview
+//
+// CodeFig runs plain JavaScript in the Figma plugin sandbox. Use the sidebar for Utility Scripts,
+// Design System Foundations, libraries, and your saved scripts.
+//
+// Scripts can ship a Documentation tab (`@DOC_START`…`@DOC_END`, Markdown) and a Configuration UI
+// (`@PANEL_START` recipe plus `@UI_CONFIG_*` / `@CONFIG_*` values). Open this script's **Configuration UI**
+// for a live specimen of every control; sizes and tokens are under **Style & UI reference** below.
 //
 // ## Documentation tab
 //
-// Scripts can define a doc block between **// @DOC_START** and **// @DOC_END**. That block is rendered as **Markdown** in the Documentation tab.
+// The block between `// @DOC_START` and `// @DOC_END` renders as Markdown.
 //
-// **Markdown supported:** headings (`#`, `##`, `###`), **bold**, *italic*, `code`, lists (`- item`), and more.
+// Supported: headings (`#`, `##`, `###`), **bold**, *italic*, `code`, lists (`- item`), and more.
 //
-// **Spacing:** A single newline between comment lines = line break. A **blank line** or empty comment line (`//`) = new paragraph / extra vertical space.
+// Spacing: one newline between comment lines is a line break. A blank line or empty `//` starts a new
+// paragraph.
 //
 // ## Script tab
 //
-// Main code editor: write **JavaScript** (must be valid JS at run time — no TypeScript-only syntax). Run with Cmd/Ctrl+R, auto-save as you type. Use the sidebar to open Utility Scripts or your saved scripts.
+// The main editor. Code must be valid JavaScript at run time (no TypeScript-only syntax). Run with
+// Cmd/Ctrl+R; changes auto-save. Use the sidebar to open scripts.
 //
 // ## Keyboard shortcuts
 //
@@ -30,16 +41,12 @@
 //
 // - **Variables:** duplicate-variable-collection, replace-variables, rename-variables, variable-inspector
 // - **Styles:** duplicate-styles, replace-styles, replace-style-variable-bindings, rename-styles, text-to-styles, render-styles-overview
-// - **Layout:** frame-or-auto-layout-selected, scale-selection (see script titles: *Scale or resize elements*), remove-unnecessary-nesting
+// - **Layout:** frame-or-auto-layout-selected, scale-selection, remove-unnecessary-nesting
 // - **Selection / detach:** select-by-styles-variables, detach styles & variables
-// - **Design System Foundations:** grid, typography, spacing, corner-radius
+// - **Design System Foundations:** colors, grid, typography, spacing, corner-radius
 // - **API:** comments-to-annotations (Figma REST API + personal access token)
 //
 // Files or folders whose names start with **`_`** are omitted from the plugin build (development-only).
-//
-// Scripts with a **Config** tab expose options (e.g. dropdowns, text inputs) defined via **// @UI_CONFIG_START** … **// @UI_CONFIG_END** in the script. See any utility script with a Config tab for the pattern.
-//
-// **Every control, live:** open this script's **Configuration UI** tab. It renders one of each, with the exact line that produces it written underneath — copy from there rather than from memory. The sizes, spacing and colours behind them are in **Style & UI reference** below.
 //
 // ## @import system
 //
@@ -68,9 +75,9 @@
 //
 // Every text style and control the plugin can render. Two places to look:
 //
-// - **Configuration UI** — this script's own settings tab is the live specimen shelf. Each control
-//   names the exact syntax under it, so a change can be asked for by pointing at the thing rather
-//   than describing it.
+// - **Configuration UI** — this script's own settings tab is the live specimen shelf. Each control's
+//   ⓘ quotes the `@PANEL_START` JSON that produced it, so a change can be asked for by pointing at
+//   the thing rather than describing it.
 // - **Here** — the values behind them: tokens, the heading ladder, and what is deliberately not
 //   covered.
 //
@@ -80,26 +87,24 @@
 //
 // ### One heading ladder
 //
-// The Documentation tab and a settings form render the same markdown through the same parser, so a
-// heading is **the same size in both**. There is one rule per level and one place to change it.
+// The Documentation tab and a settings form share one size ladder, but the **tags differ**:
 //
-// | Source | Tag | Size | Notes |
-// |---|---|---|---|
-// | `// # Title` | `h1` | 16px, `--font-size-title` | a **section**. Carries the 48px section gap |
-// | `// ## Title` | `h2` | 14px, `--font-size-subheadline` | a title inside a section. Half the gap |
-// | `// ### Title` | `h3` | 12px, `--font-size-body` | semibold; weight is what separates it from body copy |
-// | any other comment line | `p` | 12px, `--font-size-body` | |
+// | Surface | Source | Tag | Size | Notes |
+// |---|---|---|---|---|
+// | Documentation | `# Title` | `h1` | 20px, `--font-size-display` | document lead-in (functional description) |
+// | Documentation | `##` / `###` | `h2` / `h3` | 16px title / 12px subheadline | sections and subsections |
+// | Configuration UI | `{ type: "heading", level: 1 }` / `# Title` in config | `h2` | 16px, `--font-size-title` | a **section**. Carries the 48px section gap. The form never emits `h1`. |
+// | Configuration UI | `level: 2`+ / nested `#` in `@rows` | `h3` | 12px, `--font-size-subheadline` | a title inside a section |
+// | Both | `{ type: "paragraph", text: "…" }` | `p` | 12px, `--font-size-body` | |
 //
-// The rule names both surfaces: `.docs-rendered h1, h1.config-ui-heading`. A form's headings are **not**
-// inside `.docs-rendered` — the renderer builds `h1.config-ui-heading` directly — so a rule naming one
-// surface only is the shape of the bug this replaced. It is keyed on the **class** rather than on the
-// `.config-ui-row--heading` wrapper because a heading nested in an `@rows` block has no wrapper, and
-// keyed on the wrapper it fell through and had to restate its own size.
+// The size rule names both surfaces: `.docs-rendered h2, h2.config-ui-heading`. A form's headings are
+// **not** inside `.docs-rendered` — the renderer builds `h2.config-ui-heading` for sections — so a rule
+// naming one surface only is the shape of the bug this replaced. It is keyed on the **class** rather than
+// on the `.config-ui-row--heading` wrapper because a heading nested in a `type: "rows"` block has no
+// wrapper, and keyed on the wrapper it fell through and had to restate its own size.
 //
-// **There is no `h1` at the top of a script's documentation, and none at the top of its config block.**
-// The document title in the editor header names the script, once, at 20px. Every block that used to
-// open by restating its own name had that line removed — most carried a *third* wording of it, so a
-// script could be called three things on one screen.
+// **The Configuration UI does not open with `h1`.** The document title in the editor header names the
+// script, once, at 20px. Form section titles are `h2` so they do not wear that display size.
 //
 // Spacing is the one thing stated per surface, and not by choice: the Documentation tab is a block
 // container, where a heading's top margin **collapses** with the paragraph above it, so the gap is
@@ -201,78 +206,86 @@
 // `.btn` plus one of `.primary`, `.secondary`, `.danger`. Primary is the only filled one, and there
 // is one per panel.
 //
-// ### Controls, and the line that makes each
+// ### Controls, and the PANEL block that makes each
 //
-// Every one of these is rendered live in this script's **Configuration UI** tab. The annotation goes
-// in the trailing comment on a field's line.
+// Two regions in Source. **Values** live in `@UI_CONFIG_START`…`@UI_CONFIG_END` (`var` lines) or
+// `@CONFIG_START`…`@CONFIG_END` (object literal — Design System Foundations style). The **recipe**
+// lives in `@PANEL_START`…`@PANEL_END` as JSON inside `//` comments. Configuration UI is the form;
+// Source holds both regions. There is no Configuration code tab.
 //
-// | Syntax | Control |
+// Every control below is rendered live in this script's **Configuration UI** tab. Shipped scripts
+// and anything with a real panel use `@PANEL_START`. Trailing annotations on `var` lines still work
+// for scripts *without* `@PANEL_START` (legacy / tiny utilities) — the annotation parser path is
+// kept, not the authoring model for new panels.
+//
+// | PANEL (short example) | Control |
 // |---|---|
-// | `var x = "text";` | text input |
-// | `var x = 12;` | number input, 96px |
-// | `var x = true;` | checkbox |
-// | `@placeholder="…"` | grey hint inside an empty input |
-// | `@options: a\|b\|c` | dropdown |
-// | `@options: a\|b\|c` + `@radio` | radio group |
-// | `@options: a\|b\|c` + `@multi` | checkbox list |
-// | `@options: variableCollections` | dropdown filled from this file's collections |
-// | `@textarea` | multi-line input |
-// | an array of names or numbers | one input holding a comma list; the config keeps the array |
-// | `@label: Text` | the label, instead of the prettified variable name |
-// | `@helper: Text` | what the control's ⓘ says. **Last on the line:** a note runs to the end of it, so it can mention an `@annotation` without being cut in half |
-// | `@showWhen: field=value` | the row appears only when that field holds one of those values |
-// | a comment line by itself | a paragraph, folded into the ⓘ of the control it sits against |
-// | `@prose` | on its own line: this block's paragraphs are its content — leave them on the page |
-// | `@collection` | collection picker: this file's collections, plus **New collection** |
-// | `@mode: field` | mode picker: the modes of the collection that `field` holds, plus **New mode**. Written bare it follows the block's only `@collection`. Changing that collection resets it — the modes on offer are the new collection's |
-// | `@collectionModes: Title` | the mode chips — a marker row of its own, reading names from the `modes` field |
-// | `@rows: key:type=Label\|…` | a table, one line per array entry |
-// | `@rows: …` + `@tabs` | the same array as one tab per entry, fields stacked and labelled |
-// | `@rows: …` + `@blocks` | every entry in full, one under the next, each titled from its `name` |
-// | `@group: key:type=Label\|…` | an **object** as one labelled row of captioned parts |
-// | `@curve` | the bezier curve editor, on an **array**. Four numbers is one segment, ten is two, `[]` is none |
-// | `@curve @allowOriginal` | the same, with *Original* — the empty curve — offered in its preset list |
-// | `@curve @ends: a..b @range: lo..hi` | the same on a **value axis**: real numbers up the side, draggable ends that write `a` and `b`, and a zoom rail |
-// | `#>Hue` inside `@rows` | a **channel tab**: a section of a row you can only see one of. Closed tabs are hidden, never dropped |
-// | `#>Saturation{colorModel=hsl}` | a tab may carry the same `{…}` condition a column does. A tab with nothing visible left in it is **not drawn**, so a channel whose every cell belongs to the other model takes itself off the bar |
-// | `#>Saturation{…}\|#>Chroma{…}` | two tab markers **next to each other are one tab** under two names, captioned by the first whose condition holds. The panel keeps the first name as its key, so a rename does not close the tab you are on |
-// | `@ramp: hsl($ ~a.sat% 50%)` | the bar beside a charted curve: the **whole channel** in its own colours, with the plot's window bracketed on it. `$` is the axis value, `~key` a sibling field. CSS, so the browser mixes it |
-// | `key:curve=Label` inside `@rows` | the same editor as one column of a row. `key:curve(original)` to offer *Original* |
-// | `key:curve(growth:other)` | the **open-ended** editor: log axis, a handle for the growth, written to the config as `other` |
-// | `key:{…}=Label` inside `@rows` | the same group, nested as one column of a row |
-// | `#Heading` inside `@rows` | a heading between an entry's rows, one level below the block title |
-// | `key:(a\|b)` in a column | a dropdown in that cell. All-numeric options read back as numbers |
-// | `key:number@unit="%"` | a unit printed inside the input at its right edge. Unlike a placeholder it stays when there is a value |
-// | `key:(1.25:1.25 Major third)` | the same, with the words for the value. A bare option is its own label |
-// | `key:radio(a:First\|b:Second)` | radio buttons in that cell instead of a dropdown |
-// | `key:type{other=value}` in a column | that column appears only while another column **in the same row** holds one of those values, or — when no column is named that — the form field of that name. A cell nobody can see writes nothing |
-// | `key:type@placeholder="…"` in a column | a grey example inside that cell, the same annotation a field spells |
-// | `name-{1,10}` in a token list | a series: `name-1 … name-10`. `{10}` is short for it, `{6,1}` counts down, and `{01,10}` pads to the width you wrote |
-// | an object or array with no `@rows` | the form says it cannot hold it and points at Configuration code |
+// | `{ key: "x", type: "string" }` | text input |
+// | `{ key: "x", type: "number" }` | number input, 96px |
+// | `{ key: "x", type: "boolean" }` | checkbox |
+// | `placeholder: "…"` on a field | grey hint inside an empty input |
+// | `{ key: "x", type: "select", options: ["a","b"] }` | dropdown |
+// | `{ key: "x", type: "radio", options: ["a","b"] }` | radio group |
+// | `{ key: "x", type: "multiselect", options: ["a","b"] }` | checkbox list |
+// | `options: "variableCollections"` | dropdown filled from this file's collections |
+// | `{ key: "x", type: "textarea" }` | multi-line input |
+// | `{ key: "x", type: "list" }` | one input holding a comma list; the config keeps the array |
+// | `label: "Text"` | the label, instead of the prettified key |
+// | `helper: "…"` | what the control's ⓘ says |
+// | `showWhen: { field: "value" }` | the row appears only when that field holds one of those values |
+// | `{ type: "paragraph", attachTo: "previous", text: "…" }` | a paragraph, folded into the ⓘ of the control it sits against |
+// | `{ type: "directive", name: "prose" }` | this block's paragraphs are its content — leave them on the page |
+// | `{ key: "x", type: "collection" }` | collection picker: this file's collections, plus **New collection** |
+// | `{ key: "x", type: "mode", collection: "field" }` | mode picker: the modes of the collection that `field` holds, plus **New mode**. Changing that collection resets it |
+// | `{ type: "chips", label: "…", from: "modes" }` | the mode chips — a marker row of its own, reading names from the `modes` field |
+// | `{ key: "x", type: "rows", columns: […] }` | a table, one line per array entry |
+// | `layout: "tabs"` on `type: "rows"` | the same array as one tab per entry, fields stacked and labelled |
+// | `layout: "blocks"` on `type: "rows"` | every entry in full, one under the next, each titled from its `name` |
+// | `{ key: "x", type: "group", fields: […] }` | an **object** as one labelled row of captioned parts |
+// | `{ key: "x", type: "curve" }` | the bezier curve editor, on an **array**. Four numbers is one segment, ten is two, `[]` is none |
+// | `allowOriginal: true` on a curve | the same, with *Original* — the empty curve — offered in its preset list |
+// | `ends: "a..b", range: [lo, hi]` on a curve | the same on a **value axis**: real numbers up the side, draggable ends that write `a` and `b`, and a zoom rail |
+// | `{ type: "tab", names: [{ text: "Hue" }], columns: […] }` inside `rows` | a **channel tab**: a section of a row you can only see one of. Closed tabs are hidden, never dropped |
+// | `names: [{ text: "Saturation", showWhen: { colorModel: "hsl" } }, …]` | a tab may carry the same `showWhen` a column does. A tab with nothing visible left in it is **not drawn** |
+// | two names on one `type: "tab"` | one tab under two names, captioned by the first whose condition holds. The panel keeps the first name as its key |
+// | `ramp: "hsl($ ~a.sat% 50%)"` on a curve | the bar beside a charted curve: the **whole channel** in its own colours. `$` is the axis value, `~key` a sibling field |
+// | `{ key: "c", type: "curve" }` inside `columns` | the same editor as one column of a row. `allowOriginal: true` to offer *Original* |
+// | `{ key: "c", type: "curve", growth: "ratio" }` | the **open-ended** editor: log axis, a handle for the growth, written to the config as `ratio` |
+// | `{ key: "g", type: "group", fields: […] }` inside `columns` | the same group, nested as one column of a row |
+// | `{ type: "heading", text: "…" }` inside `columns` | a heading between an entry's rows, one level below the block title |
+// | `options: ["a","b"]` or `[{ "1.25": "1.25 Major third" }]` in a column | a dropdown in that cell. All-numeric options read back as numbers; a bare option is its own label |
+// | `unit: "%"` on a number | a unit printed inside the input at its right edge. Unlike a placeholder it stays when there is a value |
+// | `type: "radio"` in a column | radio buttons in that cell instead of a dropdown |
+// | `showWhen: { other: "value" }` on a column | that column appears only while another column **in the same row** (or a form field of that name) holds one of those values. A cell nobody can see writes nothing |
+// | `placeholder: "…"` on a column | a grey example inside that cell |
+// | `name-{1,10}` in a **values** token list | a series: `name-1 … name-10`. `{10}` is short for it, `{6,1}` counts down, and `{01,10}` pads to the width you wrote — this is config text, not a PANEL type |
+// | a keyed object/array with no `type: "rows"` or `type: "group"` | the form says it cannot hold it and points at Source |
 //
-// Marker rows, on their own line:
+// Marker / structure blocks in `@PANEL_START` (not fields):
 //
-// | Syntax | Renders as |
+// | PANEL | Renders as |
 // |---|---|
-// | `// # Title` | section heading |
-// | `// ## Title`, `// ### Title` | sub-headings |
-// | `// text` | a paragraph — **bold**, *italic* and `code` all work |
-// | `// ---` | a short rule |
-// | `// --- @section` | a rule to both panel edges |
-// | `//` | a blank line's worth of space |
-// | `// @preview` | where the domain's live preview goes |
-// | `// @suggestions` | where its suggestions list goes |
-// | `// @fromFile: domains.x` | which slice of a file's config this block holds; renders as nothing |
+// | `{ type: "heading", level: 1, text: "Title" }` | section heading |
+// | `level: 2` / `level: 3` | sub-headings |
+// | `{ type: "paragraph", text: "…" }` | a paragraph — **bold**, *italic* and `code` all work |
+// | `{ type: "divider" }` | a short rule |
+// | `{ type: "divider", section: true }` | a rule to both panel edges |
+// | `{ type: "preview" }` | where the domain's live preview goes |
+// | `{ type: "suggestions" }` | where its suggestions list goes |
+// | `{ type: "directive", name: "fromFile", … }` / values `@fromFile: domains.x` | which slice of a file's config this block holds; renders as nothing |
+//
+// Scripts without `@PANEL_START` still use comment markers (`// # Title`, `// ---`, bare `//` for a
+// gap). Prefer PANEL when you are writing a panel.
 //
 // ### Not in here, on purpose
 //
-// - **`@preview` and `@suggestions`** render whatever the script's own `@PREVIEW:` / `@SUGGESTIONS:`
-//   function returns, so they are that panel's markup rather than a style primitive. Grid is the live
-//   example; critique them there, where the numbers are real.
+// - **`type: "preview"` and `type: "suggestions"`** render whatever the script's own `@PREVIEW:` /
+//   `@SUGGESTIONS:` function returns, so they are that panel's markup rather than a style primitive.
+//   Grid is the live example; critique them there, where the numbers are real.
 // - **`blank` / `lineBreak`** — spacer comment lines in the old one-line annotation format. A
 //   `@PANEL_START` recipe has no blank block; paragraph fold direction is `attachTo: "next"` or
-//   `"previous"` instead. The `//` row in the marker table above is still how non-migrated scripts
-//   write a gap; it is not something the specimen shelf can show once the panel is JSON.
+//   `"previous"` instead. Bare `//` gaps still work on non-migrated scripts; they are not something
+//   the specimen shelf can show once the panel is JSON.
 // - **InfoPanel and CodeFigUI** (`@InfoPanel`, `@codefig-ui`) style a script's *results*, which is a
 //   different surface with its own classes. Worth its own reference — ask and it gets one.
 // - **Sidebar, tab strip and footer** are panel chrome rather than anything a script can produce.
@@ -284,9 +297,9 @@
 // renderer emits. A reference nobody can trust is worse than none, because it gets quoted.
 // @DOC_END
 
-// The live specimen shelf: one of every control, each naming the syntax that produced it. This block
-// is a reference rather than a setting — the script reads none of these values, and running it does
-// nothing to your document.
+// The live specimen shelf: one of every control, each ⓘ quoting the PANEL JSON that produced it.
+// This block is a reference rather than a setting — the script reads none of these values, and
+// running it does nothing to your document.
 // @UI_CONFIG_START
 var textField = "Sample";
 var withPlaceholder = "";
@@ -309,7 +322,7 @@ var modes = [
 var lightness = { bright: 98.5, middle: 62, dark: 18 };
 var lineHeight = { base: 150, max: 110 };
 var scales = [
-  { name: "Desktop", scaleType: "modular", ratio: 1.25, step: 4, mod: 3 },
+  { name: "Desktop", scaleType: "bezier", ratio: 1.25, step: 4, mod: 3 },
   { name: "Mobile", scaleType: "metric", ratio: 1.2, step: 2, mod: 3 },
 ];
 var breakpoints = [
@@ -333,37 +346,37 @@ var nested = { outer: { inner: 1 } };
 //     { type: "directive", name: "prose" },
 //     { type: "heading", level: 1, text: "Heading level 1" },
 //     { type: "paragraph", attachTo: "previous",
-//       text: "The level every panel uses for its section titles: `// # Heading level 1`. Renders as `h1`, and it\ncarries the 48px gap that separates one section from the next." },
+//       text: "The level every panel uses for its section titles: `{ type: \"heading\", level: 1, text: \"…\" }`. The Configuration UI renders it as `h2` (never `h1`), and it\ncarries the 48px gap that separates one section from the next." },
 //     { type: "heading", level: 2, text: "Heading level 2" },
 //     { type: "paragraph", attachTo: "previous",
-//       text: "Two hashes. A title *inside* a section, at 14px with half the gap above it." },
+//       text: "`level: 2`. A title *inside* a section. On the form this renders as `h3`." },
 //     { type: "heading", level: 3, text: "Heading level 3" },
 //     { type: "paragraph", attachTo: "previous",
-//       text: "Three hashes: body size, told apart from a paragraph by its weight alone." },
+//       text: "`level: 3`: also `h3` on the form — body size, told apart from a paragraph by its weight alone." },
 //     { type: "paragraph", attachTo: "previous",
-//       text: "This is a paragraph — any comment line that is not a marker. **Bold**, *italic* and `code` work." },
+//       text: "This is a paragraph — `{ type: \"paragraph\", text: \"…\" }`. **Bold**, *italic* and `code` work." },
 //     { type: "divider" },
 //     { type: "paragraph", attachTo: "previous",
-//       text: "Above: a short rule, from `// ---`." },
+//       text: "Above: a short rule, from `{ type: \"divider\" }`." },
 //     { type: "divider", section: true },
 //     { type: "paragraph", attachTo: "previous",
-//       text: "Above: a rule reaching both panel edges, from `// --- @section`." },
+//       text: "Above: a rule reaching both panel edges, from `{ type: \"divider\", section: true }`." },
 //     { type: "heading", level: 1, text: "Text and numbers" },
-//     { key: "textField", type: "string", label: "Text", helper: "var textField = \"Sample\";" },
-//     { key: "withPlaceholder", type: "string", label: "Text with a placeholder", helper: "@placeholder=\"Shown while empty\"", placeholder: "Shown while empty" },
-//     { key: "numberField", type: "number", label: "Number", helper: "a numeric default makes it a number input, 96px wide" },
-//     { key: "longText", type: "textarea", label: "Textarea", helper: "@textarea", placeholder: "One per line" },
-//     { key: "nameList", type: "list", label: "List of names", helper: "an array of strings or numbers — one input holding a comma list, and the config keeps the array" },
+//     { key: "textField", type: "string", label: "Text", helper: "{ key: \"textField\", type: \"string\" }" },
+//     { key: "withPlaceholder", type: "string", label: "Text with a placeholder", helper: "placeholder: \"Shown while empty\"", placeholder: "Shown while empty" },
+//     { key: "numberField", type: "number", label: "Number", helper: "{ key: \"numberField\", type: \"number\" }" },
+//     { key: "longText", type: "textarea", label: "Textarea", helper: "{ key: \"longText\", type: \"textarea\" }", placeholder: "One per line" },
+//     { key: "nameList", type: "list", label: "List of names", helper: "{ key: \"nameList\", type: \"list\" }" },
 //     { type: "heading", level: 1, text: "Choices" },
-//     { key: "toggle", type: "boolean", label: "Checkbox", helper: "a true or false default" },
-//     { key: "dropdown", type: "select", label: "Dropdown", helper: "@options: small|medium|large", options: ["small","medium","large"] },
-//     { key: "radioChoice", type: "radio", label: "Radio group", helper: "the same @options, plus @radio", options: ["replace","append"] },
-//     { key: "multiChoice", type: "multiselect", label: "Multi-select", helper: "the same @options, plus @multi", options: ["small","medium","large"] },
-//     { key: "documentList", type: "select", label: "From the document", helper: "@options: variableCollections — filled with this file's collections", options: "variableCollections" },
-//     { key: "dependent", type: "string", label: "Only while Checkbox is on", helper: "@showWhen: toggle=true", showWhen: { toggle: true } },
+//     { key: "toggle", type: "boolean", label: "Checkbox", helper: "{ key: \"toggle\", type: \"boolean\" }" },
+//     { key: "dropdown", type: "select", label: "Dropdown", helper: "{ key: \"dropdown\", type: \"select\", options: […] }", options: ["small","medium","large"] },
+//     { key: "radioChoice", type: "radio", label: "Radio group", helper: "{ key: \"radioChoice\", type: \"radio\", options: […] }", options: ["replace","append"] },
+//     { key: "multiChoice", type: "multiselect", label: "Multi-select", helper: "{ key: \"multiChoice\", type: \"multiselect\", options: […] }", options: ["small","medium","large"] },
+//     { key: "documentList", type: "select", label: "From the document", helper: "options: \"variableCollections\"", options: "variableCollections" },
+//     { key: "dependent", type: "string", label: "Only while Checkbox is on", helper: "showWhen: { toggle: true }", showWhen: { toggle: true } },
 //     { type: "heading", level: 1, text: "Collections and modes" },
-//     { key: "collectionName", type: "collection", label: "Collection", helper: "@collection — this file's collections, plus New collection" },
-//     { key: "collectionMode", type: "mode", label: "Mode", helper: "@mode: collectionName — the modes of the collection above, plus New mode", collection: "collectionName" },
+//     { key: "collectionName", type: "collection", label: "Collection", helper: "{ key: \"collectionName\", type: \"collection\" }" },
+//     { key: "collectionMode", type: "mode", label: "Mode", helper: "{ key: \"collectionMode\", type: \"mode\", collection: \"collectionName\" }", collection: "collectionName" },
 //     { type: "chips", label: "Collection modes", from: "modes" },
 //     { type: "paragraph", attachTo: "next",
 //       text: "The chips read their names from the modes field below, so the two cannot disagree. Click a chip to\nrename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run." },
@@ -374,16 +387,16 @@ var nested = { outer: { inner: 1 } };
 //       ] },
 //     { type: "heading", level: 1, text: "One thing set by several numbers" },
 //     { type: "paragraph", attachTo: "next",
-//       text: "`@group:` on an **object** — one labelled row, each part captioned at a number's own width. Use it when\nthe parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three\nseparate fields make you assemble that in your head. `@rows` cannot serve this, because that one needs an\narray — it is a *repeatable* group." },
+//       text: "`type: \"group\"` on an **object** — one labelled row, each part captioned at a number's own width. Use it when\nthe parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three\nseparate fields make you assemble that in your head. `type: \"rows\"` cannot serve this, because that one needs an\narray — it is a *repeatable* group." },
 //     { type: "paragraph", attachTo: "next",
-//       text: "The same control appears nested inside `@rows`, written the same way, so an anchor in a mode block and a\nshared ladder above it are the same shape rather than two lookalikes." },
-//     { key: "lightness", type: "group", label: "Lightness", helper: "0 to 100 in the UI, 0 to 1 in the data", fields: [
+//       text: "The same control appears nested inside `type: \"rows\"`, written the same way, so an anchor in a mode block and a\nshared ladder above it are the same shape rather than two lookalikes." },
+//     { key: "lightness", type: "group", label: "Lightness", helper: "{ key: \"lightness\", type: \"group\", fields: […] }", fields: [
 //         { key: "bright", type: "number", label: "Bright" },
 //         { key: "middle", type: "number", label: "Middle" },
 //         { key: "dark", type: "number", label: "Dark" },
 //       ] },
 //     { type: "paragraph", attachTo: "previous",
-//       text: "`@unit=\"%\"` prints a unit inside the input, at its right edge. It is **not** a placeholder — a\nplaceholder disappears the moment you type, and the whole point of a unit is that a reader coming back\nto `-1.5` can tell whether that is pixels or percent." },
+//       text: "`unit: \"%\"` prints a unit inside the input, at its right edge. It is **not** a placeholder — a\nplaceholder disappears the moment you type, and the whole point of a unit is that a reader coming back\nto `-1.5` can tell whether that is pixels or percent." },
 //     { key: "lineHeight", type: "group", label: "Line height", fields: [
 //         { key: "base", type: "number", label: "Base", unit: "%" },
 //         { key: "max", type: "number", label: "Largest", unit: "%" },
@@ -393,31 +406,31 @@ var nested = { outer: { inner: 1 } };
 //       text: "Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the\nscale type and watch the fields change — each tab is judged on its own values, so two modes can be\nusing different scale types at once." },
 //     { key: "scales", type: "rows", label: "Scale per mode", layout: "tabs", columns: [
 //         { key: "name", type: "text", label: "Mode" },
-//         { key: "scaleType", type: "radio", label: "Scale type", options: [{"modular":"Modular scale"},{"metric":"Metric scale"},{"fibonacci":"Fibonacci"}] },
-//         { key: "ratio", type: "select", label: "Scaling method", options: [{"1.2":"1.2 Minor third"},{"1.25":"1.25 Major third"},{"1.618":"1.618 Golden ratio"}], showWhen: { scaleType: "modular" } },
+//         { key: "scaleType", type: "radio", label: "Scale type", options: [{"bezier":"Bezier scale"},{"metric":"Metric scale"},{"fibonacci":"Fibonacci"}] },
+//         { key: "ratio", type: "select", label: "Scaling method", options: [{"1.2":"1.2 Minor third"},{"1.25":"1.25 Major third"},{"1.618":"1.618 Golden ratio"}], showWhen: { scaleType: "bezier" } },
 //         { key: "step", type: "number", label: "Step", showWhen: { scaleType: ["metric","fibonacci"] } },
 //         { key: "mod", type: "number", label: "Every N steps", showWhen: { scaleType: "metric" } },
 //       ] },
 //     { type: "heading", level: 1, text: "Table rows" },
 //     { type: "paragraph", attachTo: "next",
-//       text: "The same annotation without @tabs: one line per entry, with Add and Remove." },
+//       text: "The same `type: \"rows\"` without `layout: \"tabs\"`: one line per entry, with Add and Remove." },
 //     { key: "breakpoints", type: "rows", label: "Breakpoints", columns: [
 //         { key: "label", type: "text", label: "Name" },
 //         { key: "min", type: "number", label: "Min width" },
 //       ] },
 //     { type: "heading", level: 1, text: "A curve you can drag" },
 //     { type: "paragraph", attachTo: "next",
-//       text: "`@curve` on an **array** of four numbers — the two handles of one cubic, exactly what `cubic-bezier()`\ncarries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the\nfield underneath. All four are the same edit: the numbers are the value and everything on screen is a\nreading of them, which is why the dropdown says *Custom* the moment a curve stops being a preset." },
-//     { key: "easing", type: "curve", label: "Curve", helper: "The dashed diagonal is the straight ramp — a curve is read as how far it departs from it." },
+//       text: "`type: \"curve\"` on an **array** of four numbers — the two handles of one cubic, exactly what `cubic-bezier()`\ncarries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the\nfield underneath. All four are the same edit: the numbers are the value and everything on screen is a\nreading of them, which is why the dropdown says *Custom* the moment a curve stops being a preset." },
+//     { key: "easing", type: "curve", label: "Curve", helper: "{ key: \"easing\", type: \"curve\" }" },
 //     { type: "paragraph", attachTo: "previous",
 //       text: "**Add middle point** makes it a three-point curve: ten numbers, a middle anchor you can drag in both\ndirections, and a handle either side of it. The split is exact, so adding the point does not move the\ncurve. It is also what `easeInOut` has always been — the in-curve over the first half and the out-curve\nover the second is a middle anchor at the centre, written as an `if`." },
 //     { key: "twoSegment", type: "curve", label: "Two-segment curve" },
 //     { type: "paragraph", attachTo: "previous",
-//       text: "`@allowOriginal` adds *Original* to the preset list — the empty curve, for a script that has something\nto fall back on. Colors uses it to mean \"leave the steps this file already has\"." },
-//     { key: "maybeCurve", type: "curve", label: "Curve or original", helper: "Shown empty. Pick a preset to give it points.", allowOriginal: true },
+//       text: "`allowOriginal: true` adds *Original* to the preset list — the empty curve, for a script that has something\nto fall back on. Colors uses it to mean \"leave the steps this file already has\"." },
+//     { key: "maybeCurve", type: "curve", label: "Curve or original", helper: "{ key: \"maybeCurve\", type: \"curve\", allowOriginal: true }", allowOriginal: true },
 //     { type: "heading", level: 1, text: "A curve on a real axis" },
 //     { type: "paragraph", attachTo: "next",
-//       text: "`@ends:` names the two fields the curve runs **between**, and `@range:` the limits of the quantity\nitself. Together they turn the y axis from a unit square into the thing being edited: the labels are\npercentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the\ntwo **square** handles are those ends — drag one and it types into its own field, because that is where\nthe value lives. The round handles still only bend the shape between them." },
+//       text: "`ends: \"a..b\"` names the two fields the curve runs **between**, and `range: [lo, hi]` the limits of the quantity\nitself. Together they turn the y axis from a unit square into the thing being edited: the labels are\npercentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the\ntwo **square** handles are those ends — drag one and it types into its own field, because that is where\nthe value lives. The round handles still only bend the shape between them." },
 //     { type: "paragraph", attachTo: "next",
 //       text: "The plot shows a **window** on the channel — the two ends with a little air — and two columns sit beside\nit. The **triangle** is the zoom: drag it up to close in, down to pull back, or step it with the buttons\nabove and below. The bar to its right is the channel's own colours across that window, and it is a\npicture: it takes no input at all. Neither column moves when you drag the curve, because where you are\nlooking is not a property of the ramp — and to follow a ramp that runs off the top or bottom, drag the\nempty chart vertically." },
 //     { type: "paragraph", attachTo: "next",
@@ -426,10 +439,10 @@ var nested = { outer: { inner: 1 } };
 //         { key: "bright", type: "number", label: "Bright" },
 //         { key: "dark", type: "number", label: "Dark" },
 //       ] },
-//     { key: "ladderCurve", type: "curve", label: "Lightness", helper: "Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.", ends: "ladder.bright..ladder.dark", range: [0,100] },
+//     { key: "ladderCurve", type: "curve", label: "Lightness", helper: "{ key: \"ladderCurve\", type: \"curve\", ends: \"ladder.bright..ladder.dark\", range: [0,100] }", ends: "ladder.bright..ladder.dark", range: [0,100] },
 //     { type: "heading", level: 1, text: "A scale with no far end" },
 //     { type: "paragraph", attachTo: "next",
-//       text: "`curve(growth:ratio)` inside `@rows` — the **open-ended** editor, for a scale whose largest value nobody\nknows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the\ngrowth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last\ntoken the line carries on faintly, because it does — adding a token extends the scale rather than\nsqueezing what is already generated into the same range." },
+//       text: "`growth: \"ratio\"` on a curve inside `type: \"rows\"` — the **open-ended** editor, for a scale whose largest value nobody\nknows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the\ngrowth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last\ntoken the line carries on faintly, because it does — adding a token extends the scale rather than\nsqueezing what is already generated into the same range." },
 //     { type: "paragraph", attachTo: "next",
 //       text: "**The dropdown is the shape control.** *Linear* means no shape and draws no handles; anything else\nreveals them, for when the growth should vary across the scale — tighter at the small end, looser at the\ntop. The field underneath carries the whole scale, growth and shape together, so copying it out and\npasting it back reproduces it." },
 //     { type: "paragraph", attachTo: "next",
@@ -439,7 +452,7 @@ var nested = { outer: { inner: 1 } };
 //         { key: "curve", type: "curve", label: "Scale", growth: "ratio" },
 //       ] },
 //     { type: "heading", level: 1, text: "What the form cannot hold" },
-//     { key: "nested", type: "unsupported", label: "Nested object", helper: "an object with no @rows — the form says so rather than dropping it" },
+//     { key: "nested", type: "unsupported", label: "Nested object", helper: "an object with no type: \"rows\" or type: \"group\"" },
 //   ]
 // }
 // @PANEL_END

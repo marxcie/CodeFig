@@ -1,30 +1,27 @@
 // @Variables
 // @DOC_START
-// Functions for Figma variables, collections, and modes.
+// # Gets and creates Figma variable collections, modes, and variables without deleting them
 //
 // ## Overview
-// Import to get/create collections, get/set variables by name or mode, list variables, and run batch operations (e.g. getOrCreateCollection, setupModes, createOrUpdateVariable, extractModes, processVariables). No configuration; use via @import.
+//
+// Import to get or create collections, plan and apply modes, read and write variable values, and batch-create or update variables from a config map (`processVariables`).
+//
+// ### Never delete a variable or a collection
+//
+// A variable's id and published key are minted at creation. Delete and recreate breaks every binding in this file and leaves subscribers with a missing variable they cannot relink. **Rename is safe.** Update in place. Nothing here removes a variable or a collection.
+//
+// ### Modes are only ever added by default
+//
+// `setupModes` adds what is missing and reports anything else the collection already has. It never removes a mode — another script may own it. `removeModes` is the explicit path when the caller has shown what will go.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
 // | Collections | getAllCollections, getCollection, getOrCreateCollection |
-// | Modes | planModes, setupModes, removeModes, modeOrderWarning |
+// | Modes | planModes, setupModes, removeModes, getOrCreateMode, getDefaultMode, modeOrderWarning |
 // | Variables | getVariable, getCollectionVariables, getVariableValue, setVariableValue, createOrUpdateVariable |
 // | Batch | extractModes, resolveModeValues, processVariables |
-//
-// ## Never delete a variable or a collection
-// A variable's id and its published key are minted at creation. Delete and recreate, and every
-// node bound to it loses its binding and every file subscribing to the published library gets a
-// "missing variable" it cannot relink. **Rename is safe** — id and key survive it — so
-// update-in-place is the only regeneration strategy that keeps a library alive. Nothing here
-// removes a variable or a collection, and nothing added here should.
-//
-// ## Modes are only ever added
-// `setupModes` adds what is missing and reports anything else the collection has. It never
-// removes a mode, because several scripts share one collection and a mode you do not
-// recognise is someone else's — along with every value stored in it. `removeModes` is the
-// explicit path, for a caller that has shown the user what will go.
 // @DOC_END
 
 // ============================================================================

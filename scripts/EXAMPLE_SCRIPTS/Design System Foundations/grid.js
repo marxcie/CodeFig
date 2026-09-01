@@ -1,24 +1,34 @@
 // Grid
 // @DOC_START
-// Create and update grid system variables programmatically.
+// # Creates a layout grid per Variable Mode with column, gap and margin variables and one Layout Guide style
 //
 // ## Overview
-// Defines a variable collection for layout grid: columns, gap, padding, viewport width per mode (e.g. Desktop, Tablet, Mobile). Each mode specifies container width, columns, gap, padding; the script creates the variables.
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | collectionName | Figma variable collection name. |
-// | group | Optional folder prefix for variable names (e.g. `layout` → `layout/columns`). When empty, variables are at the collection root (`columns`, `gap`, …). |
-// | modes | Ordered array of `{ name, containerWidth, columns, gap, padding }`. **Figma mode order matches array order.** Mode display names use `name` with only the first letter uppercased (`desktop-large` → `Desktop-large`). Column count (col-1..col-N) follows the mode with the most columns. |
-// | extensionColumns | Optional number (default `0`). Adds virtual `col-*` variables beyond the grid max (e.g. max 12 + `4` → `col-13`…`col-16`). Widths use the same column unit as the grid and grow past the content area (e.g. col-13 > col-12). Does not change `columns`, layout-guide count, or grid style. |
-// | ~~distributeToMaxColumns~~ | **Removed.** `col-s` is always the width of `s` columns of that mode. It used to be able to mean "the same fraction of the grid as `s/maxCols`", via `round(s × N ÷ maxCols)` — which collided: on an 8-column mode, `col-1` and `col-2` both became one column, `col-4` and `col-5` both became three. Twelve tokens collapsed to eight widths, `col-6` measured four columns, and extension columns ignored the rule anyway. A config still carrying the key is reported and ignored. |
-// | config (legacy) | Optional keyed object of viewports; ignored when `modes` is non-empty. |
-// | variables | Function(innerConfig) or map of variable names. Creates columns, gap, padding, viewport-width, and col-1..col-(max+extensionColumns) (optionally under `group/`). |
-// | Grid style | One grid style "Grid" (COLUMNS, left/MIN): count, sectionSize (col-1), gutter, and offset (padding) bound to variables; one style for all modes. |
-// | Preview | **Grid — overview** section: one preview frame per viewport (width bound to viewport-width variable, explicit mode, grid style). **Only when `generateOverview` is true** (default `false`). |
-// | generateOverview | Optional boolean (default `false`). When `true`, fills the **Grid — overview** section inside **`Design System Foundations`** (see `@Foundation overview`). |
-// | (output scopes) | `columns` → `EFFECT_FLOAT` (layout grid count in the Effects / layout guide picker). `gap`, `padding`, `viewport-width`, `col-*` → `WIDTH_HEIGHT` and `GAP`. |
+// Each mode defines column count, gap, margins, and viewport width. The script creates the matching
+// variables and a single **Grid** layout style for all modes.
+//
+// Enable **Generate overview** to also create a preview frame on the Figma canvas for each mode,
+// with the layout grid applied.
+//
+// Column width variables (`col-1` … `col-N`) follow the mode with the most columns. **Extra columns**
+// adds variables past that maximum for layouts that need to overshoot.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Collection**<br>`collectionName` | Name of the Figma variable collection. |
+// | **Collection modes** | Chips for modes in the collection. Add, remove, or rename here. Each mode gets its own settings below. |
+// | **Group within collection**<br>`group` | Folder prefix for variable names, e.g. `Grid` → `Grid/columns`. When empty, variables sit at the collection root. |
+// | **Extra columns**<br>`extensionColumns` | Extra column variables past the grid maximum. Default `0`. Max 12 + `4` adds `col-13` through `col-16`. Same column unit as the grid; widths can extend past the content area. Does not change column count, layout guides, or the grid style. |
+// | **Generate overview**<br>`generateOverview` | When on, creates a grid overview on the canvas: one preview frame per mode with the layout grid applied. Off by default. |
+// | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
+// | **Width**<br>`modes[].containerWidth` | Viewport / container width in pixels. |
+// | **Columns**<br>`modes[].columns` | Number of columns in the layout grid for this mode. |
+// | **Gap**<br>`modes[].gap` | Gutter between columns. |
+// | **Margins**<br>`modes[].padding` | Offset from the container edges (padding). |
 // @DOC_END
 
 // The Configuration tab redraws this as you type. Pure: it computes and renders, and touches nothing.
@@ -26,6 +36,7 @@
 // @SUGGESTIONS: gridSuggestionsHtml
 
 // Import functions from libraries
+
 @import { getOrCreateCollection, getVariable, setupModes, extractModes, processVariables, applyModeIntents } from "@Variables"
 @import { calculateColumnWidth } from "@Core Library"
 @import { foundationCreateGridOverview } from "@Foundation overview"
@@ -95,7 +106,6 @@ function calculateExtensionColumnVariable(colNum, viewportConfig) {
   return (colWidth * colNum) + (viewportConfig.gap * (colNum - 1));
 }
 
-
 var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfig : {
   // @CONFIG_START
   // @fromFile: domains.grid
@@ -120,9 +130,9 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 //     { type: "divider", section: true },
 //     { type: "heading", text: "Mode settings" },
 //     { key: "extensionColumns", type: "number", label: "Extra columns",
-//       helper: "Added as numeric variables for overshoot layout" },
+//       helper: "Extra column variables past the main grid, for layouts that need to overshoot." },
 //     { key: "generateOverview", type: "boolean", label: "Generate overview",
-//       helper: "Generate Figma frames for each mode" },
+//       helper: "Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied." },
 //     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
 //       columns: [
 //         { key: "name", type: "text", label: "Mode" },
@@ -288,7 +298,6 @@ async function createOrUpdateCollection(config) {
   describeStampAlignment(aligned).forEach(function (line) { console.log(line); });
 
   var stats = await processVariables(collection, variablesWithPrefix, innerConfig, modes);
-
 
   console.log('=== GRID SYSTEM SUMMARY ===');
   console.log('Collection: ' + collectionName);

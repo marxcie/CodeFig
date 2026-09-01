@@ -1,19 +1,22 @@
 // @Math Helpers
 // @DOC_START
-// Math utilities for calculations, interpolations, and number operations.
+// # Interpolates, eases, and generates number scales including piecewise snapped ladders
 //
 // ## Overview
-// Import for basic math, rounding, clamping, geometry (distance, center, bounds), interpolation (linear, exponential, sine, cubic, quint, goldenRatio), and easing (easeIn, easeOut, etc.). Used by font-scale and layout scripts. No configuration; use via @import.
+//
+// Math for scripts that need clamping, geometry, interpolation families, easing, and the unified scale engines used by spacing, corner radius, and typography.
+//
+// `generateScale` is the common entry for eased and modular-style ladders. `generatePiecewiseSnappedScale` / `isPiecewiseScaleType` cover piecewise snapped types. `applyEase` / `applyEaseBaseIn` feed preset conversion in `@Bezier`.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
-// | Basic | add, multiply, average, roundToNearest, clamp, lerp |
+// | Basic | add, multiply, average, roundToNearest, clamp, clamp01, lerp |
 // | Geometry | distance, center, bounds |
 // | Interpolation | interpolate, linear, exponential, sine, cubic, quint, goldenRatio |
-// | Easing | easeIn, easeOut, easeInOut, easeOutIn |
-// | Scale curve | applyEase(type, ease, t); applyEaseWithExponents(easeInExponent, easeOutExponent, ease, t) |
-// | Piecewise scale | isPiecewiseScaleType(type); generatePiecewiseSnappedScale({ steps, min, max, roundTo, type }); generateScale({ steps, min, max, type, ease, rangeMode, baseIndex, baseValue, roundTo }) — unified scale engine |
+// | Easing | easeIn, easeOut, easeInOut, easeOutIn, applyEase, applyEaseBaseIn, applyEaseWithExponents |
+// | Scale | isPiecewiseScaleType, snapScaleGrid, generatePiecewiseSnappedScale, generateScale |
 // @DOC_END
 
 // Simple math utilities that other scripts can import

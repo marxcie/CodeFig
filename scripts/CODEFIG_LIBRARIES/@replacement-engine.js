@@ -1,17 +1,20 @@
 // @Replacement Engine
 // @DOC_START
-// Find-and-replace with planning, execution, and reporting.
+// # Plans and executes find-and-replace across node styles and variables
 //
 // ## Overview
-// Import for find/replace with options (collection, type, property, exact, caseSensitive, dryRun, batchSize), planning (createReplacementPlan, validateReplacement, estimateImpact), execution (executeReplacement, rollbackReplacement, previewReplacement), and reporting (generateReport, createSummary, exportResults). No configuration; use via @import.
+//
+// Higher-level find/replace over a selection: build a plan, then execute it. Options include collection / type / property filters, exact match, case sensitivity, `dryRun`, and batch size.
+//
+// For shared **name** matching used by rename scripts, use `@Pattern Matching` (`nameMatches`, `renameByPattern`) instead.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
-// | Find & Replace | findAndReplace, batchReplace, findMatches, replaceMatches |
-// | Planning | createReplacementPlan, validateReplacement, estimateImpact |
-// | Execution | executeReplacement, rollbackReplacement, previewReplacement |
-// | Reporting | generateReport, createSummary, exportResults |
+// | Entry points | findAndReplace, batchReplace |
+// | Planning | createReplacementPlan |
+// | Execution | executeReplacement |
 // @DOC_END
 
 // ============================================================================

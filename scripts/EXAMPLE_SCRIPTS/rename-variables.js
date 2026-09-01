@@ -1,72 +1,58 @@
 // Rename variables
 // @DOC_START
-// Rename variables using the same pattern as batch-rename-styles: searchIn = scope, searchFor/replaceWith = find/replace in variable name.
+// # Renames variables by search and replace across collections and groups
 //
 // ## Overview
-// searchIn selects which collections/groups to include. searchFor/replaceWith then run on each variable name. Supports Figma-style placeholders: $&, $1 $2, $n $nn $nnn, $N $NN $NNN.
 //
-// ## searchIn scope rules (scope = "Collection/group/variable")
-// searchIn is matched against the variable's full path with plain `/` separators, so the
-// obvious ways to scope all work:
+// **Search in** selects which collections or groups to include. **Search for** and **Replace with**
+// then run on each variable name. Supports the same placeholders as Rename styles: `$&`, `$1`
+// `$2`, `$n` `$nn` `$nnn`, `$N` `$NN` `$NNN`. Matching is case-sensitive.
 //
-// | searchIn | Matches |
-// |----------|--------|
+// When **Search in** is empty, replace runs on the full hierarchy (collection names and variable
+// paths). When **Search in** is set, replace only changes what sits inside the matched scope; the
+// collection name is left unchanged.
+//
+// ### Search in scope
+//
+// Matching is against the variable's full path with plain `/` separators (case-sensitive). Both
+// `Typography/Body` and `Typography / Body` work.
+//
+// | Search in | Matches |
+// | --- | --- |
 // | (empty) | All variables. |
-// | Typography | Anything whose path contains it: the Typography collection, Typography-serif, a nested Typography group. |
-// | Typography/ | The Typography collection (and any nested group of that name). |
-// | Typography/Body | The Body group inside Typography. |
-// | Body | Any group or variable named Body, in any collection. |
-// | Typography/*/Size | Wildcard: Size under any group in Typography. |
+// | `Typography` | Anything whose path contains it. |
+// | `Typography/` | The Typography collection (and nested groups of that name). |
+// | `Typography/Body` | The Body group inside Typography. |
+// | `Body` | Any group or variable named Body, in any collection. |
+// | `Typography/*/Size` | Wildcard: Size under any group in Typography. |
 //
-// Matching is case-insensitive unless **Match case** is ticked. Both `Typography/Body` and
-// `Typography / Body` work — the separator is normalised on both sides.
+// ### Search patterns
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | searchIn | Optional scope filter (see above); empty = all variables. |
-// | searchFor | Pattern to find in the variable name. |
-// | replaceWith | Replacement string; may use the tokens below. |
-// | previewOnly | **On by default.** Lists what would change and changes nothing; untick and run again to apply. |
-// | matchCase | Match `searchIn` and `searchFor` case-sensitively. |
-// | useRegex | Treat both patterns as regular expressions. |
-// | batchReplacement | Optional array of [search, replace] pairs; overrides searchFor/replaceWith. |
-//
-// ## Search patterns
 // | Input | Meaning |
-// |-------|---------|
-// | text | Matches names **containing** that text (case-insensitive). |
-// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
-// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
-// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+// | --- | --- |
+// | text | Matches names containing that text (case-sensitive). |
+// | `V4/*/Primary` | `*` matches any characters. |
+// | `(\\w+)-(\\d+)` | A regular expression, only when **Use regular expression** is on. |
+// | (blank) | Empty filter matches everything; empty find replaces the entire name. |
 //
-// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
-// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
-// matching. Same rules in every CodeFig find/replace script.
+// Brackets and parens are literal text unless regex mode is on.
 //
-// ## Replacement tokens
-// | Token | Meaning |
-// |-------|---------|
-// | `$&` | The whole match |
-// | `$1` `$2` | Capture groups (regex mode only) |
-// | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
-// | `$N` `$NN` `$NNN` | Descending counter |
+// ## Configuration options
 //
-// ## Preview first
-// Previews by default: computes every rename, applies none, and lists them as `old → new` in
-// the InfoPanel and the console. Rows use the full `Collection/group/name` path, because a
-// variable name is only unique inside its collection — and so is a collision. Untick
-// **Preview only** and run again to apply.
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
 //
-// ## Rename behaviour
-// - **searchIn empty**: Replace in the full hierarchy (collection names and variable paths).
-// - **searchIn set**: Replace only in what is **within** the scope (variable path inside the matched collection/group; collection name is left unchanged).
+// | Control | Description |
+// | --- | --- |
+// | **Search in**<br>`searchIn` | Optional scope filter (see above). Empty = all variables. |
+// | **Search for**<br>`searchFor` | Pattern to find in the variable name. Empty replaces the whole name. |
+// | **Replace with**<br>`replaceWith` | Replacement string; may use `$&`, capture groups, and counters. |
+// | **Use regular expression**<br>`useRegex` | Treat Search in and Search for as regular expressions rather than plain text with `*` wildcards. |
+// | **Batch replacement**<br>`batchReplacement` | Many renames in one run: one pair per line, search then replace after the comma. Overrides Search for and Replace with. |
 // @DOC_END
 
 @import { getAllCollections, getCollectionVariables, getVariable } from "@Variables"
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
-@import { previewRow, flagPreviewCollisions, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
-@import { displayResults } from "@InfoPanel"
+@import { previewRow, flagPreviewCollisions } from "@Rename Preview"
 
 // ============================================================================
 // CONFIGURATION
@@ -76,9 +62,7 @@
 var searchIn = "";
 var searchFor = "";
 var replaceWith = "";
-var matchCase = false;
 var useRegex = false;
-var previewOnly = true;
 var batchReplacement = "";
 // @UI_CONFIG_END
 
@@ -111,11 +95,6 @@ var batchReplacement = "";
 //       "text": "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, `$1` a capture group, `$n` counts up and `$N` counts down."
 //     },
 //     {
-//       "key": "matchCase",
-//       "type": "boolean",
-//       "label": "Match case"
-//     },
-//     {
 //       "key": "useRegex",
 //       "type": "boolean",
 //       "label": "Use regular expression"
@@ -124,16 +103,6 @@ var batchReplacement = "";
 //       "type": "paragraph",
 //       "attachTo": "previous",
 //       "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
-//     },
-//     {
-//       "key": "previewOnly",
-//       "type": "boolean",
-//       "label": "Preview only"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "**On by default.** Lists what would change and touches nothing. Untick and run again to apply."
 //     },
 //     {
 //       "type": "divider"
@@ -210,7 +179,7 @@ function hasRenameOperation(find, replace) {
 function getMatchOpts() {
   return {
     useRegex: typeof useRegex !== 'undefined' && useRegex === true,
-    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+    matchCase: true
   };
 }
 
@@ -478,23 +447,6 @@ async function applyRenameVariablesPlan(entries) {
     // Collisions are judged over every variable in the file, in the same qualified form the
     // rows use — a name is only unique within its collection.
     flagPreviewCollisions(rows, existingVariableNames(items));
-
-    var previewOnlyVal = typeof previewOnly === 'undefined' || previewOnly === true;
-    var signature = previewSignature(rows);
-
-    if (previewOnlyVal) {
-      logPreviewPlan(rows, { field: 'previewOnly' });
-      await savePreviewSignature('rename-variables', signature);
-      displayResults(previewPayload('Rename variables', rows));
-      figma.notify(
-        'Preview: ' + rows.filter(function (r) { return r.changed; }).length +
-          ' name(s) would change. Nothing changed.'
-      );
-      return;
-    }
-
-    var drift = previewDriftMessage(await readPreviewSignature('rename-variables'), signature);
-    if (drift) console.warn(drift);
 
     var result = await applyRenameVariablesPlan(entries);
     var totalRenamed = result.renamedCount;

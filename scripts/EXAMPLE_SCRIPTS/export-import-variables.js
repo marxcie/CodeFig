@@ -1,19 +1,29 @@
 // Export/import variables
 // @DOC_START
-// Copy **local** variable collections between files as JSON.
+// # Copies local variable collections between files as JSON (export to clipboard or import from paste)
 //
-// ## Export
-// Select one or more local collections. The script serializes them to JSON, copies to the clipboard, and shows the payload in the **Info panel** as a fallback.
+// ## Overview
 //
-// ## Import
-// Paste JSON from an export into the target file. Collections and variables are matched by name; missing modes are added. Aliases within a collection are restored after all variables exist.
+// ### Export
 //
-// ## Config options
-// | Option | Description |
-// |--------|-------------|
-// | mode | **Export** or **Import**. |
-// | collections | Local collections to export (`@multi`, Export only). |
-// | importPayload | JSON payload (Import only). |
+// Select one or more local collections. The script serializes them to JSON, copies to the
+// clipboard, and shows the payload in the Info panel as a fallback.
+//
+// ### Import
+//
+// Paste JSON from an export into the target file. Collections and variables are matched by name;
+// missing modes are added. Aliases within a collection are restored after all variables exist.
+// Collections that do not exist here are created.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Mode**<br>`mode` | **Export** or **Import**. |
+// | **Collections**<br>`collections` | Local collections to export (Export only). |
+// | **Import payload**<br>`importPayload` | JSON payload from an Export run (Import only). |
 // @DOC_END
 
 @import { getOrCreateCollection, getVariable } from "@Variables"

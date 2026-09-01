@@ -1,13 +1,26 @@
 // Relink local styles
 // @DOC_START
-// **Problem:** After copy-paste between files, layers can stay bound to *different* local style definitions that share the same name (e.g. `xxlBold`). `replace-styles.js` cannot help when search/replace leaves the name unchanged.
+// # Relinks layers to the canonical local style when several definitions share the same name
 //
-// **Approach:** Group **local** text / paint / effect / grid styles by `name` + type. When several definitions share one name, pick a **canonical** style (the id with the **highest usage count** in the chosen scope). Walk layers in that same scope and rebind any binding whose style id is not the canonical one for that name. When each name appears only once locally, still rebind stray ids to that local style, including remote → same-named local.
+// ## Overview
 //
-// ## Config options (UI)
-// | Option | Description |
-// |--------|-------------|
-// | scope | **Selection** — selected layers only (requires a selection). **This page** — entire active page. **All pages** — entire file (loads every page first). |
+// After copy-paste between files, layers can stay bound to different local style definitions that
+// share the same name (for example `xxlBold`). Rename or replace-by-name does not help when the
+// displayed name is already correct.
+//
+// This script groups **local** text, paint, effect, and grid styles by name and type. When several
+// definitions share one name, it picks a canonical style (the id with the highest usage count in
+// the chosen scope). It then walks layers in that same scope and rebinds any binding whose style
+// id is not the canonical one. When each name appears only once locally, it still rebinds stray
+// ids to that local style, including remote to same-named local.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Scope**<br>`scope` | **Selection** (requires a selection), **This page**, or **All pages** (loads every page first). |
 // @DOC_END
 
 @import { traverseNodes } from "@Core Library"

@@ -1,13 +1,26 @@
 // Relink local component instances
 // @DOC_START
-// **Problem:** After copy-paste between files, instances can stay bound to *different* local component definitions that share the same name (e.g. `Button/Primary`). Swapping by name in the UI does not fix stray ids when the name already matches.
+// # Relinks instances to the canonical local component when several definitions share the same name
 //
-// **Approach:** Group **local** components by `name`. When several definitions share one name, pick a **canonical** component (the id with the **highest usage count** in the chosen scope). Walk instances in that same scope and swap any instance whose main component id is not the canonical one for that name. When each name appears only once locally, still swap stray ids to that local component, including remote → same-named local.
+// ## Overview
 //
-// ## Config options (UI)
-// | Option | Description |
-// |--------|-------------|
-// | scope | **Selection** — selected layers only (requires a selection). **This page** — entire active page. **All pages** — entire file (loads every page first). |
+// After copy-paste between files, instances can stay bound to different local component
+// definitions that share the same name (for example `Button/Primary`). Swapping by name in the
+// UI does not fix stray ids when the name already matches.
+//
+// This script groups **local** components by name. When several definitions share one name, it
+// picks a canonical component (the id with the highest usage count in the chosen scope). It then
+// walks instances in that same scope and swaps any instance whose main component id is not the
+// canonical one. When each name appears only once locally, it still swaps stray ids to that local
+// component, including remote to same-named local.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Scope**<br>`scope` | **Selection** (requires a selection), **This page**, or **All pages** (loads every page first). |
 // @DOC_END
 
 @import { traverseNodes } from "@Core Library"

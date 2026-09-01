@@ -1,23 +1,33 @@
 // Frame or auto layout selected
 // @DOC_START
-// Wrap selection in frame or auto-layout frame, unwrap such frames, or remove auto layout from frames.
+// # Wraps the selection in a frame or auto layout, unwraps such frames, or removes auto layout
 //
 // ## Overview
-// Replaces "Frame all selected", "Auto layout all selected", and "Remove auto layout recursively".
-// Choose container type (frame vs auto layout), whether to add or remove it, and recursion for remove.
 //
-// ## Actions
-// - **Wrap in frame**: targets that are not already a frame (e.g. group, shape) get a plain frame wrapper. Frames are left as-is.
-// - **Wrap in auto layout**: targets that have layoutMode (frame/component/instance) are converted to auto layout in place using Figma's inferred layout (direction, alignment, spacing) when available, or position-based inference; others are wrapped in a new auto-layout frame.
-// - **Remove auto layout**: set layoutMode to NONE (recursive = selection only; recursive on = selection and all descendants).
-// - **Unwrap frame**: remove wrapper frames (plain frames without auto layout or fills; always unwrap frames tagged by this script).
+// Choose the container kind (plain frame or auto layout), whether to add/wrap or remove/unwrap,
+// and whether remove walks descendants.
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | wrapperType | frame or autoLayout (container kind). |
-// | removeSelectedType | false = add/wrap, true = remove/unwrap. |
-// | recursively | false = only top-level selection; true = include all descendants (only for Remove). |
+// ### Actions
+//
+// - **Wrap in frame**: targets that are not already a frame (for example a group or shape) get a
+//   plain frame wrapper. Frames are left as-is.
+// - **Wrap in auto layout**: targets that already support layout (frame, component, instance) are
+//   converted to auto layout in place using Figma's inferred layout when available, or
+//   position-based inference. Others are wrapped in a new auto-layout frame.
+// - **Remove auto layout**: sets layout mode to none. With **Recursively** off, only the selection;
+//   on, the selection and all descendants.
+// - **Unwrap frame**: removes wrapper frames (plain frames without auto layout or fills; always
+//   unwraps frames tagged by this script).
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Wrapper type**<br>`wrapperType` | `frame` or `autoLayout`. |
+// | **Remove selected type**<br>`removeSelectedType` | Off adds or wraps. On removes auto layout or unwraps frames. |
+// | **Recursively**<br>`recursively` | Remove only. Off = top-level selection; on = selection and all descendants. |
 // @DOC_END
 
 // @UI_CONFIG_START

@@ -1,22 +1,15 @@
 // @Rename Preview
 // @DOC_START
-// Show what a find/replace **would** do before it does it, like Figma's Rename Layers.
+// # Previews find/replace renames with collision flags before writing
 //
 // ## Overview
-// Every defect this library exists to prevent was silent-wrong-behaviour, not a crash: a
-// pattern that matched names nobody meant, or matched nothing at all. A preview does not
-// depend on the matcher being right — it shows the answer and lets you judge it. Import
-// alongside `displayResults` from `@InfoPanel`.
 //
-// ## Exported functions
-// | Category | Functions |
-// |----------|-----------|
-// | Plan | previewRow, flagPreviewCollisions, previewCounts |
-// | Present | previewPayload, logPreviewPlan |
-// | Guarding writes | previewWouldWrite, previewRecord, previewRowsFromPlan |
-// | Preview → apply | previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage |
+// Shows what a find/replace **would** do before it writes — like Figma's Rename Layers. A preview does not depend on the matcher being perfect; it shows the plan so you can judge it. Pair with `displayResults` from `@InfoPanel`.
 //
-// ## Usage
+// `$n` / `$N` counters are positional on the **match set**. Preview and apply are separate runs — if the file changes in between, numbers move. `previewSignature` plus `previewDriftMessage` make that visible.
+//
+// ### Usage
+//
 // ```js
 // var rows = [];
 // for (var i = 0; i < items.length; i++) {
@@ -31,19 +24,23 @@
 // }
 // ```
 //
-// ## Row flags
+// ### Row flags
+//
 // | Flag | Meaning |
 // |------|---------|
-// | collision | The new name already belongs to something else. Applying would clash. |
-// | duplicate | Two rows in this plan produce the same new name. |
-// | unchanged | The name matched but the replacement did not change it — usually a pattern that does not mean what was intended. |
-// | empty | The replacement would leave an empty name. Never applied. |
+// | collision | New name already belongs to something else |
+// | duplicate | Two rows in this plan produce the same new name |
+// | unchanged | Matched but replacement did not change the name |
+// | empty | Replacement would leave an empty name — never applied |
 //
-// ## The counter caveat
-// `$n` / `$N` are positional, so they depend on the **set** of matches. Preview and apply are
-// two separate runs, so if the file changes in between, the numbers move. `previewSignature`
-// plus `previewDriftMessage` make that visible instead of silent: the preview records what it
-// planned, and the apply run says so if the plan no longer matches.
+// ## Exported functions
+//
+// | Category | Functions |
+// |----------|-----------|
+// | Plan | previewRow, flagPreviewCollisions, previewCounts |
+// | Present | previewPayload, logPreviewPlan |
+// | Guarding writes | previewWouldWrite, previewRecord, previewRowsFromPlan |
+// | Preview → apply | previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage |
 // @DOC_END
 
 // ============================================================================

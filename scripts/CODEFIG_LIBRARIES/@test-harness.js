@@ -1,15 +1,13 @@
 // @Test Harness
 // @DOC_START
-// Minimal test runner for specs that must exercise the **real** Figma API.
+// # Runs in-Figma specs against the real API with scratch pages and assertions
 //
 // ## Overview
-// Node tests cover the pure logic (`tests/`), but nothing there touches real variable scopes,
-// real style binding, or real async collection loading. This harness runs specs inside the
-// plugin instead, where those things are real. Specs live in `scripts/_TESTS/` — the `_`
-// prefix keeps them out of the shipped build — and are driven from a terminal with
-// `npm run test:figma`, which needs `npm run dev` running and the plugin open.
 //
-// ## Writing a spec
+// Minimal runner for specs that must exercise the **real** Figma API — variable scopes, style binding, async collection loading. Specs live in `scripts/_TESTS/` (the `_` prefix keeps them out of the shipped build) and are driven with `npm run test:figma` while `npm run dev` is running and the plugin is open.
+//
+// ### Writing a spec
+//
 // ```js
 // @import { testBegin, it, itInTestFile, expect, testFinish, withScratchPage } from "@Test Harness"
 //
@@ -23,22 +21,20 @@
 // })();
 // ```
 //
+// ### Two rules
+//
+// 1. **Call `testFinish()`.** Completion is inferred from idleness; without it the suite times out. `testFinish()` calls `window.codefigRunComplete()`.
+// 2. **Mutating cases go in `itInTestFile`.** Those only run in a file whose name contains `codefig-test`. Read-only cases use `it` anywhere.
+//
+// State lives on the mock `window` — `@import` extracts only top-level function declarations.
+//
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
 // | Suite | testBegin, it, itInTestFile, testFinish |
 // | Assertions | expect (toBe, toEqual, toContain, toMatch, toBeTruthy, toBeFalsy, toThrow) |
 // | Fixtures | withScratchPage, testPrefix, isTestFile, cleanupTestArtifacts |
-//
-// ## Two rules a spec must follow
-// 1. **Call `testFinish()`.** Completion is inferred from idleness, so a spec that never
-//    signals is reported as a timeout. `testFinish()` calls `window.codefigRunComplete()`.
-// 2. **Anything that mutates the document goes in `itInTestFile`.** Those cases only run in a
-//    file whose name contains `codefig-test`, so pointing the suite at real work is a
-//    no-op instead of a mess. Read-only cases run anywhere via `it`.
-//
-// State lives on the mock `window`, not in a module-level object: `@import` extracts only
-// top-level function declarations, so a `var results = []` here would never reach a spec.
 // @DOC_END
 
 // ============================================================================

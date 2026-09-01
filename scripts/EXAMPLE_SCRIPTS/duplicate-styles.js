@@ -1,25 +1,31 @@
 // Duplicate styles collection
 // @DOC_START
-// Duplicates every **local** style under a source path into a target path, preserving subfolders (`V1 / 3xl / SemiBold` → `V2 / 3xl / SemiBold`).
+// # Duplicates local styles under a source path into a target path, optionally rebinding variables
 //
 // ## Overview
-// Figma’s built-in duplicate keeps styles under the original group. This script creates **new** paint, text, effect, and grid styles whose names mirror the source tree under **targetStyleGroup**. Matching uses path **segments** (split on `/`), so spacing around slashes is normalized.
 //
-// **Variable bindings:** Text styles use `setBoundVariable` with the same variable references as the source. Paint, effect, and grid slots merge `boundVariables` from the source so color/typography bindings survive JSON cloning.
+// Figma's built-in duplicate keeps styles under the original group. This script creates **new**
+// paint, text, effect, and grid styles whose names mirror the source tree under the target path.
+// Matching uses path segments split on `/`, so spacing around slashes is normalized.
 //
-// **Rebind to another collection (optional):** If **rebindTargetCollection** is set, after each duplicate the script maps **every** bound variable on that style to the **same name + type** in the chosen collection (text / paint / effect). If it is empty, bindings stay on the **original** variables copied from the source styles.
+// Variable bindings on the new styles keep the same variable references as the source. If you pick
+// a **Rebind target collection**, every bound variable on each duplicate is mapped to the
+// same-named variable of the same type in that collection. Leave it empty to keep the original
+// variables.
 //
-// ## Config options
-// | Option | Description |
-// |--------|-------------|
-// | sourceStyleGroup | First segment(s) of the folder to copy (e.g. `V1`). |
-// | targetStyleGroup | New root path (e.g. `V2`). |
-// | rebindTargetCollection | Optional. Non-empty = rebind duplicated styles to variables in this collection. Empty = keep original variable references. |
-// | rebindBreakUnmatchedBindings | If true, detach bindings that have no same-name variable in the target collection. |
+// **Source style group** and **Target style group** are path prefixes compared segment by segment.
+// They are not search patterns with `*` or regular expressions.
 //
-// **Not a search pattern.** `sourceStyleGroup` and `targetStyleGroup` are a path pair — compared segment by segment on `/`, not with the
-// `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
-// identifier, not a search.
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Source style group**<br>`sourceStyleGroup` | First segment(s) of the folder to copy (for example `V1`). |
+// | **Target style group**<br>`targetStyleGroup` | New root path (for example `V2`). |
+// | **Rebind target collection**<br>`rebindTargetCollection` | Optional. Choose a collection to point duplicated styles at same-named variables there. Empty keeps original variable references. |
+// | **Rebind break unmatched bindings**<br>`rebindBreakUnmatchedBindings` | When on, detach bindings that have no same-name variable in the target collection. |
 // @DOC_END
 
 @import { getAllStyles } from "@Core Library"

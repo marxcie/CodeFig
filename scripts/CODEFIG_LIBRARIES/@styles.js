@@ -1,18 +1,19 @@
 // @Styles
 // @DOC_START
-// Style finding, analysis, replacement, and operations.
+// # Finds, analyses, and replaces Figma styles, including rebinding variable references
 //
 // ## Overview
-// Import to search styles by pattern/collection/type (findStyles, findStylesByPattern, getStyleById), analyze and categorize (analyzeStyles, categorizeStyle, getStyleProperties), replace on nodes (replaceStyles, applyStyleToNode, validateStyleMatch), and inspect usage (createStylePreview, getStyleUsage, getStyleHierarchy). No configuration; use via @import.
+//
+// Import to search styles by pattern, collection, or type; categorise and inspect them; apply replacements on nodes; and rebind variable references on style definitions when moving between collections.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
-// | Finding | findStyles, findStylesByPattern, getStyleById, findStylesInCollection |
+// | Finding | findStyles, findStylesByPattern, getStyleById, findStylesInCollection, findStyleByName |
 // | Analysis | analyzeStyles, categorizeStyle, getStyleProperties |
-// | Replacement | replaceStyles, applyStyleToNode, validateStyleMatch |
-// | Variable rebind (definitions) | buildTargetVariableLookup, rebindStyleVariableBindingsOnStyle |
-// | Operations | createStylePreview, getStyleUsage, getStyleHierarchy |
+// | Replacement | replaceStyles, applyStyleToNode |
+// | Variable rebind | buildTargetVariableLookup, rebindStyleVariableBindingsOnStyle |
 // @DOC_END
 
 // ============================================================================

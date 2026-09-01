@@ -1,36 +1,59 @@
 // Spacing
 // @DOC_START
-// Responsive spacing scale with range-first scaling (min → base → max per viewport).
+// # Creates a spacing scale per Variable Mode with bezier, metric or fibonacci ladders and width and gap bindings
 //
 // ## Overview
-// Creates FLOAT variables only (no preview frames). **Range layout:** **`scaling.rangeMode`** selects (1) **`full`** (default when omitted) — one ramp from each mode’s **`min` → `max`** across all tokens (`t = index / (lastIndex)`), with **`scaling.type`** / **`scaling.ease`** reshaping progress along that ramp — or (2) **`twoSegment`** — **`min` → `base` → `max`** in two segments (typography-style), with easing applied **within each** segment. Use **`twoSegment`** when you anchor a middle token; otherwise omit for a single eased ramp over the full range. One **`roundTo`** grid applies to every step. Variables use **`WIDTH_HEIGHT`** and **`GAP`**.
 //
-// ## The scale per mode
-// **Each mode carries its own scale**: `bezier` (a ramp along a curve you draw), `metric` (a step that
-// grows every N tokens) or `fibonacci` (each step the sum of the two before it).
+// Spacing variables are generated per mode, including width and gap bindings.
 //
-// A **bezier** scale ramps from `base` to `max` along a curve, in log space. Straight, that is a constant
-// ratio between steps — a modular scale, exactly. Bend it and the ratio varies across the scale, which is
-// what lets a spacing set stay tight at 4, 8, 12 and still open out at the top. Drag the handles, pick a
-// preset, or paste `cubic-bezier(…)`; **Add middle point** gives the two halves separate shapes.
+// Enable **Generate overview** to also create a reference frame on the Figma canvas.
 //
-// `modular` is still accepted in a config and generates precisely what it always generated.
+// Each mode can use its own **Scale type**:
 //
-// ## Config options
-// | Option | Description |
-// |--------|-------------|
-// | collectionName | Figma variable collection (e.g. `Responsive System`). |
-// | group | Variable name prefix folder (e.g. `Spacing` → `Spacing/md`). |
-// | spacings | **Either** an ordered array of token names (smallest → largest), e.g. `["px","xs","sm",…]` — `base.level` must match one entry — **or** a **string template** used with **`steps`** to generate names, e.g. `"spacings-{$step}"` → `spacings-1` … `spacings-N`. Placeholders: `{$index}` (0-based), `{$index1}` / `{$step}` (1-based), `{$steps}` (total count). |
-// | steps | Required with the **string** form of **`spacings`**: positive integer = number of tokens. If **`spacings`** is omitted, `[]`, or only whitespace, **`steps`** alone fills names using the default pattern `space-{$index}`. Ignored when **`spacings`** is a non-empty **array**. |
-// | modes | `{ name, min, max }` per viewport; optional `base: { level, size }` — if omitted, defaults to `md` and a size derived from min/max. |
-// | scaling.type | Range curve: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise:** `piecewise`, `piecewise2`, `piecewise4` — snapped Carbon-like ramp (see [Carbon spacing](https://carbondesignsystem.com/elements/spacing/overview/)); single segment `min`→`max` over all tokens. |
-// | scaling.rangeMode | `full` — single ramp `min`→`max` over all tokens. `twoSegment` — `min`→`base`→`max` (typography-style). **Omitted (auto):** `full` (all curve types). Set `twoSegment` explicitly for the split ramp. |
-// | scaling.ease | Applied to the curve (`getEasedFactor`). **Note:** in `@Math Helpers`, **`ease` is ignored when `type === 'linear'`** (output equals `t`); use a non-linear `type` if you want easing. **Piecewise:** use `ease: "none"`; easing does not reshape the piecewise ladder (tabular generator). |
-// | fontScaling | Optional alias; merged into `scaling` when set. |
-// | scaling.roundTo | Snap all spacing values to multiples of this number (e.g. `2` → 2, 4, 6, …). Omit or `0` for no snapping. Legacy: `roundUpperValuesTo` is accepted as an alias for `roundTo`. |
-// | (output) | Variables use `scopes: ['WIDTH_HEIGHT', 'GAP']`. |
-// | generateOverview | Optional boolean (default `false`). When `true`, builds a **Spacing — overview** frame (token rows × mode columns, variable-bound width bars). Uses `@Foundation overview`. |
+// - **Bezier scale** — follows a custom curve
+// - **Metric scale** — increases by a fixed amount every N tokens
+// - **Fibonacci** — each step is the sum of the previous two
+//
+// ### Bezier scaling
+//
+// A bezier scale progresses from **Base unit** along a curve in logarithmic space. Drag the end
+// handle to set how fast the scale grows.
+//
+// A straight curve produces a consistent ratio between steps. Adjusting the curve lets you keep
+// smaller spacing values closer together while allowing larger values to spread out more.
+//
+// You can:
+//
+// - drag the curve handles
+// - choose a preset
+// - paste a `cubic-bezier(...)` value
+// - enable **Add middle point** to control each half of the curve independently
+//
+// ### Extra spacings
+//
+// Off-scale values merge into the pool by size (for example a 1px hairline under a base of 4).
+// They take the smallest token names; the scale continues above them. If you add a value without an
+// extra token name, the largest generated value drops off the list.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Collection**<br>`collectionName` | Name of the Figma variable collection, e.g. `Responsive System`. |
+// | **Collection modes** | Chips for modes in the collection. Add, remove, or rename here. Each mode gets its own settings below. |
+// | **Group within collection**<br>`group` | Prefix used to group variables, e.g. `Spacing` produces names such as `Spacing/md`. |
+// | **Tokens**<br>`spacings` | Token names from smallest to largest. A series works: `spacing-{1,10}` expands to ten names. |
+// | **Generate overview**<br>`generateOverview` | When on, creates a spacing overview frame on the canvas: one row per token, one column per mode, with width bars bound to the variables. Off by default. |
+// | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
+// | **Scale type**<br>`modes[].scaleType` | Bezier, Metric, or Fibonacci for this mode. |
+// | **Scale**<br>`modes[].curve` | Bezier only. Curve that shapes the scale. Adding a token extends the range instead of squeezing it. |
+// | **Step**<br>`modes[].step` | Metric: how much each step adds before growth starts. Fibonacci: the first increment. |
+// | **Every N steps**<br>`modes[].mod` | Metric only. How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12. |
+// | **Base unit**<br>`modes[].base` | Value of the first generated token. |
+// | **Round numbers to**<br>`modes[].roundTo` | Snap generated values to multiples of this number. Use `0` for no snapping. |
+// | **Extra spacings**<br>`modes[].extras` | Off-scale values merged by size into the token list. |
 // @DOC_END
 
 // The Configuration tab redraws this as you type. Pure: it generates in memory and draws
@@ -39,12 +62,9 @@
 
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateSpacingOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, readManifest, findFoundationSet, normaliseConfig, foundationModeIds, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
-@import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
+@import { resolveCollectionName, resolveGroup } from "@Foundation"
 @import { displayResults, createResult } from "@InfoPanel"
-@import { scaleSequence, resolveModularRatio } from "@Scale Models"
-@import { bezierAt } from "@Bezier"
-@import { spacingRampSpec, spacingPreviewHtml, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
+@import { spacingRampSpec, spacingPreviewHtml, runLinearRamp } from "@Linear Ramp"
 
 // ========================================
 // CONFIG
@@ -86,11 +106,11 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
 //     { key: "group", type: "string", label: "Group within collection",
 //       placeholder: "eg.: Spacing" },
 //     { key: "spacings", type: "list", label: "Tokens",
-//       helper: "Named smallest to largest, and spacing-{1,10} is a series of ten." },
+//       helper: "Names from smallest to largest. spacing-{1,10} expands to ten names." },
 //     { type: "divider", section: true },
 //     { type: "heading", text: "Mode settings" },
 //     { key: "generateOverview", type: "boolean", label: "Generate overview",
-//       helper: "Generate Figma frames for each mode" },
+//       helper: "Builds a Spacing overview on the canvas: one row per token, one column per mode, with variable-bound width bars." },
 //     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
 //       columns: [
 //         { key: "name", type: "text", label: "Mode" },
@@ -98,17 +118,17 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
 //           options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
 //         { key: "curve", type: "curve", label: "Scale", growth: "ratio",
 //           showWhen: { scaleType: "bezier" },
-//           helper: "Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top." },
+//           helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
 //         { key: "step", type: "number", label: "Step",
 //           showWhen: { scaleType: ["metric", "fibonacci"] },
-//           helper: "Metric. The amount each step adds, before it starts growing.\\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it." },
+//           helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
 //         { key: "mod", type: "number", label: "Every N steps",
 //           showWhen: { scaleType: "metric" },
-//           helper: "How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down." },
+//           helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
 //         { key: "base", type: "number", label: "Base unit" },
 //         { key: "roundTo", type: "number", label: "Round numbers to" },
 //         { key: "extras", type: "list", label: "Extra spacings",
-//           helper: "Values that are not part of the scale, merged in by size — a 1px hairline below a base of 4. They fill the smallest token names and the scale takes over above them, so an extra without an extra token name pushes the largest generated value off the end of the list." }
+//           helper: "Off-scale values, merged by size (e.g. a 1px hairline under a base of 4). They take the smallest names; the scale continues above them. If you add a value without an extra token name, the largest generated value drops off the list." }
 //       ] },
 //     { type: "heading", text: "Preview" },
 //     { type: "preview" }
@@ -116,7 +136,6 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
 // }
 // @PANEL_END
 };
-
 
 var spacingConfig = typeof spacingConfig !== 'undefined' ? spacingConfig : {
   collectionName: resolveCollectionName(spacingConfigData),

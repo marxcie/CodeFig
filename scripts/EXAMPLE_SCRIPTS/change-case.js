@@ -1,33 +1,37 @@
 // Change case
 // SCRIPT_NAME: Change case
 // @DOC_START
-// # Change case
-// Recursively renames layers and component variant properties in the selection.
+// # Renames frames, groups, and component variant labels and values in the selection to lower, Capital, or camelCase
 //
 // ## Overview
-// Walks the selection and its descendants. Choose a case style, then tick which kinds of names to
-// update: frame names, group names, variant property labels, variant option values, and optionally
-// instance layer names.
 //
-// ## Case styles
-// | Style | Example (`icons/arrow right`) |
-// |-------|-------------------------------|
-// | lower case | `icons/arrow right` |
-// | Capital case | `Icons/Arrow Right` (title case per `/` segment) |
-// | camel Case | `icons/arrowRight` |
+// Walks the selection and its descendants. Choose a case style, then tick which kinds of names to
+// update: frames, groups, variant property labels, variant option values, and optionally instance
+// layer names.
 //
 // Path segments separated by `/` are transformed independently. Within a segment, words split on
 // spaces, hyphens, and underscores.
 //
-// ## Config options
-// | Option | Description |
-// |--------|-------------|
-// | caseStyle | lower case, Capital case, or camel Case. |
-// | frames | Rename `FRAME` layers. |
-// | groups | Rename `GROUP` layers. |
-// | variantLabels | Rename variant property names on component sets (`Size` → `size`). |
-// | variantValues | Rename variant option values on component sets (`Small` → `small`). |
-// | renameInstances | Rename `INSTANCE` layer names (off by default). |
+// ### Case styles
+//
+// | Style | Example (`icons/arrow right`) |
+// | --- | --- |
+// | lower case | `icons/arrow right` |
+// | Capital case | `Icons/Arrow Right` (title case per `/` segment) |
+// | camelCase | `icons/arrowRight` |
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Case style**<br>`caseStyle` | lower case, Capital case, or camel Case. |
+// | **Frames**<br>`frames` | Rename `FRAME` layers. |
+// | **Groups**<br>`groups` | Rename `GROUP` layers. |
+// | **Variant labels**<br>`variantLabels` | Rename variant property names on component sets (for example `Size` → `size`). |
+// | **Variant values**<br>`variantValues` | Rename variant option values on component sets (for example `Small` → `small`). |
+// | **Rename instances**<br>`renameInstances` | Rename `INSTANCE` layer names. Off by default. |
 // @DOC_END
 
 @import { collectNodesAsync } from "@Core Library"

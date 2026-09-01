@@ -1,18 +1,26 @@
 // @Foundation overview
 // @DOC_START
-// Shared overview for **Design System Foundations** when `generateOverview` is true.
+// # Builds Design System Foundations overview frames for typography, grid, spacing, and corner radius
 //
-// **Layout:** One page-level frame **`Design System Foundations`** (vertical auto layout) contains up to four sections (same order as the reference sheet):
-// 1. **`Render styles — overview`** — local **text styles** (two columns: Regular vs Semibold-style names), not variables.
-// 2. **`Grid — overview`** — viewport preview frames with grid style applied.
-// 3. **`Spacing — overview`** — variable-backed width bars per **mode** (columns per breakpoint).
-// 4. **`Corner radius — overview`** — variable-backed corner swatches per **mode**.
+// ## Overview
 //
-// Variable-driven sections use **explicit variable modes** on preview nodes. Text styles are modeless; grouping is by style name / font style, not collection modes.
+// Shared canvas overview used when a Foundations script has **Generate overview** on. One page-level frame **`Design System Foundations`** (vertical auto layout) holds up to four sections, in this order:
 //
-// **Imports:** `foundationCreateCornerRadiusOverview`, `foundationCreateSpacingOverview`, `foundationCreateTypographyTextStylesOverview`, `foundationCreateGridOverview`, and the one-step `foundationGenerateCornerRadiusOverview` / `foundationGenerateSpacingOverview` helpers.
+// 1. **Render styles — overview** — local text styles (Regular vs Semibold-style columns)
+// 2. **Grid — overview** — viewport preview frames with the grid style applied
+// 3. **Spacing — overview** — variable-backed width bars per mode
+// 4. **Corner radius — overview** — variable-backed corner swatches per mode
 //
-// Legacy standalone frames (`Corner radius - overview`, …) are removed when a section is updated.
+// Variable sections set **explicit variable modes** on preview nodes. Text styles are modeless; grouping is by style name / font style.
+//
+// Updating a section removes any leftover standalone legacy overview frames for that domain.
+//
+// ## Exported functions
+//
+// | Category | Functions |
+// |----------|-----------|
+// | Create | foundationCreateCornerRadiusOverview, foundationCreateSpacingOverview, foundationCreateTypographyTextStylesOverview, foundationCreateGridOverview |
+// | One-step | foundationGenerateCornerRadiusOverview, foundationGenerateSpacingOverview |
 // @DOC_END
 
 @import { getVariable, getOrCreateCollection } from "@Variables"

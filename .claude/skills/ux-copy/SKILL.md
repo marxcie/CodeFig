@@ -1,133 +1,145 @@
 ---
 name: ux-copy
-description: How to write CodeFig's in-panel help text. Use whenever adding or editing a @helper:, a @tooltip:, a heading paragraph, a status or result message, a button label, or any string a user reads in the plugin. Covers what a help text owes the reader, where it goes, and the density faults this codebase actually has.
+description: How to write CodeFig's in-panel help text and Documentation tabs. Use whenever adding or editing a @helper:, @tooltip:, heading paragraph, status/result message, button label, @DOC_START block, or any string a user or script author reads in the plugin.
 ---
 
-# In-panel copy
+# In-panel and Documentation copy
+
+## Who the reader is
+
+Most copy is for a **designer using the Configuration UI**, not the person who wrote the script.
+Assume they know Figma Variables and Modes. Do not assume they know CodeFig internals, `@import`,
+or how a feature was built.
+
+**Libraries** (`scripts/CODEFIG_LIBRARIES/`) are for **script authors**. Same clarity rules; API
+names stay exact. Still lead with what the library does, not how it is implemented.
 
 ## The problem this exists to fix
 
-This codebase's copy already passes every generic UX-writing rule. Measured: median sentence 8
-words, 85% under 14, 2% over 25, active voice throughout, no jargon the audience does not use.
-`DEFERRED.md`'s "tone pass over the remaining 77 helper texts" records that a general UX-writing
-skill would have flagged 13 of 85 texts and none of the real faults.
+This codebase's copy already passes generic UX-writing rules (short sentences, active voice).
+**Do not run a length-and-reading-level checklist.** The fault is what the sentences are about:
+they explain mechanism when the reader asked what to type or what the script does.
 
-**Do not run a length-and-reading-level checklist over this copy. It passes, and it is still hard
-to read.**
+Bad (mechanism):
 
-The fault is what the sentences are about. They explain how the system behaves when the reader
-asked what to type. Real example, from `colors.js`:
+> How the hue travels between the ends. Worth least on a cool palette…
 
-> How the hue travels between the ends. Worth least on a cool palette and most on a warm one,
-> amber crosses 49 degrees and needs its own timing. Empty on a near-grey, where a measured hue
-> is rounding rather than a value.
-
-Three true facts about the mechanism, no instruction. The reader is looking at an empty field and
-still does not know whether to fill it.
-
-Better:
+Better (actionable):
 
 > Controls how the hue shifts from the light end to the dark end. Leave it as it is unless the
 > palette is warm, where amber and orange need their own timing.
 
-Same information the reader can act on, in half the words, with the aside dropped rather than
-smuggled in.
-
-## What a help text owes the reader
+## Helpers (`@helper:`, folded paragraphs, tooltips)
 
 Three lines at most, in this order. Stop as soon as the reader can act.
 
-1. **Do.** What to put here, or what this changes. One sentence. Starts with a verb or with the
-   thing itself, never with "This field".
-2. **Default.** What happens if they touch nothing, when that is not obvious from the value shown.
-3. **Deviate.** The one condition under which the answer changes. One condition, the most common
-   one. Not three.
+1. **Do.** What to put here, or what this changes. Verb or the thing itself — never "This field".
+2. **Default.** What happens if they touch nothing, when that is not obvious.
+3. **Deviate.** One condition under which the answer changes. The most common one only.
 
-If a text has no line 1, it is not help. It is documentation that escaped into a tooltip.
+**ELI5 test:** Out loud: *"So what do I type?"* If that answer is not in the first sentence,
+rewrite.
 
-## The five density faults, in order of how often they appear here
+**Idea count, not word count:** three ideas max per bubble; two is better.
 
-**1. The mechanism aside.** A clause explaining why the system works that way. Usually attached
-with an em dash or a "which is". It is the author's satisfaction at having built the thing, not
-the reader's need.
+### Density faults (cut these)
 
-> Add middle point bends the two halves differently, which is what a real neutral ramp does, and
-> that anchor is the middle colour's lightness and its step.
+1. **Mechanism asides** — why the system works that way ("which is…"). Docs can hold that; helpers cannot.
+2. **Em dashes** — almost always smuggle fault 1. **Do not use em dashes in panel copy.** Second sentence or cut.
+3. **Teaching the domain** — what Fibonacci/OKLCH is. Name the choice; Documentation teaches.
+4. **Internal names** — config keys, library functions, `@Foundation overview`. Use the **on-screen label**.
+5. **Restating the label** — if the only honest text repeats the caption, write nothing.
+6. **Author workflow** — "to generate", "to read", "match in greyscale", personal build history.
+   Say the outcome (shared lightness steps; match an existing HSL palette).
+7. **Obsolete / removed options** — no strikethrough rows, no "this used to…". Current behaviour only.
+8. **Cross-script references** in user copy — say what the control builds on the canvas, not which
+   library builds it.
 
-Cut to: `Add middle point bends the two halves differently.` The rest belongs in the
-Documentation tab, where somebody reading about ramps will find it.
+Shared controls across scripts (Scale, Step, Every N steps, Generate overview, Collection, …)
+reuse **one wording** unless behaviour truly differs.
 
-**2. Em dash asides.** In this codebase the em dash is the delivery mechanism for fault 1 almost
-every time. **Do not use em dashes in panel copy.** If a thought needs one, it is a second
-sentence or it is cut. This rule is a proxy, but it catches the real fault reliably.
+## Documentation (`@DOC_START` … `@DOC_END`)
 
-**3. Teaching the domain.** An info bubble is not the place to explain what a Fibonacci scale is,
-what OKLCH is, or why greyscale matching works. Name the choice, and let the Documentation tab
-teach.
+### Structure
 
-> Fibonacci. The first increment, the sequence is the base, the base plus this, then each value
-> the sum of the two before it.
+Docs keep a full markdown ladder: `#` / `##` / `###`.
 
-Cut to: `Fibonacci. The first increment. Each later step is the sum of the two before it.`
+1. **`#` Functional title (required).** What the script *does* — core capability — not a repeat of
+   the script display name. ≈ **160 characters max** (count the heading text only, no `# `).
+   Prefer **Creates…** / **Renames…** / **Rebinds…**. Lead with the outcome; put Collection /
+   Variable Mode / binding detail in the same sentence when that is the core.
+2. **`## Overview`** — expand what the user gets; how to use the main controls; optional overview
+   frames. Separate ideas into short paragraphs or lists.
+3. **`###` subsections** as needed (scale types, caveats, matching modes).
+4. **`## Configuration options`** — **only controls that appear in the Configuration UI.**
 
-**4. Naming the internal concept instead of the thing on screen.** The reader sees a field with a
-caption. Use that caption's words. Not the variable name, not the config key, not the library
-function. The earlier copy pass fixed 15 of these and more will have crept in.
+### Configuration options table
 
-**5. Restating the label.** A helper that says what the label already says is worse than none,
-because the reader spent a click on it. 6 of these were removed in the earlier pass. If the only
-honest text is a restatement, write nothing.
+| Control | Description |
+| --- | --- |
+| **On-screen label**<br>`configKey` | What it does for the user. |
 
-## The ELI5 test
+- **Primary:** UI label (bold).
+- **Secondary:** Source / config key in backticks under the label (`<br>`).
+- Skip keys with no panel control (`fontScaling`, old `scaling.*`, removed options, internal
+  helpers). Compatibility that still runs in code is not Documentation material unless someone
+  asks for a Source authoring guide.
+- No **Legacy configuration** section in user-facing Docs. Dead keys nowhere; live-but-hidden
+  keys stay out of the options table.
 
-Read the text and answer, out loud, as the reader: **"So what do I type?"**
+### Library Documentation
 
-If the answer is not in the first sentence, rewrite it. If the answer is "it depends", the text
-needs a default. If you cannot answer at all, the field needs a decision made about it before it
-needs copy.
+Same structure and H1 length. Tables may list exported functions and parameters (authors need
+identifiers). Still: outcome first, current API only, no removed APIs, no "see also" spam that
+does not help the caller.
 
-Second test, for length: **count ideas, not words.** Three ideas is the ceiling for one bubble,
-and two is better. Sentence length is not the problem here and shortening sentences will not fix
-it.
+## Heading ladders (two surfaces)
 
-## Where copy goes
+| Surface | Tags | Notes |
+| --- | --- | --- |
+| **Documentation tab** | `h1`–`h3` from `#` / `##` / `###` | Full ladder. Functional `#` title ≤ ~160 chars. |
+| **Configuration UI** | never `h1`; sections `h2`, nested `h3` | Form section titles must not wear the document-title size. Parser `level: 1` still means "section"; the renderer demotes the tag. |
 
-**Behind the info button, by default.** Every explanation belongs behind the info button beside a
-control's label. This is the house pattern and there is one channel for it: `@helper:`,
-`@tooltip:` and a folded paragraph all render into the same bubble. Do not invent a second place.
+Do not open Docs by restating the script list name. The editor header already shows it.
 
-**A status or result message is the exception.** Anything reporting what just happened, what
-failed, or what is in progress is not help and does not go behind an info button. It goes where
-the user is already looking. Same three-line shape, different order: what happened, then what to
-do about it.
+## Status and result messages
 
-**A `@rows` column or a part caption can carry its own `@helper:`** and gets its own info button.
-Use it. The one thing with none is a `@rows` control as a whole, because the renderer builds no
-label for it. A helper written there degrades to a native `title` tooltip. If a whole block needs
-explaining, put it on the `# Heading` above, which is where the reader is looking anyway.
-
-**The Documentation tab takes everything the bubble cannot.** Mechanism, worked examples, the
-reason a default is the default. Moving text there is not deleting it.
+Not helpers. They sit where the user is looking. Order: what happened, then what to do about it.
+Same density rules (no mechanism asides, no em dashes).
 
 ## Button and action labels
 
-Verb plus object, 2 to 4 words. `Save changes`, not `OK`. `Generate frames`, not `Run`. Say what
-happens, not what the control is.
+Verb + object, 2–4 words. `Save changes`, not `OK`. `Generate frames`, not `Run`.
+
+## Where copy goes
+
+- **Default:** behind the info button (`@helper:`, `@tooltip:`, folded paragraph — one bubble).
+- **Exception:** status / result / progress.
+- **`@rows` columns** may have their own `@helper:`. A helper on the whole rows control has no
+  label and degrades to a native tooltip — prefer the section heading.
+- **Documentation** takes everything the bubble cannot.
 
 ## Before you write
 
-Read three existing helpers near the one you are writing, so the new one sits in the same voice.
-The house voice lives in `CLAUDE.md`, `CHANGELOG.md`, and `scripts/HELP/help-documentation.js`,
-not in a style guide.
+Read three nearby helpers (or one peer script's Docs) so voice matches.
+House voice lives in this skill, `CHANGELOG.md`, and shipped DSF Docs after the 2026-09 copy pass.
 
-Write the copy. Do not ask which wording is wanted. If a field's *behaviour* is undecided, that
-is a question worth asking, and copy is not the way to paper over it.
+Write the copy. Do not ask which wording is wanted. If *behaviour* is undecided, ask; do not
+paper over it with prose.
 
 ## When editing existing copy
 
-Report what changed and why, in one line per text. A copy diff that arrives without reasons
-cannot be reviewed, only accepted or rejected.
+- One line per text: what changed and why (reviewable).
+- Prefer panel-by-panel with a person when unsure; a full-repo pass is allowed when Márton asks
+  for one (as in 2026-09).
+- Update fixtures that snapshot panel helpers / Help specimen paragraphs in the same pass.
+- After Docs H1 or Help specimen changes: `npm run build:style-reference` if Style & UI reference
+  coverage is involved; `npm test` / `validate:soft` before calling it done.
 
-Do not sweep. `DEFERRED.md` is explicit that the remaining 77 helpers want reading panel by panel
-with a person, not one pass over `scripts/`. Fix the ones in the panel you are already working
-on.
+## Quick checklist
+
+- [ ] Helper: Do → Default → Deviate; no em dash; on-screen words
+- [ ] Docs `#`: core capability, ≤ ~160 chars, not the script name
+- [ ] Docs options: UI controls only; label primary, key secondary
+- [ ] Nothing obsolete, legacy-only, or cross-script in user Docs
+- [ ] Config form headings stay level-1 in PANEL data; renderer emits `h2`

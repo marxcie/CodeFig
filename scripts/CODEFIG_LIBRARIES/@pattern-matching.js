@@ -1,34 +1,32 @@
 // @Pattern Matching
 // @DOC_START
-// Pattern matching and wildcard processing for names and collections.
+// # Matches and renames names with wildcards, regex, and Figma-style replacement tokens
 //
 // ## Overview
-// Import for matching text against patterns (exact, partial, regex, glob, fuzzy), escaping wildcards, filtering by collection, and normalizing patterns. Used by replace-styles and find-and-replace scripts. No configuration; use via @import.
 //
-// ## Exported functions
-// | Category | Functions |
-// |----------|-----------|
-// | **Find/replace (use these)** | nameMatches, renameByPattern, patternToRegex, patternMode, patternModeNote |
-// | Matching | matchPattern, compilePattern, expandWildcards, escapeWildcards |
-// | Filtering | filterByCollection, getCollections, validateCollection |
-// | Advanced | fuzzyMatch, regexMatch, globMatch, wildcardMatch |
-// | Rename/Replace | applyFigmaPlaceholders, replaceWithPattern |
+// Shared find/replace matching for rename scripts. Prefer `nameMatches` and `renameByPattern` — do not write a local matcher. The mode is never guessed from the text: brackets and parens stay literal unless `useRegex` is set.
 //
-// ## Search patterns
+// ### Search patterns
+//
 // | Input | Meaning |
 // |-------|---------|
-// | text          | Matches names containing that text (case-insensitive). |
-// | V4/*/Primary  | * matches any characters. CodeFig extension; Figma has no wildcard. |
-// | (\w+)-(\d+)   | Regular expression — only when "Use regular expression" is ticked. |
-// | (blank find)  | Replaces the entire name. |
+// | text | Names containing that text (case-insensitive) |
+// | `V4/*/Primary` | `*` matches any characters (CodeFig extension) |
+// | `(\\w+)-(\\d+)` | Regular expression — only when use-regex is on |
+// | (blank find) | Replaces the entire name |
 //
-// ## Replacement tokens
-// $&  whole match      $1 $2  capture groups (regex mode only)
-// $n $nn $nnn  ascending      $N $NN $NNN  descending
+// ### Replacement tokens
 //
-// The mode is never guessed from the text: brackets and parens in a name are literal
-// unless useRegex is set. nameMatches and renameByPattern are the single semantic every
-// find/replace script uses — do not write a local matcher.
+// `$&` whole match · `$1` `$2` capture groups (regex only) · `$n` / `$nn` ascending · `$N` / `$NN` descending
+//
+// ## Exported functions
+//
+// | Category | Functions |
+// |----------|-----------|
+// | Find / replace | nameMatches, renameByPattern, patternToRegex, patternMode, patternModeNote |
+// | Matching | matchPattern, compilePattern, expandWildcards, escapeWildcards |
+// | Filtering | filterByCollection, getCollections, validateCollection |
+// | Placeholders | applyFigmaPlaceholders, replaceWithPattern |
 // @DOC_END
 
 // ============================================================================

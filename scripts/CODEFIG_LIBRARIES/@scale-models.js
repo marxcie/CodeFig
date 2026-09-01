@@ -1,74 +1,40 @@
 // @Scale Models
 // @DOC_START
-// Turns a description of a scale into a sequence of numbers. That is the whole boundary: no
-// viewports, no rounding, no variables, no Figma. Two consumers by design — `@Linear Ramp` for
-// spacing and corner radius, and typography — because the same four models are specified for
-// both, and two implementations of one formula drift the way spacing and radius did.
+// # Turns bezier, metric, fibonacci, and endpoints descriptions into number sequences
 //
-// ## The models
+// ## Overview
+//
+// Turns a scale description into a sequence of numbers — no viewports, rounding, variables, or Figma. Spacing, corner radius, and typography share these models so one formula does not drift into two.
+//
+// ### Models
+//
 // | Model | What it is | Where the top comes from |
 // |---|---|---|
-// | `endpoints` | a ramp from `min` to `max` along a named easing | `max` |
-// | `bezier` | a base and a **growth ratio**, with a **curve** distributing the growth | the ratio and the step count |
-// | `metric` | a base plus a step that grows every `mod` steps | the step and the step count |
-// | `fibonacci` | each step the sum of the two before it | the step and the step count |
-// | `explicit` | the numbers you typed | you |
+// | `endpoints` | Ramp from `min` to `max` along a named easing | `max` |
+// | `bezier` | Base + growth ratio, with a curve distributing growth | ratio and step count |
+// | `metric` | Base plus a step that grows every `mod` steps | step and step count |
+// | `fibonacci` | Each step the sum of the two before it | step and step count |
+// | `explicit` | The numbers you typed | you |
 //
-// `min` is required in all of them — it is the floor a scale starts from. `max` is a real endpoint only in
-// `endpoints`; everywhere else the top is derived, so a `max` beside those is ignored and reported. Set
-// `clamp` to be **told** when a scale passes a number, without it being squashed to fit: squashing a ramp
-// changes its shape, which is the one thing it promises to hold.
+// `min` is required. `max` is a real endpoint only in `endpoints`; elsewhere it is ignored and reported. Set `clamp` to be **told** when a scale passes a bound — values are not squashed to fit.
 //
-// ## `bezier` replaced `modular`, and generates the same numbers
-// A modular scale is a constant ratio between steps. In **log space that is a straight line**, so `bezier`
-// with a flat curve *is* a modular scale — the step count cancels out of the exponent, so it is exact and
-// it is **append-safe**: add three tokens and the first six do not move. Bending the curve lets the ratio
-// vary across the scale, which is what a real spacing set does and what one ratio could never say.
+// ### Bezier and modular
 //
-// **The top is derived, never typed.** A version of this briefly took a `max` instead, and that was wrong
-// in the way that matters: with both ends pinned, adding a token re-subdivides the range and moves every
-// value below it. Nobody knows the largest spacing in advance anyway — they know the base and roughly how
-// fast it grows, which is what `ratio` is. `max` is still accepted and converted, for the configs written
-// while that was the spelling.
+// `bezier` replaced `modular` and generates the same numbers for a flat curve (constant ratio in log space). The top is derived from `ratio` and step count, so adding a token extends the range instead of re-subdividing it. `modular` is still accepted via `modularAsBezier` for existing configs, but is omitted from `scaleModelNames`.
 //
-// **`modular` is still accepted** and converts through `modularAsBezier`, exactly. That is not politeness:
-// these scales have already been generated into people's files, and a token that comes back a different
-// number on the next run breaks everything bound to it. It is left out of `scaleModelNames` so nothing
-// offers it to anyone new.
+// ### Config vs library spelling of base
 //
-// ## Two spellings of "base", on purpose
-// A **config** names its base by token: `base: { level: "xs", size: 4 }` — that is what a user
-// writes and what a manifest stores, and it cannot change without breaking every config in
-// existence. This library names it by position: **`baseValue`** (a number) and **`baseIndex`**
-// (where in the sequence it sits), which is also how `generateScale` in `@Math Helpers` has always
-// spelled it.
+// Configs name the base by token (`base: { level, size }`). This library uses `baseValue` and `baseIndex`. Translating both directions is the caller's job.
 //
-// **Translating between them is the caller's job, in both directions.** `@Linear Ramp` does it in
-// `buildRampScaleOpts` (config → here) and `rampModePayloadFor` (here → config). Getting only one
-// direction is not a compile error and not a crash: an adopted metric scale regenerated as
-// `4, 5, 6, 8, 12` because a `base` that was not an object was silently replaced with the middle
-// token. Plan 20's typography ramps carry `base: { step, size, lineHeight, tracking }`, so the
-// same split arrives with more fields to lose — wire both directions before wiring anything else.
+// Rounding and the monotonic guard stay with the caller. Line height and tracking stay in typography — they are functions of a size, not sequence generators.
 //
-// ## What is deliberately not here
-// Rounding, and the monotonic guard that rounding makes necessary — both belong to the caller, so
-// there is one grid ladder rather than four. Line height and letter spacing, which are reciprocal
-// functions *of* a size rather than sequence generators; they stay in typography.
-//
-// ## Companion imports
-// `@import` does not follow calls across scripts. `endpoints` delegates to `generateScale` and `bezier`
-// reads its curve with `bezierAt`, so a consumer must import both:
-//
-// ```js
-// @import { scaleSequence, resolveModularRatio } from "@Scale Models"
-// @import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
-// @import { bezierAt } from "@Bezier"
-// ```
+// `endpoints` needs `generateScale` from `@Math Helpers`; `bezier` needs `bezierAt` from `@Bezier`.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
-// | Sequences | scaleSequence, scaleModelNames, scaleModelAliases |
+// | Sequences | scaleSequence, scaleModelNames, scaleModelAliases, recogniseScale |
 // | Ratios | modularRatios, resolveModularRatio |
 // @DOC_END
 

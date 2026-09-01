@@ -1,51 +1,62 @@
 // Corner radius
 // @DOC_START
-// A corner-radius scale, one per mode.
+// # Creates a corner radius scale per Variable Mode with CORNER_RADIUS bindings and bezier, metric or fibonacci ladders
 //
 // ## Overview
-// Creates FLOAT variables with the **`CORNER_RADIUS`** scope only, so a binding offers itself in a corner
-// field and not in width or gap. No canvas frames unless you ask for the overview.
 //
-// **Each mode carries its own scale**: `bezier` (a ramp along a curve you draw), `metric` (a step that
-// grows every N tokens) or `fibonacci` (each step the sum of the two before it). `base` is the value of the
-// first *generated* token and `roundTo` is the mode's own grid, so a 4px desktop scale and a 2px mobile one
-// are the ordinary case rather than a compromise.
+// Corner radius variables are generated per mode with the **CORNER_RADIUS** scope, so bindings appear
+// in corner fields rather than width or gap.
 //
-// **A bezier scale ramps from `base` to `max` along a curve, in log space.** Straight, that is a constant
-// ratio between steps — a modular scale, exactly. Bend it and the ratio varies across the scale, which is
-// how a radius set stays tight at the small end without flattening at the large one. Drag the handles, pick
-// a preset, or paste `cubic-bezier(…)`; **Add middle point** gives the two halves separate shapes.
+// Enable **Generate overview** to also create a reference frame on the Figma canvas.
 //
-// `modular` is still accepted in a config and generates precisely what it always generated.
+// Each mode can use its own **Scale type**:
 //
-// **`none` is an extra value, not a special case.** Put `0` in Extra values and it fills the smallest
-// token name; the scale then takes over from the base. Extras merge into the pool by value, so the number
-// of tokens is the number of names — add an extra without adding a name and the largest generated value
-// falls off the end of the list.
+// - **Bezier scale** — follows a custom curve
+// - **Metric scale** — increases by a fixed amount every N tokens
+// - **Fibonacci** — each step is the sum of the previous two
 //
-// ## Config options
-// | Option | Description |
-// |--------|-------------|
-// | collectionName | Figma variable collection (e.g. `Responsive System`). |
-// | group | Variable name prefix folder (e.g. `Corner radius` → `Corner radius/md`). |
-// | radii | Ordered token names, smallest to largest. A series works: `radius-{1,10}` is ten of them, and it mixes with names you write — `none, xs, radius-{1,6}`. |
-// | modes | Per mode: `scaleType`, `max`/`curve` or `step`/`mod`, `base`, `roundTo`, `extras`. |
-// | generateOverview | Optional boolean (default `false`). When `true`, builds a **Corner radius — overview** frame (token rows × mode columns, variable-bound swatches). Uses `@Foundation overview`. |
-// | (output) | Variables use `scopes: ['CORNER_RADIUS']`. |
+// **Base unit** is the value of the first generated token. Each mode has its own **Round numbers to**
+// grid, so a 4px desktop scale and a 2px mobile scale are a common setup.
 //
-// ## The older shape still runs
-// A config written before the panel keeps working and generates what it always generated: per-mode
-// `min`/`max` with `base: { level, size }`, a top-level `roundTo`, and a `scaling` curve. Those keys have
-// no controls now; nothing else about them changed.
+// ### Bezier scaling
 //
-// | Legacy option | Description |
-// |--------|-------------|
-// | modes[].min / max / base | `{ name, min, max }` per viewport; optional `base: { level, size }` — if omitted, defaults to `md` and a size derived from min/max. |
-// | radii (string) + steps | A name template used with `steps`, e.g. `"radius-{$step}"` → `radius-1` … `radius-N`. Placeholders: `{$index}` (0-based), `{$index1}` / `{$step}` (1-based), `{$steps}`. |
-// | scaling.type | Range curve: linear, sine, quad, cubic, quart, quint, circ, exponential, goldenRatio. **Piecewise:** `piecewise`, `piecewise2`, `piecewise4` — snapped ramp; single segment `min`→`max` over all tokens. |
-// | scaling.rangeMode | `full` — one ramp `min`→`max` over all tokens. `twoSegment` — `min`→`base`→`max`. Omitted: `full`. |
-// | scaling.ease | Applied to the curve. **`ease` is ignored when `type === 'linear'`**; use a non-linear type if you want easing. |
-// | scaling.roundTo | Snap every value to a multiple of this. Legacy aliases: `roundUpperValuesTo`, and `fontScaling` for the whole curve object. |
+// A bezier scale progresses from **Base unit** along a curve in logarithmic space.
+//
+// A straight curve produces a consistent ratio between steps. Adjusting the curve lets you keep
+// smaller radii closer together without flattening at the large end.
+//
+// You can:
+//
+// - drag the curve handles
+// - choose a preset
+// - paste a `cubic-bezier(...)` value
+// - enable **Add middle point** to control each half of the curve independently
+//
+// ### Extra values
+//
+// **`none` is not a special case.** Put `0` in **Extra values** and it takes the smallest token name;
+// the scale continues from **Base unit**. Extras merge into the pool by value. If you add an extra
+// without adding a token name, the largest generated value drops off the list.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Collection**<br>`collectionName` | Name of the Figma variable collection, e.g. `Responsive System`. |
+// | **Collection modes** | Chips for modes in the collection. Add, remove, or rename here. Each mode gets its own settings below. |
+// | **Group within collection**<br>`group` | Prefix used to group variables, e.g. `Corner radius` produces names such as `Corner radius/md`. |
+// | **Tokens**<br>`radii` | Token names from smallest to largest. A series works: `radius-{1,10}` expands to ten names and can mix with names you write, e.g. `none, xs, radius-{1,6}`. |
+// | **Generate overview**<br>`generateOverview` | When on, creates a corner radius overview frame: one row per token, one column per mode, with swatches bound to the variables. Off by default. |
+// | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
+// | **Scale type**<br>`modes[].scaleType` | Bezier, Metric, or Fibonacci for this mode. |
+// | **Scale**<br>`modes[].curve` | Bezier only. Curve that shapes the scale. |
+// | **Step**<br>`modes[].step` | Metric: how much each step adds before growth starts. Fibonacci: the first increment. |
+// | **Every N steps**<br>`modes[].mod` | Metric only. How often the step size grows. |
+// | **Base unit**<br>`modes[].base` | Value of the first generated token. |
+// | **Round numbers to**<br>`modes[].roundTo` | Snap generated values to multiples of this number. Use `0` for no snapping. |
+// | **Extra values**<br>`modes[].extras` | Off-scale values merged by size into the token list. |
 // @DOC_END
 
 // The Configuration tab redraws this as you type. Pure: it generates in memory and draws
@@ -54,12 +65,9 @@
 
 @import { getCollection, getOrCreateCollection, setupModes, extractModes, processVariables } from "@Variables"
 @import { foundationCreateCornerRadiusOverview } from "@Foundation overview"
-@import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, registryViewportLabels, writeManifest, readManifest, findFoundationSet, normaliseConfig, foundationModeIds, expandTokenList, tokenListHasSeries, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
-@import { generateScale, isPiecewiseScaleType, snapScaleGrid } from "@Math Helpers"
+@import { resolveCollectionName, resolveGroup } from "@Foundation"
 @import { displayResults, createResult } from "@InfoPanel"
-@import { scaleSequence, resolveModularRatio } from "@Scale Models"
-@import { bezierAt } from "@Bezier"
-@import { radiusRampSpec, radiusPreviewHtml, ensureCompatRampConfig, materialiseRampTokens, materialiseRampSizes, validateRampScalingType, generateRampVariables, runLinearRamp } from "@Linear Ramp"
+@import { radiusRampSpec, radiusPreviewHtml, runLinearRamp } from "@Linear Ramp"
 
 // ========================================
 // CONFIG
@@ -101,11 +109,11 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
 //     { key: "group", type: "string", label: "Group within collection",
 //       placeholder: "eg.: Corner radius" },
 //     { key: "radii", type: "list", label: "Tokens",
-//       helper: "Named smallest to largest, and radius-{1,10} is a series of ten." },
+//       helper: "Names from smallest to largest. radius-{1,10} expands to ten names." },
 //     { type: "divider", section: true },
 //     { type: "heading", text: "Mode settings" },
 //     { key: "generateOverview", type: "boolean", label: "Generate overview",
-//       helper: "Builds the Corner radius overview frame" },
+//       helper: "Builds a Corner radius overview on the canvas: one row per token, one column per mode, with variable-bound swatches." },
 //     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
 //       columns: [
 //         { key: "name", type: "text", label: "Mode" },
@@ -113,17 +121,17 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
 //           options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
 //         { key: "curve", type: "curve", label: "Scale", growth: "ratio",
 //           showWhen: { scaleType: "bezier" },
-//           helper: "Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top." },
+//           helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
 //         { key: "step", type: "number", label: "Step",
 //           showWhen: { scaleType: ["metric", "fibonacci"] },
-//           helper: "Metric. The amount each step adds, before it starts growing.\\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it." },
+//           helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
 //         { key: "mod", type: "number", label: "Every N steps",
 //           showWhen: { scaleType: "metric" },
-//           helper: "How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down." },
+//           helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
 //         { key: "base", type: "number", label: "Base unit" },
 //         { key: "roundTo", type: "number", label: "Round numbers to" },
 //         { key: "extras", type: "list", label: "Extra values",
-//           helper: "Values that are not part of the scale, merged in by size. Put a 0 here for a `none` token: it fills the smallest name and the scale takes over above it, so `none` needs no special case." }
+//           helper: "Off-scale values, merged by size. Put 0 here for a none token: it takes the smallest name and the scale continues above it." }
 //       ] },
 //     { type: "heading", text: "Preview" },
 //     { type: "preview" }
@@ -131,7 +139,6 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
 // }
 // @PANEL_END
 };
-
 
 var cornerRadiusConfig = typeof cornerRadiusConfig !== 'undefined' ? cornerRadiusConfig : {
   collectionName: resolveCollectionName(cornerRadiusConfigData),

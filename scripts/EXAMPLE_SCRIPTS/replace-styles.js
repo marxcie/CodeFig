@@ -1,65 +1,52 @@
 // Replace styles
 // @DOC_START
-// Replaces style bindings on nodes by matching style names to patterns (rebinds nodes to a different style; does not rename style definitions).
+// # Rebinds layers from one style to another by rewriting style names with search and replace
 //
 // ## Overview
-// Same config as batch-rename: searchIn (optional filter on current style name), searchFor/replaceWith for one replacement, batchReplacement for multiple. Style name matching is **partial** (substring, with * wildcards). Supports text, paint, and effect styles. **Replacement targets** resolve from **local file styles and remote/Team Library** (imports when needed). After find/replace on the name, **lookup variants** run (default: `✅ `→`🚫 ` plus slash spacing `a/b`↔`a / b`) so e.g. `V5`→`V4` can find `🚫 V4 / …` when the computed name was `✅ V4/…`. selectionOnly: selection vs whole page.
 //
-// ## Config options (UI)
-// | Option | Description |
-// |--------|--------------|
-// | searchIn | Optional: only try to rebind when the current style name (partial) matches this; empty = all styles. |
-// | searchFor / replaceWith | Single find/replace pair applied to style names. |
-// | matchCase | Match `searchIn` and `searchFor` case-sensitively. |
-// | useRegex | Treat both patterns as regular expressions. |
-// | batchReplacement | Textarea (UI) or array (script): multiple "search, replace" pairs; when non-empty, overrides searchFor/replaceWith. |
-// | selectionOnly | If true, **replace bindings** only on/under the current selection; if false, whole page. **Style cache** (finding target styles) always scans the **current page** so a **Render styles** overview frame and other layers on the page are visible. |
+// Does **not** rename style definitions. It finds style bindings on nodes, rewrites the current
+// style name with **Search for** / **Replace with** (or **Batch replacement**), and rebinds to a
+// style with that new name. Targets resolve from local styles and from team libraries when the
+// document has already seen them.
 //
-// ## Script-only (edit in file, not in plugin UI)
-// - **`replaceStylesDebug`** — `true` by default: `[ReplaceStyles]` logs, `[detail]` samples, inventory hints, and a run summary. Set **`false`** once behavior is verified (summary still prints when zero replacements).
-// - **`localStylesOnly`** — `false` by default (local **and** remote/team library). Set **`true`** only while isolating local resolution issues.
-// - **`replaceStylesMaxLibraryCollections`** — `0` = load style metadata from **all** connected library collections (recommended for remote replacement). Set a positive number to cap (faster, may miss a library).
-// - **`replaceStylesTeamLibraryTimeoutMs`** — Max wait for `getAvailableLibraryStyleCollectionsAsync` (default `30000`). Use `0` to disable the timeout (wait as long as Figma needs).
-// - **`replaceStylesNameFallbackRewrites`** — After `searchFor`/`replaceWith`, if the computed name is missing from the cache, try extra string variants (regex → replacement), e.g. `✅ `→`🚫 ` when V5 styles use ✅ and V4 styles use 🚫. See script body for default.
-// - **`replaceStylesRemoteTargetAliases`** — Optional map `{ "computed name after replace": "exact published style name" }` when the string from your rule doesn’t match the library’s style name (Team Library lookup is exact). Values get the same slash / prefix variants as other candidates.
-// - **`replaceStylesLimitCacheScanToSelection`** — Default `false`. Set `true` only for legacy behavior: limit **cache** document scan to the selection (breaks overview frames outside the selection).
+// Figma caches styles per file, so a library style can only be rebound once the document has seen
+// it. Run **Render styles overview** in the library file, then copy that frame into this one, so
+// the styles become available. Local styles need none of that.
 //
-// ### Remote / Team Library (honest limits)
-// Figma’s **styles** plugin API is thinner than **variables**: there is no “list all styles in file + libraries” like variables. This script uses `getAvailableLibraryStyleCollectionsAsync` + `getStylesInLibraryCollectionAsync` + `importStyleByKeyAsync`, plus a **document scan** for styles already on nodes. If the catalog API isn’t available (wrong runtime, timeout), remote targets only resolve if the style is **already used** on the scoped nodes—or you fix names via **aliases** / **pre-place** targets once on a scratch frame.
-// For a guided “pre-place” workflow, use **render-styles-overview** in the library source file, then copy the generated frame into the target file.
-// - **`replaceStylesScanMaxNodes`** — Max nodes in the **main** page walk (default `40000`). Lower values (e.g. `5000`) can stop before an overview frame at the **bottom** of the layer list.
-// - **`replaceStylesPriorityScanFrameNameSubstrings`** — Matching frames/sections are scanned **in full first** (no node cap). Default includes `Render styles` / `styles overview` (and legacy `warm-up` markers).
+// After find/replace on the name, lookup also tries common variants (for example emoji prefix
+// swaps and slash spacing) so a rewritten name can still find the published style. Matching is
+// case-sensitive.
 //
-// ## Search patterns
+// ### Search patterns
+//
 // | Input | Meaning |
-// |-------|---------|
-// | text | Matches names **containing** that text (case-insensitive). |
-// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
-// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
-// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+// | --- | --- |
+// | text | Matches names containing that text (case-sensitive). |
+// | `V4/*/Primary` | `*` matches any characters. |
+// | `(\\w+)-(\\d+)` | A regular expression, only when **Use regular expression** is on. |
+// | (blank) | Empty Search in matches every style; empty Search for replaces the entire name. |
 //
-// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
-// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
-// matching. Same rules in every CodeFig find/replace script.
+// Brackets and parens are literal text unless regex mode is on. `$&` and capture groups work in
+// the replacement; counters like `$n` are not useful here because each binding is rewritten on
+// its own (the counter stays 1).
 //
-// ## Replacement tokens
-// | Token | Meaning |
-// |-------|---------|
-// | `$&` | The whole match |
-// | `$1` `$2` | Capture groups (regex mode only) |
-// | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
-// | `$N` `$NN` `$NNN` | Descending counter |
+// ## Configuration options
 //
-// The counters are **not** useful in this script: it rewrites a name each time a binding is
-// encountered, not once per item in an ordered list, so `$n` is always 1. Use them in
-// **Rename styles** instead. `$&` and capture groups work normally.
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Search in**<br>`searchIn` | Optional: only try to rebind when the current style name contains this. Empty = all styles. |
+// | **Search for**<br>`searchFor` | Pattern applied to the current style name. Empty replaces the whole name. |
+// | **Replace with**<br>`replaceWith` | Replacement string; may use `$&` and capture groups. |
+// | **Use regular expression**<br>`useRegex` | Treat Search in and Search for as regular expressions rather than plain text with `*` wildcards. |
+// | **Batch replacement**<br>`batchReplacement` | Many rebinds in one run: one pair per line, search then replace after the comma. Overrides Search for and Replace with. |
 // @DOC_END
 
 // Import memory management utilities and library functions
 @import { processWithOptimization, cleanupMemory, traverseNodes, getAllStyles, collectNodesAsync, showProgress, codefigRunOpBegin, codefigRunOpEnd, finishCodefigRunProgress } from "@Core Library"
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
-@import { previewWouldWrite, previewRecord, previewRowsFromPlan, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
-@import { displayResults } from "@InfoPanel"
+@import { previewWouldWrite, previewRecord } from "@Rename Preview"
 
 // ========================================
 // CONFIGURATION
@@ -69,9 +56,7 @@
 var searchIn = "";
 var searchFor = "";
 var replaceWith = "";
-var matchCase = false;
 var useRegex = false;
-var previewOnly = true;
 var batchReplacement = "";
 // @UI_CONFIG_END
 
@@ -114,11 +99,6 @@ var batchReplacement = "";
 //       "text": "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, and `$1` `$2` are capture groups when **Use regular expression** is on."
 //     },
 //     {
-//       "key": "matchCase",
-//       "type": "boolean",
-//       "label": "Match case"
-//     },
-//     {
 //       "key": "useRegex",
 //       "type": "boolean",
 //       "label": "Use regular expression"
@@ -127,16 +107,6 @@ var batchReplacement = "";
 //       "type": "paragraph",
 //       "attachTo": "previous",
 //       "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
-//     },
-//     {
-//       "key": "previewOnly",
-//       "type": "boolean",
-//       "label": "Preview only"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "**On by default.** Lists the bindings that would be rebound and touches nothing. Untick and run again to apply."
 //     },
 //     {
 //       "type": "divider"
@@ -434,7 +404,7 @@ function logReplaceStylesSummary(searchInVal, replacements, localStylesOnlyVal, 
 function getMatchOpts() {
   return {
     useRegex: typeof useRegex !== 'undefined' && useRegex === true,
-    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+    matchCase: true
   };
 }
 
@@ -660,9 +630,8 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         (selectionOnlyVal ? 'selection only' : 'whole page')
     );
     
-    // Preview state travels with the traversal: the same walk runs with the writes switched
-    // off, rather than a separate pass that describes what this one would do.
-    var previewOnlyVal = typeof previewOnly === 'undefined' || previewOnly === true;
+    // Writes on every run. Plan still records what changed for console summary.
+    var previewOnlyVal = false;
     var preview = { previewOnly: previewOnlyVal, plan: [] };
 
     var nodes = selectionOnlyVal ? figma.currentPage.selection : [figma.currentPage];
@@ -741,20 +710,6 @@ function replaceAllStyles(customReplacements, customSelectionOnly) {
         console.log('✅ Total replacements: ' + totalReplacements);
 
         logReplaceStylesSummary(searchInVal, replacements, localStylesOnlyVal, totalReplacements);
-
-        var rows = previewRowsFromPlan(preview.plan);
-        // No collision flagging: a style rebind targets a style that already exists — the
-        // lookup only succeeds because it does. Same reasoning as the other replace scripts.
-        if (previewOnlyVal) {
-          logPreviewPlan(rows, { field: 'previewOnly' });
-          await savePreviewSignature('replace-styles', previewSignature(rows));
-          displayResults(previewPayload('Replace styles', rows));
-          figma.notify('Preview: ' + rows.length + ' binding(s) would be rebound. Nothing changed.');
-          return { success: true, replacements: 0, preview: rows.length, error: null };
-        }
-
-        var drift = previewDriftMessage(await readPreviewSignature('replace-styles'), previewSignature(rows));
-        if (drift) console.warn(drift);
 
         if (totalReplacements > 0) {
           figma.notify('✅ Replaced ' + totalReplacements + ' styles');

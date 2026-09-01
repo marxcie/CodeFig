@@ -1,64 +1,43 @@
 // Rename styles
 // @DOC_START
-// Rename local styles (paint, text, effect, grid) by search/replace patterns.
+// # Renames local paint, text, effect, and grid styles by search and replace patterns
 //
 // ## Overview
-// Applies find/replace to style names. Use searchIn to narrow by folder, searchFor/replaceWith for single replacement, or batchReplacement for multiple operations. Supports Figma-style placeholders: $& (full match), $1 $2 (regex groups), $n $nn $nnn (ascending), $N $NN $NNN (descending).
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | searchIn | Optional filter: only styles whose name contains this (e.g. "color/", "Typography/*"). |
-// | searchFor | Pattern to find in style names. |
-// | replaceWith | Replacement string; may use the tokens below. |
-// | previewOnly | **On by default.** Lists what would change and changes nothing; untick and run again to apply. |
-// | matchCase | Match `searchIn` and `searchFor` case-sensitively. |
-// | useRegex | Treat both patterns as regular expressions. |
-// | batchReplacement | Optional array of [search, replace] pairs; if set, overrides searchFor/replaceWith. |
+// Applies find/replace to local style names. Use **Search in** to narrow by folder, **Search for**
+// and **Replace with** for a single replacement, or **Batch replacement** for many pairs in one
+// run. Supports Figma-style placeholders: `$&` (full match), `$1` `$2` (regex groups), `$n`
+// `$nn` `$nnn` (ascending), `$N` `$NN` `$NNN` (descending). Matching is case-sensitive.
 //
-// ## Search patterns
+// `$n` / `$N` are positional over the set of matches in that run.
+//
+// ### Search patterns
+//
 // | Input | Meaning |
-// |-------|---------|
-// | text | Matches names **containing** that text (case-insensitive). |
-// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
-// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
-// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+// | --- | --- |
+// | text | Matches names containing that text (case-sensitive). |
+// | `V4/*/Primary` | `*` matches any characters. |
+// | `(\\w+)-(\\d+)` | A regular expression, only when **Use regular expression** is on. |
+// | (blank) | Empty **Search in** matches everything; empty **Search for** replaces the entire name. |
 //
-// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
-// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
-// matching. Same rules in every CodeFig find/replace script.
+// Brackets and parens are literal text unless regex mode is on.
 //
-// ## Replacement tokens
-// | Token | Meaning |
-// |-------|---------|
-// | `$&` | The whole match |
-// | `$1` `$2` | Capture groups (regex mode only) |
-// | `$n` `$nn` `$nnn` | Ascending counter (1, 01, 001) |
-// | `$N` `$NN` `$NNN` | Descending counter |
+// ## Configuration options
 //
-// ## Preview first
-// The script previews by default: it computes every rename, applies none, and lists them as
-// `old → new` in the InfoPanel and the console. Rows are flagged when the new name already
-// exists, when two rows would produce the same name, when a pattern matched but changed
-// nothing (usually a pattern that does not mean what was intended), or when the result would
-// be empty. Untick **Preview only** and run again to apply.
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
 //
-// `$n` / `$N` are positional, so they depend on the set of matches. Preview and apply are two
-// runs — if the file changes in between, the numbering moves. The apply run says so when the
-// plan no longer matches what was previewed.
-//
-// ## Examples
-// Simple: searchFor = "font-", replaceWith = "text-"
-// With filter: searchIn = "color/", searchFor = "pine", replaceWith = "Pine"
-// Wildcard filter: searchIn = "V4/*/Primary", searchFor = "V4", replaceWith = "V5"
-// Regex + numbering: useRegex = true, searchFor = "(\\w+)-(\\d+)", replaceWith = "$1-$2-$nn"
-// Batch: batchReplacement = [["LG","XL"], ["MD","LG"], ["SM","MD"]]
+// | Control | Description |
+// | --- | --- |
+// | **Search in**<br>`searchIn` | Optional filter: only styles whose name contains this (for example `color/`, `Typography/*`). Empty searches every style. |
+// | **Search for**<br>`searchFor` | Pattern to find in style names. Empty replaces the whole name. |
+// | **Replace with**<br>`replaceWith` | Replacement string; may use `$&`, capture groups, and counters. |
+// | **Use regular expression**<br>`useRegex` | Treat Search in and Search for as regular expressions rather than plain text with `*` wildcards. |
+// | **Batch replacement**<br>`batchReplacement` | Many renames in one run: one pair per line, search then replace after the comma. Overrides Search for and Replace with. |
 // @DOC_END
 
 @import { getAllStyles } from "@Core Library"
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
-@import { previewRow, flagPreviewCollisions, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
-@import { displayResults } from "@InfoPanel"
+@import { previewRow, flagPreviewCollisions } from "@Rename Preview"
 
 // ========================================
 // CONFIGURATION
@@ -68,9 +47,7 @@
 var searchIn = "";
 var searchFor = "";
 var replaceWith = "";
-var matchCase = false;
 var useRegex = false;
-var previewOnly = true;
 var batchReplacement = "";
 // @UI_CONFIG_END
 
@@ -103,11 +80,6 @@ var batchReplacement = "";
 //       "text": "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, `$1` a capture group, `$n` counts up and `$N` counts down."
 //     },
 //     {
-//       "key": "matchCase",
-//       "type": "boolean",
-//       "label": "Match case"
-//     },
-//     {
 //       "key": "useRegex",
 //       "type": "boolean",
 //       "label": "Use regular expression"
@@ -116,16 +88,6 @@ var batchReplacement = "";
 //       "type": "paragraph",
 //       "attachTo": "previous",
 //       "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
-//     },
-//     {
-//       "key": "previewOnly",
-//       "type": "boolean",
-//       "label": "Preview only"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "**On by default.** Lists what would change and touches nothing. Untick and run again to apply."
 //     },
 //     {
 //       "type": "divider"
@@ -202,7 +164,7 @@ function hasRenameOperation(find, replace) {
 function getMatchOpts() {
   return {
     useRegex: typeof useRegex !== 'undefined' && useRegex === true,
-    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+    matchCase: true
   };
 }
 
@@ -334,20 +296,6 @@ getAllStyles().then(async function(allStyles) {
   // renaming into a name that exists outside the scope clashes just as hard.
   var existingNames = allStyles.map(function (style) { return style.name; });
   flagPreviewCollisions(rows, existingNames);
-
-  var previewOnlyVal = typeof previewOnly === 'undefined' || previewOnly === true;
-  var signature = previewSignature(rows);
-
-  if (previewOnlyVal) {
-    logPreviewPlan(rows, { field: 'previewOnly' });
-    await savePreviewSignature('rename-styles', signature);
-    displayResults(previewPayload('Rename styles', rows));
-    figma.notify('Preview: ' + rows.filter(function (r) { return r.changed; }).length + ' style(s) would be renamed. Nothing changed.');
-    return;
-  }
-
-  var drift = previewDriftMessage(await readPreviewSignature('rename-styles'), signature);
-  if (drift) console.warn(drift);
 
   totalCount = applyRenamePlan(entries);
   if (isBatch) {

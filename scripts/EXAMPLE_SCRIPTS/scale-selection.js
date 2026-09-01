@@ -1,10 +1,38 @@
 // Scale or resize elements
 // @DOC_START
-// **Scale** uses `rescale` (like the Scale tool). **Resize** uses constraint-aware `resize` (like dragging frame handles).
+// # Scales or resizes top-level selected layers by factor, target size, or aspect ratio
 //
 // ## Overview
-// - **Scale:** Factor (uniform scale), or target width, or target height (other axis follows current aspect ratio).
-// - **Resize:** Pixels (absolute width/height) or Factor (multipliers). Optional aspect ratio: `16:9`, `16/9`, `16, 9`, `16 9`. When aspect ratio is set with both width and height, landscape ratios keep width and recompute height; portrait ratios keep height and recompute width. Only **top-level selected** layers are transformed.
+//
+// Only **top-level selected** layers are transformed.
+//
+// ### Scale
+//
+// Uses `rescale` (like the Scale tool). Choose a uniform factor, or a target width or height
+// (the other axis follows the current aspect ratio).
+//
+// ### Resize
+//
+// Uses constraint-aware `resize` (like dragging frame handles). Enter pixels (absolute width and
+// height) or factors (multipliers). Optional aspect ratio accepts `16:9`, `16/9`, `16, 9`, or
+// `16 9`. When aspect ratio is set with both width and height, landscape ratios keep width and
+// recompute height; portrait ratios keep height and recompute width.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Scale or resize**<br>`scaleOrResize` | `scale` or `resize`. |
+// | **Scale method**<br>`scaleMethod` | Scale only: `factor`, `width`, or `height`. |
+// | **Scale factor**<br>`scaleFactor` | Uniform scale multiplier when Scale method is factor. |
+// | **Scale width to**<br>`scaleWidthTo` | Target width when Scale method is width. |
+// | **Scale height to**<br>`scaleHeightTo` | Target height when Scale method is height. |
+// | **Resize unit mode**<br>`resizeUnitMode` | Resize only: `pixels` or `factor`. |
+// | **Width to**<br>`widthTo` | Target width (pixels or factor). |
+// | **Height to**<br>`heightTo` | Target height (pixels or factor). |
+// | **Aspect ratio**<br>`aspectRatio` | Optional. Forces width/height to this ratio when resizing. |
 // @DOC_END
 
 // @UI_CONFIG_START

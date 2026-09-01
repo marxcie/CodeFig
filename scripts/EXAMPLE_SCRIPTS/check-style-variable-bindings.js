@@ -1,17 +1,25 @@
 // Check style and variable bindings
 // @DOC_START
-// Audits the current selection (including descendants) for style and variable bindings that are not available in this file.
+// # Audits the selection for style and variable bindings that are not available in this file
 //
 // ## Overview
-// No configuration. Traverses all nodes under the selection and flags bindings that are neither **local to this file** nor from a **linked team library**. Typical after paste from another file: layers still point at the source file’s style/variable ids even though this file has its own definitions.
 //
-// ## What is checked
+// No configuration. Traverses all nodes under the selection and flags bindings that are neither
+// **local to this file** nor from a **linked team library**. Typical after paste from another file:
+// layers still point at the source file's style or variable ids even though this file has its own
+// definitions.
+//
+// ### What is checked
+//
 // - Applied styles: text, fill, stroke, effect, grid (including mixed text segments)
-// - Variable bindings on layers (`boundVariables`, including fills/strokes/effects slots)
+// - Variable bindings on layers (`boundVariables`, including fills, strokes, and effects slots)
 // - Variable bindings on resolved styles that drive the layer
 //
-// ## Report
-// Style issues are listed first (grouped by **style name**), then variable issues (grouped by **variable name**). Click a row to select all elements using that binding. When everything is local or from a linked library, only a success notification is shown.
+// ### Report
+//
+// Style issues are listed first (grouped by style name), then variable issues (grouped by variable
+// name). Click a row to select all elements using that binding. When everything is local or from a
+// linked library, only a success notification is shown.
 // @DOC_END
 
 @import { displayResults, getPropertyDisplay } from "@InfoPanel"

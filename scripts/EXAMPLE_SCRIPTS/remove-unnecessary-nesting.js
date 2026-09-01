@@ -1,18 +1,34 @@
 // Remove unnecessary nesting
 // @DOC_START
-// Removes or merges nesting containers (frames, auto layouts) that have no effect on their children.
+// # Removes or merges redundant frames and auto layouts that do nothing for their children
 //
 // ## Overview
-// Targets frames, auto layouts, and groups that are redundant: single child, no padding, no gap (or gap irrelevant with one child). Optionally **normalizes** by merging parent and child when one has padding and the other has gap—combining properties onto one container.
 //
-// ## Actions
+// Targets frames, auto layouts, and groups that are redundant: a single child, no padding, and no
+// effective gap. Optionally **Normalize** merges parent and child when one has padding and the
+// other has gap, combining properties onto one container.
+//
+// ### Actions
+//
 // - **Remove**: Unwrap containers that do nothing (single child, no padding, no effective spacing).
-// - **Normalize** (optional): When parent has padding and only one child, and that child has gap but no padding, merge padding + gap onto the inner container and remove the outer one. Variable bindings are preserved.
+// - **Normalize** (optional): When the parent has padding and only one child, and that child has
+//   gap but no padding, merge padding and gap onto the inner container and remove the outer one.
+//   Variable bindings are preserved.
 //
-// ## Merge rules
-// - Only merge when properties don't overlap: e.g. parent has padding, child has gap → safe.
-// - Do NOT merge when both have padding (values would add together).
+// ### Merge rules
+//
+// - Only merge when properties do not overlap (for example parent has padding, child has gap).
+// - Do not merge when both have padding (values would add together).
 // - Variable-based values are inherited when merging.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Normalize (merge padding + gap when safe)**<br>`normalize` | When on, merges parent padding with child gap when that is safe. |
+// | **Process descendants**<br>`recursive` | When on, walks nested containers under the selection. |
 // @DOC_END
 
 // @UI_CONFIG_START

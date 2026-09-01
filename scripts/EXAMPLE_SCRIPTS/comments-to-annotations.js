@@ -1,17 +1,22 @@
 // Comments to annotations
 // @DOC_START
-// Converts file comments into Figma annotations and optional invisible anchor frames.
+// # Converts file comments into Figma annotations and optional invisible anchor frames
 //
 // ## Overview
-// Uses the Figma REST API to read comments, then creates annotations (and optionally anchor frames) at comment positions. Requires a Figma Personal Access Token and a file key or URL.
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | tokenStorageKey | Client storage key for the Personal Access Token, or paste the token itself (figd_...) here. |
-// | fileKeyOrUrl | Figma file key or file URL; leave empty to use stored key or be prompted. |
-// | annotationAnchors | If true, creates invisible anchor frames at comment locations. |
-// | resolvedComments | If true, resolved comments are included; default false. |
+// Reads comments through the Figma REST API, then creates annotations (and optionally anchor
+// frames) at comment positions. Needs a Figma Personal Access Token and a file key or URL.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Access token**<br>`tokenStorageKey` | Your Figma personal access token, or the name of a key you have already saved. Needs the *Files / file_comments:read* scope. |
+// | **File key or URL**<br>`fileKeyOrUrl` | File key or any URL from the file. Leave empty to use a stored key or be prompted. |
+// | **Anchor to comment position**<br>`annotationAnchors` | When on, creates an invisible frame where each comment sits so the annotation lands in the same place. |
+// | **Include resolved comments**<br>`resolvedComments` | When on, resolved comments become annotations too. Off by default (open comments only). |
 // @DOC_END
 
 // ============================================================================

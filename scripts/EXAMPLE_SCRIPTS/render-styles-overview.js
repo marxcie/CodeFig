@@ -1,27 +1,38 @@
 // Render styles overview
 // @DOC_START
-// Renders **local** text, paint, and effect styles as a structured overview. **All auto-layout frames hug contents**. Path logic: **one or two** segments (`Style` or `Group / Name` such as `🚧 V6/3xs`) → **vertical** stack, one tile per row (no column strip). **Three or more** segments (`…/…/Weight`) → **last** segment is the **column** (e.g. **Normal** | **Bold**): matching endings stack **vertically**; **one horizontal** `… · columns` frame holds those columns **side by side** (weight order when names match a known list, else file order). Optional `renderStylesOverviewMinColumnWidth` sets a minimum width on each column frame. **Fills** on style cards + **root** only; **corner radius** only on filled layers. Inner group frames use **no padding**. Typography preview: **previewText** (Config textarea), or **`RENDER_TEXT_PREVIEW_SAMPLE`** if empty; line breaks from the field become **`\u2028`** (soft) in Figma.
+// # Renders local text, paint, and effect styles as a structured overview of auto-layout frames
 //
-// - **Text styles:** **previewText** (or fallback) as multiline sample + **full style name** caption (applied text style). Left-aligned, hug.
-// - **Paint styles:** swatch + **full style name** caption.
-// - **Effect styles:** sample shape with effect + **full style name** caption.
+// ## Overview
 //
-// Use it as a **style guide** or to **surface styles in a file** so tools like **Replace styles** can resolve targets (paste the frame into another file if needed). **Design System Foundations** scripts can build smaller token overviews via **@Foundation overview** (corner radius, spacing variables; typography text tiles as a flat list).
+// Builds a style guide from **local** text, paint, and effect styles. All auto-layout frames hug
+// contents.
 //
-// ## Config (UI)
-// | Option | Description |
-// |--------|-------------|
-// | styleGroup | Substring on full style name (case-insensitive). Empty = all (capped). |
-// | previewText | Multiline **textarea**: copy shown in each **text** style tile. **Enter** in the field becomes a **soft line break** (`\u2028`) in Figma. Leave empty to use `RENDER_TEXT_PREVIEW_SAMPLE`. |
+// Path logic:
 //
-// ## Script-only
-// - `renderStylesIncludeText`, `renderStylesIncludePaint`, `renderStylesIncludeEffect`, `renderStylesIncludeGrid`
-// - `renderStylesMaxStyles` — max styles total (default `600`)
-// - `renderStylesOverviewMinColumnWidth` — optional min width (px) for column frames; `0` = pure hug contents (default `0`).
-// - `renderStylesRadiusInner` / `renderStylesRadiusStep` — swatch/box radius and +step for the **filled** style card around them (defaults `8` / `4`).
-// - `renderStylesRootCornerRadius` — root overview frame (has background); default `20`.
-// - `previewText` — set via Config textarea; leave empty to use `RENDER_TEXT_PREVIEW_SAMPLE`.
-// - `RENDER_TEXT_PREVIEW_SAMPLE` — fallback when `previewText` is blank; may use **`\u2028`** between lines.
+// - **One or two** name segments (`Style` or `Group / Name`) → a **vertical** stack, one tile per
+//   row.
+// - **Three or more** segments → the **last** segment becomes the **column** (for example Normal |
+//   Bold). Matching endings stack vertically; one horizontal frame holds those columns side by
+//   side (weight order when names match a known list, otherwise file order).
+//
+// Tile contents:
+//
+// - **Text styles:** **Preview text** (or a built-in sample if empty) plus the full style name as
+//   a caption. Enter in the field becomes a soft line break in Figma.
+// - **Paint styles:** swatch plus full style name.
+// - **Effect styles:** sample shape with the effect plus full style name.
+//
+// Use it as a style guide, or to surface styles in a file so tools like Replace styles can resolve
+// library targets (paste the overview frame into another file if needed).
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Style group**<br>`styleGroup` | Substring on the full style name (case-insensitive). Empty = all styles (capped). |
+// | **Preview text**<br>`previewText` | Multiline sample shown in each text style tile. Enter becomes a soft line break. Leave empty for the built-in sample. |
 // @DOC_END
 
 @import { getAllStyles } from "@Core Library"

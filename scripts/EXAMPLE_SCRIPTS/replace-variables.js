@@ -1,51 +1,58 @@
 // Replace variables
 // @DOC_START
-// Rebinds variable **bindings** on layers and/or in the **variables table**. Does not create,
-// rename, or move variable definitions — use **Copy or move variables** for that.
-//
-// **Style vs native:** On layers, bindings that come from an applied **text**, **color (fill)**,
-// **stroke**, or **effect** style are **not** replaced — only **native** bindings on the layer.
+// # Rebinds variable bindings on layers and in the variables table by collection, group, and name
 //
 // ## Overview
-// **Scope:** **selection** — layer bindings under the current selection. **variablesCollection** —
-// alias values inside local variable definitions (`valuesByMode`, all modes). **both** — layers
-// (when something is selected) plus the variables table.
 //
-// **Search for / Replace with:** Collection limits which referenced bindings to consider / where
-// to look up the replacement. **Group** and **Variables** compose a path find/replace (e.g. group
-// `UI`, variables `white` → find `UI/white`). Empty group + variables = match by variable leaf or
-// path fragment as before.
+// Does not create, rename, or move variable definitions. Use **Copy or move variables** for that.
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | rebindScope | **selection**, **variablesCollection**, or **both**. |
-// | sourceCollection / targetCollection | Filter / lookup collection; empty = all / same then any. |
-// | sourceGroup / sourceVariables | Path find (joined as `group/variables` when both set). |
-// | targetGroup / targetVariables | Path replace (same join rules). |
-// | useRegex | Treat the composed find as a regular expression. |
-// | batchReplacement | Multiple `search, replace` lines; overrides Group/Variables. |
-// | **Replace-all (path)** | Source + target set, Group/Variables/batch empty: swap collection name in the path. |
-// | **Remap by name** | Target set, everything else empty: same variable name in the target collection. |
+// On layers, bindings that come from an applied text, color (fill), stroke, or effect style are
+// **not** replaced. Only native bindings on the layer are.
 //
-// ## Search patterns
+// **Scope** chooses where to look:
+//
+// - **selection**: layer bindings under the current selection
+// - **variablesCollection**: alias values inside local variable definitions (all modes)
+// - **both**: layers (when something is selected) plus the variables table
+//
+// Under **Search for** / **Replace with**, Collection limits which bindings to consider or where
+// to look up the replacement. **Group** and **Variables** compose a path find/replace (for example
+// group `UI`, variables `white` → find `UI/white`). Empty group and variables match by variable
+// leaf or path fragment.
+//
+// Shortcuts:
+//
+// - Source and target collections set, Group/Variables/batch empty: swap the collection name in
+//   the path (replace-all by collection).
+// - Target set, everything else empty: same variable name in the target collection (remap by name).
+//
+// ### Search patterns
+//
 // | Input | Meaning |
-// |-------|---------|
-// | text | Matches names **containing** that text (case-insensitive). |
-// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
-// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
-// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+// | --- | --- |
+// | text | Matches names containing that text (case-sensitive). |
+// | `V4/*/Primary` | `*` matches any characters. |
+// | `(\\w+)-(\\d+)` | A regular expression, only when **Use regular expression** is on. |
+// | (blank) | Empty filter matches everything. |
 //
 // Patterns use plain `/` separators (`Color/red`, not `Color / red`). A literal asterisk in a
-// name needs regex mode and `\*`.
+// name needs regex mode and `\\*`.
 //
-// ## Replacement tokens
-// | Token | Meaning |
-// |-------|---------|
-// | `$&` | The whole match |
-// | `$1` `$2` | Capture groups (regex mode only) |
-// | `$n` `$nn` `$nnn` | Ascending counter (always 1 here — bindings are not an ordered list) |
-// | `$N` `$NN` `$NNN` | Descending counter |
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Rebind scope**<br>`rebindScope` | `selection`, `variablesCollection`, or `both`. |
+// | **Collection**<br>`sourceCollection` | Filter which referenced bindings to consider. Empty = all. |
+// | **Group**<br>`sourceGroup` | Path prefix to match. Leave empty to ignore group. |
+// | **Variables**<br>`sourceVariables` | Variable name or fragment to find. Combined with Group as `group/name`. |
+// | **Collection**<br>`targetCollection` | Collection where replacement variables are looked up. |
+// | **Group**<br>`targetGroup` | Destination path prefix. Leave empty to keep the matched group structure. |
+// | **Variables**<br>`targetVariables` | Name to bind to instead. Leave empty to keep each variable's own name. |
+// | **Use regular expression**<br>`useRegex` | Treat the composed find path as a regular expression rather than plain text with `*` wildcards. |
+// | **Batch replacement**<br>`batchReplacement` | Many rebinds in one run: one pair per line. Overrides Group and Variables. |
 // @DOC_END
 
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
@@ -326,7 +333,7 @@ async function rvVariablePath(variable) {
 function getMatchOpts() {
   return {
     useRegex: typeof useRegex !== 'undefined' && useRegex === true,
-    matchCase: false
+    matchCase: true
   };
 }
 

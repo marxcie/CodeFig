@@ -1,48 +1,57 @@
 // Selection to variables
 // @DOC_START
-// Recursively walks the selection and creates or updates variables from layer names and values.
+// # Creates or updates variables from selected layers' names and values
 //
-// ## Collection
-// Pick a collection in this file, or choose **New collection** and type a name — a name that is not
-// in this file is created on Run. Same control as the Design System Foundations scripts.
+// ## Overview
 //
-// ## Mode
-// Which mode the values are written to, chosen the same way: a mode of that collection, or **New
-// mode** and a name, created on Run. Left empty, the values go to the collection's default mode.
+// Recursively walks the selection and writes variables into a collection.
 //
-// Changing the collection empties it, because the modes on offer are the new collection's.
+// **Collection:** pick one in this file, or choose New collection and type a name. A name that is
+// not in this file is created on Run.
 //
-// **New mode always means a mode beside the ones you have**, never a rename of one. The single
-// exception is a collection with no variables in it yet — there is nothing in it to lose, and its
-// untouched *Mode 1* is a placeholder Figma made rather than a mode you asked for.
+// **Mode:** which mode the values are written to. Empty means the collection's default mode. New
+// mode always means a mode beside the ones you have, never a rename. The exception is a collection
+// with no variables yet: its untouched Mode 1 is a placeholder Figma made, so New mode can take
+// that slot.
 //
-// ## Group
-// A group inside the collection that every variable goes under. Left empty, they land at the
-// collection root. It is a *prefix*, so it composes with whatever the layer name already says —
-// `bark` + a layer called `350` and no group + a layer called `bark/350` both write `bark/350`.
-// One field when the layers are named uniformly, slashes in the layer names when they are not.
+// Changing the collection clears Mode, because the modes on offer belong to the new collection.
 //
-// ## Layer naming
-// The layer name is the variable path *inside* that collection (after the group); slashes are
-// further groups.
+// **Group within collection:** a prefix every variable goes under. Empty means the collection
+// root. It composes with the layer name: group `bark` plus a layer named `350`, or no group plus
+// a layer named `bark/350`, both write `bark/350`.
+//
+// ### Layer naming
+//
+// The layer name is the variable path inside the collection (after the group); slashes are further
+// groups.
+//
 // - `bark/350` → group `bark`, variable `350`
 // - `primitives/bark/350` → group `primitives/bark`, variable `350`
 // - `350` → variable `350` at the collection root
 //
-// ## Variable type
+// ### Variable type
+//
 // | Type | Layer | Value |
-// |------|-------|-------|
+// | --- | --- |
 // | Color | Shape with solid fill | Fill color |
 // | Number | Text | Parsed number from text content |
 // | String | Text | Text content |
 //
-// Every variable the run touched is listed in the **Info panel** — its value, and whether it was
-// created or updated. Click a row to select the layer. The panel does **not** open by itself; open
-// it from its button when you want to read the run.
+// Every variable the run touched is listed in the Info panel (created or updated). Click a row to
+// select the layer. Open the Info panel from its button when you want to read the run.
 //
-// **Not a search pattern.** The collection field is a picker — compared by exact name, not with the
-// `*` / regex matching used by the CodeFig find/replace scripts. Deliberate: this is an
-// identifier, not a search.
+// Collection is an exact picker, not a search pattern.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Collection**<br>`targetCollection` | Destination collection, or New collection with a name. |
+// | **Mode**<br>`targetMode` | Mode to write into. Empty means the collection's default mode. |
+// | **Group within collection**<br>`targetGroup` | Prefix under which every variable is created. Empty means collection root. |
+// | **Variable type**<br>`variableType` | Color (solid fill on shapes), Number, or String (text layers). |
 // @DOC_END
 
 @import { collectNodesAsync, showProgress, finishCodefigRunProgress } from "@Core Library"

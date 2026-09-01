@@ -1,77 +1,55 @@
 // @CodeFigUI
 // @DOC_START
-// Build and send native UI (toggles, inputs, sections) to the plugin so it can be shown in real time.
-//
-// **Nomenclature:** **CodeFigUI** is this feature (the library and the form rendered in the Config tab). The **@UI_CONFIG** block is the section in your script: wrap config variables between **// @UI_CONFIG_START** and **// @UI_CONFIG_END**. So: use “CodeFigUI” when referring to the feature; use “@UI_CONFIG” when referring to the config block markers.
+// # Builds run-time Configuration UI forms; author shipped panels with @PANEL_START and values blocks
 //
 // ## Overview
-// Import to define config or custom forms in code. Build a schema with section(), toggle(), number(), string(), select(), then send it to the plugin UI with sendToUI(). You can edit this library to add more component types (e.g. createColorPicker, createSlider).
 //
-// ## @UI_CONFIG block in scripts
-// Wrap config variables between **// @UI_CONFIG_START** and **// @UI_CONFIG_END**. The Config tab will show the native form only (no code view). Use **// @CONFIG_START** / **// @CONFIG_END** if you want the Config tab to show editable code instead of the form.
+// **Shipped Configuration UI panels** use `@PANEL_START`…`@PANEL_END` (JSON recipe) plus a values block (`@UI_CONFIG_*` or `@CONFIG_*`). That is the authoring model — see **Help & documentation** (Style & UI reference).
 //
-// ## Components (built-in)
-// - **Toggle** (boolean) – checkbox-style on/off.
-// - **Number** – numeric input.
-// - **Text** (string) – single-line text input.
-// - **Textarea** – multiline text (e.g. batch replacement: one line per "search, replace"). **Builder:** textarea(name, value, opts?). **@UI_CONFIG block:** add `// @textarea` on the var line. Same width as text input, max 5 lines by default.
-// - **Select** (dropdown) – choice from a list of options. **Builder API:** section().select(name, value, options, opts?). In the **@UI_CONFIG block**, add `// @options:` on the var line (see **Dropdown** and **Dropdown options** below).
-// - **Multiselect** – multiple choices (checkbox list). **@UI_CONFIG:** `var names = []; // @options: variableCollections @multi` — value is a **JSON array** of strings; Config tab shows grouped checkboxes; code mode round-trips `["a","b"]`.
-// - **Collection picker** – where variables should be *written*: this file's collections, plus **New collection**, which reveals a name input. **@UI_CONFIG:** `var targetCollection = ""; // @collection`. One string either way — `getOrCreateCollection` from `@Variables` creates a name it cannot find, so "new" is something that happens at Run rather than a second setting.
-// - **Mode picker** – the same control one level down: the modes of the collection another field holds, plus **New mode**. **@UI_CONFIG:** `var targetMode = ""; // @mode: targetCollection` (written bare, `// @mode`, it follows the block's only `@collection`). Script side is `getOrCreateMode(collection, name)` from `@Variables`, which returns the mode and treats an empty name as the collection's default. **Changing the collection resets it**, because the modes on offer are the new collection's — so a script must handle an empty value rather than assuming a mode was chosen.
-// - **Radio** – single choice from options shown as radio buttons (use when all options should be visible). **Builder API:** section().radio(name, value, options, opts?). In the **@UI_CONFIG block**, add `// @options: a|b|c @radio` on the var line.
+// This library's builder API (`section()`, `sendToUI()`, …) is for **forms built at run time**, not a replacement for `@PANEL_START`.
 //
-// **Conditional visibility (`@showWhen`):** Add `@showWhen: fieldName=value1|value2` so a field is only shown when the controlling field has one of the listed values. Use for parameters that depend on a previous choice (e.g. show `scaledFactor` only when `scaleMode=uniform`). **Multiple `@showWhen` on the same line are combined with AND** (all must match).
+// **Names:** **CodeFigUI** is the feature (this library and the Config tab form). **`@UI_CONFIG_*`** markers wrap **values** in a script.
 //
-// **Field labels (`@label:`):** Override the auto-generated label: `var minFontSize = 8; // @label: Font size`. Combine with `@options`, `@radio`, `@textarea`, `@showWhen` on the same line.
+// ### Builder API
 //
-// **Section dividers:** A comment line `// ---` (or `// ***` / `// ___`) renders a horizontal rule between form sections.
+// Build a schema with `section()`, `toggle()`, `number()`, `string()`, `textarea()`, `select()`, `radio()`, then `sendToUI()`:
 //
-// **Section headings:** On the same line as `// ## Title`, append `@showWhen: fieldName=value1|value2` to hide that heading (and use the same pattern in the Config tab as for fields).
+// ```js
+// section('Display').toggle('onlyUsed', true).number('maxNodes', 5);
+// sendToUI();
+// ```
 //
-// **Combine with `@options`:** On one line, list `@options: a|b|c` first, then `@radio` or `@multi` if needed, then `@showWhen: …`. The parser stops the option list at the next `@` so `@radio` / `@multi` / `@showWhen` are not swallowed into the dropdown options.
+// ### Values blocks
 //
-// **In the @UI_CONFIG block:** only `var name = value; // optional hint` is supported. Inferred types: `true`/`false` → toggle, number → number input, string → text. For a **dropdown**, use `// @options: <value>` (static list or dynamic source). For **radio buttons**, use `// @options: a|b|c @radio`. For **conditional visibility** use `// @showWhen: fieldName=val1|val2`. The variable value is always a string; in script/code mode it is edited as text.
+// With `@PANEL_START`, `@UI_CONFIG_START`…`@UI_CONFIG_END` and `@CONFIG_START`…`@CONFIG_END` hold **values only**. Without a PANEL block, trailing annotations on each `var` line still drive a simple form:
 //
-// ## Dropdown (use in @UI_CONFIG)
-// Use a **dropdown** when the value must be one of a fixed or runtime-defined set (e.g. action type, collection name). In the Config tab the control is a `<select>`; in script mode the line stays editable as `var name = 'value';`.
+// | Annotation | Effect |
+// |---|---|
+// | `@options:` + static list | Dropdown — pipe-separated choices, e.g. `frame` / `autoLayout` |
+// | `@options: variableCollections` | Dynamic collection list (local + remote, with “all”) |
+// | `@options: localVariableCollections` | Local collections only (no “all”) |
+// | `@options:` + `@radio` | Radio buttons |
+// | `@options:` + `@multi` | Multiselect — value is a JSON array of strings |
+// | `@collection` / `@mode` / `@mode: field` | Collection and mode pickers |
+// | `@textarea` | Multiline text |
+// | `@showWhen: field=…` | Show only when the controlling field matches (AND if repeated) |
+// | `@label: …` | Override the auto-generated label |
+// | `// ---` | Section divider |
+// | `// ## Title` | Section heading (may take `@showWhen`) |
 //
-// **Static choices** – e.g. action or mode: `var selectedType = 'frame'; // @options: frame|autoLayout`  
-// **Dynamic choices** – e.g. pick a variable collection: `var sourceCollectionName = 'website V3'; // @options: variableCollections`  
-// The script reads the var like any other string; run uses the current selection. See **Dropdown options** for syntax and edge cases.
-//
-// ## Dropdown options (`// @options:`)
-// On a var line, `// @options: <value>` accepts either a **dynamic source** or a **static list**:
-//
-// - **Static list (pipe-separated):** e.g. `var selectedType = 'frame'; // @options: frame|autoLayout`  
-//   The token after `@options:` contains `|`, so it is split by `|`, trimmed, and used as the option list. The Config tab shows a dropdown with those options; script mode keeps the line as editable code. Round-trip serialization preserves the list as `opt1|opt2|...`.
-// - **Dynamic source (single word):** e.g. `var sourceCollectionName = 'website V3'; // @options: variableCollections`  
-//   The token is a single word (no `|`), so the plugin fills the dropdown at runtime. Supported dynamic sources: **variableCollections** (local + remote, with “all” option), **localVariableCollections** (local only, no “all”—use when selecting a single collection to duplicate).
-//
-// **Rule:** If the token after `@options:` contains a pipe (`|`), it is treated as a static list; otherwise as a dynamic source name.
-//
-// **Edge cases:** Empty or single-option lists are valid (field.options is still set). If the current var value is not in the option list, the current value is still shown and serialized. Existing scripts using `// @options: variableCollections` (no pipe) continue to use dynamic loading unchanged.
-//
-// ## Scope and filtering (config patterns)
-// Many scripts use **scope** and **filtering** vars inside the @UI_CONFIG block. These are normal CodeFigUI fields (no special directive):
-//
-// - **searchIn** (string) – Optional scope filter: which items to process. Empty = all; when set, the script restricts to items whose name or path matches (partial). Examples: variable scripts use "collection / variable path"; style scripts use style name (e.g. `"color/"`, `"Typography/"`). Use a text input or leave empty for "all".
-// - **selectionOnly** (boolean) – When true, process only the current selection; when false, process the whole page (or a full set). Use a toggle in the @UI_CONFIG block. Scripts that support it (e.g. replace-styles) read the var and pass it into the processing logic.
-//
-// These are not CodeFigUI-specific features—they are config variables that your script logic interprets. CodeFigUI only provides the controls (text, toggle, dropdown); the script decides how to apply scope and filtering.
+// Pipe in the `@options` token → static list; a single word → dynamic source. List `@options` first, then `@radio` / `@multi`, then `@showWhen`.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
 // | Builder | section(title), toggle(name, value, opts?), number(name, value, opts?), string(name, value, opts?), textarea(name, value, opts?), select(name, value, options, opts?), radio(name, value, options, opts?) |
-// | Send | sendToUI() – sends the built schema to the plugin UI (Config / Visual or custom panel) |
-//
-// ## Example (builder)
-// section('Display').toggle('onlyUsed', true).number('maxNodes', 5);
-// sendToUI();
+// | Schema | getSchema(), reset() |
+// | Send | sendToUI() |
 // @DOC_END
 
-// Config block showcase (toggle, number, text, dropdown). Select is also available via the builder API (section().select(...)).
+// Config block showcase (toggle, number, text, dropdown) — builder / annotation demo, not the
+// `@PANEL_START` authoring model. Prefer Help & documentation for panel recipes.
 // @UI_CONFIG_START
 // # Built-in components
 // One of each control type the config block supports.

@@ -1,18 +1,22 @@
 // @Core Library
 // @DOC_START
-// Reusable Figma operations and utilities for nodes, styles, patterns, memory, and colors.
+// # Traverses nodes, replaces styles by pattern, yields for long runs, and converts hex colours
 //
 // ## Overview
-// Import functions into your scripts for node traversal, style listing/replacement, pattern-based rename, progress/memory handling, and color conversion. No configuration; use via @import.
+//
+// Shared Figma helpers for scripts that walk the document, rename or rebind styles, show progress, and keep the UI responsive during long work.
+//
+// Use `processWithOptimization`, `collectNodesAsync`, `yieldToUI`, and `showProgress` for long runs. Call `codefigRunComplete` (or `displayResults` from `@InfoPanel`) so completion is not inferred from silence alone.
 //
 // ## Exported functions
+//
 // | Category | Functions |
 // |----------|-----------|
 // | Node | traverseNodes, getTargetNodes, findByName, findAllByName, findAllByType, clone, setupAutoLayout, applyNamingConvention, createComponentFromSelection |
 // | Styles | getAllStyles, buildStyleCache, replaceStylesByPattern, getStyleByName, replaceByPattern |
-// | Memory | processWithOptimization, estimateNodeCount, showProgress, cleanupMemory, yieldToUI, collectNodesAsync |
+// | Memory / progress | processWithOptimization, estimateNodeCount, showProgress, cleanupMemory, yieldToUI, collectNodesAsync, codefigRunComplete |
 // | Colors | hexToRgb, rgbToHex |
-// | Utilities | log, timeOperation, unique, analyzeSelection |
+// | Utilities | log, timeOperation, unique, analyzeSelection, generateScale, calculateColumnWidth |
 // @DOC_END
 
 // === NODE UTILITIES ===

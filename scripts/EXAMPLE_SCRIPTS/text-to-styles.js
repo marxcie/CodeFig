@@ -1,9 +1,12 @@
 // Text to styles
 // @DOC_START
-// Creates local text styles from selected text nodes and keeps variable bindings.
+// # Creates or updates local text styles from selected text layers, keeping variable bindings
 //
 // ## Overview
-// Reads typography (font, size, weight, line height, etc.) and variable bindings from each selected text node, then creates or updates a local text style using the layer name. No configuration; run on selection.
+//
+// No configuration. Reads typography (font, size, weight, line height, and related properties) and
+// variable bindings from each selected text node, then creates or updates a local text style using
+// the layer name.
 // @DOC_END
 
 // ============================================================================

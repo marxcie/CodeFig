@@ -1,30 +1,46 @@
 // Match colors to collection variables
 // @DOC_START
-// Recursively walks the selection and binds **raw** paint colors (fills, strokes, gradient stops, drop/inner shadows, and per-span text fills) to **COLOR** variables from one or more collections.
+// # Binds raw paint colors in the selection to COLOR variables from chosen collections
 //
-// ## Matching modes
-// - **Exact (default):** 8-bit RGBA must match a token’s resolved value (after alias chains).
-// - **Loose:** nearest token by **ΔE (CIE76)** in LAB, within a tolerance preset. Tolerance is **luminance-adaptive** (extra room for dark neutrals like `#191919` → `grey/900`, tighter for light greys). Near-ties pick the closest token (verbose log). Large alpha differences are skipped.
+// ## Overview
 //
-// ## Token scope (loose mode)
-// 1. **Grey baseline:** `colors/grey`, `grey/*`, `black/*`, `white/*`
-// 2. **Extended:** `colors/sage`, `colors/other` (only when grey baseline finds no match)
+// Recursively walks the selection and binds raw paint colors (fills, strokes, gradient stops,
+// drop and inner shadows, and per-span text fills) to **COLOR** variables from one or more
+// collections.
 //
-// ## Multi-collection
-// All selected collections are merged into one candidate list. Loose mode picks the **nearest** token by ΔE (not collection order). When two tokens share the same resolved RGB, ties favor names like `white` / `black` over `grey/25` on near-white/near-black paints.
+// Tick every collection that should supply candidates. Results are listed in the Info panel
+// (bound colors and skips). Click a row to select the layer.
 //
-// ## Safety
-// Select **every** collection that should supply candidates (e.g. grey scale + brand). Tolerance limits how far a raw color may drift; it does not stop a grey binding to green if **only** green collections are selected.
+// ### Matching modes
 //
-// ## Config options
-// | Option | Description |
-// |--------|-------------|
-// | collections | One or more variable collection names (`@multi`). |
-// | looseMatching | When true, bind near-miss colors within tolerance. |
-// | matchTolerance | `conservative` (ΔE≤2), `standard` (≤4), `aggressive` (≤6), or `custom` + `maxDeltaE`. |
-// | verboseLogging | Extra console detail (duplicates, near-ties, palette stats). Off by default. |
+// - **Exact (default):** 8-bit RGBA must match a token's resolved value (after alias chains).
+// - **Loose (Match near misses on):** nearest token by ΔE (CIE76) in LAB, within a tolerance
+//   preset. Tolerance is luminance-adaptive (extra room for dark neutrals, tighter for light
+//   greys). Near-ties pick the closest token. Large alpha differences are skipped.
 //
-// Results are listed in the **Info panel** (bound colors and skips). Click a row to select the layer.
+// ### Token scope (loose mode)
+//
+// 1. Grey baseline: `colors/grey`, `grey/*`, `black/*`, `white/*`
+// 2. Extended: `colors/sage`, `colors/other` (only when grey baseline finds no match)
+//
+// All selected collections are merged into one candidate list. Loose mode picks the nearest token
+// by ΔE, not by collection order. When two tokens share the same resolved RGB, ties favor names
+// like `white` / `black` over `grey/25` on near-white or near-black paints.
+//
+// Tolerance limits how far a raw color may drift. It does not stop a grey binding to green if
+// **only** green collections are selected.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Collections**<br>`collections` | One or more variable collections that may hold matching colour tokens. |
+// | **Match near misses**<br>`looseMatching` | Off requires an exact match. On binds to the closest token within the tolerance below. |
+// | **Match tolerance**<br>`matchTolerance` | How far a colour may sit from a token (LAB ΔE): conservative 2, standard 4, aggressive 6, or custom. Shown when Match near misses is on. |
+// | **Custom tolerance (ΔE)**<br>`maxDeltaE` | Used when Match tolerance is custom. |
+// | **Verbose console output**<br>`verboseLogging` | Extra console detail (duplicates, near-ties, palette stats). Off by default. The Info panel summary always appears. |
 // @DOC_END
 
 @import { displayResults, createResult, createSelectableResult } from "@InfoPanel"

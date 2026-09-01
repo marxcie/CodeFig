@@ -1,36 +1,44 @@
 // Select by styles or variables
 // @DOC_START
-// Selects elements that use styles or variables matching a search term. Handles partial matches (e.g. "Regular" matches Text/5xl/Regular, Text/6xl/Regular).
+// # Selects layers that use styles or variables matching a search pattern
 //
-// ## Features
-// - **Search For**: Partial style or variable name (case-insensitive), with `*` wildcards
-// - **Select mixed**: When **off** (default), excludes elements with mixed style/variable usage (e.g. text lines mixing bold and regular)
-// - **Selection only**: When on, searches within current selection; when off, searches the whole page
+// ## Overview
 //
-// ## Usage
-// 1. Enter a partial style or variable name (e.g. "Regular", "Text/*/Bold", "Primary")
-// 2. Toggle "Select mixed" if you want to include elements with mixed formatting
-// 3. Click Run to select all matching elements
+// Finds elements whose applied styles or variables match **Search for**. Partial matches work
+// (for example `Regular` matches `Text/5xl/Regular`). `*` wildcards are allowed unless
+// **Use regular expression** is on. Matching is case-sensitive.
 //
-// ## Search patterns
+// **Include mixed layers** is off by default, so layers with mixed style or variable usage (for
+// example text that is partly bold and partly regular) are skipped. Turn it on to include them.
+//
+// **Selection only** limits the search to the current selection. Off searches the whole page.
+//
+// ### Search patterns
+//
 // | Input | Meaning |
-// |-------|---------|
-// | text | Matches names **containing** that text (case-insensitive). |
-// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
-// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
-// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+// | --- | --- |
+// | text | Matches names containing that text (case-sensitive). |
+// | `V4/*/Primary` | `*` matches any characters. |
+// | `(\\w+)-(\\d+)` | A regular expression, only when **Use regular expression** is on. |
+// | (blank) | Matches everything. |
 //
-// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
-// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
-// matching. Same rules in every CodeFig find/replace script.
+// Brackets and parens are literal text unless regex mode is on. A literal `*` in a name needs
+// regex mode and `\\*`.
 //
-// A name containing a literal `*` is now read as a wildcard; escape it as `\*` in regex mode
-// to match the character itself.
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Search for**<br>`searchFor` | Part of a style or variable name (for example `Regular`, `Text/*/Bold`). |
+// | **Use regular expression**<br>`useRegex` | Treat Search for as a regular expression rather than plain text with `*` wildcards. |
+// | **Include mixed layers**<br>`selectMixed` | When on, include layers that use more than one style or variable at once. |
+// | **Selection only**<br>`selectionOnly` | When on, search within the current selection. Off searches the whole page. |
 // @DOC_END
 
 // @UI_CONFIG_START
 var searchFor = "";
-var matchCase = false;
 var useRegex = false;
 var selectMixed = false;
 var selectionOnly = true;
@@ -41,7 +49,6 @@ var selectionOnly = true;
 //   blocks: [
 //     { key: "searchFor", type: "string", placeholder: "Text/*/Regular" },
 //     { type: "paragraph", attachTo: "previous", text: "Part of a style or variable name — `Regular`, `Text/5xl`, `Text/*/Bold`." },
-//     { key: "matchCase", type: "boolean", label: "Match case" },
 //     { key: "useRegex", type: "boolean", label: "Use regular expression" },
 //     { type: "paragraph", attachTo: "previous",
 //       text: "Reads **Search for** as a regular expression rather than plain text with `*` wildcards." },
@@ -65,7 +72,7 @@ var selectionOnly = true;
 function getMatchOpts() {
   return {
     useRegex: typeof useRegex !== 'undefined' && useRegex === true,
-    matchCase: typeof matchCase !== 'undefined' && matchCase === true
+    matchCase: true
   };
 }
 

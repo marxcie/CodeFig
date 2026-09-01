@@ -1,17 +1,32 @@
 // Detach styles & variables
 // @DOC_START
-// Removes style and variable bindings from selected nodes (and optionally their children).
+// # Removes style and variable bindings from selected nodes so they keep local values
 //
 // ## Overview
-// Clears text/fill/stroke/effect/grid style IDs and variable bindings on selected nodes so they use local values. Can run recursively on children.
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | recursive | If true, processes children as well. |
-// | allStyles | If true, detaches all style types; otherwise use per-type flags (fontStyles, fillStyles, etc.). |
-// | allVariables | If true, detaches all variable bindings; otherwise use typographicVariables, numericVariables, colorVariables. |
-// | colorVariables | Fills, strokes, opacity (used when allVariables is false). |
+// Clears text, fill, stroke, effect, and grid style IDs and variable bindings on the selection so
+// layers use local values. Optionally walks children as well.
+//
+// Tick **All styles** or **All variables** to clear everything of that kind, or turn those off and
+// choose the individual style and variable types.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Recursive**<br>`recursive` | When on, processes children as well as the selection. |
+// | **All styles**<br>`allStyles` | When on, detaches every style type below. When off, use the per-type toggles. |
+// | **Font styles**<br>`fontStyles` | Detach text styles. |
+// | **Fill styles**<br>`fillStyles` | Detach fill (paint) styles. |
+// | **Stroke styles**<br>`strokeStyles` | Detach stroke styles. |
+// | **Effect styles**<br>`effectStyles` | Detach effect styles. |
+// | **Grid styles**<br>`gridStyles` | Detach grid styles. |
+// | **All variables**<br>`allVariables` | When on, detaches every variable binding type below. When off, use the per-type toggles. |
+// | **Typographic variables**<br>`typographicVariables` | Font size, line height, letter spacing, and related text numbers. |
+// | **Numeric variables**<br>`numericVariables` | Width, height, padding, gap, radius, and similar numbers. |
+// | **Color variables**<br>`colorVariables` | Fills, strokes, and opacity. |
 // @DOC_END
 
 // @UI_CONFIG_START

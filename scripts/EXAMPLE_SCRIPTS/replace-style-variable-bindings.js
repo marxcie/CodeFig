@@ -1,53 +1,49 @@
-// Replace style variable bindings
+// Replace variables in local styles
 // @DOC_START
-// Rebinds **variables on style definitions** (not on layers). Only styles whose name **partially matches** `searchIn` are processed (e.g. `V5` matches `V5 / Text / 3xs / SemiBold`). Bindings that use variables from **Source collection** are swapped to the **same-named variable** in **Target collection** (types must match).
+// # Rebinds variables on local style definitions from a source collection to same-named variables in a target
 //
 // ## Overview
-// Walks **local** text, color (paint), and effect styles. Skips remote/library styles. For each bound variable whose collection is the source, looks up a variable with the same name in the target collection (local first, then team library). Text fields use `setBoundVariable`; fills/effects use cloned paints/effects with updated `VARIABLE_ALIAS` ids.
 //
-// ## Config options
-// | Option | Description |
-// |--------|-------------|
-// | searchIn | Style-name pattern; only matching styles are updated. Empty = all local text/paint/effect styles. |
-// | sourceCollection | Collection name of variables currently bound on those styles. |
-// | targetCollection | Collection where replacement variables are resolved (same variable names as in source). |
-// | previewOnly | **On by default.** Lists the bindings that would change and changes nothing; untick and run again to apply. |
-// | matchCase | Match `searchIn` case-sensitively. |
-// | useRegex | Treat `searchIn` as a regular expression. |
-// | breakUnmatchedBindings | If true, **detach** source-collection bindings that have **no** matching variable in the target (default: leave those bindings unchanged). You can enable this with an empty target map to strip all source bindings on matching styles. |
+// Walks **local** text, color (paint), and effect styles. Skips remote or library styles. Only
+// styles whose name matches **Search in** are processed (partial match; empty means all local
+// text, paint, and effect styles).
 //
-// ## Preview first
-// Previews by default: the same walk runs in dry-run mode, reporting every binding it would
-// change as `SourceCollection/name → TargetCollection/name` (or `(detached)`), and writing
-// nothing. Untick **Preview only** and run again to apply. Unlike the rename scripts there is
-// no collision flag here — a rebind aims at a variable that already exists, which is the point
-// rather than a clash.
+// Bindings that use variables from **Source collection** are swapped to the same-named variable
+// in **Target collection** (types must match). Text fields use bound variables; fills and effects
+// update variable alias ids on cloned paints and effects. Matching is case-sensitive.
 //
-// ## Search patterns
+// ### Search patterns
+//
 // | Input | Meaning |
-// |-------|---------|
-// | text | Matches names **containing** that text (case-insensitive). |
-// | V4/*/Primary | `*` matches any characters. A CodeFig extension — Figma has no wildcard. |
-// | (\w+)-(\d+) | A regular expression — **only** when "Use regular expression" is ticked. |
-// | (blank) | An empty filter matches everything; an empty find replaces the entire name. |
+// | --- | --- |
+// | text | Matches names containing that text (case-sensitive). |
+// | `V4/*/Primary` | `*` matches any characters. |
+// | `(\\w+)-(\\d+)` | A regular expression, only when **Use regular expression** is on. |
+// | (blank) | Empty Search in matches every local text, paint, and effect style. |
 //
-// Brackets and parens are literal text unless regex mode is on, so `Text [Legacy]` matches
-// only names that really contain `Text [Legacy]`. Tick **Match case** for case-sensitive
-// matching. Same rules in every CodeFig find/replace script.
+// Brackets and parens are literal text unless regex mode is on.
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Search in**<br>`searchIn` | Only styles whose name contains this. Empty means every local text, paint, and effect style. |
+// | **Use regular expression**<br>`useRegex` | Treat Search in as a regular expression rather than plain text with `*` wildcards. |
+// | **Source collection**<br>`sourceCollection` | Bindings pointing at this collection are the ones that move. |
+// | **Target collection**<br>`targetCollection` | Each binding moves to the same-named variable in this collection. |
+// | **Break unmatched bindings**<br>`breakUnmatchedBindings` | When on, remove a binding if the target has no variable of that name (raw value remains). Off leaves the binding as it is. |
 // @DOC_END
 
 @import { buildTargetVariableLookup, rebindStyleVariableBindingsOnStyle } from "@Styles"
 @import { nameMatches, patternModeNote } from "@Pattern Matching"
-@import { previewRow, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
-@import { displayResults } from "@InfoPanel"
 
 // @UI_CONFIG_START
 var searchIn = "";
-var matchCase = false;
 var useRegex = false;
 var sourceCollection = "";
 var targetCollection = "";
-var previewOnly = true;
 var breakUnmatchedBindings = false;
 // @UI_CONFIG_END
 
@@ -62,12 +58,7 @@ var breakUnmatchedBindings = false;
 //     {
 //       "type": "paragraph",
 //       "attachTo": "previous",
-//       "text": "Only styles whose name contains this, ignoring case, with `*` allowed. Empty means every local text,\npaint and effect style."
-//     },
-//     {
-//       "key": "matchCase",
-//       "type": "boolean",
-//       "label": "Match case"
+//       "text": "Only styles whose name contains this, with `*` allowed. Empty means every local text, paint and\neffect style."
 //     },
 //     {
 //       "key": "useRegex",
@@ -103,16 +94,6 @@ var breakUnmatchedBindings = false;
 //       "type": "divider"
 //     },
 //     {
-//       "key": "previewOnly",
-//       "type": "boolean",
-//       "label": "Preview only"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "**On by default.** Lists the bindings that would change and touches nothing. Untick and run again to apply."
-//     },
-//     {
 //       "key": "breakUnmatchedBindings",
 //       "type": "boolean"
 //     },
@@ -127,12 +108,11 @@ var breakUnmatchedBindings = false;
 
 /**
  * Walk every local text, paint and effect style matching `searchIn`, rebinding through
- * @Styles. With `dryRun` it changes nothing and returns the plan instead — same traversal,
- * same matching, same replacement lookup, so a preview cannot drift from the apply.
+ * @Styles.
  */
-async function walkMatchingStyles(searchInVal, matchOpts, sourceName, lookup, breakUnmatched, dryRun) {
+async function walkMatchingStyles(searchInVal, matchOpts, sourceName, lookup, breakUnmatched) {
   var plan = [];
-  var options = { dryRun: dryRun === true, plan: plan };
+  var options = { dryRun: false, plan: plan };
   var total = 0;
   var stylesTouched = 0;
   var i;
@@ -166,7 +146,7 @@ async function main() {
     // One matcher for every CodeFig find/replace script: see @Pattern Matching.
     var matchOpts = {
       useRegex: typeof useRegex !== "undefined" && useRegex === true,
-      matchCase: typeof matchCase !== "undefined" && matchCase === true
+      matchCase: true
     };
     var sourceName = typeof sourceCollection !== "undefined" && sourceCollection != null ? String(sourceCollection).trim() : "";
     var targetName = typeof targetCollection !== "undefined" && targetCollection != null ? String(targetCollection).trim() : "";
@@ -199,45 +179,7 @@ async function main() {
       return;
     }
 
-    var previewOnlyVal = typeof previewOnly === "undefined" || previewOnly === true;
-
-    // One walk, two modes. The dry run reports through `plan` and writes nothing, so the
-    // preview and the apply pass are the same code path over the same styles — not a
-    // description of it maintained separately.
-    var walk = await walkMatchingStyles(searchInVal, matchOpts, sourceName, lookup, breakUnmatched, previewOnlyVal);
-
-    if (previewOnlyVal) {
-      var rows = walk.plan.map(function (entry) {
-        return previewRow(
-          (entry.fromCollection ? entry.fromCollection + "/" : "") + entry.fromName,
-          entry.action === "detach" ? "(detached)" : targetName + "/" + entry.toName,
-          entry.styleName + " · " + entry.field
-        );
-      });
-      // No collision check here, unlike the rename scripts: a rebind *targets* a variable that
-      // already exists. Its existing is the point, not a clash.
-      logPreviewPlan(rows, { field: "previewOnly" });
-      await savePreviewSignature("replace-style-variable-bindings", previewSignature(rows));
-      displayResults(previewPayload("Replace style variable bindings", rows));
-      figma.notify(
-        "Preview: " + walk.total + " binding change(s) on " + walk.stylesTouched +
-          " style(s). Nothing changed."
-      );
-      return;
-    }
-
-    var applyRows = walk.plan.map(function (entry) {
-      return previewRow(
-        (entry.fromCollection ? entry.fromCollection + "/" : "") + entry.fromName,
-        entry.action === "detach" ? "(detached)" : targetName + "/" + entry.toName,
-        entry.styleName
-      );
-    });
-    var drift = previewDriftMessage(
-      await readPreviewSignature("replace-style-variable-bindings"),
-      previewSignature(applyRows)
-    );
-    if (drift) console.warn(drift);
+    var walk = await walkMatchingStyles(searchInVal, matchOpts, sourceName, lookup, breakUnmatched);
 
     console.log("=== Done ===");
     console.log("Bindings updated:", walk.total, "· Styles modified:", walk.stylesTouched);

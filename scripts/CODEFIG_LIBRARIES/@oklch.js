@@ -1,48 +1,35 @@
 // @OKLCH
 // @DOC_START
-// Perceptual colour arithmetic, and nothing else: no Figma API, no variables, no panel. That boundary
-// is what lets these be plain functions a test can check by hand, which matters because every number a
-// colour panel shows comes out of here.
+// # Converts and interpolates OKLCH and HSL colours, builds lightness ladders, and fits chroma to sRGB
 //
-// Two consumers by design, the way `@Scale Models` has two: the **Colors** panel generates a ramp with
-// it, and the cross-collection alignment report will measure existing ramps against a ladder with the
-// same functions. Two implementations of one matrix drift the way spacing and radius did.
+// ## Overview
 //
-// ## What it owns
+// Perceptual colour arithmetic only — no Figma API, no variables, no panel. Plain functions so tests can check numbers by hand; every colour a panel shows comes out of here.
+//
+// ### Decisions callers rely on
+//
+// **Chroma is reduced to fit sRGB, always.** `oklchToHex` bisects chroma downward so **L and H** stay put — required for a shared lightness ladder. It reports `{ clamped: true, chroma }` when it fitted.
+//
+// **Hue interpolates along the shortest arc** via `oklchLerpHue` (linear 0→255 would go the long way and teal the middle of a neutral ramp).
+//
+// **Lock seed re-anchors; it does not offset.** `oklchReanchor` replaces the middle anchor with the seed's lightness and recomputes both segments so the first and last steps stay on the ladder ends.
+//
+// ### Curves
+//
+// A curve is a list of bezier coordinates. `oklchCurveOf` also accepts older `{ type, ease, amount }` pairs and curve ids from `oklchCurves()`, converting both on the way in. Curve evaluation needs `bezierAt` from `@Bezier`.
+//
+// ## Exported functions
+//
 // | Area | Functions |
 // |---|---|
-// | sRGB ↔ linear | `oklchSrgbToLinear`, `oklchLinearToSrgb` |
-// | hex ↔ channels | `oklchHexToRgb`, `oklchRgbToHex`, `oklchNormaliseHex` |
-// | OKLab (Ottosson) | `oklchLinearRgbToLab`, `oklchLabToLinearRgb` |
-// | OKLCH | `oklchFromHex`, `oklchFromRgb`, `oklchToHex` |
-// | HSL, the other model the panel offers | `oklchHslFromHex`, `oklchHslToHex` |
-// | Interpolation | `oklchLerp`, `oklchLerpHue`, `oklchSegmentAt` |
-// | Ladders | `oklchCurves`, `oklchCurveById`, `oklchLadder`, `oklchNearestStep`, `oklchReanchor` |
-// | A whole ramp | `oklchRamp` |
-//
-// ## Three things that are decisions, not details
-//
-// **Chroma is reduced to fit sRGB, always, and there is no other strategy.** It is the only fit that
-// holds **L and H** still, and holding L still is the entire premise of a shared lightness ladder —
-// clipping RGB or scaling lightness moves a step off the ladder to keep a colour it was never going to
-// have. So `oklchToHex` fits by bisecting chroma downward and there is no option to turn it off. It
-// **reports** every time: `{ clamped: true, chroma: <what fitted> }`, so a panel and a run log can both
-// say so.
-//
-// **Hue interpolates along the shortest arc.** Linear interpolation from 0 to 255 goes the long way
-// round and a neutral ramp comes out visibly teal in the middle. `oklchLerpHue` takes the short way.
-//
-// **Lock seed re-anchors; it does not offset.** `oklchReanchor` replaces the *middle* anchor with the
-// seed's lightness and recomputes the two segments through it, so the first and last steps are still
-// exactly the ladder's anchors. An offset moved them, which is what ruled it out.
-//
-// ## Curves
-// **A curve is a list of bezier coordinates.** `oklchCurveOf` also accepts the two older spellings — the
-// `{ type, ease, amount }` pair and a curve id from `oklchCurves()` — and converts both to coordinates on
-// the way in, so there is one evaluator rather than one per era of config. The maths is `@Bezier`; import
-// it too, or every ladder comes back linear.
-//
-// `oklchCurves()` remains the flattened list of `(type, ease)` pairs, now used only to read an old config.
+// | sRGB ↔ linear | oklchSrgbToLinear, oklchLinearToSrgb |
+// | hex ↔ channels | oklchHexToRgb, oklchRgbToHex, oklchNormaliseHex |
+// | OKLab | oklchLinearRgbToLab, oklchLabToLinearRgb |
+// | OKLCH | oklchFromHex, oklchFromRgb, oklchToHex |
+// | HSL | oklchHslFromHex, oklchHslToHex |
+// | Interpolation | oklchLerp, oklchLerpHue, oklchSegmentAt |
+// | Ladders | oklchCurves, oklchCurveById, oklchLadder, oklchNearestStep, oklchReanchor |
+// | Ramp / compare | oklchRamp, oklchDistance, oklchCompare |
 // @DOC_END
 
 @import { bezierAt, bezierNormalise, bezierFromEase } from "@Bezier"

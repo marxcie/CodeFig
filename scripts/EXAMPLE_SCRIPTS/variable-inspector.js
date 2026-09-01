@@ -1,41 +1,39 @@
 // Variable inspector (WIP)
 // @DOC_START
-// Comprehensive variable analysis tool showing all variables with their values, health status, and usage in your selection and styles.
+// # Reports variables with values, health, and usage on the selection and in styles
 //
-// ## Features
-// - **Health Check**: Identifies variables with missing values or issues
-// - **Usage Analysis**: Shows which nodes AND styles use each variable
-// - **Value Preview**: Displays variable values across all modes
-// - **Smart Filtering**: Filter by variable purpose (typography, color, dimensions, effects)
-// - **Clickable Nodes**: Click individual nodes to select them
+// ## Overview
 //
-// ## Config options
-// | Option | Description |
-// |--------|--------------|
-// | onlyUsedVariables | Show only variables used in selection/styles. |
-// | groupByCollection | Organize variables by collection. |
-// | showValuePreview | Display actual variable values. |
-// | maxNodesPreview | Number of individual nodes to show (rest clickable as "Show all X nodes"). |
-// | typographicVariables | Typography (fontSize, letterSpacing, lineHeight, etc.). |
-// | colorVariables | Colors (fills, strokes, backgrounds). |
-// | dimensionVariables | Dimensions & spacing (width, height, padding, gap, radius, etc.). |
-// | effectVariables | Effects & opacity (shadows, blur, opacity). |
-// | otherVariables | Other/miscellaneous variables. |
-// | checkStyleUsage | Check if variables are used in text/paint/effect styles. |
-// | showHealthScore | Display variable health score (0-100). |
+// Lists variables with resolved values, health status, and which layers and styles use them.
+// Select nodes to inspect, or leave the selection empty for the whole page.
 //
-// ## Status Indicators
-// - ✅ Healthy - Variable is working correctly
-// - ⚠️ Warning - Variable has some issues (missing values in modes)
-// - ❌ Broken - Variable has critical issues
-// - 🔗 Remote - Library/remote variable
+// Click a variable to select all nodes using it. Click individual node names to select those
+// layers, or **Show all** when the list is truncated.
 //
-// ## Usage
-// 1. Select nodes to inspect (or leave empty for entire page)
-// 2. Run the script
-// 3. Click any variable to select all nodes using it
-// 4. Click individual node names to select specific nodes
-// 5. Click "Show all X nodes" to select all nodes at once
+// ### Status indicators
+//
+// - Healthy: variable is working correctly
+// - Warning: some issues (for example missing values in modes)
+// - Broken: critical issues
+// - Remote: library or remote variable
+//
+// ## Configuration options
+//
+// Controls match the Configuration UI. The code key is shown under each label for Source edits.
+//
+// | Control | Description |
+// | --- | --- |
+// | **Only variables in use**<br>`onlyUsedVariables` | Hides any variable that nothing in the selection, and no style, refers to. |
+// | **Group by collection**<br>`groupByCollection` | Organize the report by collection. |
+// | **Show each value**<br>`showValuePreview` | Print the value a variable resolves to beside its name. |
+// | **Usages shown**<br>`maxNodesPreview` | How many layers to name per variable before the report offers Show all. |
+// | **Typography**<br>`typographicVariables` | Text size, letter spacing, line height, and related text numbers. |
+// | **Color**<br>`colorVariables` | Variables bound to fills or strokes. |
+// | **Dimensions and spacing**<br>`dimensionVariables` | Width, height, padding, gap, radius, and similar. |
+// | **Effects and opacity**<br>`effectVariables` | Shadows, blur, opacity. |
+// | **Everything else**<br>`otherVariables` | Variables that do not fall into the groups above. |
+// | **Include styles**<br>`checkStyleUsage` | Count a variable as used when a text, paint, or effect style refers to it, not only a layer. |
+// | **Health score**<br>`showHealthScore` | Rate the collection out of 100 on naming, duplication, and unused tokens. |
 // @DOC_END
 
 // @UI_CONFIG_START
