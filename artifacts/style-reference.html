@@ -328,19 +328,19 @@
       <div class="config-ui-form config-ui-form--rows" data-package="">
         <div class="config-ui-row config-ui-row--directive" data-row-index="0" style="display: none"></div>
         <div class="config-ui-row config-ui-row--heading" data-section="heading-level-1" data-row-index="1">
-          <h1 class="config-ui-heading">Heading level 1</h1>
+          <h2 class="config-ui-heading">Heading level 1</h2>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="2">
           <div class="docs-rendered">
-            The level every panel uses for its section titles: <code>// # Heading level 1</code>. Renders as <code>h1</code>, and it<br>carries the 48px gap that separates one section from the next.
+            The level every panel uses for its section titles: <code>{ type: "heading", level: 1, text: "…" }</code>. The Configuration UI renders it as <code>h2</code> (never <code>h1</code>), and it<br>carries the 48px gap that separates one section from the next.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="heading-level-2" data-row-index="3">
-          <h2 class="config-ui-heading">Heading level 2</h2>
+          <h3 class="config-ui-heading">Heading level 2</h3>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="4">
           <div class="docs-rendered">
-            Two hashes. A title <em>inside</em> a section, at 14px with half the gap above it.
+            <code>level: 2</code>. A title <em>inside</em> a section. On the form this renders as <code>h3</code>.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="heading-level-3" data-row-index="5">
@@ -348,12 +348,12 @@
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="6">
           <div class="docs-rendered">
-            Three hashes: body size, told apart from a paragraph by its weight alone.
+            <code>level: 3</code>: also <code>h3</code> on the form — body size, told apart from a paragraph by its weight alone.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="7">
           <div class="docs-rendered">
-            This is a paragraph — any comment line that is not a marker. <strong>Bold</strong>, <em>italic</em> and <code>code</code> work.
+            This is a paragraph — <code>{ type: "paragraph", text: "…" }</code>. <strong>Bold</strong>, <em>italic</em> and <code>code</code> work.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--divider" data-row-index="8">
@@ -361,7 +361,7 @@
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="9">
           <div class="docs-rendered">
-            Above: a short rule, from <code>// ---</code>.
+            Above: a short rule, from <code>{ type: "divider" }</code>.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section" data-row-index="10">
@@ -369,18 +369,18 @@
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="11">
           <div class="docs-rendered">
-            Above: a rule reaching both panel edges, from <code>// --- @section</code>.
+            Above: a rule reaching both panel edges, from <code>{ type: "divider", section: true }</code>.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="text-and-numbers" data-row-index="12">
-          <h1 class="config-ui-heading">Text and numbers</h1>
+          <h2 class="config-ui-heading">Text and numbers</h2>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="13">
           <div class="config-ui-field config-ui-field--string" data-key="textField" data-type="string" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-textField-0">
                 Text
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="var textField = &quot;Sample&quot;;">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;textField&quot;, type: &quot;string&quot; }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <input type="text" id="config-ui-textField-0" value="Sample" class="config-ui-input config-ui-input--text" data-field="textField">
@@ -393,7 +393,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-withPlaceholder-1">
                 Text with a placeholder
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="@placeholder=&quot;Shown while empty&quot;">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="placeholder: &quot;Shown while empty&quot;">i</button>
               </label>
               <div class="config-ui-field__control">
                 <input type="text" id="config-ui-withPlaceholder-1" value="" class="config-ui-input config-ui-input--text" data-field="withPlaceholder" placeholder="Shown while empty">
@@ -406,7 +406,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-numberField-2">
                 Number
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="a numeric default makes it a number input, 96px wide">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;numberField&quot;, type: &quot;number&quot; }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <input type="number" id="config-ui-numberField-2" value="12" class="config-ui-input config-ui-input--number" data-field="numberField">
@@ -419,7 +419,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-longText-3">
                 Textarea
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="@textarea">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;longText&quot;, type: &quot;textarea&quot; }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <textarea id="config-ui-longText-3" value="" class="config-ui-input config-ui-input--text config-ui-textarea" data-field="longText" placeholder="One per line" rows="5"></textarea>
@@ -432,7 +432,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-nameList-4">
                 List of names
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="an array of strings or numbers — one input holding a comma list, and the config keeps the array">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;nameList&quot;, type: &quot;list&quot; }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <input type="text" class="config-ui-input config-ui-input--text" data-field="nameList" data-field-list="true" value="sm, md, lg">
@@ -441,14 +441,14 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="choices" data-row-index="18">
-          <h1 class="config-ui-heading">Choices</h1>
+          <h2 class="config-ui-heading">Choices</h2>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="19">
           <div class="config-ui-field config-ui-field--boolean" data-key="toggle" data-type="boolean" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-toggle-5">
                 Checkbox
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="a true or false default">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;toggle&quot;, type: &quot;boolean&quot; }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <div class="config-ui-toggle-wrap">
@@ -463,7 +463,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-dropdown-6">
                 Dropdown
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="@options: small|medium|large">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;dropdown&quot;, type: &quot;select&quot;, options: […] }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <select id="config-ui-dropdown-6" class="config-ui-input config-ui-input--select" data-field="dropdown">
@@ -480,7 +480,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-radioChoice-7">
                 Radio group
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="the same @options, plus @radio">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;radioChoice&quot;, type: &quot;radio&quot;, options: […] }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <div class="config-ui-radio-group">
@@ -502,7 +502,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-multiChoice-8">
                 Multi-select
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="the same @options, plus @multi">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;multiChoice&quot;, type: &quot;multiselect&quot;, options: […] }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <div id="config-ui-multiChoice-8" class="config-ui-multiselect" data-field="multiChoice" data-multi="true">
@@ -528,7 +528,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-documentList-9">
                 From the document
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="@options: variableCollections — filled with this file's collections">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="options: &quot;variableCollections&quot;">i</button>
               </label>
               <div class="config-ui-field__control">
                 <select id="config-ui-documentList-9" class="config-ui-input config-ui-input--select" data-field="documentList" data-option-source="variableCollections" data-initial-value="">
@@ -543,7 +543,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-dependent-10">
                 Only while Checkbox is on
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="@showWhen: toggle=true">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="showWhen: { toggle: true }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <input type="text" id="config-ui-dependent-10" value="" class="config-ui-input config-ui-input--text" data-field="dependent">
@@ -552,14 +552,14 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="collections-and-modes" data-row-index="25">
-          <h1 class="config-ui-heading">Collections and modes</h1>
+          <h2 class="config-ui-heading">Collections and modes</h2>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="26">
           <div class="config-ui-field config-ui-field--collection" data-key="collectionName" data-type="collection" data-section="collections-and-modes">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-collectionName-11">
                 Collection
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="@collection — this file's collections, plus New collection">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;collectionName&quot;, type: &quot;collection&quot; }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <div class="config-ui-collection config-ui-picker" data-collection-field="collectionName" data-option-source="localCollections" data-initial-value="Responsive System">
@@ -583,7 +583,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-collectionMode-12">
                 Mode
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="@mode: collectionName — the modes of the collection above, plus New mode">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;collectionMode&quot;, type: &quot;mode&quot;, collection: &quot;collectionName&quot; }">i</button>
               </label>
               <div class="config-ui-field__control">
                 <div class="config-ui-mode config-ui-picker" data-mode-field="collectionMode" data-mode-collection-field="collectionName" data-initial-value="Desktop" data-mode-exists="" data-mode-collection="Responsive System">
@@ -643,31 +643,31 @@
                     <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="0">
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Width</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="width" value="1440">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="width" value="1440" data-key="width" data-type="number" data-group="config-ui-row-radio-modes-0-width">
                       </label>
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Columns</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="columns" value="12">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="columns" value="12" data-key="columns" data-type="number" data-group="config-ui-row-radio-modes-0-columns">
                       </label>
                     </div>
                     <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="1" style="display: none">
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Width</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="width" value="834">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="width" value="834" data-key="width" data-type="number" data-group="config-ui-row-radio-modes-1-width">
                       </label>
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Columns</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="columns" value="8">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="columns" value="8" data-key="columns" data-type="number" data-group="config-ui-row-radio-modes-1-columns">
                       </label>
                     </div>
                     <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="2" style="display: none">
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Width</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="width" value="390">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="width" value="390" data-key="width" data-type="number" data-group="config-ui-row-radio-modes-2-width">
                       </label>
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Columns</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="columns" value="4">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="columns" value="4" data-key="columns" data-type="number" data-group="config-ui-row-radio-modes-2-columns">
                       </label>
                     </div>
                   </div>
@@ -677,16 +677,16 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="one-thing-set-by-several-numbers" data-row-index="31">
-          <h1 class="config-ui-heading">One thing set by several numbers</h1>
+          <h2 class="config-ui-heading">One thing set by several numbers</h2>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="32">
           <div class="docs-rendered">
-            <code>@group:</code> on an <strong>object</strong> — one labelled row, each part captioned at a number's own width. Use it when<br>the parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three<br>separate fields make you assemble that in your head. <code>@rows</code> cannot serve this, because that one needs an<br>array — it is a <em>repeatable</em> group.
+            <code>type: "group"</code> on an <strong>object</strong> — one labelled row, each part captioned at a number's own width. Use it when<br>the parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three<br>separate fields make you assemble that in your head. <code>type: "rows"</code> cannot serve this, because that one needs an<br>array — it is a <em>repeatable</em> group.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="33">
           <div class="docs-rendered">
-            The same control appears nested inside <code>@rows</code>, written the same way, so an anchor in a mode block and a<br>shared ladder above it are the same shape rather than two lookalikes.
+            The same control appears nested inside <code>type: "rows"</code>, written the same way, so an anchor in a mode block and a<br>shared ladder above it are the same shape rather than two lookalikes.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="34">
@@ -694,21 +694,21 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-lightness-14">
                 Lightness
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="0 to 100 in the UI, 0 to 1 in the data">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;lightness&quot;, type: &quot;group&quot;, fields: […] }">i</button>
               </label>
               <div class="config-ui-field__control">
-                <span class="config-ui-rows-group" data-group-field="lightness">
+                <span class="config-ui-rows-group" data-group-field="lightness" data-type="group" data-key="lightness" data-group="cfg-lightness-14">
                   <label class="config-ui-rows-group-part">
                     <span class="config-ui-rows-group-label">Bright</span>
-                    <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lightness.bright" value="98.5">
+                    <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lightness.bright" value="98.5" data-key="bright" data-type="number" data-group="cfg-lightness-14-bright">
                   </label>
                   <label class="config-ui-rows-group-part">
                     <span class="config-ui-rows-group-label">Middle</span>
-                    <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lightness.middle" value="62">
+                    <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lightness.middle" value="62" data-key="middle" data-type="number" data-group="cfg-lightness-14-middle">
                   </label>
                   <label class="config-ui-rows-group-part">
                     <span class="config-ui-rows-group-label">Dark</span>
-                    <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lightness.dark" value="18">
+                    <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lightness.dark" value="18" data-key="dark" data-type="number" data-group="cfg-lightness-14-dark">
                   </label>
                 </span>
               </div>
@@ -717,7 +717,7 @@
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="35">
           <div class="docs-rendered">
-            <code>@unit="%"</code> prints a unit inside the input, at its right edge. It is <strong>not</strong> a placeholder — a<br>placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back<br>to <code>-1.5</code> can tell whether that is pixels or percent.
+            <code>unit: "%"</code> prints a unit inside the input, at its right edge. It is <strong>not</strong> a placeholder — a<br>placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back<br>to <code>-1.5</code> can tell whether that is pixels or percent.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="36">
@@ -725,17 +725,17 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-lineHeight-15">Line height</label>
               <div class="config-ui-field__control">
-                <span class="config-ui-rows-group" data-group-field="lineHeight">
+                <span class="config-ui-rows-group" data-group-field="lineHeight" data-type="group" data-key="lineHeight" data-group="cfg-lineHeight-15">
                   <label class="config-ui-rows-group-part">
                     <span class="config-ui-rows-group-label">Base</span>
-                    <span class="config-ui-unit">
+                    <span class="config-ui-unit" data-key="base" data-type="number" data-group="cfg-lineHeight-15-base">
                       <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lineHeight.base" value="150">
                       <span class="config-ui-unit__mark" aria-hidden="true">%</span>
                     </span>
                   </label>
                   <label class="config-ui-rows-group-part">
                     <span class="config-ui-rows-group-label">Largest</span>
-                    <span class="config-ui-unit">
+                    <span class="config-ui-unit" data-key="max" data-type="number" data-group="cfg-lineHeight-15-max">
                       <input type="number" class="config-ui-input config-ui-input--number" data-row-field="lineHeight.max" value="110">
                       <span class="config-ui-unit__mark" aria-hidden="true">%</span>
                     </span>
@@ -746,7 +746,7 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="a-column-that-depends-on-its-row" data-row-index="37">
-          <h1 class="config-ui-heading">A column that depends on its row</h1>
+          <h2 class="config-ui-heading">A column that depends on its row</h2>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="38">
           <div class="docs-rendered">
@@ -766,10 +766,10 @@
                     <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="0">
                       <div class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Scale type</span>
-                        <span class="config-ui-radio-group" data-row-field="scaleType" data-row-radio="true">
+                        <span class="config-ui-radio-group" data-row-field="scaleType" data-row-radio="true" data-key="scaleType" data-type="radio" data-group="config-ui-row-radio-scales-0-scaleType">
                           <label class="config-ui-radio-label">
-                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-0-scaleType" value="modular" checked>
-                             Modular scale
+                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-0-scaleType" value="bezier" checked>
+                             Bezier scale
                           </label>
                           <label class="config-ui-radio-label">
                             <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-0-scaleType" value="metric">
@@ -781,9 +781,9 @@
                           </label>
                         </span>
                       </div>
-                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;modular&quot;]}]">
+                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;bezier&quot;]}]">
                         <span class="config-ui-rows-cell-label">Scaling method</span>
-                        <select class="config-ui-input config-ui-input--select" data-row-field="ratio">
+                        <select class="config-ui-input config-ui-input--select" data-row-field="ratio" data-key="ratio" data-type="select" data-group="config-ui-row-radio-scales-0-ratio">
                           <option value="1.2">1.2 Minor third</option>
                           <option value="1.25" selected>1.25 Major third</option>
                           <option value="1.618">1.618 Golden ratio</option>
@@ -791,20 +791,20 @@
                       </label>
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;metric&quot;,&quot;fibonacci&quot;]}]" style="display: none">
                         <span class="config-ui-rows-cell-label">Step</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="step" value="4">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="step" value="4" data-key="step" data-type="number" data-group="config-ui-row-radio-scales-0-step">
                       </label>
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;metric&quot;]}]" style="display: none">
                         <span class="config-ui-rows-cell-label">Every N steps</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="mod" value="3">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="mod" value="3" data-key="mod" data-type="number" data-group="config-ui-row-radio-scales-0-mod">
                       </label>
                     </div>
                     <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="1" style="display: none">
                       <div class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Scale type</span>
-                        <span class="config-ui-radio-group" data-row-field="scaleType" data-row-radio="true">
+                        <span class="config-ui-radio-group" data-row-field="scaleType" data-row-radio="true" data-key="scaleType" data-type="radio" data-group="config-ui-row-radio-scales-1-scaleType">
                           <label class="config-ui-radio-label">
-                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-1-scaleType" value="modular">
-                             Modular scale
+                            <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-1-scaleType" value="bezier">
+                             Bezier scale
                           </label>
                           <label class="config-ui-radio-label">
                             <input type="radio" class="config-ui-radio" name="config-ui-row-radio-scales-1-scaleType" value="metric" checked>
@@ -816,9 +816,9 @@
                           </label>
                         </span>
                       </div>
-                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;modular&quot;]}]" style="display: none">
+                      <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;bezier&quot;]}]" style="display: none">
                         <span class="config-ui-rows-cell-label">Scaling method</span>
-                        <select class="config-ui-input config-ui-input--select" data-row-field="ratio">
+                        <select class="config-ui-input config-ui-input--select" data-row-field="ratio" data-key="ratio" data-type="select" data-group="config-ui-row-radio-scales-1-ratio">
                           <option value="1.2" selected>1.2 Minor third</option>
                           <option value="1.25">1.25 Major third</option>
                           <option value="1.618">1.618 Golden ratio</option>
@@ -826,11 +826,11 @@
                       </label>
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;metric&quot;,&quot;fibonacci&quot;]}]">
                         <span class="config-ui-rows-cell-label">Step</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="step" value="2">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="step" value="2" data-key="step" data-type="number" data-group="config-ui-row-radio-scales-1-step">
                       </label>
                       <label class="config-ui-rows-cell config-ui-rows-cell--stacked" data-row-show-when="[{&quot;field&quot;:&quot;scaleType&quot;,&quot;values&quot;:[&quot;metric&quot;]}]">
                         <span class="config-ui-rows-cell-label">Every N steps</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="mod" value="3">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="mod" value="3" data-key="mod" data-type="number" data-group="config-ui-row-radio-scales-1-mod">
                       </label>
                     </div>
                   </div>
@@ -840,11 +840,11 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="table-rows" data-row-index="40">
-          <h1 class="config-ui-heading">Table rows</h1>
+          <h2 class="config-ui-heading">Table rows</h2>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="41">
           <div class="docs-rendered">
-            The same annotation without @tabs: one line per entry, with Add and Remove.
+            The same <code>type: "rows"</code> without <code>layout: "tabs"</code>: one line per entry, with Add and Remove.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="42">
@@ -856,21 +856,21 @@
                     <div class="config-ui-rows-item" data-row-index="0">
                       <label class="config-ui-rows-cell">
                         <span class="config-ui-rows-cell-label">Name</span>
-                        <input type="text" class="config-ui-input config-ui-input--text" data-row-field="label" value="sm">
+                        <input type="text" class="config-ui-input config-ui-input--text" data-row-field="label" value="sm" data-key="label" data-type="text" data-group="config-ui-row-radio-breakpoints-0-label">
                       </label>
                       <label class="config-ui-rows-cell">
                         <span class="config-ui-rows-cell-label">Min width</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="min" value="640">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="min" value="640" data-key="min" data-type="number" data-group="config-ui-row-radio-breakpoints-0-min">
                       </label>
                     </div>
                     <div class="config-ui-rows-item" data-row-index="1">
                       <label class="config-ui-rows-cell">
                         <span class="config-ui-rows-cell-label">Name</span>
-                        <input type="text" class="config-ui-input config-ui-input--text" data-row-field="label" value="md">
+                        <input type="text" class="config-ui-input config-ui-input--text" data-row-field="label" value="md" data-key="label" data-type="text" data-group="config-ui-row-radio-breakpoints-1-label">
                       </label>
                       <label class="config-ui-rows-cell">
                         <span class="config-ui-rows-cell-label">Min width</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="min" value="834">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="min" value="834" data-key="min" data-type="number" data-group="config-ui-row-radio-breakpoints-1-min">
                       </label>
                     </div>
                   </div>
@@ -880,11 +880,11 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="a-curve-you-can-drag" data-row-index="43">
-          <h1 class="config-ui-heading">A curve you can drag</h1>
+          <h2 class="config-ui-heading">A curve you can drag</h2>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="44">
           <div class="docs-rendered">
-            <code>@curve</code> on an <strong>array</strong> of four numbers — the two handles of one cubic, exactly what <code>cubic-bezier()</code><br>carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the<br>field underneath. All four are the same edit: the numbers are the value and everything on screen is a<br>reading of them, which is why the dropdown says <em>Custom</em> the moment a curve stops being a preset.
+            <code>type: "curve"</code> on an <strong>array</strong> of four numbers — the two handles of one cubic, exactly what <code>cubic-bezier()</code><br>carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the<br>field underneath. All four are the same edit: the numbers are the value and everything on screen is a<br>reading of them, which is why the dropdown says <em>Custom</em> the moment a curve stops being a preset.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="45">
@@ -892,10 +892,10 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-easing-18">
                 Curve
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="The dashed diagonal is the straight ramp — a curve is read as how far it departs from it.">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;easing&quot;, type: &quot;curve&quot; }">i</button>
               </label>
               <div class="config-ui-field__control">
-                <div class="config-ui-curve" data-curve-value="[0.37,0,0.63,1]" data-curve-field="easing">
+                <div class="config-ui-curve" data-type="curve" data-key="easing" data-curve-value="[0.37,0,0.63,1]" data-curve-field="easing">
                   <div class="config-ui-curve__head">
                     <select class="config-ui-curve__preset" value="custom">
                       <option value="custom" selected>Custom</option>
@@ -988,7 +988,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-twoSegment-19">Two-segment curve</label>
               <div class="config-ui-field__control">
-                <div class="config-ui-curve" data-curve-value="[0.17,0,0.33,0.23,0.5,0.5,0.67,0.77,0.83,1]" data-curve-field="twoSegment">
+                <div class="config-ui-curve" data-type="curve" data-key="twoSegment" data-curve-value="[0.17,0,0.33,0.23,0.5,0.5,0.67,0.77,0.83,1]" data-curve-field="twoSegment">
                   <div class="config-ui-curve__head">
                     <select class="config-ui-curve__preset" value="custom">
                       <option value="custom" selected>Custom</option>
@@ -1078,7 +1078,7 @@
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="48">
           <div class="docs-rendered">
-            <code>@allowOriginal</code> adds <em>Original</em> to the preset list — the empty curve, for a script that has something<br>to fall back on. Colors uses it to mean "leave the steps this file already has".
+            <code>allowOriginal: true</code> adds <em>Original</em> to the preset list — the empty curve, for a script that has something<br>to fall back on. Colors uses it to mean "leave the steps this file already has".
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="49">
@@ -1086,10 +1086,10 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-maybeCurve-20">
                 Curve or original
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="Shown empty. Pick a preset to give it points.">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;maybeCurve&quot;, type: &quot;curve&quot;, allowOriginal: true }">i</button>
               </label>
               <div class="config-ui-field__control">
-                <div class="config-ui-curve" data-curve-value="[]" data-curve-field="maybeCurve">
+                <div class="config-ui-curve" data-type="curve" data-key="maybeCurve" data-curve-value="[]" data-curve-field="maybeCurve">
                   <div class="config-ui-curve__head">
                     <select class="config-ui-curve__preset" value="original">
                       <option value="original" selected>Original</option>
@@ -1167,11 +1167,11 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="a-curve-on-a-real-axis" data-row-index="50">
-          <h1 class="config-ui-heading">A curve on a real axis</h1>
+          <h2 class="config-ui-heading">A curve on a real axis</h2>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="51">
           <div class="docs-rendered">
-            <code>@ends:</code> names the two fields the curve runs <strong>between</strong>, and <code>@range:</code> the limits of the quantity<br>itself. Together they turn the y axis from a unit square into the thing being edited: the labels are<br>percentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the<br>two <strong>square</strong> handles are those ends — drag one and it types into its own field, because that is where<br>the value lives. The round handles still only bend the shape between them.
+            <code>ends: "a..b"</code> names the two fields the curve runs <strong>between</strong>, and <code>range: [lo, hi]</code> the limits of the quantity<br>itself. Together they turn the y axis from a unit square into the thing being edited: the labels are<br>percentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the<br>two <strong>square</strong> handles are those ends — drag one and it types into its own field, because that is where<br>the value lives. The round handles still only bend the shape between them.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="52">
@@ -1189,7 +1189,7 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladder-21">Ends</label>
               <div class="config-ui-field__control">
-                <span class="config-ui-rows-group" data-group-field="ladder"></span>
+                <span class="config-ui-rows-group" data-group-field="ladder" data-type="group" data-key="ladder" data-group="cfg-ladder-21"></span>
               </div>
             </div>
           </div>
@@ -1199,10 +1199,10 @@
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladderCurve-22">
                 Lightness
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="{ key: &quot;ladderCurve&quot;, type: &quot;curve&quot;, ends: &quot;ladder.bright..ladder.dark&quot;, range: [0,100] }">i</button>
               </label>
               <div class="config-ui-field__control">
-                <div class="config-ui-curve" data-curve-value="[0.4,0,0.7,0.55]" data-curve-field="ladderCurve" data-curve-view="11.1,100">
+                <div class="config-ui-curve" data-type="curve" data-key="ladderCurve" data-curve-value="[0.4,0,0.7,0.55]" data-curve-field="ladderCurve" data-curve-view="11.1,100">
                   <div class="config-ui-curve__head">
                     <select class="config-ui-curve__preset" value="custom">
                       <option value="custom" selected>Custom</option>
@@ -1313,7 +1313,7 @@
                     <div class="config-ui-curve__anchor">
                       <label class="config-ui-rows-group-part">
                         <span class="config-ui-rows-group-label">Bright</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.bright" value="98" data-curve-from-bound="true">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.bright" value="98" data-key="bright" data-type="number" data-group="cfg-ladder-21-bright" data-curve-from-bound="true">
                       </label>
                     </div>
                     <label class="config-ui-curve__anchor config-ui-curve__anchor--middle" data-shown="false">
@@ -1325,7 +1325,7 @@
                     <div class="config-ui-curve__anchor config-ui-curve__anchor--end">
                       <label class="config-ui-rows-group-part">
                         <span class="config-ui-rows-group-label">Dark</span>
-                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.dark" value="19" data-curve-to-bound="true">
+                        <input type="number" class="config-ui-input config-ui-input--number" data-row-field="ladder.dark" value="19" data-key="dark" data-type="number" data-group="cfg-ladder-21-dark" data-curve-to-bound="true">
                       </label>
                     </div>
                   </div>
@@ -1335,11 +1335,11 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="a-scale-with-no-far-end" data-row-index="56">
-          <h1 class="config-ui-heading">A scale with no far end</h1>
+          <h2 class="config-ui-heading">A scale with no far end</h2>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="57">
           <div class="docs-rendered">
-            <code>curve(growth:ratio)</code> inside <code>@rows</code> — the <strong>open-ended</strong> editor, for a scale whose largest value nobody<br>knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the<br>growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last<br>token the line carries on faintly, because it does — adding a token extends the scale rather than<br>squeezing what is already generated into the same range.
+            <code>growth: "ratio"</code> on a curve inside <code>type: "rows"</code> — the <strong>open-ended</strong> editor, for a scale whose largest value nobody<br>knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the<br>growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last<br>token the line carries on faintly, because it does — adding a token extends the scale rather than<br>squeezing what is already generated into the same range.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="58">
@@ -1364,7 +1364,7 @@
                     <div class="config-ui-rows-item config-ui-rows-item--stacked" data-row-index="0">
                       <div class="config-ui-rows-cell config-ui-rows-cell--stacked">
                         <span class="config-ui-rows-cell-label">Scale</span>
-                        <div class="config-ui-curve config-ui-curve--growth" data-curve-growth-value="1.5" data-curve-value="[]" data-row-field="curve">
+                        <div class="config-ui-curve config-ui-curve--growth" data-type="curve" data-key="curve" data-curve-growth-value="1.5" data-curve-value="[]" data-row-field="curve" data-group="config-ui-row-radio-openScale-0-curve">
                           <div class="config-ui-curve__head">
                             <select class="config-ui-curve__preset" value="linear|none">
                               <option value="custom" hidden>Custom</option>
@@ -1448,14 +1448,14 @@
           </div>
         </div>
         <div class="config-ui-row config-ui-row--heading" data-section="what-the-form-cannot-hold" data-row-index="61">
-          <h1 class="config-ui-heading">What the form cannot hold</h1>
+          <h2 class="config-ui-heading">What the form cannot hold</h2>
         </div>
         <div class="config-ui-row config-ui-row--field" data-row-index="62">
           <div class="config-ui-field config-ui-field--unsupported" data-key="nested" data-type="unsupported" data-section="what-the-form-cannot-hold">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-nested-24">
                 Nested object
-                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="an object with no @rows — the form says so rather than dropping it">i</button>
+                <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="an object with no type: &quot;rows&quot; or type: &quot;group&quot;">i</button>
               </label>
               <div class="config-ui-field__control">
                 <pre class="config-ui-readonly" aria-readonly="true" data-readonly-field="nested" title="Edit this one in the Script tab — no form control can hold it">{
@@ -1481,24 +1481,24 @@
         hover or on focus, which a static page cannot do — so the text is listed here.
       </p>
       <table class="ref-table">
-        <tr><td>Text</td><td class="ref-tip">var textField = "Sample";</td></tr>
-        <tr><td>Text with a placeholder</td><td class="ref-tip">@placeholder="Shown while empty"</td></tr>
-        <tr><td>Number</td><td class="ref-tip">a numeric default makes it a number input, 96px wide</td></tr>
-        <tr><td>Textarea</td><td class="ref-tip">@textarea</td></tr>
-        <tr><td>List of names</td><td class="ref-tip">an array of strings or numbers — one input holding a comma list, and the config keeps the array</td></tr>
-        <tr><td>Checkbox</td><td class="ref-tip">a true or false default</td></tr>
-        <tr><td>Dropdown</td><td class="ref-tip">@options: small|medium|large</td></tr>
-        <tr><td>Radio group</td><td class="ref-tip">the same @options, plus @radio</td></tr>
-        <tr><td>Multi-select</td><td class="ref-tip">the same @options, plus @multi</td></tr>
-        <tr><td>From the document</td><td class="ref-tip">@options: variableCollections — filled with this file's collections</td></tr>
-        <tr><td>Only while Checkbox is on</td><td class="ref-tip">@showWhen: toggle=true</td></tr>
-        <tr><td>Collection</td><td class="ref-tip">@collection — this file's collections, plus New collection</td></tr>
-        <tr><td>Mode</td><td class="ref-tip">@mode: collectionName — the modes of the collection above, plus New mode</td></tr>
-        <tr><td>Lightness</td><td class="ref-tip">0 to 100 in the UI, 0 to 1 in the data</td></tr>
-        <tr><td>Curve</td><td class="ref-tip">The dashed diagonal is the straight ramp — a curve is read as how far it departs from it.</td></tr>
-        <tr><td>Curve or original</td><td class="ref-tip">Shown empty. Pick a preset to give it points.</td></tr>
-        <tr><td>Lightness</td><td class="ref-tip">Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.</td></tr>
-        <tr><td>Nested object</td><td class="ref-tip">an object with no @rows — the form says so rather than dropping it</td></tr>
+        <tr><td>Text</td><td class="ref-tip">{ key: "textField", type: "string" }</td></tr>
+        <tr><td>Text with a placeholder</td><td class="ref-tip">placeholder: "Shown while empty"</td></tr>
+        <tr><td>Number</td><td class="ref-tip">{ key: "numberField", type: "number" }</td></tr>
+        <tr><td>Textarea</td><td class="ref-tip">{ key: "longText", type: "textarea" }</td></tr>
+        <tr><td>List of names</td><td class="ref-tip">{ key: "nameList", type: "list" }</td></tr>
+        <tr><td>Checkbox</td><td class="ref-tip">{ key: "toggle", type: "boolean" }</td></tr>
+        <tr><td>Dropdown</td><td class="ref-tip">{ key: "dropdown", type: "select", options: […] }</td></tr>
+        <tr><td>Radio group</td><td class="ref-tip">{ key: "radioChoice", type: "radio", options: […] }</td></tr>
+        <tr><td>Multi-select</td><td class="ref-tip">{ key: "multiChoice", type: "multiselect", options: […] }</td></tr>
+        <tr><td>From the document</td><td class="ref-tip">options: "variableCollections"</td></tr>
+        <tr><td>Only while Checkbox is on</td><td class="ref-tip">showWhen: { toggle: true }</td></tr>
+        <tr><td>Collection</td><td class="ref-tip">{ key: "collectionName", type: "collection" }</td></tr>
+        <tr><td>Mode</td><td class="ref-tip">{ key: "collectionMode", type: "mode", collection: "collectionName" }</td></tr>
+        <tr><td>Lightness</td><td class="ref-tip">{ key: "lightness", type: "group", fields: […] }</td></tr>
+        <tr><td>Curve</td><td class="ref-tip">{ key: "easing", type: "curve" }</td></tr>
+        <tr><td>Curve or original</td><td class="ref-tip">{ key: "maybeCurve", type: "curve", allowOriginal: true }</td></tr>
+        <tr><td>Lightness</td><td class="ref-tip">{ key: "ladderCurve", type: "curve", ends: "ladder.bright..ladder.dark", range: [0,100] }</td></tr>
+        <tr><td>Nested object</td><td class="ref-tip">an object with no type: "rows" or type: "group"</td></tr>
       </table>
     </div>
   </section>

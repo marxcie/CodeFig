@@ -28,6 +28,8 @@
       schema = s;
       if (attached && attached.detach) attached.detach();
       R.buildForm(schema, container);
+      // Plan 29/32: form root `data-package` — empty until a package id is known.
+      container.setAttribute("data-package", (opts && opts.packageId) || "");
       attached = R.attachListeners(
         container,
         schema,

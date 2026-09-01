@@ -31,6 +31,16 @@
   function proseBlock(text) { return { kind: "md", text: String(text) }; }
   function helperBlock(text) { return { kind: "text", text: String(text).replace(/\\n/g, "\n") }; }
 
+  /**
+   * Configuration UI heading tags. Docs keep a full h1–h3 ladder; the form never emits h1 —
+   * section titles (`// #` / panel level 1) are h2, nested headings are h3 — so form sections do
+   * not wear the Documentation tab's document-title size.
+   */
+  function configHeadingTag(level) {
+    var n = typeof level === "number" ? level : 1;
+    return n <= 1 ? "h2" : "h3";
+  }
+
   /** The blocks a control shows, in the order a reader met them: its own note, then any prose. */
   function tipBlocks(owner, prose) {
     var blocks = [];
@@ -529,7 +539,7 @@
       if (hrules && hrules.length) {
         wrap.setAttribute("data-show-when-rules", JSON.stringify(hrules));
       }
-      var tag = r.level >= 3 ? "h3" : r.level === 2 ? "h2" : "h1";
+      var tag = configHeadingTag(r.level);
       var h = document.createElement(tag);
       h.className = "config-ui-heading";
       h.textContent = r.text;
@@ -1725,6 +1735,11 @@
     var growthKey = typeof field.growth === "string" && field.growth ? field.growth : null;
     var wrap = document.createElement("div");
     wrap.className = "config-ui-curve" + (growthKey ? " config-ui-curve--growth" : "");
+    // Plan 29: curves inside `@rows` had no `data-type`, so `[data-section="hue"] [data-type="curve"]`
+    // could not reach them. Key is the column/field name when present (`curve`, `hue`, …).
+    wrap.setAttribute("data-type", "curve");
+    var curveKey = field && (field.name || field.key);
+    if (curveKey) wrap.setAttribute("data-key", String(curveKey));
     var points = curveValueOf(value);
 
     /**
@@ -4117,6 +4132,9 @@
             tabPanel = document.createElement("div");
             tabPanel.className = "config-ui-rows-tabpanel";
             tabPanel.setAttribute("data-rows-tabpanel", alts[0].text);
+            // Plan 29 in-rows identity: `[data-section="hue"]` must match the Hue tabpanel,
+            // not only the outer Modes `@rows` wrapper. Same slug helper as form headings.
+            tabPanel.setAttribute("data-section", sectionSlug(alts[0].text));
             rowEl.appendChild(tabPanel);
             tabNames.push(alts[0].text);
             return;
@@ -4147,7 +4165,7 @@
             return;
           }
           if (column.type === "heading") {
-            var sub = document.createElement("h" + (column.level || 2));
+            var sub = document.createElement(configHeadingTag(column.level || 2));
             sub.className = "config-ui-heading";
             sub.textContent = column.text;
             // A heading left standing over a section its condition has hidden reads as a failed render.
@@ -4355,7 +4373,7 @@
             return;
           }
           if (column.type === "heading") {
-            var sub = document.createElement("h" + (column.level || 2));
+            var sub = document.createElement(configHeadingTag(column.level || 2));
             sub.className = "config-ui-heading";
             sub.textContent = column.text;
             // A heading left standing over a section its condition has hidden reads as a failed render.
@@ -4427,6 +4445,11 @@
     // `collectRows` along with the rest of its row, and marking it here would have `getValues` collect it
     // twice — once as a row and once as a top-level key that does not exist in the config.
     if (!column.key && column.name) wrap.setAttribute("data-group-field", column.name);
+    // Plan 29 identity for stylesheets — additive; collectors still use data-group-field / row paths.
+    wrap.setAttribute("data-type", "group");
+    var groupKey = column.key || column.name;
+    if (groupKey) wrap.setAttribute("data-key", String(groupKey));
+    if (groupName) wrap.setAttribute("data-group", String(groupName));
     var held = (value && typeof value === "object") ? value : {};
 
     (column.columns || []).forEach(function (part) {
@@ -4473,6 +4496,14 @@
   function buildRowCell(column, value, groupName, keyPrefix, row, baselineKey) {
     var fieldKey = (keyPrefix || "") + column.key;
     if (column.type === "group") return buildRowGroup(column, value, groupName);
+
+    function stampCellIdentity(el) {
+      if (!el || !el.setAttribute) return el;
+      if (column.key) el.setAttribute("data-key", String(column.key));
+      if (column.type) el.setAttribute("data-type", String(column.type));
+      if (groupName) el.setAttribute("data-group", String(groupName));
+      return el;
+    }
     /**
      * A mode picker in a row: the collection's own modes plus *New mode*.
      *
@@ -4492,7 +4523,7 @@
       // and reading the form back wrote that emptiness over the name. The real list replaces this the moment it
       // arrives; until then the control shows what the config says, which is the only honest thing it can show.
       if (held) populateModeControl(picker, [held], held, { collection: "" });
-      return picker;
+      return stampCellIdentity(picker);
     }
     if (column.type === "curve") {
       // The same editor at cell scope. It carries `data-row-field` and **not** `data-curve-field`, for the
@@ -4503,7 +4534,7 @@
       var cellCurve = buildCurveControl(column, value,
         row && column.growth ? row[column.growth] : undefined, baselineKey);
       cellCurve.setAttribute("data-row-field", fieldKey);
-      return cellCurve;
+      return stampCellIdentity(cellCurve);
     }
     if (column.type === "list") {
       // `extras: [0, 1, 2]` is a list in a cell. Text on screen, an array in the config — a string
@@ -4514,7 +4545,7 @@
       list.setAttribute("data-row-field", fieldKey);
       list.setAttribute("data-row-list", "true");
       list.value = p.listToText(value);
-      return list;
+      return stampCellIdentity(list);
     }
     if (column.type === "radio") {
       // The group carries `data-row-field`, not the inputs: one cell, one value, read by asking which
@@ -4545,7 +4576,7 @@
         wrapLabel.appendChild(document.createTextNode(" " + p.columnOptionLabel(opt)));
         group.appendChild(wrapLabel);
       });
-      return group;
+      return stampCellIdentity(group);
     }
     if (column.type === "select") {
       var sel = document.createElement("select");
@@ -4572,7 +4603,7 @@
         if (String(value) === o.value) o.selected = true;
         sel.appendChild(o);
       });
-      return sel;
+      return stampCellIdentity(sel);
     }
     if (column.type === "checkbox") {
       var cb = document.createElement("input");
@@ -4580,7 +4611,7 @@
       cb.className = "config-ui-toggle";
       cb.setAttribute("data-row-field", fieldKey);
       cb.checked = value === true;
-      return cb;
+      return stampCellIdentity(cb);
     }
     var input = document.createElement("input");
     input.type = column.type === "number" ? "number" : "text";
@@ -4595,8 +4626,8 @@
     // plausible guesses and only one of them is a colour.
     if (column.placeholder != null) input.placeholder = String(column.placeholder);
     input.value = value == null ? "" : String(value);
-    if (column.unit) return curveUnitWrap(input, column.unit);
-    return input;
+    if (column.unit) return stampCellIdentity(curveUnitWrap(input, column.unit));
+    return stampCellIdentity(input);
   }
 
   /**

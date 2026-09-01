@@ -43,7 +43,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "list",
-    "helper": "Named smallest to largest, and radius-{1,10} is a series of ten."
+    "helper": "Names from smallest to largest. radius-{1,10} expands to ten names."
   },
   {
     "type": "divider",
@@ -62,7 +62,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "boolean",
-    "helper": "Builds the Corner radius overview frame"
+    "helper": "Builds a Corner radius overview on the canvas: one row per token, one column per mode, with variable-bound swatches."
   },
   {
     "type": "field",
@@ -126,7 +126,7 @@
             ]
           }
         ],
-        "helper": "Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top.",
+        "helper": "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones.",
         "growth": "ratio"
       },
       {
@@ -143,7 +143,7 @@
             ]
           }
         ],
-        "helper": "Metric. The amount each step adds, before it starts growing.\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it."
+        "helper": "Metric: how much each step adds before growth starts.\nFibonacci: the first increment. Each later step is the sum of the two before it."
       },
       {
         "key": "mod",
@@ -158,7 +158,7 @@
             ]
           }
         ],
-        "helper": "How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down."
+        "helper": "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12."
       },
       {
         "key": "base",
@@ -177,7 +177,7 @@
         "label": "Extra values",
         "type": "list",
         "labelSpelled": true,
-        "helper": "Values that are not part of the scale, merged in by size. Put a 0 here for a `none` token: it fills the smallest name and the scale takes over above it, so `none` needs no special case."
+        "helper": "Off-scale values, merged by size. Put 0 here for a none token: it takes the smallest name and the scale continues above it."
       }
     ],
     "tabs": true,

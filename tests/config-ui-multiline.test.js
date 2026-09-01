@@ -451,7 +451,7 @@ test('an object value is marked as one no control can edit', () => {
 
 test('a list of names is editable; a list of objects is not', () => {
   // **Changed deliberately.** `spacings: ["none", "px", …]` is the Tokens field in Márton's frames — one
-  // input holding a comma list — and it used to render read-only and send you to Configuration code to
+  // input holding a comma list — and it used to render read-only and send you to Source to
   // edit a row of words. A list of *objects* is a different thing and still needs `@rows` to say what
   // its columns are, because there is no way to guess.
   assert.equal(P.parse('var tokens = ["px","xs"];').rows[0].inputType, 'list');

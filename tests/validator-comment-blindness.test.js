@@ -81,13 +81,19 @@ test('a real missing import is still an error', () => {
   const spacing = scripts.filter((s) => /spacing\.js$/.test(s.path))[0];
   assert.ok(spacing, 'the fixture is a real shipped script');
 
-  const broken = scripts.map((s) => (s === spacing
-    ? Object.assign({}, s, {
+  // Strip package membership for this fixture: with packageId set, sibling lookup would
+  // pull expandTokenList from @Foundation anyway (plan 32), which is correct at run time but
+  // would make "forgot to import" invisible here. The gate still has to catch scripts that
+  // are *not* package members.
+  const broken = scripts.map((s) => {
+    const noPackage = Object.assign({}, s, { packageId: undefined, packageVisibility: undefined });
+    if (s !== spacing) return noPackage;
+    return Object.assign(noPackage, {
       // Just the two names, not the tail of the line: pinning the whole import list made this fixture
       // fail every time a script gained an unrelated import.
       code: s.code.replace(', expandTokenList, tokenListHasSeries', ''),
-    })
-    : s));
+    });
+  });
   assert.notEqual(broken.filter((s) => /spacing\.js$/.test(s.path))[0].code, spacing.code,
     'the fixture actually removed the import');
 

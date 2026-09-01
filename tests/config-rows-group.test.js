@@ -256,8 +256,8 @@ test('a block is titled from the name column’s own label, not by depluralising
 });
 
 test('a heading among the columns is the form’s own heading, one level down', () => {
-  // `#Seed` parses to the same `{ type: "heading", level }` a `// ## Heading` line does, and renders as the
-  // same element — so the two size ladders cannot drift. That is the reuse, rather than a third layout.
+  // `#Seed` parses as a nested heading (level 2) and the Configuration UI renders it as `h3` —
+  // one step below section titles (`h2`), so the two size ladders cannot drift.
   const { host, schema } = renderBlock(BLOCKS);
   const field = rowsField(schema);
   assert.deepEqual(
@@ -268,7 +268,7 @@ test('a heading among the columns is the form’s own heading, one level down', 
   const first = host.querySelectorAll('.config-ui-rows-item')[0];
   const headings = first.querySelectorAll('.config-ui-heading');
   assert.equal(headings.length, 2, 'the headings did not render inside the block');
-  assert.deepEqual([...headings].map((h) => h.tagName.toLowerCase()), ['h2', 'h2']);
+  assert.deepEqual([...headings].map((h) => h.tagName.toLowerCase()), ['h3', 'h3']);
   assert.deepEqual([...headings].map((h) => h.textContent), ['Seed', 'Palette']);
   // Not wrapped in a form row: that would bring the panel's inline padding and indent the heading past the
   // fields it names.

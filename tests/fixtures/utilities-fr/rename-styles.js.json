@@ -39,15 +39,6 @@
   },
   {
     "type": "field",
-    "name": "matchCase",
-    "value": false,
-    "label": "Match case",
-    "labelSpelled": true,
-    "tooltip": "",
-    "inputType": "boolean"
-  },
-  {
-    "type": "field",
     "name": "useRegex",
     "value": false,
     "label": "Use regular expression",
@@ -58,19 +49,6 @@
   {
     "type": "paragraph",
     "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
-  },
-  {
-    "type": "field",
-    "name": "previewOnly",
-    "value": true,
-    "label": "Preview only",
-    "labelSpelled": true,
-    "tooltip": "",
-    "inputType": "boolean"
-  },
-  {
-    "type": "paragraph",
-    "text": "**On by default.** Lists what would change and touches nothing. Untick and run again to apply."
   },
   {
     "type": "divider",

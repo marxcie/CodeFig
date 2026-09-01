@@ -1,8 +1,5 @@
 [
   {
-    "type": "directive"
-  },
-  {
     "type": "heading",
     "level": 1,
     "text": "General"
@@ -50,7 +47,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "list",
-    "helper": "Named smallest to largest, and heading-{6,1} is a series of six. The Base unit below is the size of the first name here."
+    "helper": "Names from smallest to largest. heading-{6,1} expands to six sizes. Base unit is the size of the first name."
   },
   {
     "type": "field",
@@ -73,7 +70,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "list",
-    "helper": "A number is a font weight; a word is a Figma font style name, e.g. Semi Bold."
+    "helper": "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold."
   },
   {
     "type": "field",
@@ -110,7 +107,8 @@
     "label": "Generate overview",
     "labelSpelled": true,
     "tooltip": "",
-    "inputType": "boolean"
+    "inputType": "boolean",
+    "helper": "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight."
   },
   {
     "type": "field",
@@ -177,7 +175,7 @@
             ]
           }
         ],
-        "helper": "Drag the end handle to set how fast the scale grows — the largest value comes out of that and the number of tokens, so adding a token extends the scale instead of squeezing it. Add shape bends the growth: tighter at the small end, looser at the top.",
+        "helper": "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones.",
         "growth": "ratio"
       },
       {
@@ -194,7 +192,7 @@
             ]
           }
         ],
-        "helper": "Metric. The amount each step adds, before it starts growing.\\nFibonacci. The first increment — the sequence is the base, the base plus this, then each value the sum of the two before it."
+        "helper": "Metric: how much each step adds before growth starts.\nFibonacci: the first increment. Each later step is the sum of the two before it."
       },
       {
         "key": "mod",
@@ -209,7 +207,7 @@
             ]
           }
         ],
-        "helper": "How often the step grows. With a step of 4 and a value of 3 the increments run 4, 4, 4, 8, 8, 8, 12 — which is the ladder a design system doc actually writes down."
+        "helper": "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12."
       },
       {
         "key": "base",
@@ -222,7 +220,7 @@
         "label": "Letter spacing",
         "type": "group",
         "labelSpelled": true,
-        "helper": "A percentage of the font size, the way Figma spells it — so it still means the same thing when the scale grows. Interpolated between the two ends and written as pixels.",
+        "helper": "Percent of font size (as Figma shows it). Interpolated between the two ends, then written in pixels.",
         "columns": [
           {
             "key": "base",
@@ -238,14 +236,15 @@
             "labelSpelled": true,
             "unit": "%"
           }
-        ]
+        ],
+        "group": "letterSpacing"
       },
       {
         "key": "lineHeight",
         "label": "Line height",
         "type": "group",
         "labelSpelled": true,
-        "helper": "A percentage of the font size. 150 is a comfortable body line; large text usually wants less, which is what the second field is for.",
+        "helper": "Percent of font size. 150 suits body text; use the second field when large sizes need less.",
         "columns": [
           {
             "key": "base",
@@ -261,7 +260,8 @@
             "labelSpelled": true,
             "unit": "%"
           }
-        ]
+        ],
+        "group": "lineHeight"
       },
       {
         "key": "roundTo",

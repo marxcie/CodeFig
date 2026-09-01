@@ -53,13 +53,13 @@ const POLL_MS = 200;
 const COMMANDS = {
   listScripts: 'every script in the sidebar, with its type',
   selectScript: 'open a script — name=<script name>',
-  readConfig: 'the text in the configuration editor',
-  writeConfig: 'replace it — text=<...> or --text-file <path>',
+  readConfig: 'the configuration block text (@CONFIG) in Source',
+  writeConfig: 'replace the @CONFIG block — text=<...> or --text-file <path>',
   readInfoPanel: 'the results panel: title, text, whose results they are',
   readForm: 'the rendered form: every control, its type, and what it holds',
-  readPreview: 'the Configuration tab preview: whether it is shown, and its text',
+  readPreview: 'the Configuration tab preview + injected @STYLE sheet / computed sample',
   readTabs: 'which tabs this script has and which is current',
-  switchTab: 'open a tab — name=configUI|docs|source (configCode hidden pending delete)',
+  switchTab: 'open a tab — name=configUI|docs|source',
   setField: 'type into a control — name=<field> value=<...> [part=<cell|new|option|chip|chip-add>] [index=<n>]',
   clickControl: 'press part of a control — name=<field> part=add|remove|tab|chip-remove [index=<n>]',
   dragControl: 'drag a curve editor piece — name=<field> part=<cell>:zoom|end-from|end-to|handle-<n> ' +

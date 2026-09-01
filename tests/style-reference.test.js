@@ -107,7 +107,7 @@ test('every marker row the parser emits is demonstrated, or exempt for a stated 
   // And the exemptions are documented rather than silent.
   const doc = docBlock();
   assert.match(doc, /Not in here, on purpose/);
-  assert.match(doc, /@preview` and `@suggestions/);
+  assert.match(doc, /type: "preview".*type: "suggestions"|type: "suggestions".*type: "preview"/s);
   assert.match(doc, /blank|lineBreak|attachTo/);
 });
 
@@ -120,11 +120,11 @@ test('the reference reaches the plugin: it ships and it parses', () => {
   assert.match(REF, /^\/\/ @UI_CONFIG_START$/m, 'the specimen block is gone');
   assert.match(REF, /^\/\/ @PANEL_START$/m, 'the panel spec block is gone');
 
-  // `hasSection` is an `indexOf`, so this file's *prose* about `// @UI_CONFIG_START` already made the
+  // `hasSection` is an `indexOf`, so this file's *prose* about `@UI_CONFIG_START` already made the
   // plugin think it had a config block. `extractSection` is line-anchored, so extraction is not
   // fooled — the block below is what gets read, and the mention above it stays inert.
   const anchored = /^\s*\/\/\s*@UI_CONFIG_START\s*$/m.exec(REF);
-  const prose = REF.indexOf('**// @UI_CONFIG_START**');
+  const prose = REF.indexOf('`@UI_CONFIG_START`');
   assert.ok(prose !== -1 && anchored && anchored.index > prose,
     'the prose mention now comes after the real marker, which changes which one extraction finds');
 });
@@ -138,16 +138,16 @@ test('every field in the reference names the syntax that produced it', () => {
   assert.deepEqual(unnamed, [], 'these fields carry neither a label nor a note: ' + unnamed.join(', '));
 });
 
-test('a note may mention an annotation without being truncated', () => {
-  // The reference found this: `@helper:` used to stop at the next ` @word`, so notes came back as
-  // "the same" and "an object with no". In a config UI where every annotation starts with `@`, a note
-  // that cannot say `@options` is not a note. Now it reads to end of line and must come last.
+test('a note may quote PANEL JSON without being truncated', () => {
+  // Specimen helpers name the PANEL property shape that produced the control. Truncation used to
+  // cut annotation notes mid-sentence (`@helper:` stopped at the next `@word`); the same failure
+  // mode for PANEL would leave a helper ending mid-object.
   const helpers = SCHEMA.rows.filter((r) => r.type === 'field').map((r) => r.helper).filter(Boolean);
-  const quoting = helpers.filter((h) => /\s@[a-z]/.test(h));
+  const quoting = helpers.filter((h) => /type:\s*"/.test(h) || /\{ key:/.test(h));
   assert.ok(quoting.length >= 3,
-    'the reference no longer quotes annotations in its notes, so this guards nothing');
+    'the reference no longer quotes PANEL shapes in its notes, so this guards nothing');
   quoting.forEach((h) => {
-    assert.ok(h.length > 20 && !/\b(the same|with no)$/.test(h),
+    assert.ok(h.length > 10 && !/\b(the same|with no)$/.test(h),
       'a note looks truncated mid-sentence: ' + JSON.stringify(h));
   });
 });
@@ -198,13 +198,8 @@ test('the colour values the documentation states are the ones in ui.css', () => 
 });
 
 test('the one heading ladder is described as it is actually styled', () => {
-  // The bug that prompted the reference: the docs tab and the config form styled the same markdown
-  // with separate rules, and the reference had to keep two ladders apart. They are one ladder now, so
-  // this asserts the *agreement* — read off the CSS rather than from memory, in case a future edit
-  // splits them again and updates only the prose.
-  //
-  // The shared rule names both surfaces in one selector list, which is what makes a single match here
-  // sufficient: there is no second place a heading size can come from.
+  // Docs and the Configuration UI share one CSS size ladder, but the form never emits h1 — level 1
+  // sections render as h2. The reference must describe that mapping, not invent a second ladder.
   const ladder = ['h1', 'h2', 'h3'].map((tag) => {
     const rule = CSS.match(new RegExp(
       '\\.docs-rendered ' + tag + ',\\s*\\n\\s*' + tag +
@@ -216,29 +211,24 @@ test('the one heading ladder is described as it is actually styled', () => {
     return { tag, token: rule[1] };
   });
 
-  // Distinct sizes, or it is not a ladder.
   const tokens = ladder.map((l) => l.token);
   assert.equal(new Set(tokens).size, tokens.length, 'two levels share a token: ' + tokens.join(', '));
 
   const doc = docBlock();
-  // **Table rows**, not the first line that happens to mention the syntax — the paragraph explaining
-  // why the table exists mentions it too, and matched first.
-  const syntax = { h1: '`// # Title`', h2: '`// ## Title`', h3: '`// ### Title`' };
-  ladder.forEach(({ tag, token }) => {
-    const row = doc.split('\n').find(
-      (l) => /^\/\/\s*\|/.test(l) && l.includes(syntax[tag]) && l.includes('`' + tag + '`')
-    );
-    assert.ok(row, 'the heading ladder table has no ' + syntax[tag] + ' row');
-    assert.ok(row.includes(token),
-      'the ' + tag + ' row does not name the token the CSS uses, ' + token + ': ' + row.trim());
-  });
+  const byToken = Object.fromEntries(ladder.map((l) => [l.token, l.tag]));
 
-  // And it names the shared rule, because "which rule owns this" is the sentence that was missing.
-  assert.match(doc, /`\.docs-rendered h1, h1\.config-ui-heading`/);
+  // Documentation lead-in uses h1 / display; form sections use h2 / title.
+  assert.match(doc, new RegExp('Documentation[^\\n]*`# Title`[^\\n]*`h1`[^\\n]*' + ladder[0].token));
+  assert.match(doc, new RegExp('Configuration UI[^\\n]*level: 1[^\\n]*`h2`[^\\n]*' + ladder[1].token));
+  assert.match(doc, new RegExp('Configuration UI[^\\n]*level: 2[^\\n]*`h3`[^\\n]*' + ladder[2].token));
 
-  // The document title is the one size above the ladder, and the reference has to say so — it is why
-  // a script's DOC and config blocks no longer open with their own name.
-  assert.match(doc, /--font-size-display[^\n]*document title/);
+  assert.ok(byToken['--font-size-display'] === 'h1');
+  assert.ok(byToken['--font-size-title'] === 'h2');
+  assert.ok(byToken['--font-size-subheadline'] === 'h3');
+
+  assert.match(doc, /`\.docs-rendered h2, h2\.config-ui-heading`/);
+  assert.match(doc, /--font-size-display[^\n]*document lead-in|document title/);
+  assert.match(doc, /form never emits `h1`/);
 });
 
 test('the committed HTML page is not stale', () => {

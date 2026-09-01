@@ -106,6 +106,6 @@
   },
   {
     "type": "paragraph",
-    "text": "Move rebinds this file and removes the source variables. Copy leaves the source alone."
+    "text": "Move rebinds this file and removes the source variables. Copy leaves the source alone. Design System Foundations stamps: Copy gets a new set id; Move keeps the same one."
   }
 ]

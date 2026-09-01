@@ -1,5 +1,5 @@
 /**
- * Configuration tabs: form is the live surface; code tab chrome is kept but not offered (Plan 37).
+ * Configuration tabs: form is the live surface; Configuration code chrome is gone (Plan 37).
  *
  * Plan 18 slice 1, and the paste-target gate's option B. The expensive part of B was always
  * "write a form's values back into a nested, commented object literal without wrecking it", and
@@ -8,7 +8,7 @@
  * **The config block text is canonical; the form is a projection of it.** Editing the form writes
  * back through the serializer; showing the form re-reads the text. So there is never a divergence
  * to resolve and "last edit wins" falls out rather than being implemented — nothing has to decide
- * which side is fresher, because one side is derived.
+ * which side is fresher, because one side is derived. Source holds `@CONFIG_*` / `@PANEL_*`.
  *
  * Source-level assertions, because the alternative is standing up CodeMirror to observe a class
  * toggle. The behaviour is verified through the bridge (`figma:ui -- readTabs`).
@@ -27,15 +27,18 @@ function declaredTabs() {
     .filter((name, i, all) => all.indexOf(name) === i);
 }
 
-test('there are four tab buttons in markup (configCode kept for watch, not offered)', () => {
-  // Plan 37 hide step: the button stays in the DOM; updateTabVisibility hides it because it is
-  // not in the offered list. Delete comes after the watch period.
-  assert.deepEqual(declaredTabs(), ['configUI', 'configCode', 'docs', 'source']);
+test('there are three tab buttons in markup (configCode deleted)', () => {
+  assert.deepEqual(declaredTabs(), ['configUI', 'docs', 'source']);
+  assert.equal(/data-tab="configCode"/.test(UI), false);
+  assert.equal(/id="tabConfigCode"/.test(UI), false);
+  assert.equal(/id="codeConfig"/.test(UI), false);
+  assert.equal(/id="configCodeContainer"/.test(UI), false);
+  assert.equal(/id="codePanelSpec"/.test(UI), false);
+  assert.equal(/CodeMirror\.fromTextArea\(codeConfig/.test(UI), false);
 });
 
 test('every tab button has a pane, and every pane a button', () => {
-  // A tab that toggles nothing looks like a dead click, and a pane nothing reaches is dead weight.
-  const panes = { configUI: 'tabConfigUI', configCode: 'tabConfigCode', docs: 'tabDocs', source: 'tabSource' };
+  const panes = { configUI: 'tabConfigUI', docs: 'tabDocs', source: 'tabSource' };
   for (const tab of declaredTabs()) {
     assert.ok(panes[tab], 'no pane mapped for tab ' + tab);
     assert.match(UI, new RegExp('id="' + panes[tab] + '"'), 'missing pane ' + panes[tab]);
@@ -43,25 +46,20 @@ test('every tab button has a pane, and every pane a button', () => {
 });
 
 test('the old tab names are gone, so nothing can switch to one', () => {
-  // `switchTab('config')` would silently activate nothing: every pane toggle compares against a
-  // name, and a stale literal fails no assertion at run time.
   assert.equal(/switchTab\('config'\)/.test(UI), false);
   assert.equal(/switchTab\('script'\)/.test(UI), false);
+  assert.equal(/switchTab\('configCode'\)/.test(UI), false);
   assert.equal(/currentTab === 'config'/.test(UI), false);
   assert.equal(/currentTab === 'script'/.test(UI), false);
 });
 
-test('both config tabs are treated as config, through one predicate', () => {
-  // Two literals compared in five places is how one of them gets missed. `isConfigTab` is the
-  // single question, so a third config view would be one edit.
-  assert.match(UI, /function isConfigTab\(name\) \{[\s\S]*?return name === 'configUI' \|\| name === 'configCode';/);
+test('configUI is treated as config, through one predicate', () => {
+  assert.match(UI, /function isConfigTab\(name\) \{[\s\S]*?return name === 'configUI';/);
   const uses = UI.match(/isConfigTab\(/g) || [];
   assert.ok(uses.length >= 4, 'expected the predicate to be used, found ' + uses.length);
 });
 
 test('leaving a config tab folds the edit back into the canonical text first', () => {
-  // The whole conflict rule rests on this: the other view must read current content, not what was
-  // there before the last keystroke.
   assert.match(
     UI,
     /if \(isConfigTab\(previous\) && !isConfigTab\(tabName\) && scriptHasConfig\) mergeConfigIntoMain\(\);/
@@ -74,8 +72,6 @@ test('showing the form re-projects it from the text', () => {
 });
 
 test('a config block that does not parse makes the form read-only', () => {
-  // Writing through a form projected from the last version that parsed would overwrite the broken
-  // text with stale values — losing the edit someone was halfway through.
   const fn = UI.match(/function projectConfigIntoForm\(\)[\s\S]*?\n      \}/);
   assert.ok(fn, 'projectConfigIntoForm not found');
   assert.match(fn[0], /if \(!schema\) \{[\s\S]*?configFormReadOnly = true;/);
@@ -83,17 +79,13 @@ test('a config block that does not parse makes the form read-only', () => {
   assert.match(fn[0], /The config in Source has an error/);
 });
 
-test('whether a form exists is decided by the block, not by which marker it uses', () => {
-  // **Changed in slice 2.** The parser reads property lists now, so a `@CONFIG_START` block builds a
-  // form as readily as a `var`-row one — which is the point of the whole restructure: the block stays
-  // the thing you paste and is also a form. `scriptHasUIConfig` still says which *marker* is in use,
-  // because `extractConfigSection` needs that; it stopped meaning "has a form".
+test('a config block that yields no fields does not keep a dead-end note', () => {
   const fn = UI.match(/function projectConfigIntoForm\(\)[\s\S]*?\n      \}/)[0];
   assert.match(fn, /formFields\.length === 0/, 'the test is whether the block yields fields');
   assert.equal(/if \(!scriptHasUIConfig\) \{/.test(fn), false,
     'the marker must not decide whether a form is shown');
-  assert.match(fn, /no settings a form can show/, 'and the empty case still says so');
-  assert.match(fn, /Edit it in Source/, 'empty form points at Source, not Configuration code');
+  assert.equal(/no settings a form can show/.test(fn), false,
+    'empty form must not leave a Configuration UI dead-end note');
 });
 
 test('unsupported fields point at Source, not Configuration code', () => {
@@ -102,31 +94,34 @@ test('unsupported fields point at Source, not Configuration code', () => {
   assert.equal(/only editable in Configuration code/.test(fn), false);
 });
 
-test('Configuration UI is the default for any script with a config', () => {
+test('section markers must be alone on a // line', () => {
+  assert.match(UI, /function sectionMarkerRe\(marker\)/);
+  assert.match(UI, /function hasSection\(code, startMarker\) \{[\s\S]*?sectionMarkerRe\(startMarker\)\.test\(code\)/);
+  assert.equal(/code\.indexOf\('\/\/ ' \+ startMarker\)/.test(UI), false,
+    'prose mentions of // @CONFIG_START must not count as a section');
+});
+
+test('Configuration UI is offered only when the block yields form fields', () => {
+  assert.match(UI, /function configOffersForm\(sections\)/);
+  assert.match(UI, /scriptHasConfig = configOffersForm\(parsedSections\)/);
+  assert.match(UI, /if \(scriptHasConfig\) tabs\.push\('configUI'\)/);
+  assert.equal(/if \(parsedSections\.hasConfig\) tabs\.push\('configUI'\)/.test(UI), false);
+});
+
+test('Configuration UI is the default when a form exists', () => {
   assert.match(UI, /const initialTab = scriptHasConfig \? 'configUI' : 'source';/);
 });
 
-test('a script with a config offers Configuration UI, not Configuration code', () => {
-  // Plan 37: the code tab is hidden (chrome kept for a watch period). Soft-assert the active list
-  // only pushes configUI; the button/pane may still exist in markup.
-  assert.match(UI, /if \(parsedSections\.hasConfig\) tabs\.push\('configUI'\);/);
-  assert.equal(
-    /if \(parsedSections\.hasConfig\) \{ tabs\.push\('configUI'\); tabs\.push\('configCode'\); \}/.test(UI),
-    false,
-    'configCode must not be pushed into the offered tab list'
-  );
-  assert.equal(
-    /if \(nextHasConfig\) \{ tabs\.push\('configUI'\); tabs\.push\('configCode'\); \}/.test(UI),
-    false,
-    'structure sync must not re-offer configCode either'
-  );
+test('a script with a form offers Configuration UI only', () => {
+  assert.match(UI, /if \(scriptHasConfig\) tabs\.push\('configUI'\)/);
+  assert.equal(/configEditor/.test(UI), false, 'second config editor must be gone');
+  assert.equal(/tabs\.push\('configCode'\)/.test(UI), false);
 });
 
-test('the preview follows the active config tab, and there is one of it', () => {
-  // Plan 21 put the preview beside the controls. With two config views it belongs beside whichever
-  // one you are editing — moved rather than duplicated, because two nodes would share an id.
+test('the preview follows Configuration UI, and there is one of it', () => {
   assert.equal((UI.match(/id="configPreview"/g) || []).length, 1);
-  assert.match(UI, /host && preview\.parentNode !== host\) host\.appendChild\(preview\)/);
+  assert.match(UI, /tabName === 'configUI' && tabConfigUIEl/);
+  assert.equal(/tabName === 'configCode'/.test(UI), false);
 });
 
 test('readTabs reports what a verifier needs to see', () => {
@@ -138,10 +133,6 @@ test('readTabs reports what a verifier needs to see', () => {
 });
 
 test('a config with nothing showable leaves no other script’s controls behind', () => {
-  // Found by `readForm` on its first real use: the no-form path hid the container without emptying
-  // it, so the previous script's controls were still in the DOM and reported as this script's.
-  // Nothing reads them today — a no-form script merges from the code editor — but a stale form is a
-  // loaded gun: the next thing to collect values from that container collects someone else's.
   const fn = UI.match(/function projectConfigIntoForm\(\)[\s\S]*?\n      \}/)[0];
   const branch = fn.slice(fn.indexOf('if (parsedForForm && formFields.length === 0)'));
   assert.match(branch, /configUIContainer\.innerHTML = ''/, 'the container is emptied, not just hidden');
@@ -149,35 +140,36 @@ test('a config with nothing showable leaves no other script’s controls behind'
 });
 
 test('switchTab refuses a tab this script does not offer', () => {
-  // Silently doing nothing would report success and leave a verifier reading the wrong pane —
-  // which is worse than an error, because it looks like the assertion passed.
   const fn = UI.match(/case 'switchTab': \{[\s\S]*?\n          \}/);
   assert.ok(fn, 'switchTab case not found');
   assert.match(fn[0], /throw new Error\('No tab "'/);
   assert.match(fn[0], /switchTab\(wanted\)/, 'and it calls the same function the button calls');
 });
 
-test('which view the merge reads is decided by which view you are in', () => {
-  // The defect slice 1 shipped with: the merge preferred the form whenever one had been rendered,
-  // so typing into Configuration code on a form script did nothing — the form's values were
-  // serialised over the text on the next merge. That is the canonical-text rule backwards. Found by
-  // `writeConfig` reporting the old block after writing a new one.
-  const fn = UI.match(/function mergeConfigIntoMain\(\)[\s\S]*?\n        const before =/);
-  assert.ok(fn, 'mergeConfigIntoMain not found');
-  assert.match(fn[0], /const fromForm = currentTab === 'configUI' &&/,
-    'the form is only authoritative while the form is the view you are in');
-  assert.match(fn[0], /configContent = configEditor \? configEditor\.getValue\(\) : ''/,
-    'and Configuration code is authoritative otherwise');
+test('merge reads the form only; writeConfig splices Source', () => {
+  const merge = UI.match(/function mergeConfigIntoMain\(\)[\s\S]*?\n        const before =/);
+  assert.ok(merge, 'mergeConfigIntoMain not found');
+  assert.match(merge[0], /const fromForm = currentTab === 'configUI' &&/,
+    'the form is only authoritative while Configuration UI is showing');
+  assert.match(merge[0], /if \(!fromForm\) return/,
+    'without a form view, merge does not invent config text');
+  assert.equal(/configEditor/.test(merge[0]), false);
+
+  const write = UI.match(/case 'writeConfig': \{[\s\S]*?\n          \}/);
+  assert.ok(write, 'writeConfig case not found');
+  assert.match(write[0], /writeConfigBlockText\(a\.text/);
+  assert.equal(/configEditor/.test(write[0]), false);
+  assert.equal(/configCode/.test(write[0]), false);
+});
+
+test('syncUIToCode always merges through the form path', () => {
+  const fn = UI.match(/function syncUIToCode\(values\) \{[\s\S]*?\n      \}/);
+  assert.ok(fn, 'syncUIToCode not found');
+  assert.match(fn[0], /mergeConfigIntoMain\(\)/);
+  assert.equal(/configEditor/.test(fn[0]), false);
 });
 
 test('a helper line belongs to its field, and shows behind its \u24d8', () => {
-  // `@helper:` attaches a note to a field rather than to the gap above it — which is the whole reason
-  // the annotation exists, and is unchanged. Where it *renders* did change: it used to draw a 10px
-  // line under the control, and it is now one of the blocks behind the field's \u24d8, together with the
-  // field's leftover prose and any paragraph written against it. Three kinds of grey text became one.
-  //
-  // Everything below the renderer assertions is about the parser and is deliberately untouched: the
-  // fold is presentational, so `@helper:` parses and round trips exactly as it did.
   const P = require('../src/config-ui/parser.js');
   const line = 'extensionColumns: 0, // @label: Extra columns @helper: Just numeric variables';
   const f = P.parse(line).rows.filter((r) => r.type === 'field')[0];
@@ -185,11 +177,6 @@ test('a helper line belongs to its field, and shows behind its \u24d8', () => {
   assert.equal(f.label, 'Extra columns', 'and it does not swallow the label');
   assert.equal(P.serialize(P.parse(line), {}), line, 'and survives untouched');
 
-  // **A note runs to the end of the line, and may therefore mention an annotation.** It used to stop
-  // at the next ` @word`, which in a config UI where every annotation starts with `@` meant a note
-  // could not name one: "an object with no @rows" was stored as "an object with no", and
-  // `@helper: @placeholder="x"` was stored as nothing at all, because the placeholder strip is a
-  // global replace that ran first. The style reference is written in these notes, so it found it.
   const quoting = 'var x = ""; // @label: Nested @helper: an object with no @rows — the form says so';
   const q = P.parse(quoting).rows.filter((r) => r.type === 'field')[0];
   assert.equal(q.helper, 'an object with no @rows — the form says so');
@@ -201,8 +188,6 @@ test('a helper line belongs to its field, and shows behind its \u24d8', () => {
   assert.equal(w.placeholder, 'Real one', 'the field keeps its own placeholder');
   assert.equal(w.helper, '@placeholder="Shown while empty"', 'and the note keeps the one it quotes');
 
-  // The cost of reading to end of line: a note has to be **last**. Which means serialize has to put
-  // it last, or a form interaction would fold every following annotation into the note.
   const parserSrc = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'src', 'config-ui', 'parser.js'), 'utf8'
   );
@@ -217,9 +202,6 @@ test('a helper line belongs to its field, and shows behind its \u24d8', () => {
   const renderer = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
   );
-  // The field's label owns the affordance, and `attachInfo` is the one place that decides whether
-  // there is anything to say — a field with no helper, no prose and no leftover comment gets no
-  // button, so the panel does not sprout a row of \u24d8 that all say nothing.
   assert.match(renderer, /attachInfo\(lab, field, prose\)/,
     'the field label no longer carries the info affordance');
   assert.equal(/className = "config-ui-field-note";\n\s*helper\.textContent/.test(renderer), false,
@@ -230,13 +212,8 @@ test('a helper line belongs to its field, and shows behind its \u24d8', () => {
   assert.match(css, /\.config-ui-info \{/, 'the info affordance has no styling');
   assert.match(css, /\.config-ui-tip \{[\s\S]{0,400}position: fixed/,
     'the bubble is not positioned against the panel');
-  // `.config-ui-field-note` stays, and stays in the control's column: it carries the notes that
-  // report **state** — `@disabledNote:`, the collection and mode notes, the pending mode removal.
-  // Those are consequences about to happen, and a consequence does not go behind a hover.
   assert.match(css, /\.config-ui-field-note \{[\s\S]{0,160}grid-column: 2/);
 
-  // And no row gap: the helper is a second grid row, so a row gap would put 12px between a control
-  // and the text explaining it. The note's own 4px margin is that spacing.
   const fieldRow = css.match(/\.config-ui-field__row \{[^}]*\}/);
   assert.ok(fieldRow, 'the field row rule is missing');
   assert.match(fieldRow[0], /row-gap: 0;/);
@@ -245,10 +222,8 @@ test('a helper line belongs to its field, and shows behind its \u24d8', () => {
 });
 
 test('the space around a section divider is symmetric', () => {
-  // It was 12 above and 28 below — the previous row's margin plus the heading's own 16 — which read as
-  // the rule belonging to the section above it rather than separating two.
   const css = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'src', 'ui.css'), 'utf8'
   );
-  assert.match(css, /\.config-ui-row--divider \+ \.config-ui-row--heading h2 \{\s*\n\s*margin-top: 0;/);
+  assert.match(css, /\.config-ui-row--divider \+ \.config-ui-row--heading h3 \{\s*\n\s*margin-top: 0;/);
 });

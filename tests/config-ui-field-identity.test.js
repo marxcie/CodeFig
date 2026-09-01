@@ -12,11 +12,10 @@
  * rule: `buildRow` tracks the slug of the last heading it drew and stamps it onto every field row
  * until the next one.
  *
- * Scope, stated plainly: this covers `buildField` and the section-tracking in `buildRow`, which is
- * every plain `@UI_CONFIG` field and the outer wrapper of an `@rows` control. It does **not** cover
- * the cells and groups *inside* an `@rows` table (`buildRowsControl`/`buildRowGroup`/`buildRowCell`)
- * — those are a separate, denser builder family the plan flagged as a follow-up rather than
- * something "10-15 lines, no logic touched" could respectably reach in one pass.
+ * Scope: `buildField` and section-tracking in `buildRow` (plain `@UI_CONFIG` fields and the outer
+ * `@rows` wrapper), plus the in-rows follow-up — tabpanels (`data-section` from tab text), curves
+ * (`data-type="curve"` / `data-key`), row groups (`data-type="group"` / `data-key`), and cells
+ * stamped by `stampCellIdentity` (`data-key` / `data-type` / `data-group`).
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -118,5 +117,91 @@ test('a prebuilt panel (Spacing) renders every field with a key and a type', () 
   assert.ok(fields.length > 0, 'no fields carried data-key');
   fields.forEach((el) => {
     assert.ok(el.getAttribute('data-type'), 'a field wrapper has data-key but no data-type');
+  });
+});
+
+/**
+ * In-rows identity (plan 29 follow-up). Channel tabs used to be addressable only by
+ * `data-rows-tabpanel="Hue"`; stylesheets that already select form sections with
+ * `[data-section="hue"]` could not reach curves inside those panels. Walk the DOM rather than
+ * using a descendant combinator — `dom-shim` refuses those on purpose.
+ */
+test('a @rows tabpanel carries data-section from the tab text, and holds a keyed curve', () => {
+  const container = render([
+    '// @CONFIG_START',
+    '  modes: [{ hueCurve: [], lightness: 50 }], // @rows: name:text=Mode' +
+      '|#>Hue|hueCurve:curve=Hue curve' +
+      '|#>Lightness|lightness:number=Lightness @tabs @label: Modes',
+    '// @CONFIG_END',
+  ].join('\n'));
+
+  const panels = Array.from(container.querySelectorAll('.config-ui-rows-tabpanel'));
+  assert.ok(panels.length >= 2, 'expected Hue and Lightness tabpanels');
+
+  const hue = panels.find((el) => el.getAttribute('data-rows-tabpanel') === 'Hue');
+  assert.ok(hue, 'no Hue tabpanel');
+  assert.strictEqual(hue.getAttribute('data-section'), 'hue');
+
+  const lightness = panels.find((el) => el.getAttribute('data-rows-tabpanel') === 'Lightness');
+  assert.ok(lightness, 'no Lightness tabpanel');
+  assert.strictEqual(lightness.getAttribute('data-section'), 'lightness');
+
+  const curve = Array.from(hue.querySelectorAll('.config-ui-curve'))[0];
+  assert.ok(curve, 'Hue panel has no curve');
+  assert.strictEqual(curve.getAttribute('data-type'), 'curve');
+  assert.strictEqual(curve.getAttribute('data-key'), 'hueCurve');
+});
+
+test('a row group carries data-type=group and data-key', () => {
+  const container = render([
+    '// @CONFIG_START',
+    '  modes: [{ bright: { hue: 250, chroma: 0.01 } }], // @rows: name:text=Mode' +
+      '|bright:{hue:number=Hue|chroma:number=Chroma}=Bright @tabs @label: Modes',
+    '// @CONFIG_END',
+  ].join('\n'));
+
+  const group = container.querySelector('.config-ui-rows-group');
+  assert.ok(group, 'no row group');
+  assert.strictEqual(group.getAttribute('data-type'), 'group');
+  assert.strictEqual(group.getAttribute('data-key'), 'bright');
+});
+
+test('a row cell stamped by stampCellIdentity carries data-key, data-type and data-group', () => {
+  const container = render([
+    '// @CONFIG_START',
+    '  modes: [{ gap: 8 }], // @rows: name:text=Mode|gap:number=Gap @tabs @label: Modes',
+    '// @CONFIG_END',
+  ].join('\n'));
+
+  const cell = container.querySelector('[data-row-field="gap"]');
+  assert.ok(cell, 'no gap cell');
+  assert.strictEqual(cell.getAttribute('data-key'), 'gap');
+  assert.strictEqual(cell.getAttribute('data-type'), 'number');
+  assert.ok(cell.getAttribute('data-group'), 'cell has no data-group');
+});
+
+test('Colors panel tabpanels use data-section=hue and nest curves with data-type=curve', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'colors.js'),
+    'utf8'
+  );
+  const config = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(src);
+  const panel = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(src);
+  assert.ok(config, 'colors.js has no @CONFIG_START block');
+  assert.ok(panel, 'colors.js has no @PANEL_START block');
+  const container = document.createElement('div');
+  renderer.buildForm(parser.parse(config[1], panel[1]), container);
+
+  const huePanels = Array.from(container.querySelectorAll('.config-ui-rows-tabpanel'))
+    .filter((el) => el.getAttribute('data-section') === 'hue');
+  assert.ok(huePanels.length > 0, 'no [data-section="hue"] tabpanel');
+
+  const curves = huePanels.flatMap((p) => Array.from(p.querySelectorAll('.config-ui-curve')));
+  assert.ok(curves.length > 0, 'hue tabpanel has no curve');
+  curves.forEach((curve) => {
+    assert.strictEqual(curve.getAttribute('data-type'), 'curve');
+    assert.ok(curve.getAttribute('data-key'), 'curve inside hue has no data-key');
   });
 });

@@ -87,7 +87,6 @@
           
           <div class="editor-tabs" id="editorTabs">
             <button class="editor-tab" data-tab="configUI" type="button">Configuration UI</button>
-            <button class="editor-tab" data-tab="configCode" type="button">Configuration code</button>
             <button class="editor-tab" data-tab="docs" type="button">Documentation</button>
             <button class="editor-tab active" data-tab="source" type="button">Source code</button>
           </div>
@@ -103,19 +102,7 @@
               </div>
               <div class="config-no-form" id="configNoForm" style="display: none;"></div>
             </div>
-            <div class="tab-content" id="tabConfigCode">
-              <!-- A migrated script's @PANEL_START, read-only, shown above the values it explains.
-                   Hidden entirely for a script with no second region — see currentPanelSpecText(). -->
-              <div class="config-panel-spec-container" id="configPanelSpecContainer" style="display: none;">
-                <div class="config-panel-spec-label">Panel spec — read-only</div>
-                <textarea id="codePanelSpec" readonly></textarea>
-              </div>
-              <div class="config-code-container" id="configCodeContainer">
-                <textarea id="codeConfig" placeholder="// Configuration section"></textarea>
-              </div>
-            </div>
-            <!-- Moved into whichever config tab is active: it belongs beside the thing you edit,
-                 and there is one of it. Rendered when the script declares // @PREVIEW: <fn>. -->
+            <!-- Preview lives beside Configuration UI. Rendered when the script declares // @PREVIEW: <fn>. -->
             <div class="config-preview" id="configPreview" style="display: none;">
               <div class="config-preview-title">Preview</div>
               <div class="config-preview-body" id="configPreviewBody"></div>
@@ -583,11 +570,9 @@
       const scriptTitle = document.getElementById('scriptTitle');
       const scriptStatus = document.getElementById('scriptStatus');
       const codeTextarea = document.getElementById('code');
-      const codeConfigTextarea = document.getElementById('codeConfig');
       const editorTabsEl = document.getElementById('editorTabs');
       const tabSourceEl = document.getElementById('tabSource');
       const tabConfigUIEl = document.getElementById('tabConfigUI');
-      const tabConfigCodeEl = document.getElementById('tabConfigCode');
       const tabDocsEl = document.getElementById('tabDocs');
       // Kept as an alias so the older references below keep meaning "a config tab is showing".
       const tabConfigEl = tabConfigUIEl;
@@ -642,62 +627,8 @@
         scrollbarStyle: 'native'
       });
 
-      // Initialize CodeMirror for config tab
-      let configEditor = null;
-      if (codeConfigTextarea) {
-        configEditor = CodeMirror.fromTextArea(codeConfigTextarea, {
-          mode: 'javascript',
-          theme: 'default',
-          lineNumbers: true,
-          indentUnit: 2,
-          tabSize: 2,
-          lineWrapping: true,
-          autoCloseBrackets: true,
-          matchBrackets: true,
-          gutters: ['CodeMirror-linenumbers'],
-          scrollbarStyle: 'native'
-        });
-      }
-
-      /**
-       * **The spec pane, read-only.** `@PANEL_START` is never editable from this tab — a shared buffer
-       * with `configEditor` would let its JSON-in-comments text get spliced verbatim into
-       * `@CONFIG_START`'s span the moment someone typed into Configuration code (`writeConfigBlockText`
-       * and `mergeConfigIntoMain`'s Configuration-code branch both take whatever `configEditor.getValue()`
-       * holds and put it there unparsed). A second, genuinely read-only pane sidesteps that: nothing here
-       * writes back, so neither of those functions needed to change at all, and a script with no
-       * `@PANEL_START` gets no second pane — `updateConfigPanelSpecPane`, below, is the only thing that
-       * shows or hides it.
-       */
-      const codePanelSpecTextarea = document.getElementById('codePanelSpec');
-      const configPanelSpecContainer = document.getElementById('configPanelSpecContainer');
-      let panelSpecEditor = null;
-      if (codePanelSpecTextarea) {
-        panelSpecEditor = CodeMirror.fromTextArea(codePanelSpecTextarea, {
-          mode: 'javascript',
-          theme: 'default',
-          lineNumbers: true,
-          indentUnit: 2,
-          tabSize: 2,
-          lineWrapping: true,
-          readOnly: true,
-          gutters: ['CodeMirror-linenumbers'],
-          scrollbarStyle: 'native'
-        });
-      }
-
-      /** Shown, and filled, only when the open script has one — hidden entirely otherwise. */
-      function updateConfigPanelSpecPane() {
-        if (!panelSpecEditor || !configPanelSpecContainer) return;
-        const specText = currentPanelSpecText();
-        if (specText) {
-          panelSpecEditor.setValue(specText);
-          configPanelSpecContainer.style.display = '';
-          panelSpecEditor.refresh();
-        } else {
-          configPanelSpecContainer.style.display = 'none';
-        }
-      }
+      // Plan 37: Configuration code tab deleted. Form writes through mergeConfigIntoMain into
+      // Source `@CONFIG_*` / `@UI_CONFIG_*`. Panel recipe lives in Source `@PANEL_START`.
 
       let configUIInstance = null;
       /** The values as last seen, so a change can be attributed to a field. */
@@ -710,7 +641,6 @@
        * One variable, one job, and the name says which.
        */
       let configLastAddress = null;
-      const configCodeContainer = document.getElementById('configCodeContainer');
       const configUIContainer = document.getElementById('configUIContainer');
 
       // ======================================================================
@@ -1002,6 +932,7 @@
             configUIContainer.innerHTML = '';
             configUIInstance = window.CodeFigConfigUI.render(schema, {
               container: configUIContainer,
+              packageId: (currentScript && currentScript.packageId) || '',
               curveBaselines: _curveBaselines,
               curveRamps: _curveRamps,
               // **Parked, alongside the dropdown option, not called at all.** This was the other half
@@ -1154,16 +1085,8 @@
       function syncUIToCode(values) {
         try {
           if (!scriptHasConfig || typeof window.CodeFigConfigUI === 'undefined') return;
-          if (scriptHasUIConfig) {
-            // @UI_CONFIG: configEditor is not used; mergeConfigIntoMain parses from main code
-            mergeConfigIntoMain();
-          } else {
-            if (!configEditor) return;
-            const schema = window.CodeFigConfigUI.parse(configEditor.getValue(), currentPanelSpecText());
-            const newCode = window.CodeFigConfigUI.serialize(schema, values);
-            configEditor.setValue(newCode);
-            mergeConfigIntoMain();
-          }
+          // Form → serialize into Source `@CONFIG` / `@UI_CONFIG` (plan 37: no second editor).
+          mergeConfigIntoMain();
         } catch (err) {
           // Swallowed as before: a half-typed config must not throw on every keystroke.
         } finally {
@@ -1175,7 +1098,7 @@
 
       // Tab state for script sections (docs / config / script)
       let currentTab = 'source';
-      /** True while Configuration code does not parse: the form must not write over broken text. */
+      /** True while the config block in Source does not parse: the form must not write over broken text. */
       let configFormReadOnly = false;
       /**
        * The block text the form currently on screen was built from, or null before the first projection.
@@ -1188,19 +1111,26 @@
       let configProjectedFrom = null;
       let scriptHasDocs = false;
       let scriptHasConfig = false;
-      let scriptHasUIConfig = false; // @UI_CONFIG_START → show UI; @CONFIG_START only → show code
+      let scriptHasUIConfig = false; // which marker extractConfigSection uses (@UI_CONFIG vs @CONFIG)
       let parsedSections = null; // { docContent, configContent, hasUIConfig, configStartMarker, configEndMarker, ... }
 
-      // Parse script into sections by @DOC_START/@DOC_END and @CONFIG_START/@CONFIG_END
+      // Parse script into sections by @DOC_START/@DOC_END and @CONFIG_START/@CONFIG_END.
+      // Markers must be alone on a // line — same rule as extractSection. A prose mention like
+      // "`// @CONFIG_START`" in Docs or a JSDoc (@foundation) must not invent a config section;
+      // that used to open Configuration UI with "no settings a form can show".
+      function sectionMarkerRe(marker) {
+        return new RegExp('^\\s*//\\s*' + String(marker).replace('@', '\\@') + '\\s*$', 'm');
+      }
+
       function hasSection(code, startMarker) {
         if (!code || typeof code !== 'string') return false;
-        return code.indexOf('// ' + startMarker) !== -1 || code.indexOf('//' + startMarker) !== -1;
+        return sectionMarkerRe(startMarker).test(code);
       }
 
       function extractSection(code, startMarker, endMarker) {
         if (!code || typeof code !== 'string') return '';
-        const startPattern = new RegExp('^\\s*//\\s*' + startMarker.replace('@', '\\@') + '\\s*$', 'm');
-        const endPattern = new RegExp('^\\s*//\\s*' + endMarker.replace('@', '\\@') + '\\s*$', 'm');
+        const startPattern = sectionMarkerRe(startMarker);
+        const endPattern = sectionMarkerRe(endMarker);
         const startMatch = code.match(startPattern);
         const endMatch = code.match(endPattern);
         if (!startMatch || !endMatch) return '';
@@ -1208,6 +1138,24 @@
         const endIdx = code.indexOf(endMatch[0]);
         if (startIdx >= endIdx) return '';
         return code.slice(startIdx, endIdx).replace(/^\s*\n|\n\s*$/g, '');
+      }
+
+      /** True when the config block yields at least one form field (or fails to parse — still show the tab so the error note can land). */
+      function configOffersForm(sections) {
+        if (!sections || !sections.hasConfig) return false;
+        if (typeof window.CodeFigConfigUI === 'undefined') return false;
+        try {
+          var parsed = window.CodeFigConfigUI.parse(
+            sections.configContent || '',
+            sections.hasPanelSpec ? sections.panelSpecContent : undefined
+          );
+          var fields = parsed && parsed.rows
+            ? parsed.rows.filter(function (r) { return r.type === 'field'; })
+            : [];
+          return fields.length > 0;
+        } catch (e) {
+          return true;
+        }
       }
 
       function extractConfigSection(code, useUIConfig) {
@@ -1223,6 +1171,90 @@
           const m = line.match(/^\s*\/\/\s?(.*)$/);
           return m ? m[1] : line;
         }).join('\n').trim();
+      }
+
+      /** Strip `// ` prefixes from `@STYLE_START` the same way Docs does. */
+      function extractStyleContent(code) {
+        const raw = extractSection(code, '@STYLE_START', '@STYLE_END');
+        if (!raw) return '';
+        return raw.split('\n').map(function (line) {
+          const m = line.match(/^\s*\/\/\s?(.*)$/);
+          return m ? m[1] : line;
+        }).join('\n').trim();
+      }
+
+      /**
+       * Plan 30: inject a scoped `<style data-style-owner>` while a script's panel is open.
+       * Rewriter is `CodeFigStyleScoper` (already inlined); this is the lifecycle wiring.
+       */
+      function clearInjectedScriptStyles() {
+        document.querySelectorAll('style[data-style-owner]').forEach(function (el) {
+          el.parentNode.removeChild(el);
+        });
+        document.querySelectorAll('[data-style-owner]').forEach(function (el) {
+          if (el.tagName === 'STYLE') return;
+          el.removeAttribute('data-style-owner');
+        });
+      }
+
+      function styleOwnerIdFor(script) {
+        var raw = (script && (script.packageId || script.storageId || script.name)) || 'script';
+        return String(raw).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'script';
+      }
+
+      /** Form + side preview must share the scope attribute — preview is a sibling of the form, not inside it. Suggestions render inside `#configPreviewBody`. */
+      function styleScopeRoots() {
+        var roots = [];
+        if (configUIContainer) roots.push(configUIContainer);
+        var preview = document.getElementById('configPreview');
+        if (preview) roots.push(preview);
+        return roots;
+      }
+
+      /**
+       * Library `@STYLE_START` (shared components) + this script's `@STYLE_START` (overrides).
+       * Scoped under one owner so selectors match form + preview. See `collectStyleSheets`.
+       */
+      function collectCssForScript(script) {
+        if (!script) return '';
+        var imports = window.CodeFigImports;
+        if (imports && typeof imports.collectStyleSheets === 'function') {
+          var parts = imports.collectStyleSheets(
+            script.code || '',
+            allScripts,
+            script.packageId,
+            extractStyleContent
+          );
+          return parts.join('\n\n').trim();
+        }
+        return extractStyleContent(script.code || '');
+      }
+
+      function injectScriptStyles(script) {
+        clearInjectedScriptStyles();
+        if (!script) return;
+        var cssText = collectCssForScript(script);
+        if (!cssText) return;
+        var scoper = window.CodeFigStyleScoper;
+        if (!scoper || typeof scoper.scopeStylesheet !== 'function') {
+          console.warn('CodeFigStyleScoper missing: stylesheet not injected');
+          return;
+        }
+        var owner = styleOwnerIdFor(script);
+        var result = scoper.scopeStylesheet(cssText, owner);
+        if (!result || !result.ok) {
+          var errs = (result && result.errors) ? result.errors.join('; ') : 'unknown error';
+          console.warn('Script stylesheet rejected:', errs);
+          post('NOTIFY', { message: 'Script stylesheet rejected: ' + errs });
+          return;
+        }
+        styleScopeRoots().forEach(function (root) {
+          root.setAttribute('data-style-owner', owner);
+        });
+        var el = document.createElement('style');
+        el.setAttribute('data-style-owner', owner);
+        el.textContent = result.css;
+        document.head.appendChild(el);
       }
 
       function nextLineStart(s, i) {
@@ -1311,67 +1343,51 @@
         const i = mainCode.indexOf(startMarker);
         const j = mainCode.indexOf(endMarker);
         if (i === -1 || j === -1 || j <= i) return;
-        // **Which view is authoritative is decided by which one you are in**, not by whether a form
-        // happens to exist. This used to prefer the form whenever one had been rendered, which made
-        // typing into Configuration code do nothing on a form script: the form's values were
-        // serialised over the text on the next merge. That contradicts slice 1's rule — the block
-        // text is canonical and the form is a projection of it — so an edit in the text must win.
-        let configContent = '';
-        // Not gated on the marker: a `@CONFIG_START` block has a form now too, and the form is
-        // authoritative while it is the view you are in.
+        // Plan 37: Configuration UI is the only config view. Form serialises into Source while
+        // that tab is active; otherwise leave Source alone (no second editor).
         const fromForm = currentTab === 'configUI' && configUIInstance && window.CodeFigConfigUI;
-        if (fromForm) {
-          // **A form may only be written back over the block it was projected from.**
-          //
-          // The form is authoritative for something you typed, and the rule above is about *which view*
-          // you are in. It says nothing about *when*, and that is the hole: a programmatic write — an
-          // auto-import fill — replaces the block behind the form's back, and any merge in the window
-          // before the re-projection serialises the form's previous values straight back over it. The
-          // trace read `before: 4686, filled: 5115, afterWrite: 4686` with a nameless one-entry form
-          // landing on top of three named modes. Everything downstream then told the truth about a block
-          // that had been reverted: the fields showed Ash, Granite and Bark because the *form* had been
-          // rebuilt, and the preview drew eleven placeholder steps in grey because the *block* had not.
-          //
-          // Comparing the text rather than trusting an ordering: the previous attempt at this was to
-          // re-project inside the writer, which only holds while nothing merges in between. This holds
-          // whoever writes and whenever they do.
-          const blockNow = mainCode.slice(i + startMarker.length, j);
-          if (configProjectedFrom !== null && blockNow.trim() !== configProjectedFrom.trim()) {
-            blockWrites.push({
-              by: 'merge:refused@' + currentTab,
-              at: new Date().toLocaleTimeString(),
-              modes: 'form is a projection of different text'
-            });
-            if (blockWrites.length > 8) blockWrites.shift();
-            return;
-          }
-          const schema = window.CodeFigConfigUI.parse(blockNow, currentPanelSpecText());
-          // The same fresh schema is handed to `getValues` as the base for anything the form did not read.
-          // A cell hidden by its own condition writes nothing — correctly — and what it falls back to has to
-          // be the block as it stands, not the copy the form was built from before any of this was typed.
-          configContent = window.CodeFigConfigUI.serialize(schema, configUIInstance.getValues(schema));
-        } else {
-          configContent = configEditor ? configEditor.getValue() : '';
+        if (!fromForm) return;
+        // **A form may only be written back over the block it was projected from.**
+        //
+        // The form is authoritative for something you typed, and the rule above is about *which view*
+        // you are in. It says nothing about *when*, and that is the hole: a programmatic write — an
+        // auto-import fill — replaces the block behind the form's back, and any merge in the window
+        // before the re-projection serialises the form's previous values straight back over it. The
+        // trace read `before: 4686, filled: 5115, afterWrite: 4686` with a nameless one-entry form
+        // landing on top of three named modes. Everything downstream then told the truth about a block
+        // that had been reverted: the fields showed Ash, Granite and Bark because the *form* had been
+        // rebuilt, and the preview drew eleven placeholder steps in grey because the *block* had not.
+        //
+        // Comparing the text rather than trusting an ordering: the previous attempt at this was to
+        // re-project inside the writer, which only holds while nothing merges in between. This holds
+        // whoever writes and whenever they do.
+        const blockNow = mainCode.slice(i + startMarker.length, j);
+        if (configProjectedFrom !== null && blockNow.trim() !== configProjectedFrom.trim()) {
+          blockWrites.push({
+            by: 'merge:refused@' + currentTab,
+            at: new Date().toLocaleTimeString(),
+            modes: 'form is a projection of different text'
+          });
+          if (blockWrites.length > 8) blockWrites.shift();
+          return;
         }
+        const schema = window.CodeFigConfigUI.parse(blockNow, currentPanelSpecText());
+        // The same fresh schema is handed to `getValues` as the base for anything the form did not read.
+        // A cell hidden by its own condition writes nothing — correctly — and what it falls back to has to
+        // be the block as it stands, not the copy the form was built from before any of this was typed.
+        const configContent = window.CodeFigConfigUI.serialize(schema, configUIInstance.getValues(schema));
         const before = mainCode.slice(0, i + startMarker.length);
         const after = mainCode.slice(j);
         const trimmed = configContent.replace(/\n\s*$/, '');
         const newCode = before + '\n' + trimmed + '\n' + after;
         if (newCode === mainCode) return;
 
-        // Only write merged config back into the main editor while the Configuration
-        // tab is active (user is editing the form / split config editor). On Script or
-        // Docs, the main editor is authoritative: applying merge here would replace
-        // inline edits with stale CodeFigUI/config-editor state, make the buffer match
-        // originalCode, and skip autosave — feeling like a revert to the last save.
+        // Only write merged config back into the main editor while Configuration UI is
+        // active. On Source or Docs, the main editor is authoritative.
         if (!isConfigTab(currentTab)) return;
 
-        // **The other writer.** This path — form values serialised over the block — does not go through
-        // `writeConfigBlockText`, so the write trace could not see it, and a revert by this function
-        // looked like a write that never happened. Recorded here for the same reason: an invisible
-        // writer turns "who changed this?" into guesswork.
         blockWrites.push({
-          by: 'merge:' + (fromForm ? 'form' : 'code') + '@' + currentTab,
+          by: 'merge:form@' + currentTab,
           at: new Date().toLocaleTimeString(),
           modes: (trimmed.match(/name: "([^"]+)"/g) || []).map(function (m) {
             return m.slice(7, -1);
@@ -1424,10 +1440,6 @@
       }
 
       function getEffectiveContentLength() {
-        if (isConfigTab(currentTab) && scriptHasConfig) {
-          if (scriptHasUIConfig && configUIInstance) return code.getValue().trim().length > 0;
-          if (configEditor) return (code.getValue().trim().length > 0) || (configEditor.getValue().trim().length > 0);
-        }
         return code.getValue().trim().length > 0;
       }
 
@@ -1452,7 +1464,7 @@
 
       function updateTabVisibility(tabs) {
         scriptHasDocs = tabs.indexOf('docs') !== -1;
-        scriptHasConfig = tabs.indexOf('configUI') !== -1 || tabs.indexOf('configCode') !== -1;
+        scriptHasConfig = tabs.indexOf('configUI') !== -1;
         const visible = scriptHasDocs || scriptHasConfig;
         if (editorTabsEl) editorTabsEl.classList.toggle('visible', visible);
         [].forEach.call(editorTabsEl ? editorTabsEl.querySelectorAll('.editor-tab') : [], btn => {
@@ -1461,9 +1473,9 @@
         });
       }
 
-      /** Either of the two views of one config. */
+      /** Configuration UI is the only config view (plan 37). */
       function isConfigTab(name) {
-        return name === 'configUI' || name === 'configCode';
+        return name === 'configUI';
       }
 
       /**
@@ -1473,9 +1485,6 @@
        * writes back through the serializer, and showing the form re-reads the text — so there is
        * never a divergence to resolve and "last edit wins" falls out rather than being implemented.
        * Nothing has to decide which side is fresher, because one side is derived.
-       *
-       * Plan 37: Configuration code chrome still exists (`switchTab('configCode')`, `configEditor`)
-       * but is not offered in the tab list.
        */
       function switchTab(tabName) {
         const previous = currentTab;
@@ -1487,35 +1496,26 @@
 
         if (tabSourceEl) tabSourceEl.classList.toggle('active', tabName === 'source');
         if (tabConfigUIEl) tabConfigUIEl.classList.toggle('active', tabName === 'configUI');
-        if (tabConfigCodeEl) tabConfigCodeEl.classList.toggle('active', tabName === 'configCode');
         if (tabDocsEl) tabDocsEl.classList.toggle('active', tabName === 'docs');
 
         if (tabName === 'configUI' && scriptHasConfig) {
           projectConfigIntoForm();
         }
-        if (tabName === 'configCode' && scriptHasConfig) {
-          if (configCodeContainer) configCodeContainer.style.display = 'block';
-          if (configEditor) configEditor.setValue(currentConfigBlock());
-          updateConfigPanelSpecPane();
-        }
 
-        // One preview, moved to whichever config tab is showing: it belongs beside the thing you
-        // are editing, and both views edit the same config.
+        // Preview lives beside Configuration UI.
         const preview = document.getElementById('configPreview');
         if (preview) {
-          const host = tabName === 'configUI' ? tabConfigUIEl
-            : tabName === 'configCode' ? tabConfigCodeEl : null;
-          if (host && preview.parentNode !== host) host.appendChild(preview);
-          if (!host) preview.style.display = 'none';
-          else updateConfigPreviewVisibility();
+          if (tabName === 'configUI' && tabConfigUIEl) {
+            if (preview.parentNode !== tabConfigUIEl) tabConfigUIEl.appendChild(preview);
+            updateConfigPreviewVisibility();
+          } else {
+            preview.style.display = 'none';
+          }
         }
 
         [].forEach.call(editorTabsEl ? editorTabsEl.querySelectorAll('.editor-tab') : [], btn => {
           btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
         });
-        if (tabName === 'configCode' && scriptHasConfig && configEditor) {
-          setTimeout(() => { configEditor.refresh(); configEditor.setSize(null, '100%'); }, 10);
-        }
         if (tabName === 'source') {
           setTimeout(() => { code.refresh(); code.setSize(null, '100%'); }, 10);
         }
@@ -1544,8 +1544,6 @@
         // The same idea, for whichever field had the caret — see `captureFieldFocus`.
         const hadFocus = captureFieldFocus();
 
-        if (configCodeContainer) configCodeContainer.style.display = 'none';
-
         // **Whether a form exists is decided by whether the block parses to fields**, not by which
         // marker the script uses. The parser reads property lists now, so a `@CONFIG_START` block
         // has a form too — which is the whole point: the block stays the thing you paste, and it is
@@ -1562,11 +1560,8 @@
           : [];
 
         if (parsedForForm && formFields.length === 0) {
-          // A config with no fields at all — nothing a form could show.
-          //
-          // Emptied, not just hidden. A hidden container kept the previous script's controls in the
-          // DOM, which `readForm` reported as this script's. Nothing reads them today, but a stale
-          // form is a loaded gun: the next thing that collects values from it collects someone else's.
+          // No fields → no Configuration UI tab (see configOffersForm). If we still landed here,
+          // empty the container and leave Source as the place to edit — do not show a dead-end note.
           if (configUIContainer) {
             configUIContainer.style.display = 'none';
             configUIContainer.innerHTML = '';
@@ -1574,9 +1569,8 @@
           configUIInstance = null;
           if (note) note.style.display = 'none';
           if (noForm) {
-            noForm.style.display = 'block';
-            noForm.textContent = "This script's config has no settings a form can show. " +
-              'Edit it in Source — it is the same config.';
+            noForm.style.display = 'none';
+            noForm.textContent = '';
           }
           return;
         }
@@ -1752,20 +1746,19 @@
         const fullCode = code.getValue();
         const next = parseScriptSections(fullCode);
         const nextHasDocs = next.hasDocs;
-        const nextHasConfig = next.hasConfig;
+        const nextOffersForm = configOffersForm(next);
         const nextHasUI = !!next.hasUIConfig;
 
         const structureChanged =
-          hadDocs !== nextHasDocs || hadConfig !== nextHasConfig || hadUI !== nextHasUI;
+          hadDocs !== nextHasDocs || hadConfig !== nextOffersForm || hadUI !== nextHasUI;
 
         parsedSections = next;
         scriptHasDocs = nextHasDocs;
-        scriptHasConfig = nextHasConfig;
+        scriptHasConfig = nextOffersForm;
         scriptHasUIConfig = nextHasUI;
 
         const tabs = [];
-        // Plan 37: Configuration code is hidden (watch → delete). Chrome stays; do not push it.
-        if (nextHasConfig) tabs.push('configUI');
+        if (nextOffersForm) tabs.push('configUI');
         if (nextHasDocs) tabs.push('docs');
         tabs.push('source');
         updateTabVisibility(tabs);
@@ -1774,18 +1767,12 @@
           renderSimpleMarkdown(next.docContent || '');
         }
 
-        if (structureChanged && nextHasConfig && configEditor && !nextHasUI) {
-          configEditor.setValue(next.configContent || '');
-        }
-
-        if (structureChanged && nextHasUI && isConfigTab(currentTab)) {
+        if (structureChanged && nextOffersForm && isConfigTab(currentTab)) {
           initConfigUI(next.configContent || '');
         }
 
-        if (structureChanged) updateConfigPanelSpecPane();
-
         if (currentTab === 'docs' && !nextHasDocs) switchTab('source');
-        else if (isConfigTab(currentTab) && !nextHasConfig) switchTab('source');
+        else if (isConfigTab(currentTab) && !nextOffersForm) switchTab('source');
 
         updateButtonStates();
       }
@@ -1824,7 +1811,6 @@
         const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const theme = isDark ? 'midnight' : 'default';
         code.setOption('theme', theme);
-        if (configEditor) configEditor.setOption('theme', theme);
       }
 
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyColorScheme);
@@ -1834,7 +1820,6 @@
         applyColorScheme();
         code.refresh();
         code.setSize(null, '100%');
-        if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
         
         // Initialize the app after CodeMirror is ready
         init();
@@ -1901,6 +1886,8 @@
         const filteredScripts = allScripts.filter(script =>
           script.name.toLowerCase().includes(term.toLowerCase()) &&
           !script.isTemporary // Don't show temporary scripts in the list
+          // Package membership (`packageId` / `packageVisibility`) still stamps for @import
+          // sibling resolution — libraries stay listed so users can open and learn from them.
         );
 
         if (filteredScripts.length === 0 && term) {
@@ -2284,6 +2271,7 @@
         // form that switch had just built, on every script in the plugin.
         if (configUIContainer) configUIContainer.innerHTML = '';
         configUIInstance = null;
+        clearInjectedScriptStyles();
         clearResolvedImportsCache();
         const fullCode = script.code || '';
 
@@ -2297,34 +2285,29 @@
         }
         parsedSections = parseScriptSections(fullCode);
         scriptHasDocs = parsedSections.hasDocs;
-        scriptHasConfig = parsedSections.hasConfig;
+        // Tab + default surface: only when a form can show fields. Marker-only / prose mentions
+        // of @CONFIG_* must not open an empty Configuration UI.
+        scriptHasConfig = configOffersForm(parsedSections);
         scriptHasUIConfig = !!parsedSections.hasUIConfig;
+        injectScriptStyles(script);
         
         const tabs = [];
-        // Plan 37: Configuration UI only. Configuration code chrome stays in the DOM for a watch
-        // period but is not offered — form is the only config surface users see.
-        if (parsedSections.hasConfig) tabs.push('configUI');
+        if (scriptHasConfig) tabs.push('configUI');
         if (parsedSections.hasDocs) tabs.push('docs');
         tabs.push('source');
         updateTabVisibility(tabs);
         
         if (code && code.setValue) {
           code.setValue(fullCode);
-          if (scriptHasConfig && configEditor && !scriptHasUIConfig) {
-            configEditor.setValue(parsedSections.configContent || '');
-          }
-          updateConfigPanelSpecPane();
           if (scriptHasDocs && docsRendererEl) {
             renderSimpleMarkdown(parsedSections.docContent || '');
           }
           setTimeout(() => {
             code.refresh();
             code.setSize(null, '100%');
-            if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
-            if (panelSpecEditor) { panelSpecEditor.refresh(); panelSpecEditor.setSize(null, '100%'); }
           }, 10);
         }
-        // Configuration UI is the default for any script with a config (Plan 37: no code tab).
+        // Configuration UI is the default when a form exists (Plan 37: no code tab).
         const initialTab = scriptHasConfig ? 'configUI' : 'source';
         currentTab = initialTab;
         switchTab(initialTab);
@@ -2528,7 +2511,12 @@
       }
 
       /** A run nobody sees: no console bridge, no notify, no InfoPanel. */
-            // Map of cache-key → resolved text. Preview (no extras) and auto-import (extra
+      /**
+       * Resolved `@import` text for the open script. Resolving Colors' package graph is ~1s on the
+       * UI thread; paying that on every collection switch / preview is the select freeze. Cache
+       * until the script changes.
+       */
+      // Map of cache-key → resolved text. Preview (no extras) and auto-import (extra
       // `@import` lines) are different keys; a single-slot cache made them thrash each other
       // on every collection switch (~0.5s + ~0.9s resolve again).
       var _resolvedImportsCache = Object.create(null);
@@ -2662,10 +2650,9 @@
 
       function buildPreviewSnippet(code, fn, config, domain, seq) {
         const suggestFn = scriptSuggestionsFunction(code);
-        const imports = (window.CodeFigImports && typeof window.CodeFigImports.findImports === 'function')
-          ? window.CodeFigImports.findImports(code).map(function (imp) { return imp.statement; })
-          : [];
-        return imports.concat([
+        // Imports come from `resolvedImportsPreamble()` via `runSilentSnippet(..., { bodyOnly: true })`
+        // — resolving them on every preview keystroke was a second copy of the collection-switch cost.
+        return [
           'window.codefigConfigLoadResult({',
           '  preview: ' + fn + '(' + JSON.stringify(config) + ', ' + JSON.stringify(domain) + ', ' +
             JSON.stringify(activeModeName()) + '),',
@@ -2677,7 +2664,7 @@
             : '  suggestions: null,'),
           '  previewSeq: ' + seq,
           '});'
-        ]).join('\n');
+        ].join('\n');
       }
 
       /**
@@ -3169,6 +3156,8 @@
       // ======================================================================
 
       var autoImportTimer = null;
+      /** Wall time when the in-flight auto-import request was sent (perf probe). */
+      var autoImportStartedAt = 0;
       /** Why the last pristine check answered as it did — read back by `figma:ui readAutoImport`. */
       var lastPristine = { loadable: false, reason: 'not asked yet' };
       var autoImportSeq = 0;
@@ -3220,7 +3209,6 @@
           text.replace(/\n\s*$/, '') + '\n' + mainCode.slice(j);
         if (next === mainCode) return;
         code.setValue(next);
-        if (configEditor) configEditor.setValue(currentConfigBlock());
 
         // **And bring the form with it.** `mergeConfigIntoMain` treats the form as authoritative
         // while the Configuration UI tab is the view you are in — which is right for something you
@@ -3387,8 +3375,9 @@
        * writes are two form rebuilds, and because pristine clears the token list, the first one *collapses*
        * every section gated on it and the second expands them again. That is the layout jump.
        *
-       * So the text is prepared here and applied once, when the answer arrives — filled onto if there is
-       * something to fill, written bare if there is not. Same end state, one rebuild, no collapse.
+       * So the text is prepared here — and for an address *change* it is also applied immediately
+       * in `onChange` — then filled onto when the answer arrives. Same end state; the person sees
+       * defaults for the new collection without waiting for the sandbox round trip.
        */
       function pristineConfigForAddress(collection, group) {
         var api = window.CodeFigConfigUI;
@@ -4218,7 +4207,7 @@
         // preview, and reading a one-turn variable after all that is how a report comes to describe the
         // call after the one it is reporting on.
         var onLoad = { added: lastInsertedModes.slice(), dropped: lastDroppedModes.slice() };
-        // Straight into the canonical text, with no tab switching. Switching to Configuration code and
+        // Straight into the canonical text, with no tab switching.
         // back was what rebuilt the form, and a rebuild is what made this loop.
         //
         // Traced, because "the fill reported success and the block did not change" has two very
@@ -5052,9 +5041,6 @@
           // For temporary scripts, just clear and reset
           currentScript = null;
           code.setValue('');
-          if (configEditor) configEditor.setValue('');
-          if (panelSpecEditor) panelSpecEditor.setValue('');
-          if (configPanelSpecContainer) configPanelSpecContainer.style.display = 'none';
           if (configUIInstance) { configUIInstance.destroy(); configUIInstance = null; }
           originalCode = '';
           scriptHasDocs = false;
@@ -5095,9 +5081,6 @@
           // Clear editor and tab state
           currentScript = null;
           code.setValue('');
-          if (configEditor) configEditor.setValue('');
-          if (panelSpecEditor) panelSpecEditor.setValue('');
-          if (configPanelSpecContainer) configPanelSpecContainer.style.display = 'none';
           if (configUIInstance) { configUIInstance.destroy(); configUIInstance = null; }
           originalCode = '';
           scriptHasDocs = false;
@@ -5140,7 +5123,9 @@
         return imports.resolveImports(code, allScripts, {
           log: function (message) { console.log(message); },
           warn: function (message) { console.warn(message); },
-          notify: function (message) { post('NOTIFY', { message: message }); }
+          notify: function (message) { post('NOTIFY', { message: message }); },
+          // Plan 32: package-scoped extraction when the open script is a package member.
+          packageId: (currentScript && currentScript.packageId) || undefined
         });
       }
 
@@ -5609,7 +5594,6 @@
         setTimeout(() => {
           code.refresh();
           code.setSize(null, '100%');
-          if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
         }, 0);
       }
 
@@ -5623,7 +5607,6 @@
         setTimeout(() => {
           code.refresh();
           code.setSize(null, '100%');
-          if (configEditor) { configEditor.refresh(); configEditor.setSize(null, '100%'); }
         }, 0);
       }
 
@@ -5856,7 +5839,7 @@
       // Toggle line comments for selected lines in CodeMirror
       function toggleLineComments() {
         // Determine which editor is active
-        const activeEditor = currentTab === 'configCode' ? configEditor : code;
+        const activeEditor = code;
         if (!activeEditor) return;
 
         const doc = activeEditor.getDoc();
@@ -6069,15 +6052,6 @@
         syncScriptStructureFromEditor();
       });
 
-      // Config editor change (when script has config tab)
-      if (configEditor) {
-        configEditor.on('change', () => {
-          updateButtonStates();
-          scheduleAutosave();
-          scheduleConfigPreview();
-        });
-      }
-
       // Message handling
         window.onmessage = (event) => {
           const msg = event.data.pluginMessage;
@@ -6095,7 +6069,9 @@
               type: script.type || 'prebuilt',
               // Kept for `npm run figma:run -- <script>`: display names are
               // "Category / Title (WIP)", so the filename is the stable handle.
-              filename: script.filename || ''
+              filename: script.filename || '',
+              packageId: script.packageId || '',
+              packageVisibility: script.packageVisibility || ''
             }));
             allScripts = [...prebuiltScripts, ...userScripts];
             updateScriptList();
@@ -6145,17 +6121,16 @@
                 originalCode = currentScript.code;
                 parsedSections = parseScriptSections(currentScript.code);
                 scriptHasDocs = parsedSections.hasDocs;
-                scriptHasConfig = parsedSections.hasConfig;
+                scriptHasConfig = configOffersForm(parsedSections);
                 scriptHasUIConfig = !!parsedSections.hasUIConfig;
                 const tabs = [];
-                if (parsedSections.hasConfig) tabs.push('configUI');
+                if (scriptHasConfig) tabs.push('configUI');
                 if (parsedSections.hasDocs) tabs.push('docs');
                 tabs.push('source');
                 updateTabVisibility(tabs);
                 if (scriptHasDocs && docsRendererEl) {
                   renderSimpleMarkdown(parsedSections.docContent || '');
                 }
-                updateConfigPanelSpecPane();
                 const tab = scriptHasConfig ? 'configUI' : 'source';
                 currentTab = tab;
                 switchTab(tab);
@@ -6466,6 +6441,17 @@
                   appendCheckbox(opt, opt);
                 });
               }
+              // Multiselect collection pickers used to leave an empty bordered box when the file
+              // has no collections. Same empty copy for both collection option sources.
+              var isCollectionMulti =
+                optionSource === 'variableCollections' ||
+                optionSource === 'localVariableCollections';
+              if (isCollectionMulti && !box.querySelector('.config-ui-multiselect-item')) {
+                var empty = document.createElement('div');
+                empty.className = 'config-ui-multiselect-empty';
+                empty.textContent = 'No Collections available';
+                box.appendChild(empty);
+              }
             }
 
             // The collection pickers. Filled here rather than at render time because the list is a
@@ -6528,7 +6514,6 @@
                     container: container,
                     onChange: function () { /* Library-sent UI: no sync back to editor */ }
                   });
-                  if (configCodeContainer) configCodeContainer.style.display = 'none';
                   container.style.display = 'flex';
                   if (scriptHasConfig) switchTab('configUI');
                 }
@@ -7158,28 +7143,15 @@
               text: currentConfigBlock(),
               hasUiConfig: !!scriptHasUIConfig,
               script: currentScript ? currentScript.name : null,
-              // The read-only spec pane above Configuration code's values — shown, and holding this
-              // text, only for a script that has one. `panelSpecEditor.getValue()`, not
-              // `currentPanelSpecText()` again: this is what the pane actually displays, so a test
-              // that only checked the source of truth could pass while the pane itself showed nothing.
-              panelSpecShown: !!(configPanelSpecContainer && configPanelSpecContainer.style.display !== 'none'),
-              panelSpecText: panelSpecEditor ? panelSpecEditor.getValue() : null
+              // Panel recipe lives in Source `@PANEL_START` (Configuration code pane removed).
+              panelSpecShown: !!(parsedSections && parsedSections.hasPanelSpec),
+              panelSpecText: currentPanelSpecText() || null
             });
 
           case 'writeConfig': {
             if (typeof a.text !== 'string') throw new Error('writeConfig needs { text }');
-            if (!configEditor) throw new Error('The configuration editor is not open');
-            // Form scripts used to be refused here, which slice 1 made wrong: both tabs are now
-            // editable views of one config, and the block text is the canonical one. Writing it and
-            // re-projecting is exactly what typing into Configuration code does.
-            var previousTab = currentTab;
-            // Always through Configuration code: that is the view whose content the merge takes,
-            // and writing the canonical text is what this command means.
-            if (currentTab !== 'configCode') switchTab('configCode');
-            configEditor.setValue(a.text);
-            mergeConfigIntoMain();
-            if (scriptHasUIConfig) projectConfigIntoForm();
-            if (isConfigTab(previousTab)) switchTab(previousTab);
+            // Replace the canonical `@CONFIG` block in Source and re-project the form.
+            writeConfigBlockText(a.text, 'ui:writeConfig');
             return Promise.resolve({ text: currentConfigBlock() });
           }
 
@@ -7226,6 +7198,50 @@
               text: suggestSlot.innerText || ''
             } : null;
 
+            /** Plan 30: prove library/script sheets injected and actually paint a known class. */
+            function readInjectedStyles() {
+              var styleEl = document.querySelector('style[data-style-owner]');
+              var owners = [];
+              document.querySelectorAll('[data-style-owner]').forEach(function (el) {
+                if (el.tagName === 'STYLE') return;
+                owners.push({
+                  id: el.id || el.className || el.tagName,
+                  owner: el.getAttribute('data-style-owner')
+                });
+              });
+              var css = styleEl ? (styleEl.textContent || '') : '';
+              var sample =
+                document.querySelector('.color-ramp-preview') ||
+                document.querySelector('.spacing-preview') ||
+                document.querySelector('.radius-preview') ||
+                document.querySelector('.grid-preview') ||
+                document.querySelector('.type-specimen') ||
+                document.querySelector('.grid-suggestions');
+              var computed = null;
+              if (sample) {
+                var cs = window.getComputedStyle(sample);
+                computed = {
+                  className: sample.className,
+                  display: cs.display,
+                  width: cs.width,
+                  flexDirection: cs.flexDirection || null,
+                  gridTemplateColumns: cs.gridTemplateColumns || null
+                };
+              }
+              return {
+                styleTag: !!styleEl,
+                owner: styleEl ? styleEl.getAttribute('data-style-owner') : null,
+                cssChars: css.length,
+                hasColorRamp: css.indexOf('color-ramp-preview') !== -1,
+                hasSpacing: css.indexOf('spacing-preview') !== -1,
+                hasRadius: css.indexOf('radius-preview') !== -1,
+                hasGrid: css.indexOf('grid-preview') !== -1,
+                hasType: css.indexOf('type-specimen') !== -1,
+                scopeRoots: owners,
+                sample: computed
+              };
+            }
+
             // **Every slot, not the first one.** The same reporting gap as the two above, one level along:
             // `@preview` can be a *column* of a `@blocks` control, so there is a slot per row plus the
             // section-level one — and reading only the first reported an empty preview whenever the first
@@ -7251,7 +7267,8 @@
                 where: 'form',
                 slots: reported,
                 text: reported.map(function (one) { return one.text; }).filter(Boolean).join('\n'),
-                suggestions: suggestions
+                suggestions: suggestions,
+                styles: readInjectedStyles()
               });
             }
             var body = document.getElementById('configPreviewBody');
@@ -7260,7 +7277,8 @@
               visible: !!(region && region.style.display !== 'none'),
               where: 'panel',
               text: body ? body.innerText : '',
-              suggestions: suggestions
+              suggestions: suggestions,
+              styles: readInjectedStyles()
             });
           }
 

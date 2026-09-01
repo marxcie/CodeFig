@@ -89,7 +89,7 @@ test('a structured answer survives the trip', async () => {
   await withBridge(async ({ base }) => {
     const { json } = await req(base, 'POST', '/ui', { command: 'readTabs' });
     await req(base, 'GET', '/ui/next');
-    const payload = { current: 'configUI', tabs: ['configUI', 'configCode', 'source'] };
+    const payload = { current: 'configUI', tabs: ['configUI', 'source'] };
     await req(base, 'POST', '/ui/' + json.id + '/result', { ok: true, result: payload });
     const done = await req(base, 'GET', '/ui/' + json.id);
     assert.deepEqual(done.json.result, payload);

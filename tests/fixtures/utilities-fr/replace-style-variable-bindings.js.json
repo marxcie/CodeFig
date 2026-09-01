@@ -11,16 +11,7 @@
   },
   {
     "type": "paragraph",
-    "text": "Only styles whose name contains this, ignoring case, with `*` allowed. Empty means every local text,\npaint and effect style."
-  },
-  {
-    "type": "field",
-    "name": "matchCase",
-    "value": false,
-    "label": "Match case",
-    "labelSpelled": true,
-    "tooltip": "",
-    "inputType": "boolean"
+    "text": "Only styles whose name contains this, with `*` allowed. Empty means every local text, paint and\neffect style."
   },
   {
     "type": "field",
@@ -66,19 +57,6 @@
   {
     "type": "divider",
     "section": false
-  },
-  {
-    "type": "field",
-    "name": "previewOnly",
-    "value": true,
-    "label": "Preview only",
-    "labelSpelled": true,
-    "tooltip": "",
-    "inputType": "boolean"
-  },
-  {
-    "type": "paragraph",
-    "text": "**On by default.** Lists the bindings that would change and touches nothing. Untick and run again to apply."
   },
   {
     "type": "field",

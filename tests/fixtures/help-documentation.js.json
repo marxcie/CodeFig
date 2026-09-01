@@ -6,7 +6,7 @@
   },
   {
     "type": "paragraph",
-    "text": "The level every panel uses for its section titles: `// # Heading level 1`. Renders as `h1`, and it carries the 48px gap that separates one section from the next."
+    "text": "The level every panel uses for its section titles: `{ type: \"heading\", level: 1, text: \"…\" }`. The Configuration UI renders it as `h2` (never `h1`), and it carries the 48px gap that separates one section from the next."
   },
   {
     "type": "heading",
@@ -15,7 +15,7 @@
   },
   {
     "type": "paragraph",
-    "text": "Two hashes. A title *inside* a section, at 14px with half the gap above it."
+    "text": "`level: 2`. A title *inside* a section. On the form this renders as `h3`."
   },
   {
     "type": "heading",
@@ -24,11 +24,11 @@
   },
   {
     "type": "paragraph",
-    "text": "Three hashes: body size, told apart from a paragraph by its weight alone."
+    "text": "`level: 3`: also `h3` on the form — body size, told apart from a paragraph by its weight alone."
   },
   {
     "type": "paragraph",
-    "text": "This is a paragraph — any comment line that is not a marker. **Bold**, *italic* and `code` work."
+    "text": "This is a paragraph — `{ type: \"paragraph\", text: \"…\" }`. **Bold**, *italic* and `code` work."
   },
   {
     "type": "divider",
@@ -36,7 +36,7 @@
   },
   {
     "type": "paragraph",
-    "text": "Above: a short rule, from `// ---`."
+    "text": "Above: a short rule, from `{ type: \"divider\" }`."
   },
   {
     "type": "divider",
@@ -44,7 +44,7 @@
   },
   {
     "type": "paragraph",
-    "text": "Above: a rule reaching both panel edges, from `// --- @section`."
+    "text": "Above: a rule reaching both panel edges, from `{ type: \"divider\", section: true }`."
   },
   {
     "type": "heading",
@@ -59,7 +59,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "string",
-    "helper": "var textField = \"Sample\";"
+    "helper": "{ key: \"textField\", type: \"string\" }"
   },
   {
     "type": "field",
@@ -70,7 +70,7 @@
     "tooltip": "",
     "inputType": "string",
     "placeholder": "Shown while empty",
-    "helper": "@placeholder=\"Shown while empty\""
+    "helper": "placeholder: \"Shown while empty\""
   },
   {
     "type": "field",
@@ -80,7 +80,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "number",
-    "helper": "a numeric default makes it a number input, 96px wide"
+    "helper": "{ key: \"numberField\", type: \"number\" }"
   },
   {
     "type": "field",
@@ -91,7 +91,7 @@
     "tooltip": "",
     "inputType": "textarea",
     "placeholder": "One per line",
-    "helper": "@textarea"
+    "helper": "{ key: \"longText\", type: \"textarea\" }"
   },
   {
     "type": "field",
@@ -105,7 +105,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "list",
-    "helper": "an array of strings or numbers — one input holding a comma list, and the config keeps the array"
+    "helper": "{ key: \"nameList\", type: \"list\" }"
   },
   {
     "type": "heading",
@@ -120,7 +120,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "boolean",
-    "helper": "a true or false default"
+    "helper": "{ key: \"toggle\", type: \"boolean\" }"
   },
   {
     "type": "field",
@@ -130,7 +130,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "select",
-    "helper": "@options: small|medium|large",
+    "helper": "{ key: \"dropdown\", type: \"select\", options: […] }",
     "options": [
       "small",
       "medium",
@@ -145,7 +145,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "radio",
-    "helper": "the same @options, plus @radio",
+    "helper": "{ key: \"radioChoice\", type: \"radio\", options: […] }",
     "options": [
       "replace",
       "append"
@@ -161,7 +161,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "multiselect",
-    "helper": "the same @options, plus @multi",
+    "helper": "{ key: \"multiChoice\", type: \"multiselect\", options: […] }",
     "options": [
       "small",
       "medium",
@@ -176,7 +176,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "select",
-    "helper": "@options: variableCollections — filled with this file's collections",
+    "helper": "options: \"variableCollections\"",
     "optionSource": "variableCollections"
   },
   {
@@ -187,7 +187,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "string",
-    "helper": "@showWhen: toggle=true",
+    "helper": "showWhen: { toggle: true }",
     "showWhenRules": [
       {
         "field": "toggle",
@@ -210,7 +210,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "collection",
-    "helper": "@collection — this file's collections, plus New collection"
+    "helper": "{ key: \"collectionName\", type: \"collection\" }"
   },
   {
     "type": "field",
@@ -220,7 +220,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "mode",
-    "helper": "@mode: collectionName — the modes of the collection above, plus New mode",
+    "helper": "{ key: \"collectionMode\", type: \"mode\", collection: \"collectionName\" }",
     "collectionField": "collectionName"
   },
   {
@@ -286,11 +286,11 @@
   },
   {
     "type": "paragraph",
-    "text": "`@group:` on an **object** — one labelled row, each part captioned at a number's own width. Use it when the parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three separate fields make you assemble that in your head. `@rows` cannot serve this, because that one needs an array — it is a *repeatable* group."
+    "text": "`type: \"group\"` on an **object** — one labelled row, each part captioned at a number's own width. Use it when the parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three separate fields make you assemble that in your head. `type: \"rows\"` cannot serve this, because that one needs an array — it is a *repeatable* group."
   },
   {
     "type": "paragraph",
-    "text": "The same control appears nested inside `@rows`, written the same way, so an anchor in a mode block and a shared ladder above it are the same shape rather than two lookalikes."
+    "text": "The same control appears nested inside `type: \"rows\"`, written the same way, so an anchor in a mode block and a shared ladder above it are the same shape rather than two lookalikes."
   },
   {
     "type": "field",
@@ -304,7 +304,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "group",
-    "helper": "0 to 100 in the UI, 0 to 1 in the data",
+    "helper": "{ key: \"lightness\", type: \"group\", fields: […] }",
     "columns": [
       {
         "key": "bright",
@@ -328,7 +328,7 @@
   },
   {
     "type": "paragraph",
-    "text": "`@unit=\"%\"` prints a unit inside the input, at its right edge. It is **not** a placeholder — a placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back to `-1.5` can tell whether that is pixels or percent."
+    "text": "`unit: \"%\"` prints a unit inside the input, at its right edge. It is **not** a placeholder — a placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back to `-1.5` can tell whether that is pixels or percent."
   },
   {
     "type": "field",
@@ -373,7 +373,7 @@
     "value": [
       {
         "name": "Desktop",
-        "scaleType": "modular",
+        "scaleType": "bezier",
         "ratio": 1.25,
         "step": 4,
         "mod": 3
@@ -404,8 +404,8 @@
         "labelSpelled": true,
         "options": [
           {
-            "value": "modular",
-            "label": "Modular scale"
+            "value": "bezier",
+            "label": "Bezier scale"
           },
           {
             "value": "metric",
@@ -422,14 +422,6 @@
         "label": "Scaling method",
         "type": "select",
         "labelSpelled": true,
-        "showWhen": [
-          {
-            "field": "scaleType",
-            "values": [
-              "modular"
-            ]
-          }
-        ],
         "options": [
           {
             "value": "1.2",
@@ -442,6 +434,14 @@
           {
             "value": "1.618",
             "label": "1.618 Golden ratio"
+          }
+        ],
+        "showWhen": [
+          {
+            "field": "scaleType",
+            "values": [
+              "bezier"
+            ]
           }
         ]
       },
@@ -485,7 +485,7 @@
   },
   {
     "type": "paragraph",
-    "text": "The same annotation without @tabs: one line per entry, with Add and Remove."
+    "text": "The same `type: \"rows\"` without `layout: \"tabs\"`: one line per entry, with Add and Remove."
   },
   {
     "type": "field",
@@ -528,7 +528,7 @@
   },
   {
     "type": "paragraph",
-    "text": "`@curve` on an **array** of four numbers — the two handles of one cubic, exactly what `cubic-bezier()` carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the field underneath. All four are the same edit: the numbers are the value and everything on screen is a reading of them, which is why the dropdown says *Custom* the moment a curve stops being a preset."
+    "text": "`type: \"curve\"` on an **array** of four numbers — the two handles of one cubic, exactly what `cubic-bezier()` carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the field underneath. All four are the same edit: the numbers are the value and everything on screen is a reading of them, which is why the dropdown says *Custom* the moment a curve stops being a preset."
   },
   {
     "type": "field",
@@ -543,7 +543,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "curve",
-    "helper": "The dashed diagonal is the straight ramp — a curve is read as how far it departs from it."
+    "helper": "{ key: \"easing\", type: \"curve\" }"
   },
   {
     "type": "paragraph",
@@ -571,7 +571,7 @@
   },
   {
     "type": "paragraph",
-    "text": "`@allowOriginal` adds *Original* to the preset list — the empty curve, for a script that has something to fall back on. Colors uses it to mean \"leave the steps this file already has\"."
+    "text": "`allowOriginal: true` adds *Original* to the preset list — the empty curve, for a script that has something to fall back on. Colors uses it to mean \"leave the steps this file already has\"."
   },
   {
     "type": "field",
@@ -581,7 +581,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "curve",
-    "helper": "Shown empty. Pick a preset to give it points.",
+    "helper": "{ key: \"maybeCurve\", type: \"curve\", allowOriginal: true }",
     "allowOriginal": true
   },
   {
@@ -591,7 +591,7 @@
   },
   {
     "type": "paragraph",
-    "text": "`@ends:` names the two fields the curve runs **between**, and `@range:` the limits of the quantity itself. Together they turn the y axis from a unit square into the thing being edited: the labels are percentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the two **square** handles are those ends — drag one and it types into its own field, because that is where the value lives. The round handles still only bend the shape between them."
+    "text": "`ends: \"a..b\"` names the two fields the curve runs **between**, and `range: [lo, hi]` the limits of the quantity itself. Together they turn the y axis from a unit square into the thing being edited: the labels are percentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the two **square** handles are those ends — drag one and it types into its own field, because that is where the value lives. The round handles still only bend the shape between them."
   },
   {
     "type": "paragraph",
@@ -640,7 +640,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "curve",
-    "helper": "Bright at the left, dark at the right. The ends are draggable; the shape between them is not affected by moving one.",
+    "helper": "{ key: \"ladderCurve\", type: \"curve\", ends: \"ladder.bright..ladder.dark\", range: [0,100] }",
     "ends": {
       "from": "ladder.bright",
       "to": "ladder.dark"
@@ -657,7 +657,7 @@
   },
   {
     "type": "paragraph",
-    "text": "`curve(growth:ratio)` inside `@rows` — the **open-ended** editor, for a scale whose largest value nobody knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last token the line carries on faintly, because it does — adding a token extends the scale rather than squeezing what is already generated into the same range."
+    "text": "`growth: \"ratio\"` on a curve inside `type: \"rows\"` — the **open-ended** editor, for a scale whose largest value nobody knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last token the line carries on faintly, because it does — adding a token extends the scale rather than squeezing what is already generated into the same range."
   },
   {
     "type": "paragraph",
@@ -716,6 +716,6 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "unsupported",
-    "helper": "an object with no @rows — the form says so rather than dropping it"
+    "helper": "an object with no type: \"rows\" or type: \"group\""
   }
 ]
