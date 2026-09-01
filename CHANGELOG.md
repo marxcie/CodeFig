@@ -19,6 +19,54 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Removed
+
+- **Copy simple variables JSON** — superseded by Export/import variables.
+- **Stack or flatter color scale** (`color-scale-layout`) — moved to a personal user script.
+- **Preview only** and **Match case** controls on Rename styles/variables, Replace styles,
+  Replace style variable bindings, and Select by styles/variables. Matching is always
+  case-sensitive; runs always apply.
+
+### Changed
+
+- **Multi-collection pickers** show “No Collections available” when the file has none
+  (was an empty bordered box).
+- **DSF copy pass (helpers + Documentation).** All five Design System Foundations scripts
+  (Colors, Spacing, Corner radius, Typography, Grid): panel `@helper` text and `@DOC_START`
+  rewritten for a general audience. Docs open with a functional `#` title (core capability,
+  ≤~160 characters), list Configuration UI controls only (label primary, code key secondary),
+  and keep a full h1–h3 ladder. Configuration UI form headings demote one step (`h2`/`h3`, never `h1`).
+- **Full Documentation copy pass.** Utility EXAMPLE_SCRIPTS, all CODEFIG_LIBRARIES, and Help &
+  documentation: same functional-title / Overview / UI-only options rules. Standing instructions
+  in `.claude/skills/ux-copy/SKILL.md`. `@codefig-ui` keeps teaching `@PANEL_START` as the shipped
+  panel language.
+
+### Developer
+
+- **Plan 32 step 6 (DSF import trim).** Spacing / Corner radius import lists 37→13 names; Colors
+  65→19; Typography 40→35 (Grid already minimal). Package sibling extraction pulls the rest.
+  `extractFunctions` now increments depth only on cross-file hops so Bezier’s tree survives
+  Linear Ramp → Scale Models → Bezier.
+- **Plan 29 (field identity, in-rows).** `@rows` tabpanels carry `data-section`; curves and
+  cells carry `data-key` / `data-type` (and `data-group` where applicable), so panel CSS can
+  select `[data-section="hue"] [data-type="curve"]`.
+- **Plan 30 (scoped stylesheets).** Opening a script injects a scoped
+  `<style data-style-owner>` from `@STYLE_START` on **imported libraries** (shared components)
+  plus the open script (overrides), scoped on the Configuration form **and** the side Preview.
+  Design System Foundations teach the three tiers: CodeFig `ui.css`, library sheets next to
+  markup (`@Color Ramp`, `@Linear Ramp`, `@Type Scale`, grid/suggestions on `@Foundation`),
+  and optional script-only sheets. `package.css` is not the product path.
+- **Plan 32 (packages, wiring).** Build stamps `packageId` / `packageVisibility` on Design
+  System Foundations (5 scripts + 9 libraries). Package libraries stay listed in CodeFig
+  Libraries (openable as examples); `@import` resolution still passes `packageId` for sibling
+  extraction.
+### Fixed
+
+- **Libraries that only mention `@CONFIG_START` in Docs/comments no longer open an empty
+  Configuration UI.** Section markers must sit alone on a `//` line (same rule as extraction).
+  The Configuration UI tab appears only when the config block yields form fields — no more
+  “no settings a form can show” dead end (e.g. `@Foundation`).
+
 ### Changed
 
 - **Colors / config typing: keystrokes no longer rewrite Source or force a preview.** `input`
@@ -37,16 +85,32 @@ a plain statement of the new default.
   address before reprojecting (so `scheduleGroupDetection` does not queue a rival), and
   `requestAutoImport` clears its timer with `clearTimeout` instead of orphaning it.
 
+### Fixed
+
+- **Foundation stamps: Copy / duplicate create new identity; Move keeps it.** CodeFig **Copy**
+  (and Duplicate variable collection) mint a new set id, restamp the new variables, and write a
+  forked manifest — originals keep their stamps. **Move** of a whole set keeps the same set id
+  and updates the manifest group; a partial Move of a set mints for the moved portion. On plugin
+  open, clear native group-duplicate collisions (`ambiguous-set-groups`) are forked the same way
+  (silent); tied collisions stay skipped.
+- **Style & UI reference / authoring docs teach `@PANEL_START` as the shipped panel language.**
+  Help & documentation, CLAUDE.md, and `@codefig-ui` point authors at PANEL JSON for form recipes;
+  values stay in `@UI_CONFIG_*` / `@CONFIG_*`. Annotation syntax remains for scripts without PANEL.
 - **Copy or move variables** (was Merge variable collections): Source/Target sections with
   collection, group, and mode; **Move** or **Copy**. Matching names in the target overwrite.
   Move rebinds this file and removes the source variables (collection too when empty and
   unpublished). Copy leaves the source alone. Collection fields use the collection picker
   (so Mode can follow them); a missing target collection is created.
 - **Replace variables** panel: Rebind scope, then Search for / Replace with (collection, group,
-  variables). Match case and Preview only removed — runs apply immediately, case-insensitive.
+  variables). Match case and Preview only removed — runs apply immediately, always case-sensitive.
   Still rebinds only; does not move definitions.
 
 ### Fixed
+
+- **Foundation maintain runs again on LIST**, not only at plugin open. Open could finish
+  before Figma’s variable graph was ready, so a native group-duplicate collision was planned
+  empty and left alone; the first sidebar LIST re-runs the same quiet repair.
+
 
 - **Colors loads again when Collection and Group point at an existing set.** Renaming the
   shipped starter mode to `Value` (so a fresh collection can run) made auto-import ask the
@@ -113,15 +177,15 @@ a plain statement of the new default.
   and `clientStorage` on SAVE / Sync (not on open). Variables win on name collision for
   display. Scopes stay empty so script vars are not bindable text tokens. Local vs Library
   banner / navigate-away still pending.
-- **Configuration code tab is hidden.** Configuration UI is the only config surface users see
-  (Documentation + Source still available). Tab chrome and the dual-pane editor stay in the build
-  for a watch period, then delete. Unsupported / empty-form notes point at Source. Form edits still
-  write into `@CONFIG_START`.
+- **Configuration code tab removed.** Configuration UI is the only config surface (Documentation
+  + Source still available). Panel recipes live in Source `@PANEL_START`; values in `@CONFIG_*`.
+  Unsupported / empty-form notes point at Source. Form edits write into `@CONFIG_START`.
+  `figma:ui writeConfig` splices Source directly (no second editor).
 - **Quiet foundation housekeeping on every plugin open.** Clear-case CodeFig plugin-data drift
   is repaired with no toast or InfoPanel: orphan registry viewports, manifest keys with no
   stamped tokens left, stamps whose set id has no manifest on that collection. Variables,
   collections and styles are never deleted. Ambiguous stamp collisions (two groups, one set id)
-  are left alone.
+  are left alone until the locked copy=new-identity repair lands.
 
 ### Added
 

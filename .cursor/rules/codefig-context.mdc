@@ -10,19 +10,21 @@ alwaysApply: true
 - `.plans/NN-*.md` — one initiative each. The `**Status.**` block at the top of a plan is the source
   of truth for that initiative.
 - `.plans/37-config-format-decision.md` — script language / config UX: JSON `@PANEL_START`; drop
-  Configuration code tab; migrate remaining DSF panels. HTML/JSX skin deferred. **Executing
-  (go-ahead 2026-08-28).** Read before touching `@PANEL_START`, `@CONFIG_START`,
-  `src/config-ui/parser.js`, or the Configuration code tab.
-- `.plans/38-script-storage-variables.md` — script storage & sharing: STRING variables, local vs
-  library, autosave policy. **Executing (go-ahead 2026-08-28).** Read before changing how user
+  Configuration code tab; migrate remaining DSF panels. HTML/JSX skin deferred. **Next: cleanup +
+  panel consistency (go-ahead 2026-08-28; priority call 2026-08-31).** Read before touching
+  `@PANEL_START`, `@CONFIG_START`, `src/config-ui/parser.js`, or the Configuration code tab.
+- `.plans/38-script-storage-variables.md` — script storage & sharing: Variables + LocalStorage
+  (both keep); library edit UX deferred for a consistent model. Read before changing how user
   scripts are saved, loaded, or shared.
-- `.plans/39-foundation-maintenance.md` — DSF metadata hygiene on plugin open (auto-clear, no UI
-  noise); Foundation config script removal. **Part A+B landed locally (go-ahead 2026-08-28);
-  ambiguous stamp collisions still deferred.** Read before changing `readFoundation` /
+- `.plans/39-foundation-maintenance.md` — DSF metadata hygiene on plugin open; Foundation config
+  script removed. Ambiguous stamp collisions still deferred. Manifest-preserving copy/move is
+  part of config cleanup consistency. Read before changing `readFoundation` /
   `reconcileFoundation` repair behaviour or plugin boot cleanup.
 - **Do not commit `.plans/`.** They are gitignored and stay local. Update `ROADMAP.md` when a plan
   moves.
 - **Ramp recognition is deferred** — manifest load + recreate is enough; do not prioritise it.
+- **Library / non-persistable edit UX is deferred** — one model later for remotes, DSF, utilities,
+  `@` libs; do not ship a library-only banner.
 - `DEFERRED.md` — known problems left unfixed, with what fixing involves. Check before reporting
   something as new.
 - `CHANGELOG.md` — what changed, in behaviour terms.

@@ -1,9 +1,12 @@
 # CodeFig roadmap and status
 
 **One page that says where the project is.** Written for whoever picks it up next, in any tool.
-Last consolidated 2026-08-28 (late evening): Colors write committed; recognition deferred;
-cornerstone plans **37 / 38 / 39** have go-ahead to execute. Do not commit `.plans/` files
-(they stay gitignored / local).
+Last consolidated 2026-08-31 (evening): Cornerstones largely landed on `dsf-foundations`
+(HEAD includes `@PANEL_START` migrations, Variables + LocalStorage storage, canvas paste-share,
+foundation maintain). **Next:** config UX cleanup + consistency (37). §11 stamp identity
+(copy = new set id; Move keeps; boot forks clear collisions) is implemented — click-verify in
+Figma. Library edit UX deferred (one model later). LocalStorage stays as personal backup. Do not
+commit `.plans/` files (gitignored / local).
 
 Keep it current. If a plan's status changes, change it here too, in the same pass. A roadmap that
 lies is worse than none.
@@ -18,9 +21,9 @@ lies is worse than none.
 | `CLAUDE.md` | How the codebase works. Architecture, invariants, gotchas. | Behaviour or structure changes. |
 | `.plans/NN-*.md` | One initiative each. Its own `**Status.**` block at the top is the source of truth for that item. **Local only — never commit.** | That initiative moves. |
 | `.plans/00-INDEX.md` | The 01 to 27 history and their ordering constraints. | Rarely. Historical. |
-| `.plans/37-config-format-decision.md` | Script language / config UX: JSON `@PANEL_START`; drop Configuration code tab; migrate remaining DSF panels. **Executing.** | A format or UX decision changes. |
-| `.plans/38-script-storage-variables.md` | Script storage & sharing: STRING variables, local vs library, autosave policy. **Executing.** | A storage decision changes. |
-| `.plans/39-foundation-maintenance.md` | DSF metadata hygiene: auto-repair on plugin open; Foundation config script removal. **Part A+B landed (local); ambiguous collisions still open.** | A maintenance decision changes. |
+| `.plans/37-config-format-decision.md` | Script language / config UX: JSON `@PANEL_START`; drop Configuration code tab; panel consistency. **Next: cleanup.** | A format or UX decision changes. |
+| `.plans/38-script-storage-variables.md` | Script storage: Variables + LocalStorage (both keep). Library edit UX deferred. | A storage decision changes. |
+| `.plans/39-foundation-maintenance.md` | DSF metadata hygiene; config script gone. Copy/duplicate → new identity (§11 implemented); tied collisions still skipped. | A maintenance decision changes. |
 | `DEFERRED.md` | Known problems nobody is fixing yet, with what fixing involves. | Something is found and left. |
 | `CHANGELOG.md` | What changed, in behaviour terms, for a user deciding whether to upgrade. | Every landed change. |
 
@@ -32,9 +35,8 @@ the sequence. **Do not commit `.plans/`.**
 
 - **Nothing is committed unless Márton asks.**
 - **Do not commit `.plans/` files.** They are gitignored and stay local.
-- **Backward compatibility with saved user scripts is not negotiable.** Today they live in
-  `clientStorage`; the planned model is STRING variables (`.plans/38`). Until migration ships,
-  treat `clientStorage` as canonical. A change that alters behaviour for a script carrying none of
+- **Backward compatibility with saved user scripts is not negotiable.** Bodies live in Variables
+  and/or LocalStorage (prefs); both stay. A change that alters behaviour for a script carrying none of
   the new regions is a stop-and-report, not something to design around.
 - **A Figma number comes from inside Figma.** No Node substitute, no estimate presented as a
   measurement. If it cannot be measured, say so.
@@ -50,36 +52,35 @@ the sequence. **Do not commit `.plans/`.**
 
 ## Current state
 
-**Committed** through `c3f9db3` (Colors write path + OKLCH preview / curve chart fixes).
+**Committed** through `94d2577` on `dsf-foundations` (Colors Mode 1 / Value load fix). Major
+landings: `5322d2e` (panels + Variables storage + foundation maintain), `266b811` (canvas
+paste-share + Copy or move / Replace variables).
 
-**This commit:** `ROADMAP.md` and `.cursor/rules/codefig-context.mdc` — shared orientation. No
-`.plans/`, no scratchpad.
+**Product calls**
 
-**Product call (2026-08-28):** ramp **recognition** (reading a hand-made scale with no manifest)
-is deferred — nice to have. Enough that scripts load from a recorded manifest, or the user
-recreates the scale. Do not prioritise Spacing/Grid recognition work.
+- **2026-08-28:** ramp **recognition** deferred — manifest load + recreate is enough.
+- **2026-08-31:** **LocalStorage stays** as personal backup beside Variables (teams). Do not
+  demote/remove it. **Library / remote edit UX** deferred until one model covers prebuilts, DSF,
+  `@` libs, and remotes (`DEFERRED.md`). **Next work** is config UX cleanup + consistency (37),
+  including copy/move respecting manifests as core behaviour. Colors dry-run / DSF polish sits
+  with the deferred polish cluster, not first.
 
-**Typography:** the old deferred claim “records no manifest” is **stale** — `typography.js`
-already calls `writeManifest` after a run. If a panel fails to load, debug the read path; do not
-re-implement the write.
+**Typography:** write path exists; if a panel fails to load, debug the read path.
 
 ---
 
-## Cornerstone initiatives (executing)
+## Cornerstone initiatives
 
-Go-ahead 2026-08-28. Order of value: **37 → 38 → 39** can overlap where independent; prefer not
-migrating script bodies (38) until DSF panels sit on `@PANEL_START` (37) so storage does not
-migrate twice.
-
-| Initiative | Plan | Locked | Next concrete work |
+| Initiative | Plan | Locked | Status / next |
 |---|---|---|---|
-| **Script language & config UX** | `.plans/37` | JSON `@PANEL_START` for **all** shipped config scripts; drop Configuration code tab (hidden → watch → delete) | **Migrations done** (DSF + 24 utilities + Help). Tab hidden. Watch, then delete chrome. |
-| **Script storage & sharing** | `.plans/38` | Path-named Variables + LocalStorage prefs; Local / LocalStorage / library folders; settings gear; canvas render as component instances with SRC↔variable bind (paste-share) | **Flag on.** Settings + canvas share path landed locally. Library banner still pending |
-| **Foundation metadata maintenance** | `.plans/39` | Auto-repair clear cases on every plugin open; no UI noise; remove Foundation config script | **Part A+B landed (local):** `config.js` removed; maintain on boot. **2026-08-29:** Figma has no `require` — build now inlines siblings into `code.js`. Ambiguous collisions still deferred (§11). |
+| **Script language & config UX** | `.plans/37` | JSON `@PANEL_START`; drop Configuration code tab | **Migrations done; tab deleted; teaching surfaces retargeted 2026-08-31.** **Next:** consistent panel language/structure for custom-script authors. |
+| **Script storage & sharing** | `.plans/38` | Variables + LocalStorage (both keep); settings; canvas paste-share | **Landed.** Library edit UX deferred (consistent model later). |
+| **Foundation metadata maintenance** | `.plans/39` | Auto-repair clear cases on open; no UI noise; config script gone | **Part A+B landed.** **§11 implemented 2026-08-31:** copy/duplicate → restamp new objects; originals keep stamps; boot forks clear `ambiguous-set-groups`. Move keeps identity. Tied collisions still skipped. |
 
-**Still open inside those plans (do not invent silently):** observation out of config; choice vs
-readiness naming; full reachability SAT; 38 `@import` across library inventory / id minting /
-when to use `@lib/` paths; 39 boot sync vs async and ambiguous native-duplicate collisions.
+**Still open (do not invent silently):** observation out of config; choice vs readiness naming;
+reachability SAT; 38 `@import` / id minting / `@lib/` paths; 39 boot await vs fire-and-forget.
+Ambiguous-collision **product rule is implemented** for clear cases (copy = new identity; boot
+fork). Tied collisions still skipped.
 
 ---
 
@@ -87,39 +88,40 @@ when to use `@lib/` paths; 39 boot sync vs async and ambiguous native-duplicate 
 
 | # | What | Result |
 |---|---|---|
-| 25 (write) | Colors Run writes variables | Stamp bracket, alias/alpha skips, orphan report. Live dry-run review of plan still welcome, not blocking 37+. |
+| 25 (write) | Colors Run writes variables | Stamp bracket, alias/alpha skips, orphan report. |
 | 28 | Read path performance | API calls per read `(M+1)×V` to ~2. |
 | 36 | Read without fitting, fit on demand | Colors read: 2.4s → under 20ms. |
 | 39 (cache) | Manifest cache and recovery | Renamed group recovers; duplicated collection carries sets. |
 | 34 | DevTools harness | Layout / CSS / rebuild / profile helpers. |
-| 31 | `@PANEL_START` panel spec | Format complete; **Colors migrated**. |
-| 37 (migrate) | All shipped configs → `@PANEL_START` | DSF (5) + EXAMPLE_SCRIPTS utilities (24) + Help specimen (local). |
+| 31 | `@PANEL_START` panel spec | Format complete; Colors + all shipped configs migrated. |
+| 37 (migrate) | All shipped configs → `@PANEL_START` | DSF (5) + utilities (24) + Help specimen. |
+| 38 (core) | Variables + LocalStorage + canvas share | Flag on; prefs; folders; paste-share. |
+| 39 A+B | Foundation maintain + remove config script | Boot maintain live (require shim); `config.js` gone. |
 | — | Curve editor fundamentals | Drag, presets → Custom, zoom, middle anchor. |
-| 39 A+B | Foundation maintain + remove config script | `config.js` gone; `foundationMaintain` on boot (local). |
 
-## In flight
+## Next (priority)
 
-1. **`.plans/37`** — Configuration code tab **hidden**; watch, then delete chrome / dual-pane.
-2. **`.plans/38`** — Local vs LocalStorage vs library folders; settings modal for stores/sync;
-   import refreshes in-session; canvas render to page `CodeFig Scripts`. Library banner next.
-3. **`.plans/39`** — ambiguous-collision product rule; prevent-over-repair in merge scripts.
+1. **Polish cluster** — Colors live dry-run; DSF/utility polish; curve acceptance + probes;
+   on-demand fit hang; fitter corners; other `DEFERRED.md` user-facing items.
+2. **Click-verify DSF previews** — after reload, confirm library `@STYLE_START` paints form + side preview.
 
-**Curve editor acceptance pass** — still in `DEFERRED.md`, hand-check on a real collection. Not
-blocking cornerstone work.
+## Done recently
 
-## Next up (after / beside cornerstones)
-
-Infrastructure that unblocks styling and DSF packaging, lower priority than 37–39:
-
-1. Finish `.plans/29` into `buildRowsControl` / `buildRowGroup` / `buildRowCell`.
-2. `.plans/30`'s injector, then move ~312 preview lines out of `ui.css`.
-3. `.plans/32`'s wiring (`packageId` on DSF).
+| What | Result |
+|---|---|
+| Plan 32 step 6 | Trimmed DSF imports (spacing/corner 37→13, colors 65→19, typography 40→35); sibling depth fix so Bezier trees survive package hops. |
+| Housekeeping | Removed Copy simple variables JSON + color-scale-layout; empty multi-collection copy; Preview/Match case dropped from rename/replace. |
+| Plans 29 / 30 / 32 (wiring) | In-rows `data-*`; style injector + `@STYLE_START`; DSF `packageId` stamped (libraries stay listed). |
+| Plan 30 DSF CSS | Preview styles on the libraries that emit the markup (`@Color Ramp`, `@Linear Ramp`, `@Type Scale`, `@Foundation`); injector gathers import graph + script sheet. |
+| DSF + utilities + libraries + Help Docs | Functional `#` titles (≤~160 chars), Overview structure, UI-only options tables. Rules in `.claude/skills/ux-copy/SKILL.md`. |
 
 ## Parked, with the reason
 
 | Item | Why it is parked |
 |---|---|
-| **Ramp recognition** (Spacing / Grid / Colors from file without a manifest) | **Product deferral 2026-08-28.** Nice to have. Manifest load + recreate is enough. |
+| **Library / remote / prebuilt edit UX** (banner, leave-with-edits) | **2026-08-31.** Need one consistent model for remotes, DSF, utilities, `@` libs — not a library-only strip. |
+| **Demote / remove LocalStorage** | **Rejected 2026-08-31.** Keep as personal backup beside Variables. |
+| **Ramp recognition** | **2026-08-28.** Manifest load + recreate is enough. |
 | **The estimate / on-demand fit** | Computation fine; live dispatch never arrives. Next: checkpoint log in RUN handler. |
 | **`.plans/35` bezier solver cost** | Demoted — nobody waits on fit up front after 36. |
 | **`.plans/33` custom components** | Held until a second person asks for a missing control. |
@@ -135,15 +137,15 @@ Infrastructure that unblocks styling and DSF packaging, lower priority than 37�
 
 - The fitter places corners the data does not ask for (mirrored handle dragging).
 - `displayResults` grouping callbacks throw and kill the script silently.
-- `Copy or move variables` (`merge-variable-collections.js`) treats unpublished as unused.
+- `Copy or move variables` treats unpublished as unused (wording / safety).
 - Styles still found by name → rename duplicates / orphans bindings.
 - Curve-editor probe instrumentation still live; P3 gamut toggle not started.
+- Library / non-persistable edit UX (consistent model later).
 
 **Superseded / do not re-open without evidence**
 
 - Typography “records no manifest” — write path exists; investigate read if a file fails to load.
-- Spacing recognition hazard — deferred with recognition; running without a manifest still uses
-  panel defaults (user recreates). Do not treat recognition as a blocker.
+- Spacing recognition hazard — deferred with recognition.
 
 **Everything else** is duplication, dead code, and dev-only tooling.
 

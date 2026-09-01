@@ -75,7 +75,7 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 
 **`src/import-resolver.js` is the single implementation**, consumed by the UI at run time and by `validate-scripts.js` at build time — there is no second copy to keep in sync. `build-import-resolver.js` inlines it into the `<script id="import-resolver-js">` block of `dist/ui.html` (a one-line stub in `src/ui.html`, never written back to source, same pattern as config-ui) and it must stay ahead of the main app script; `processRuntimeImports` throws if the `CodeFigImports` global is missing rather than letting every import silently degrade. Behaviour is pinned by `tests/import-resolver.test.js`, including the extraction limits above and a per-script check that shipped imports resolve to real injected source.
 
-**`src/style-scoper.js` is the same pattern, for a script's own CSS (plan `.plans/30-scoped-stylesheets.md`).** One implementation, inlined by `build-style-scoper.js` into `<script id="style-scoper-js">` for the UI at run time (reached via the `CodeFigStyleScoper` global) and required directly by `validate-scripts.js`'s `validatePackageStylesheets` at build time. It prefixes every selector under `[data-style-owner="{id}"]`, namespaces `@keyframes` (rewriting `animation`/`animation-name` references to match), rewrites `:root` to the owner attribute, strips stylesheet-level `@import`, and — the actual containment, not a courtesy — rejects any `url()` whose scheme is not `data:` and any `position: fixed` outright rather than stripping either silently. As of this writing nothing calls it: the module is inlined and tested (`tests/style-scoper.test.js`), but the injector that would insert `<style data-style-owner>` when a script's panel opens has not been wired into `src/ui.html`'s script lifecycle, and no script ships a `package.css` or `@STYLE_START` block yet. See `DEFERRED.md`.
+**`src/style-scoper.js` is the same pattern, for a script's own CSS (plan `.plans/30-scoped-stylesheets.md`).** One implementation, inlined by `build-style-scoper.js` into `<script id="style-scoper-js">` for the UI at run time (reached via the `CodeFigStyleScoper` global) and required directly by `validate-scripts.js`'s `validatePackageStylesheets` at build time. It prefixes every selector under `[data-style-owner="{id}"]`, namespaces `@keyframes` (rewriting `animation`/`animation-name` references to match), rewrites `:root` to the owner attribute, strips stylesheet-level `@import`, and — the actual containment, not a courtesy — rejects any `url()` whose scheme is not `data:` and any `position: fixed` outright rather than stripping either silently. **Authoring tiers:** (1) CodeFig defaults in `src/ui.css` / Style & UI reference; (2) library `// @STYLE_START` … `// @STYLE_END` next to the markup that library emits; (3) the same markers on a runnable script for script-only overrides. Opening a script injects the concatenation of imported libraries' sheets (dependency-first via `collectStyleSheets` in `import-resolver.js`) plus the open script's sheet, scoped under one `data-style-owner` on the form **and** the side Preview. `package.css` is not the product path. See `DEFERRED.md`.
 
 **Ask the question, don't store the answer.** Three times in the Colors build a piece of *derived* state was given a variable, and each time the variable became the bug: an `onLadder` flag for the Apply banner (deleted before it shipped), and an `untouched` flag to keep the preview quiet on load — which cost a flag, a snapshot, a clearing path and a fault in each, because the snapshot it compared against was reassigned before the comparison ran, so no edit ever registered and the whole panel looked dead. Both questions were answerable on demand: *is the config's output equal to the file's?* If a display decision can be re-derived from the config and the file, derive it on every render. State that exists only to remember what the user already did is state that will disagree with them.
 
@@ -98,7 +98,12 @@ Neither is derived from a printer that renders the other. **The block is the for
 
 **`src/config-ui/`** (`parser.js`, `renderer.js`, `controller.js`, `bridge.js`) turns a script's config comment block into a rendered form. `build-config-ui.js` exports `inlineConfigUI(html)`, a pure string transform that concatenates these four files into the `<script id="config-ui-js">` block on the way to `dist/ui.html`. In `src/ui.html` that block is a one-line stub and stays that way — the bundle is never written back to source.
 
-**`parser.js`'s `parse()` takes an optional second argument, `panelSpecText` (plan `.plans/31-panel-spec-json.md`), for reading a `@PANEL_START` JSON block instead of the one-line-per-field annotation syntax.** No caller passes it yet — every script in the repo renders through the unchanged first path — so this is inert groundwork, not a second live format. The two are meant to coexist indefinitely: a script with `@PANEL_START` gets the new reader, everything else keeps working exactly as before. `renderer.js` does not know or care which reader ran; both produce the same `{ rows }` shape it already consumes.
+**`parser.js`'s `parse()` takes an optional second argument, `panelSpecText`, for reading a
+`@PANEL_START` JSON block instead of the one-line-per-field annotation syntax.** Every shipped
+config script passes it — values stay in `@UI_CONFIG_*` / `@CONFIG_*`, the form recipe lives in
+`@PANEL_START`. A script with no `@PANEL_START` still takes the annotation path unchanged; the two
+coexist indefinitely. `renderer.js` does not know or care which reader ran; both produce the same
+`{ rows }` shape it already consumes.
 
 **`bundle-ui.js`** inlines vendors (CodeMirror, marked) into `dist/ui.html`, and `__CODEFIG_BUILD_IS_DEV__` is substituted with `true`/`false` so the production UI never reaches for localhost.
 
@@ -121,15 +126,33 @@ Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `pr
 
 **Marker blocks** (all line comments, parsed by the UI):
 - `// @DOC_START` … `// @DOC_END` — markdown docs tab.
-- `// @UI_CONFIG_START` … `// @UI_CONFIG_END` — rendered as a **form**; annotations on each `var` line: `@options: a|b|c` (or `@options: variableCollections` for dynamic lists), `@radio`, `@multi`, `@label:`, `@placeholder:`, `@textarea`, `@showWhen: field=value|value`. `// # Heading`, `// ---`, and plain comments become headings/dividers/paragraphs.
-- `// @CONFIG_START` … `// @CONFIG_END` — config shown in a code editor instead (used for object-literal configs the form parser can't represent).
+- `// @PANEL_START` … `// @PANEL_END` — the **form recipe** as JSON in `//` comments. Shipped scripts
+  and anything with a real panel use this. Configuration UI is the form; Source holds the recipe
+  beside the values. There is no Configuration code tab.
+- `// @UI_CONFIG_START` … `// @UI_CONFIG_END` — **values only** (`var` lines) when paired with
+  `@PANEL_START`. Without a PANEL block, trailing annotations on each `var` line still drive the
+  form (legacy / tiny scripts): `@options: a|b|c`, `@radio`, `@multi`, `@label:`, `@placeholder:`,
+  `@textarea`, `@showWhen: field=value|value`, plus `// # Heading`, `// ---`, and plain comments as
+  headings/dividers/paragraphs.
+- `// @CONFIG_START` … `// @CONFIG_END` — **values only** as an object literal (Design System
+  Foundations style). Same pairing with `@PANEL_START`; not a second form of Configuration UI.
 
-**The annotation list above is not the whole list, deliberately.** The **Style & UI reference** *is* the list, and it lives in two places that are one thing: the `## Style & UI reference` section and the `@UI_CONFIG` specimen shelf in `scripts/HELP/help-documentation.js` (in the plugin: that script's Documentation and Configuration UI tabs), and **`artifacts/style-reference.html`**, generated by `build-style-reference.js` from the same config block via the real `renderer.js`. Use the page when a *number* is in question — it loads `src/ui.css` in a browser and prints every computed size, weight and box value, which is the one thing a Figma panel cannot show you. `tests/style-reference.test.js` derives coverage from `renderer.js` and `parser.js` and reads the stated token values back out of `src/ui.css`, so a control that exists without a specimen, a documented value that has drifted, and a stale HTML page are all build failures. Copying the list into a second place here would be the seam that reference exists to close — send people there instead.
+**The PANEL property list is not duplicated here.** The **Style & UI reference** *is* the list, and
+it lives in two places that are one thing: the `## Style & UI reference` section and the specimen
+shelf (`@UI_CONFIG` values + `@PANEL_START` recipe) in `scripts/HELP/help-documentation.js` (in the
+plugin: that script's Documentation and Configuration UI tabs), and **`artifacts/style-reference.html`**,
+generated by `build-style-reference.js` from the same blocks via the real `renderer.js`. Use the page
+when a *number* is in question — it loads `src/ui.css` in a browser and prints every computed size,
+weight and box value, which is the one thing a Figma panel cannot show you. `tests/style-reference.test.js`
+derives coverage from `renderer.js` and `parser.js` and reads the stated token values back out of
+`src/ui.css`, so a control that exists without a specimen, a documented value that has drifted, and a
+stale HTML page are all build failures. Copying the list into a second place here would be the seam
+that reference exists to close — send people there instead.
 
 Two rules that only bite when authoring one:
 
 - **`@helper:` runs to the end of the line and must be last.** It is prose, and prose about this plugin says things like "an object with no `@rows`" — so it cannot stop at the next `@word`. Anything written after a note becomes part of it, which is why `serialize` emits it last.
-- **`// # Title` is level 1**, so a config form's section headings are `h1`, styled by `.config-ui-form--rows .config-ui-row--heading h1` — *not* by the `.docs-rendered h1` the Documentation tab uses. The two ladders are different sizes on purpose. A rule written for the wrong one is silent: it validates, it ships, and nothing on screen changes.
+- **`// # Title` is level 1**, so a config form's section headings render as `h2` (the Configuration UI never emits `h1`), styled by `.config-ui-form--rows .config-ui-row--heading h2` — *not* by the `.docs-rendered h1` the Documentation tab uses. Docs keep a full h1–h3 ladder; the form starts at h2 so sections do not wear the document-title size. A rule written for the wrong surface is silent: it validates, it ships, and nothing on screen changes.
 
 **Long-running work:** use `collectNodesAsync`, `processWithOptimization`, `yieldToUI`, `showProgress` from `@Core Library`. Fully synchronous loops block the main thread and starve the progress bar.
 

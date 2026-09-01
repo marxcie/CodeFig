@@ -289,31 +289,33 @@ same correctness, cost paid only when the cache misses.
 
 ## 11. Figma's native group duplication copies a stamp, and now two groups claim one set
 
-**Still open — leave alone (plan 39).** Boot maintenance (`src/foundation-maintain.js`) detects
-this as `ambiguous-set-groups` and does **not** auto-pick a winner. Clear-case orphans (stamp with
-no manifest, manifest with no stamps) are repaired; this collision is not.
+**Product rule locked 2026-08-31; implemented 2026-08-31.** Duplicate / copy = **new objects
+with new identity**. Originals keep their stamps. The copy is **restamped** (new set id); do
+**not** treat a duplicate as transferring the original’s set / stamp / manifest identity.
 
-**What.** `duplicate-variable-collection.js` (this repo's own script) is not the only way a token
-group gets duplicated — Figma's own Variables panel can duplicate a selection of variables (a
-"group", in the folder sense) natively, no plugin involved. Tested live: stamp a group's
-variables, duplicate the group through Figma's own UI, and the copies carry the **exact same**
-stamp as the originals — same `set` id, same `token`. Two groups (`probe-group` and
-`probe-group 2` in the test) now both claim to be where set `mt7e5wif-ai2i4y7i` lives.
+**What shipped.**
 
-**Consequence.** `findFoundationSet`/`findFoundationSetCached` derive a set's live group from its
-stamps (`deriveSetGroup`), on the assumption that a set's tokens live in exactly one place. With
-two groups stamped identically, a read for either group's name would see the same set id at two
-different addresses — not a crash, but the resolver has no principled way to say which group is
-the "real" one. Whichever `deriveSetGroup` happens to match first wins; the copy's own group is
-functionally indistinguishable from the original until something re-stamps it.
+- **CodeFig Copy / duplicate:** `duplicate-variable-collection.js` already minted new set ids;
+  `Copy or move variables` (`merge-variable-collections.js`) now does the same on **Copy**
+  (and on partial **Move** of a set). Full **Move** keeps the set id on the relocated
+  definitions and updates the manifest group.
+- **Boot repair:** `planFoundationMaintenance` / `runFoundationMaintain` fork clear
+  `ambiguous-set-groups` cases — keep stamp+manifest on the original group (prefer manifest’s
+  last-known `group`, else the unique non-`… 2` / `Copy` suffix name); restamp other groups
+  under a new set id with a forked manifest. Silent when clear. When the original cannot be
+  chosen without inventing, still `skippedAmbiguous` only.
 
-**How it was found.** Asked directly, live in Figma, per this task's own instruction: stamp a
-group, duplicate it through Figma's native UI (not this repo's script), read both copies' stamps.
+**What.** Figma has no native “duplicate collection” — only groups and modes. Duplicating a
+**group** in Figma’s Variables UI copies plugin data with the variables. Live-tested: the copy
+carries the **exact same** stamp as the original (same `set` id, same `token`). Two groups
+(`probe-group` and `probe-group 2`) both claimed set `mt7e5wif-ai2i4y7i`. Mode duplicate does
+**not** create this leak (no per-mode stamp).
 
-**Why it was left.** A real fix means either detecting the collision (two groups, one set id) and
-reporting it in product UI rather than silently picking one, or re-stamping a duplicate the moment
-it's created — and Figma gives a plugin no signal that a native duplicate just happened. Boot
-scan detection exists now (log only); choosing a winner is still a product decision.
+**Still open.** Boot is fire-and-forget (may race first LIST). Truly tied collisions (two
+non-copy names, or two `… 2` names, with no matching manifest group) stay skipped until a
+follow-up picks a rule. Click-verify in Figma after reload.
+
+**How it was found.** Live in Figma: stamp a group, native-duplicate it, read both stamps.
 
 **Mode duplication has no equivalent leak.** A stamp is per-variable, keyed by token; there is no
 per-mode stamp in this system for a native "Duplicate mode" to carry over. Tested alongside the
@@ -324,6 +326,11 @@ path's own mode-list handling).
 
 
 ## The tone pass over the remaining 77 helper texts
+
+**Status.** **Landed 2026-09-01** for Documentation across DSF, all utility EXAMPLE_SCRIPTS,
+CODEFIG_LIBRARIES, and Help. Panel `@helper` pass completed earlier for DSF (the scripts that
+ship helpers). Standing rules live in `.claude/skills/ux-copy/SKILL.md` (functional `#` ≤~160 chars,
+UI-label options tables, no legacy-only rows, Config UI never emits `h1`).
 
 **What.** The copy pass fixed what could be pointed at: 87 Title Case labels, 15 explanations naming a
 variable instead of the field on screen, 6 that only repeated their label, 3 broken sentences, and 5
@@ -336,11 +343,12 @@ a rule anything can check. `.claude/skills/ux-copy/SKILL.md` now encodes what th
 (mechanism asides, em-dash asides, teaching the domain, naming the internal concept, restating the
 label) — use it for the panel-by-panel read instead of re-deriving the checklist.
 
-**Why it was left.** It is taste, it is a large diff, and it wants reading rather than a sweep. The
+**Why it waited.** It is taste, it is a large diff, and it wants reading rather than a sweep. The
 house voice is in `CLAUDE.md` and `CHANGELOG.md`, not in a generic skill.
 
 **What doing it involves.** Script by script, with a person reading each panel — not one pass over all
-of `scripts/`.
+of `scripts/`. Start with helpers behind ⓘ; move mechanism into Documentation when the bubble cannot
+hold it.
 
 ---
 
@@ -1036,9 +1044,9 @@ transitively reach. `validateResolvedCalls` keeps the list honest, which turns i
 authoring tax rather than a safety net.
 
 **Fix.** `.plans/32-packages.md`, step 4 — implemented and tested 2026-08-23
-(`extractFunctions`'s `siblingLookup` parameter in `src/import-resolver.js`). Not wired to these
-five scripts: nothing ships with a `packageId` yet, so today's import blocks are unaffected. Step 6
-(actually trimming them) has its own explicit stop-gate in the plan and was not attempted.
+(`extractFunctions`'s `siblingLookup` parameter in `src/import-resolver.js`). Wired 2026-09-01
+(`packageId` stamped; step 6 trimmed the five DSF import blocks). Spacing/Corner 37→13,
+Colors 65→19, Typography 40→35.
 
 ---
 
@@ -1059,45 +1067,28 @@ the only thing the resolver knows how to be.
 package-private, but update that documentation line so it stops naming a library users can no
 longer import standalone.
 
-**The manifest that would hide these nine compiles correctly, but nothing shows it to anyone
-yet.** `build-package-manifest.js`'s `compilePackageManifest`, run against this repo's real
-scripts, produces exactly this package's member list (verified 2026-08-23). What's missing:
-`build-scripts.js` does not call it, so no script the plugin ships carries a `packageId`, and
-`src/ui.html`'s CodeFig Libraries list has not been taught to hide `visibility: "package"`
-members — these nine are still listed exactly as before.
+**Closed (2026-09-01) for membership + step 6; listing kept visible 2026-09-01.** Build stamps
+`packageId` / `packageVisibility` on the nine DSF libraries. They remain in the CodeFig Libraries
+list so users can open them as examples — `packageVisibility` is membership metadata for `@import`
+sibling resolution, not a sidebar hide. DSF script import blocks
+are trimmed; sibling extraction covers the rest. Help prose that *lists* `@Math Helpers` as a
+standalone library should still be updated when convenient.
 
 ---
 
-## The panel DOM has no selectable identity — partly fixed, the dense part is not
+## The panel DOM has no selectable identity — closed 2026-09-01
 
 **What.** `buildField()` in `src/config-ui/renderer.js` stamped `config-ui-field
 config-ui-field--{type}` and nothing else. No key, no group, no section, no package. No
 stylesheet could address a specific group of fields, so panel arrangement could not be changed at
 all without editing the renderer.
 
-**Fixed 2026-08-23, for plain fields.** `buildField()` now stamps `data-key`/`data-type`, and
-`data-section` from the nearest heading above it (derived at render time in `buildRow()`, not
-stored — see `.plans/29-field-identity.md`); `buildForm()`'s root carries an empty `data-package`.
-Covers every plain `@UI_CONFIG` field and the outer wrapper of a whole `@rows` control.
-
-**Still open: `buildRowsControl`, `buildRowGroup`, `buildRowCell`.** The builders for what is
-*inside* an `@rows` table — a mode's individual cells, an anchor group like "bright" — were not
-touched. This is the part that actually matters for Colors: its hue anchors, chroma anchors and
-curve editors all live inside `@rows`, so `[data-section="hue"] [data-type="curve"]` — the plan's
-own motivating example — does not work yet. Deferred rather than attempted in the same pass
-because it happened while the plugin could not be reloaded to check the Colors panel still
-renders correctly, and this builder family is the one `DEFERRED.md` already has several
-silent-breakage entries about.
-
-**The exact fix is spec'd, not implemented.** `.plans/34-devtools-harness.md`'s "B3, extended"
-walked all 6 in-rows curve instances' real ancestor chains and names the precise two-line change
-(`data-section` on `.config-ui-rows-tabpanel` at `renderer.js:3387-3388`, optionally `data-key`/
-`data-type="curve"` on `.config-ui-curve` at `renderer.js:3774`), with a checked-in failing
-assertion (`npm run devtools:assert-layout`) that will start passing once it lands.
+**Fixed.** Plain fields (2026-08-23) plus in-rows tabpanels / curves / cells / groups (2026-09-01).
+`[data-section="hue"] [data-type="curve"]` is the done-when selector.
 
 ---
 
-## `@keyframes` and `:root` will collide once scripts can ship CSS — the rewriter is done, nothing calls it yet
+## `@keyframes` and `:root` will collide once scripts can ship CSS — rewriter done; injector wired 2026-09-01
 
 **What.** Not a current bug — no script can ship CSS today. `.plans/30-scoped-stylesheets.md`
 introduces the surface; this recorded the part that was easy to miss: two scripts defining
@@ -1110,11 +1101,11 @@ owner's `[data-style-owner]` attribute, and strips stylesheet-level `@import`. 3
 `tests/style-scoper.test.js`, including a hostile stylesheet and the CSS-only exfiltration shape
 the amendment to this plan raised (`input[value^="x"] { background-image: url(...) }`).
 
-**Still true: nothing calls this yet.** The rewriter is inlined into `dist/ui.html` as
-`CodeFigStyleScoper` but unused — the injector that would insert `<style data-style-owner>` when a
-script's panel opens was not built in the same pass (see `.plans/30-scoped-stylesheets.md`'s
-Status note for why). So this entry stays open until that wiring lands and a script actually ships
-CSS through it.
+**Injector wired 2026-09-01; library + script sheets 2026-09-01.** Opening a script injects
+scoped CSS from `@STYLE_START` on imported libraries (dependency-first) then the open script,
+with `data-style-owner` on form + side Preview. Authoring tiers: CodeFig `ui.css` → library
+sheet beside markup → script-only sheet. `package.css` is optional build machinery only (no
+sheet today). Live click-verify of each DSF preview after reload is still worth a pass.
 
 ---
 
@@ -1441,6 +1432,57 @@ probe will very likely be read again before it is.
 ## ~~The zoom and range controls stay visible, but do nothing, on a flat equal-ends curve~~ — CLOSED
 
 Equal ends keep zoom/range (synthetic window). See `CHANGELOG.md` [Unreleased].
+
+## Library / remote script edit UX — deferred pending one consistent model
+
+**Product deferral 2026-08-31.** Not urgent. Do not ship a library-only banner, toast, or
+navigate-away dialog as a one-off.
+
+**What.** Plan 38 still lists: persistent “Library script — edits not saved” banner; navigate-away
+with discard / save as local copy / cancel; and a clear “Save as local copy” path. Pieces exist
+(menu label, notify on autosave refusal, remote folder in the sidebar). The gap is deliberate UX
+for *any* script the user cannot durably edit where it lives — not only remote library STRING
+vars.
+
+**Why wait.** The same class of problem applies to **utility prebuilts**, **DSF scripts**,
+**`@` libraries**, and **remote CodeFig Scripts**. Source edits on embedded prebuilts already do
+not autosave (session only; leaving reloads pristine). Inventing a library-only strip now would
+teach one rule for remotes and leave three other “you can’t keep this edit here” cases looking
+different. Prefer one clear model later (banner / copy / discard) that covers all of those,
+then implement once.
+
+**What it would take.** Product pass: list every origin that cannot persist Source/config edits
+in place; one copy pattern (ux-copy skill); one leave-with-edits flow; then wire UI. Until then,
+leave the current menu + notify behaviour.
+
+## Library / remote script edit UX — deferred pending one consistent model
+
+**Product deferral 2026-08-31.** Not urgent. Do not ship a library-only banner, toast, or
+navigate-away dialog as a one-off.
+
+**What.** Plan 38 still lists: persistent “Library script — edits not saved” banner; navigate-away
+with discard / save as local copy / cancel; and a clear “Save as local copy” path. Pieces exist
+(menu label, notify on autosave refusal, remote folder in the sidebar). The gap is deliberate UX
+for *any* script the user cannot durably edit where it lives — not only remote library STRING
+vars.
+
+**Why wait.** The same class of problem applies to **utility prebuilts**, **DSF scripts**,
+**`@` libraries**, and **remote CodeFig Scripts**. Source edits on embedded prebuilts already do
+not autosave (session only; leaving reloads pristine). Inventing a library-only strip now would
+teach one rule for remotes and leave three other “you can’t keep this edit here” cases looking
+different. Prefer one clear model later (banner / copy / discard) that covers all of those,
+then implement once.
+
+**What it would take.** Product pass: list every origin that cannot persist Source/config edits
+in place; one copy pattern (ux-copy skill); one leave-with-edits flow; then wire UI. Until then,
+leave the current menu + notify behaviour.
+
+## Documentation + helper-text consistency — next planned pass
+
+**2026-08-31.** Teaching surfaces already point at `@PANEL_START`. Remaining work is the tone pass
+over helpers (priority) and Documentation: machine-lingo, mechanism asides, internal names —
+follow `.claude/skills/ux-copy/SKILL.md`, panel by panel with a person. Same work as “The tone
+pass over the remaining 77 helper texts” below; elevated to ROADMAP Next.
 
 ## Acceptance pass on the curve editor: not started
 
