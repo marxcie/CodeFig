@@ -185,6 +185,21 @@ test('a form edit rewrites one value and leaves the rest alone', () => {
 // The load-bearing one: every shipped config's content survives
 // ---------------------------------------------------------------------------
 
+const EXAMPLE = require('./dsf-example-configs.js');
+
+const EXAMPLE_BY_FILE = {
+  'grid.js': EXAMPLE.grid,
+  'spacing.js': EXAMPLE.spacing,
+  'corner-radius.js': EXAMPLE.radius,
+  'typography.js': EXAMPLE.typography,
+};
+
+/** Example configs for arithmetic tests — not the live empty shipped blocks. */
+function exampleConfig(file) {
+  if (EXAMPLE_BY_FILE[file]) return JSON.parse(JSON.stringify(EXAMPLE_BY_FILE[file]));
+  return shippedConfig(file);
+}
+
 /** The `@CONFIG_START` block of a shipped script, evaluated as the object it is. */
 function shippedConfig(file) {
   const source = fs.readFileSync(path.join(DSF, file), 'utf8');
@@ -205,7 +220,7 @@ test('the content of every shipped config block survives the serializer', () => 
   // Read only. This does not migrate anything and no file changes — it asserts the property the
   // later per-script switches to @UI_CONFIG depend on, before any of them is attempted.
   for (const file of ['grid.js', 'spacing.js', 'corner-radius.js', 'typography.js', 'colors.js']) {
-    const config = shippedConfig(file);
+    const config = exampleConfig(file);
     const block = asUiConfigBlock(config);
     const trip = roundTrip(block);
 
@@ -220,7 +235,7 @@ test('the content of every shipped config block survives the serializer', () => 
 test('the deepest nesting a shipped config has survives', () => {
   // spacing's modes carry `base: { level, size }` — an object inside an object inside an array,
   // which is exactly the shape the one-line reader could never have held.
-  const spacing = shippedConfig('spacing.js');
+  const spacing = exampleConfig('spacing.js');
   const trip = roundTrip(asUiConfigBlock(spacing));
   assert.deepEqual(trip.values.modes, spacing.modes);
   assert.deepEqual(trip.values.modes[0].base, spacing.modes[0].base);

@@ -1252,16 +1252,25 @@
           if (hWhen) heading.showWhenRules = hWhen;
           rows.push(heading);
         } else if (block.type === "divider") {
-          rows.push({ type: "divider", section: !!block.section });
+          var dWhen = panelConditionRules(block.showWhen);
+          var divider = { type: "divider", section: !!block.section };
+          if (dWhen) divider.showWhenRules = dWhen;
+          rows.push(divider);
         } else if (block.type === "chips") {
           var cWhen = panelConditionRules(block.showWhen);
           var chips = { type: "chips", label: block.label || "Collection modes", from: block.from || "modes" };
           if (cWhen) chips.showWhenRules = cWhen;
           rows.push(chips);
         } else if (block.type === "suggestions") {
-          rows.push({ type: "suggestions" });
+          var sWhen = panelConditionRules(block.showWhen);
+          var suggestions = { type: "suggestions" };
+          if (sWhen) suggestions.showWhenRules = sWhen;
+          rows.push(suggestions);
         } else if (block.type === "preview") {
-          rows.push({ type: "preview" });
+          var pvWhen = panelConditionRules(block.showWhen);
+          var preview = { type: "preview" };
+          if (pvWhen) preview.showWhenRules = pvWhen;
+          rows.push(preview);
         } else if (block.type === "directive") {
           rows.push({ type: "directive", directive: block.name });
         } else if (block.type === "paragraph") {
@@ -1469,14 +1478,40 @@
         }
 
         if (/^@suggestions\b/.test(c)) {
-          rows.push({ type: "suggestions", raw: line });
+          var sugSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|*]+)/g;
+          var sugSwAll = [];
+          var sugm;
+          while ((sugm = sugSwRe.exec(c)) !== null) {
+            sugSwAll.push({
+              field: sugm[1],
+              values: sugm[2].split("|").map(function (v) { return v.trim(); }).filter(Boolean)
+            });
+          }
+          rows.push({
+            type: "suggestions",
+            raw: line,
+            showWhenRules: sugSwAll.length ? sugSwAll : undefined
+          });
           lastWasBlank = false;
           i++;
           continue;
         }
 
         if (/^@preview\b/.test(c)) {
-          rows.push({ type: "preview", raw: line });
+          var pvSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|*]+)/g;
+          var pvSwAll = [];
+          var pvm;
+          while ((pvm = pvSwRe.exec(c)) !== null) {
+            pvSwAll.push({
+              field: pvm[1],
+              values: pvm[2].split("|").map(function (v) { return v.trim(); }).filter(Boolean)
+            });
+          }
+          rows.push({
+            type: "preview",
+            raw: line,
+            showWhenRules: pvSwAll.length ? pvSwAll : undefined
+          });
           lastWasBlank = false;
           i++;
           continue;
@@ -1541,11 +1576,25 @@
           i++;
           continue;
         }
-        if (/^(---|\*\*\*|___)(\s+@section\b)?\s*$/.test(c)) {
+        if (/^(---|\*\*\*|___)/.test(c)) {
           // Two lengths. `// ---` separates items and stays within the content; `// --- @section`
           // separates sections and reaches the panel's edges. A divider is always asked for — none
           // appears between blocks on its own.
-          rows.push({ type: "divider", section: /@section\b/.test(c), raw: line });
+          var dSwRe = /@showWhen:\s*(\w+)\s*=\s*([\w|*]+)/g;
+          var dSwAll = [];
+          var dsm;
+          while ((dsm = dSwRe.exec(c)) !== null) {
+            dSwAll.push({
+              field: dsm[1],
+              values: dsm[2].split("|").map(function (v) { return v.trim(); }).filter(Boolean)
+            });
+          }
+          rows.push({
+            type: "divider",
+            section: /@section\b/.test(c),
+            raw: line,
+            showWhenRules: dSwAll.length ? dSwAll : undefined
+          });
           lastWasBlank = false;
           i++;
           continue;

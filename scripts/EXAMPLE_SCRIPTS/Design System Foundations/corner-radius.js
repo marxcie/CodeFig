@@ -82,22 +82,10 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
 // @fromFile: domains.radius
 
   collectionName: "",
-  group: "Corner radius",
-  radii: ["none", "xs", "sm", "md", "lg", "xl"],
+  group: "",
+  radii: [],
   generateOverview: false,
-  modes: [
-    {
-      name: "Value",
-      scaleType: "bezier",
-      base: 4,
-      ratio: 1.5,
-      curve: [],
-      step: 4,
-      mod: 3,
-      roundTo: 2,
-      extras: [0]
-    }
-  ]
+  modes: []
 // @CONFIG_END
 
 // @PANEL_START
@@ -109,12 +97,16 @@ var cornerRadiusConfigData = typeof cornerRadiusConfigData !== 'undefined' ? cor
 //     { key: "group", type: "string", label: "Group within collection",
 //       placeholder: "eg.: Corner radius" },
 //     { key: "radii", type: "list", label: "Tokens",
+//       placeholder: "none, xs, sm, md, lg, xl",
 //       helper: "Names from smallest to largest. radius-{1,10} expands to ten names." },
 //     { type: "divider", section: true },
-//     { type: "heading", text: "Mode settings" },
+//     { type: "heading", text: "Mode settings",
+//       showWhen: { collectionName: "*", radii: "*" } },
 //     { key: "generateOverview", type: "boolean", label: "Generate overview",
+//       showWhen: { collectionName: "*", radii: "*" },
 //       helper: "Builds a Corner radius overview on the canvas: one row per token, one column per mode, with variable-bound swatches." },
 //     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+//       showWhen: { collectionName: "*", radii: "*" },
 //       columns: [
 //         { key: "name", type: "text", label: "Mode" },
 //         { key: "scaleType", type: "radio", label: "Scale type",
@@ -176,6 +168,14 @@ runLinearRamp(cornerRadiusConfig, radiusRampSpec())
     // anything was edited. What is left is what a run has to say that the panel cannot: what it wrote.
     var results = [];
     if (result.undeclaredModes) results.push(createResult('Modes this run did not write', result.undeclaredModes, 'info'));
+    if (result.skippedModes && result.skippedModes.length) {
+      results.push(createResult(
+        result.skippedModes.length + ' mode' + (result.skippedModes.length === 1 ? '' : 's') + ' skipped',
+        result.skippedModes.map(function (s) { return s.viewport; }).join(', ') +
+          ' — set a base above zero (or Extra values) before they can generate',
+        'warning'
+      ));
+    }
     results.push(createResult(
       result.stats.created + ' created, ' + result.stats.updated + ' updated, ' + result.stats.skipped + ' skipped',
       'Collection: ' + (result.collection ? result.collection.name : '—'),

@@ -17,6 +17,7 @@ const path = require('path');
 const vm = require('vm');
 
 const resolver = require('../src/import-resolver.js');
+const EXAMPLE = require('./dsf-example-configs.js');
 
 const ROOT = path.join(__dirname, '..');
 const SCRIPTS = path.join(ROOT, 'scripts');
@@ -261,7 +262,7 @@ test('the recorded slice is the whole config, not a hand-picked subset', () => {
 
   for (const domain of DOMAINS) {
     const spec = ctx[domain.spec]();
-    const declared = shippedConfigBlock(domain.block);
+    const declared = JSON.parse(JSON.stringify(EXAMPLE[domain.label === 'radius' ? 'radius' : 'spacing']));
     const resolved = JSON.parse(JSON.stringify(declared));
     ctx.ensureCompatRampConfig(resolved, spec);
     ctx.materialiseRampTokens(resolved, spec);
@@ -357,7 +358,7 @@ test('the shipped defaults generate a bezier ramp from a base and a growth', () 
   const ctx = baseContext();
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
   const spec = ctx.spacingRampSpec();
-  const config = shippedConfigBlock('spacing.js');
+  const config = JSON.parse(JSON.stringify(EXAMPLE.spacing));
 
   ctx.ensureCompatRampConfig(config, spec);
   ctx.materialiseRampTokens(config, spec);
@@ -375,7 +376,7 @@ test('the shipped radius defaults start at zero and step up', () => {
   const ctx = baseContext();
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
   const spec = ctx.radiusRampSpec();
-  const config = shippedConfigBlock('corner-radius.js');
+  const config = JSON.parse(JSON.stringify(EXAMPLE.radius));
 
   ctx.ensureCompatRampConfig(config, spec);
   ctx.materialiseRampTokens(config, spec);
@@ -392,7 +393,7 @@ test('a run says which model produced its numbers', () => {
   const ctx = baseContext();
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
   const spec = ctx.spacingRampSpec();
-  const config = shippedConfigBlock('spacing.js');
+  const config = JSON.parse(JSON.stringify(EXAMPLE.spacing));
   ctx.ensureCompatRampConfig(config, spec);
   ctx.materialiseRampTokens(config, spec);
   ctx.materialiseRampSizes(config, spec);
@@ -628,7 +629,7 @@ test('a scale the guard never touches reports no adjustments', () => {
   const ctx = baseContext();
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
   const spec = ctx.spacingRampSpec();
-  const config = shippedConfigBlock('spacing.js');
+  const config = JSON.parse(JSON.stringify(EXAMPLE.spacing));
   ctx.ensureCompatRampConfig(config, spec);
   ctx.materialiseRampTokens(config, spec);
   ctx.materialiseRampSizes(config, spec);
@@ -637,6 +638,61 @@ test('a scale the guard never touches reports no adjustments', () => {
   ctx.generateRampVariables(config, spec, report);
   assert.deepEqual(report.adjustments, [], 'the shipped default needs no correcting');
   assert.deepEqual(ctx.describeRampAdjustments([]), [], 'and says nothing about it');
+});
+
+test('incomplete sibling modes are skipped on write — they do not abort a ready mode', () => {
+  // Same shape as the Corner radius Run failure: Desktop has a real base; Pad/Mobile sit at 0
+  // after collection alignment. Bezier refuses 0; the run used to throw on Pad and write nothing.
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.radiusRampSpec();
+  const config = {
+    collectionName: 'Responsive System',
+    group: 'Corner radius',
+    radii: ['none', 'sm', 'md', 'lg'],
+    modes: [
+      { name: 'Desktop', scaleType: 'bezier', base: 4, ratio: 1.5, curve: [], roundTo: 1, extras: [0] },
+      { name: 'Pad', scaleType: 'bezier', base: 0, ratio: 1.5, curve: [], roundTo: 1, extras: [] },
+      { name: 'Mobile', scaleType: 'bezier', base: 0, ratio: 1.5, curve: [], roundTo: 1, extras: [] },
+      { name: 'Value', scaleType: 'bezier', base: 0, ratio: 1.5, curve: [], roundTo: 1, extras: [] },
+    ],
+  };
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+
+  const report = {};
+  const variables = ctx.generateRampVariables(config, spec, report);
+  const names = Object.keys(variables);
+  assert.ok(names.length > 0, 'Desktop still writes');
+  names.forEach((name) => {
+    const modes = Object.keys(variables[name].values);
+    assert.deepEqual(modes, ['Desktop'], 'only the ready mode is in the map: ' + name);
+  });
+  assert.equal(report.skippedModes.length, 3);
+  assert.deepEqual(report.skippedModes.map((s) => s.viewport).sort(), ['Mobile', 'Pad', 'Value']);
+  assert.match(report.skippedModes[0].message, /base has to be above zero/);
+  assert.match(ctx.describeRampSkippedModes(report.skippedModes)[0], /Skipped 3 modes/);
+});
+
+test('when every mode is incomplete, generate still refuses', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const spec = ctx.radiusRampSpec();
+  const config = {
+    collectionName: 'C', group: 'Corner radius', radii: ['sm', 'md'],
+    modes: [
+      { name: 'Pad', scaleType: 'bezier', base: 0, ratio: 1.5, curve: [] },
+      { name: 'Mobile', scaleType: 'bezier', base: 0, ratio: 1.5, curve: [] },
+    ],
+  };
+  ctx.ensureCompatRampConfig(config, spec);
+  ctx.materialiseRampTokens(config, spec);
+  ctx.materialiseRampSizes(config, spec);
+  assert.throws(
+    () => ctx.generateRampVariables(config, spec, {}),
+    /base has to be above zero/
+  );
 });
 
 test('adoption records three identical modes as one scale, and regenerates all three', () => {

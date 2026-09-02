@@ -518,6 +518,56 @@
     return candidates.length === 1 ? candidates[0].value : "";
   }
 
+  /**
+   * Preview / suggestions start hidden and open only when they hold HTML.
+   *
+   * `@showWhen` alone used to open an empty Preview the moment a collection was picked — then a
+   * silent run cleared it, which read as a flash of placeholder. Content is the gate; conditions
+   * can still *hide* a filled slot, but they cannot show an empty one.
+   */
+  function markContentReveal(el) {
+    if (!el) return el;
+    el.setAttribute("data-content-reveal", "true");
+    el.style.display = "none";
+    return el;
+  }
+
+  function contentRevealFilled(el) {
+    if (!el) return false;
+    var html = el.innerHTML;
+    return !!(html && String(html).replace(/\s+/g, "").length);
+  }
+
+  /** Headings / fields that belong with the next preview or suggestions slot. */
+  function isContentRevealSectionHeading(text) {
+    return /^(Preview|Overview|Suggested)\b/i.test(String(text || "").trim());
+  }
+
+  /**
+   * Fill a preview/suggestions slot and reveal (or hide) it with its paired heading.
+   * The single write path the panel uses — never set innerHTML on these slots alone.
+   */
+  function fillContentReveal(slot, html) {
+    if (!slot) return;
+    var text = html || "";
+    slot.innerHTML = text;
+    var has = !!(text && String(text).trim());
+    var suppressed = slot.getAttribute("data-content-reveal-suppressed") === "true";
+    var show = has && !suppressed;
+    slot.style.display = show ? "" : "none";
+    var el = slot.previousElementSibling;
+    while (el && el.getAttribute("data-content-reveal-pair") === "true") {
+      el.style.display = show ? "" : "none";
+      el = el.previousElementSibling;
+    }
+  }
+
+  /** Re-apply content+suppressed to one slot (after applyVisibility flips the flag). */
+  function refreshContentReveal(slot) {
+    if (!slot || !slot.getAttribute("data-content-reveal")) return;
+    fillContentReveal(slot, slot.innerHTML);
+  }
+
   function buildRow(r, idx, schema, prose) {
     if (r.type === "lineBreak") {
       var wr = document.createElement("div");
@@ -529,6 +579,10 @@
       var wr2 = document.createElement("div");
       wr2.className = "config-ui-row config-ui-row--divider" +
         (r.section ? " config-ui-row--divider-section" : "");
+      var drules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+      if (drules && drules.length) {
+        wr2.setAttribute("data-show-when-rules", JSON.stringify(drules));
+      }
       wr2.appendChild(document.createElement("hr"));
       return wr2;
     }
@@ -583,8 +637,14 @@
       var suggestSlot = document.createElement("div");
       suggestSlot.className = "config-ui-row config-ui-row--suggestions";
       suggestSlot.setAttribute("data-suggestions-slot", "true");
-      // The search for alternatives is not built. Dimmed and captioned rather than absent, so the
-      // panel reports how far along it is instead of looking finished.
+      // **Hidden until there is something to show.** Content, not `@showWhen`, is the gate — a
+      // collection alone is not a reason to open an empty Overview. `setContentReveal` / the panel
+      // fill path reveal the row when HTML arrives; `applyVisibility` will not force it open.
+      markContentReveal(suggestSlot);
+      var srules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+      if (srules && srules.length) {
+        suggestSlot.setAttribute("data-show-when-rules", JSON.stringify(srules));
+      }
       return suggestSlot;
     }
     if (r.type === "preview") {
@@ -592,6 +652,11 @@
       var previewSlot = document.createElement("div");
       previewSlot.className = "config-ui-row config-ui-row--preview";
       previewSlot.setAttribute("data-preview-slot", "true");
+      markContentReveal(previewSlot);
+      var pvrules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+      if (pvrules && pvrules.length) {
+        previewSlot.setAttribute("data-show-when-rules", JSON.stringify(pvrules));
+      }
       return previewSlot;
     }
     if (r.type === "chips") {
@@ -680,6 +745,17 @@
       // Which paragraph explains which control, decided once for the whole block — a row cannot
       // answer it alone, because the answer is about the rows on either side of it.
       var fold = foldProse(schema.rows);
+      // **Pair Preview/Overview headings with the content-reveal slot that follows.** They start
+      // hidden with the slot; `fillContentReveal` opens them together when HTML arrives. Mode
+      // settings and other headings are not paired — they keep ordinary `@showWhen`.
+      var revealTrail = [];
+      function clearRevealTrail(keepHidden) {
+        revealTrail.forEach(function (el) {
+          el.removeAttribute("data-content-reveal-pair");
+          if (!keepHidden) el.style.display = "";
+        });
+        revealTrail = [];
+      }
       schema.rows.forEach(function (r, i) {
         // A folded paragraph is not dropped from the schema, only from the page: it is still in
         // `schema.rows`, so `serialize` writes it back into the config block exactly as it was.
@@ -690,6 +766,21 @@
         var el = buildRow(r, r.type === "field" ? fieldIdx++ : 0, schema, fold.prose[i]);
         el.setAttribute("data-row-index", String(i));
         container.appendChild(el);
+        if (r.type === "heading" && isContentRevealSectionHeading(r.text)) {
+          clearRevealTrail(true);
+          el.setAttribute("data-content-reveal-pair", "true");
+          el.style.display = "none";
+          revealTrail = [el];
+        } else if ((r.type === "field" || r.type === "paragraph") && revealTrail.length) {
+          el.setAttribute("data-content-reveal-pair", "true");
+          el.style.display = "none";
+          revealTrail.push(el);
+        } else if (r.type === "preview" || r.type === "suggestions") {
+          // Trail already marked as pairs; leave them hidden until fillContentReveal.
+          revealTrail = [];
+        } else {
+          clearRevealTrail(false);
+        }
       });
       return;
     }
@@ -1101,7 +1192,7 @@
    * list is not evidence that it does not exist, so the note stays quiet rather than claiming a
    * collection will be created when nobody has looked.
    */
-  function populateCollectionControl(wrap, names, value, known) {
+  function populateCollectionControl(wrap, names, value, known, forceCreating) {
     var select = wrap.querySelector(".config-ui-collection-select");
     var newName = wrap.querySelector(".config-ui-collection-new");
     var note = wrap.querySelector(".config-ui-collection-note");
@@ -1113,7 +1204,11 @@
     // somebody made, and the list arriving a moment later must not undo it merely because they have
     // not finished typing the name — which is the state the control is in for as long as it takes to
     // reach the keyboard.
-    var chosenNew = select.value === collectionNewSentinel();
+    //
+    // `forceCreating` is the host remembering that choice across a form rebuild (seeding a starter
+    // Value mode writes the block and reprojects — without it, *New collection* snaps back to the
+    // placeholder and Mode settings close again).
+    var chosenNew = !!forceCreating || select.value === collectionNewSentinel();
 
     select.innerHTML = "";
     // Shown when nothing is chosen, but **not an item in the list**: it is a prompt, and picking it would
@@ -4155,6 +4250,7 @@
             // the entry is called. The name rides along for diagnosis only.
             slot.setAttribute("data-preview-row", String(index));
             slot.setAttribute("data-preview-name", rowLabel(row, index));
+            markContentReveal(slot);
             /**
              * **The strip is the mode's, never a channel's.** It shows the colours the mode generates, and
              * those do not change with which channel you happen to be looking at. Left to fall into the
@@ -4932,6 +5028,8 @@
        * four decimals.
        */
       function showWhenValueStr(v) {
+        // A token list is an array in the form; `*` means "at least one name", not `String([])`.
+        if (Array.isArray(v)) return v.length > 0 ? v.join(",") : "";
         return v === undefined || v === null ? "" : String(v);
       }
       function curveFieldNames() {
@@ -4965,7 +5063,25 @@
       }
       container.querySelectorAll("[data-show-when-rules]").forEach(function (row) {
         var v = visRules(row);
-        if (v !== null) row.style.display = v ? "" : "none";
+        if (v === null) return;
+        // Content-reveal slots: `@showWhen` may suppress, but never open an empty slot.
+        if (row.getAttribute("data-content-reveal")) {
+          if (v) row.removeAttribute("data-content-reveal-suppressed");
+          else row.setAttribute("data-content-reveal-suppressed", "true");
+          refreshContentReveal(row);
+          return;
+        }
+        // Paired headings follow their slot — do not let showWhen alone open them.
+        if (row.getAttribute("data-content-reveal-pair") === "true") {
+          return;
+        }
+        row.style.display = v ? "" : "none";
+      });
+      // Slots with no showWhen still need a pass after a rebuild / empty fill.
+      container.querySelectorAll("[data-content-reveal]").forEach(function (row) {
+        if (row.getAttribute("data-show-when-rules")) return;
+        row.removeAttribute("data-content-reveal-suppressed");
+        refreshContentReveal(row);
       });
       // Row cells, judged inside their own row. `getValues` flattens the rows into one array per field,
       // which is the wrong shape for this — what a cell needs is the sibling cell beside it, so the
@@ -5333,9 +5449,15 @@
     buildForm: buildForm,
     buildField: buildField,
     attachListeners: attachListeners,
+    // Content-reveal: preview/suggestions start hidden; the panel fills through this.
+    fillContentReveal: fillContentReveal,
+    contentRevealFilled: contentRevealFilled,
     // The collection list is a backend round trip, so `ui.html` fills the picker when it arrives.
     populateCollectionControl: populateCollectionControl,
     readCollectionControl: readCollectionControl,
+    // Published so `ui.html` can restore *New collection* after a form rebuild (starter-mode seed)
+    // without hard-coding the sentinel string in a second place.
+    collectionNewSentinel: collectionNewSentinel,
     // The mode list is the same round trip, one level down: which collection to ask about comes from
     // the collection picker, so `ui.html` fills these by the collection name they are showing.
     populateModeControl: populateModeControl,

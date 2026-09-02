@@ -44,6 +44,7 @@ function load() {
 }
 
 const lib = load();
+const EXAMPLE = require('./dsf-example-configs.js');
 
 /** The `@CONFIG_START` body of a shipped script, as text. */
 function shippedBlock(file) {
@@ -91,13 +92,17 @@ function recordAndPrint(config, domain, viewports) {
  */
 function blockWithModes(file, entries) {
   const block = shippedBlock(file);
+  const body = entries.map((e) => '    ' + e).join(',\n');
+  const replacement = '  modes: [\n' + body + '\n  ]';
+  if (/modes:\s*\[\s*\]/.test(block)) {
+    return block.replace(/modes:\s*\[\s*\]/, replacement);
+  }
   const start = block.indexOf('  modes: [');
   // Trailing comma after `]` is annotation-era; value-only `@CONFIG` ends with bare `]`.
   let end = block.indexOf('\n  ],', start);
   if (end === -1) end = block.indexOf('\n  ]', start);
   assert.ok(start !== -1 && end !== -1, 'could not find the modes array in ' + file);
-  const body = entries.map((e) => '    ' + e).join(',\n');
-  return block.slice(0, start) + '  modes: [\n' + body + block.slice(end);
+  return block.slice(0, start) + replacement + block.slice(end + '\n  ]'.length);
 }
 
 const THREE_MODE_SPACING_BLOCK = () => blockWithModes('spacing.js', [
@@ -290,16 +295,14 @@ test('a value edit rewrites its own line and nothing else', () => {
 
     // A scalar, and a number nested inside a `@rows` array — the two shapes a panel edits.
     const scalar = fields.filter((r) => r.inputType === 'number')[0];
+    const stringField = fields.filter((r) => r.inputType === 'string' && r.name !== 'collectionName')[0];
     const rows = fields.filter((r) => r.inputType === 'rows')[0];
-    if (!scalar && !rows) continue;
+    if (!scalar && !rows && !stringField) continue;
 
     const values = {};
     if (scalar) values[scalar.name] = (scalar.value || 0) + 7;
-    // Under `@PANEL` serialize, editing a nested rows cell can expand a compact one-liner
-    // (Grid's single-line mode → multi-line object). That length change is a formatting choice,
-    // not the annotation-era "one edit, one line" invariant — panel-spec suites cover value
-    // round-trips. So when a panel schema already has a scalar to edit, skip the rows edit.
-    if (rows && !(panel && scalar)) {
+    else if (stringField && panel) values[stringField.name] = (stringField.value || 'Test') + ' edited';
+    else if (rows) {
       const next = JSON.parse(JSON.stringify(rows.value));
       const first = next[0] || {};
       const key = Object.keys(first).filter((k) => typeof first[k] === 'number')[0];
@@ -339,6 +342,8 @@ test('a value edit rewrites its own line and nothing else', () => {
         }
       }
       values[rows.name] = next;
+    } else {
+      continue;
     }
 
     const before = block.split('\n');

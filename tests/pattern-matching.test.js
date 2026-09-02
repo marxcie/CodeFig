@@ -265,10 +265,10 @@ test('hasRenameOperation refuses an unconfigured form but allows both real one-s
   // Same source text in rename-styles.js and rename-variables.js; extract from one and
   // assert the other is byte-identical, so they cannot drift apart.
   const styles = fs.readFileSync(
-    path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'rename-styles.js'), 'utf8'
+    path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Styles', 'rename-styles.js'), 'utf8'
   );
   const variables = fs.readFileSync(
-    path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'rename-variables.js'), 'utf8'
+    path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Variables', 'rename-variables.js'), 'utf8'
   );
   const fromStyles = resolver.extractFunctionMap(styles).get('hasRenameOperation');
   const fromVariables = resolver.extractFunctionMap(variables).get('hasRenameOperation');

@@ -21,7 +21,7 @@
   {
     "type": "field",
     "name": "group",
-    "value": "Spacing",
+    "value": "",
     "label": "Group within collection",
     "labelSpelled": true,
     "tooltip": "",
@@ -31,18 +31,12 @@
   {
     "type": "field",
     "name": "spacings",
-    "value": [
-      "px",
-      "xs",
-      "sm",
-      "md",
-      "lg",
-      "xl"
-    ],
+    "value": [],
     "label": "Tokens",
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "list",
+    "placeholder": "px, xs, sm, md, lg, xl",
     "helper": "Names from smallest to largest. spacing-{1,10} expands to ten names."
   },
   {
@@ -52,7 +46,21 @@
   {
     "type": "heading",
     "level": 1,
-    "text": "Mode settings"
+    "text": "Mode settings",
+    "showWhenRules": [
+      {
+        "field": "collectionName",
+        "values": [
+          "*"
+        ]
+      },
+      {
+        "field": "spacings",
+        "values": [
+          "*"
+        ]
+      }
+    ]
   },
   {
     "type": "field",
@@ -62,30 +70,44 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "boolean",
-    "helper": "Builds a Spacing overview on the canvas: one row per token, one column per mode, with variable-bound width bars."
+    "helper": "Builds a Spacing overview on the canvas: one row per token, one column per mode, with variable-bound width bars.",
+    "showWhenRules": [
+      {
+        "field": "collectionName",
+        "values": [
+          "*"
+        ]
+      },
+      {
+        "field": "spacings",
+        "values": [
+          "*"
+        ]
+      }
+    ]
   },
   {
     "type": "field",
     "name": "modes",
-    "value": [
-      {
-        "name": "Value",
-        "scaleType": "bezier",
-        "base": 4,
-        "ratio": 1.5,
-        "curve": [],
-        "step": 4,
-        "mod": 3,
-        "roundTo": 2,
-        "extras": [
-          1
-        ]
-      }
-    ],
+    "value": [],
     "label": "Modes",
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "rows",
+    "showWhenRules": [
+      {
+        "field": "collectionName",
+        "values": [
+          "*"
+        ]
+      },
+      {
+        "field": "spacings",
+        "values": [
+          "*"
+        ]
+      }
+    ],
     "columns": [
       {
         "key": "name",

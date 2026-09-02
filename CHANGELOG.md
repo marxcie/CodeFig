@@ -19,6 +19,23 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Fixed
+
+- **DSF Mode settings gates differ by script.** Spacing / Typography / Corner radius / Colors
+  open Mode settings only with a **named collection** (existing or New collection + name) **and
+  Tokens**. Grid opens Mode settings, suggestions, and Preview once a collection is named —
+  choosing *New collection* alone no longer pre-fills Width/Columns or shows suggestions.
+  Collection modes chips can still unlock earlier via a seeded Value mode.
+
+- **New collection unlocks Collection modes on every DSF panel.** Choosing *New collection*
+  (even before typing a name) seeds a renameable **Value** mode. Colors chips no longer wait on
+  Color tokens (Mode settings still do). Address reset no longer writes empty `modes: []` back
+  over that starter.
+
+## [2.0.0] - TBD
+
+**Foundations.** Generational config UX: JSON `@PANEL_START` panel recipes (values stay in `@CONFIG_*`); Configuration code tab removed. Script storage in Figma Variables with LocalStorage backup, settings gear, and canvas paste-share. Foundation maintain on open; copy/duplicate → new stamp identity. Design System Foundations open empty until a collection is chosen; ramp scripts scan for the group when none is recorded. Scoped preview CSS on DSF libraries (plans 29–32).
+
 ### Removed
 
 - **Copy simple variables JSON** — superseded by Export/import variables.
@@ -29,6 +46,34 @@ a plain statement of the new default.
 
 ### Changed
 
+- **Utility script sidebar groups.** Shipped utilities are grouped under **Styles** (6),
+  **Variables** (12), **Styles & Variables** (4), and **Utility Scripts** (6 general tools).
+  Design System Foundations is unchanged. Script filenames and `@import` targets are the same;
+  only the display prefix changed (e.g. `Styles / Rename styles` instead of
+  `Utility Scripts / Rename styles`). Resolve by filename or title as before.
+
+- **Grid, Spacing, Corner radius, and Typography** open with empty General fields (placeholders
+  only). **Mode settings** still wait on a collection; **Preview / Overview / Suggestions** stay
+  hidden until their HTML has something to show (content-reveal — not `@showWhen` alone), so an
+  empty collection no longer flashes placeholder copy. Ramp scripts **scan the collection for the
+  group that holds a set** when the current group has no manifest (same offer Grid already had for
+  `col-N` series). Auto-import still fills token names or the manifest once Group points at the
+  right place. **Fix:** the group scan no longer throws in the sandbox — the minimum-token
+  threshold lived in a top-level `var` that `@import` extraction does not carry. **Domain-aware:**
+  spacing and radius scans no longer treat each other's groups (or typography companions) as
+  candidates, so a collection with one of each can auto-set Group again.
+- **Content-reveal for DSF previews.** Preview and suggestions slots start `display: none` and
+  open only through `fillContentReveal` when the silent run returns non-empty HTML. Paired
+  section headings (Preview / Overview / Suggested…) follow the same gate. Fixes Colors strips
+  that stayed invisible after tokens were typed (empty slots had been left at `display: none`).
+  Typography no longer emits “Pick a scale type…” placeholders — incomplete scales return `''`.
+- **Spacing / Corner radius Run skips incomplete modes.** Collection alignment fills every mode;
+  a bezier base of 0 on Pad/Mobile no longer aborts the whole run when Desktop is ready. Skipped
+  modes are listed in the results; the run still fails only when *no* mode can generate.
+- **Collection modes on DSF panels.** Choosing a collection while Group is still empty left mode
+  chips in placeholder ("Modes locked by Collection scope") when group detection returned early or
+  when the address reset wrote `modes: []` after alignment. Modes from the file are written before
+  any group offer short-circuits now.
 - **Multi-collection pickers** show “No Collections available” when the file has none
   (was an empty bordered box).
 - **DSF copy pass (helpers + Documentation).** All five Design System Foundations scripts
@@ -62,6 +107,12 @@ a plain statement of the new default.
   extraction.
 ### Fixed
 
+- **Preview no longer bleeds across script switches.** Cached preview HTML from the previous
+  panel was redrawn into the next one's slot and forced visible, overriding `@showWhen`; switching
+  scripts now clears that cache and defers row visibility to the form's condition sweep.
+  **Follow-up:** the cache clear ran *after* the new form restored `_previewLastHtml`, so Grid
+  still flashed on Spacing (and Colors on Corner radius) until the next silent run. Clear now
+  runs before the form build, restores only for the same script, and wipes preview DOM immediately.
 - **Libraries that only mention `@CONFIG_START` in Docs/comments no longer open an empty
   Configuration UI.** Section markers must sit alone on a `//` line (same rule as extraction).
   The Configuration UI tab appears only when the config block yields form fields — no more

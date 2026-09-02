@@ -111,12 +111,10 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   // @fromFile: domains.grid
 
   collectionName: "",
-  group: "Grid",
+  group: "",
   extensionColumns: 0,
   generateOverview: false,
-  modes: [
-    { name: "Value", containerWidth: 1920, columns: 12, gap: 40, padding: 80 }
-  ]
+  modes: []
 // @CONFIG_END
 
 // @PANEL_START
@@ -128,12 +126,15 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 //     { type: "chips", label: "Collection modes", from: "modes" },
 //     { key: "group", type: "string", label: "Group within collection", placeholder: "eg. Grid" },
 //     { type: "divider", section: true },
-//     { type: "heading", text: "Mode settings" },
+//     { type: "heading", text: "Mode settings", showWhen: { collectionName: "*" } },
 //     { key: "extensionColumns", type: "number", label: "Extra columns",
+//       showWhen: { collectionName: "*" },
 //       helper: "Extra column variables past the main grid, for layouts that need to overshoot." },
 //     { key: "generateOverview", type: "boolean", label: "Generate overview",
+//       showWhen: { collectionName: "*" },
 //       helper: "Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied." },
 //     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+//       showWhen: { collectionName: "*" },
 //       columns: [
 //         { key: "name", type: "text", label: "Mode" },
 //         { key: "containerWidth", type: "number", label: "Width" },
@@ -141,10 +142,11 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
 //         { key: "gap", type: "number", label: "Gap" },
 //         { key: "padding", type: "number", label: "Margins" }
 //       ] },
-//     { type: "heading", text: "Suggested whole number divisions" },
-//     { type: "suggestions" },
-//     { type: "heading", text: "Preview" },
-//     { type: "preview" }
+//     { type: "heading", text: "Suggested whole number divisions",
+//       showWhen: { collectionName: "*" } },
+//     { type: "suggestions", showWhen: { collectionName: "*" } },
+//     { type: "heading", text: "Preview", showWhen: { collectionName: "*" } },
+//     { type: "preview", showWhen: { collectionName: "*" } }
 //   ]
 // }
 // @PANEL_END

@@ -248,26 +248,15 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
 // @fromFile: domains.typography
 
   collectionName: "",
-  group: "Typography",
-  fontScale: ["Text-Tiny", "Text-Small", "Text-Regular", "Text-Large", "Heading-6", "Heading-5", "Heading-4", "Heading-3", "Heading-2", "Heading-1"],
-  fontFamily: "Inter",
-  fontWeights: [400, 600],
-  createStyles: true,
-  styleNaming: "Typography/{$fontScale}/{$fontWeight}",
+  group: "",
+  fontScale: [],
+  fontFamily: "",
+  fontWeights: [],
+  createStyles: false,
+  styleNaming: "",
   generateOverview: false,
-  modes: [
-    {
-      name: "Value",
-      scaleType: "bezier",
-      base: 8,
-      ratio: 1.25,
-      curve: [],
-      letterSpacing: { base: 0, max: -2 },
-      lineHeight: { base: 150, max: 110 },
-      roundTo: 2
-    }
-  ],
-  overviewPreviewText: "Sphinx of black quartz,\njudge my vow."
+  modes: [],
+  overviewPreviewText: ""
 // @CONFIG_END
 
 // @PANEL_START
@@ -279,19 +268,24 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
 //     { key: "group", type: "string", label: "Group within collection",
 //       placeholder: "eg.: Typography" },
 //     { key: "fontScale", type: "list", label: "Tokens",
+//       placeholder: "Text-Tiny, Text-Small, Text-Regular, Heading-1",
 //       helper: "Names from smallest to largest. heading-{6,1} expands to six sizes. Base unit is the size of the first name." },
 //     { key: "fontFamily", type: "string", label: "Font family",
 //       placeholder: "eg.: Inter Tight" },
 //     { key: "fontWeights", type: "list", label: "Font weights",
+//       placeholder: "400, 600",
 //       helper: "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold." },
 //     { key: "createStyles", type: "boolean", label: "Create and update text styles" },
 //     { key: "styleNaming", type: "string", label: "Style naming",
 //       placeholder: "eg.: Typography/{$fontScale}/{$fontWeight}" },
 //     { type: "divider", section: true },
-//     { type: "heading", text: "Mode settings" },
+//     { type: "heading", text: "Mode settings",
+//       showWhen: { collectionName: "*", fontScale: "*" } },
 //     { key: "generateOverview", type: "boolean", label: "Generate overview",
+//       showWhen: { collectionName: "*", fontScale: "*" },
 //       helper: "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight." },
 //     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+//       showWhen: { collectionName: "*", fontScale: "*" },
 //       columns: [
 //         { key: "name", type: "text", label: "Mode" },
 //         { key: "scaleType", type: "radio", label: "Scale type",

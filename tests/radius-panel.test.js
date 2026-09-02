@@ -24,6 +24,8 @@ const shim = require('./dom-shim.js');
 const { document } = shim.install();
 const P = require('../src/config-ui/parser.js');
 const R = require('../src/config-ui/renderer.js');
+const EXAMPLE = require('./dsf-example-configs.js');
+const { buildPanelWithCollection } = require('./dsf-panel-helpers.js');
 
 const ROOT = path.join(__dirname, '..');
 const RADIUS = path.join(ROOT, 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'corner-radius.js');
@@ -66,7 +68,12 @@ const MODES = [
 function threeModeConfig() {
   const config = P.parseConfigBlockObject(BLOCK);
   config.modes = MODES.map((m) => JSON.parse(JSON.stringify(m)));
+  config.radii = EXAMPLE.radius.radii;
   return config;
+}
+
+function starterConfig() {
+  return JSON.parse(JSON.stringify(EXAMPLE.radius));
 }
 
 function readout(html) {
@@ -115,11 +122,8 @@ test('the frame has three radios, which settles what the Spacing frames left ope
 });
 
 test('a mode shows the fields its scale type uses', () => {
-  const schema = parsePanel();
-  const container = document.createElement('div');
-  R.buildForm(schema, container);
-  R.attachListeners(container, schema, () => {});
-  const item = container.querySelectorAll('.config-ui-rows-item')[0];
+  const { items } = buildPanelWithCollection(R, parsePanel, starterConfig());
+  const item = items[0];
   const shown = () => [].filter
     .call(item.querySelectorAll('.config-ui-rows-cell'), (c) => c.style.display !== 'none')
     .map((c) => {
@@ -159,8 +163,8 @@ test('every mode generates exactly what it generated before the panel', () => {
 });
 
 test('the preview draws the corner at its real size, on the box the frame draws', () => {
-  const config = P.parseConfigBlockObject(BLOCK);
-  const out = readout(L.radiusPreviewHtml(config, 'radius', 'desktop'));
+  const config = starterConfig();
+  const out = readout(L.radiusPreviewHtml(config, 'radius', 'Value'));
 
   assert.deepEqual(out.names, ['none', 'xs', 'sm', 'md', 'lg', 'xl']);
   assert.deepEqual(out.values.map(Number), [0, 4, 6, 10, 14, 20]);
@@ -175,10 +179,10 @@ test('a radius past what the box can show says so', () => {
   // largest value is 96, so this is not a hypothetical.
   assert.equal(L.radiusPreviewCap(), 60);
 
-  const config = P.parseConfigBlockObject(BLOCK);
+  const config = starterConfig();
   const big = JSON.parse(JSON.stringify(config));
-  big.modes[0] = { name: 'desktop', scaleType: 'metric', base: 24, step: 24, mod: 1, roundTo: 2, extras: [0] };
-  const out = readout(L.radiusPreviewHtml(big, 'radius', 'desktop'));
+  big.modes[0] = { name: 'Value', scaleType: 'metric', base: 24, step: 24, mod: 1, roundTo: 2, extras: [0] };
+  const out = readout(L.radiusPreviewHtml(big, 'radius', 'Value'));
 
   assert.ok(out.values.map(Number).some((v) => v > 60), 'the fixture actually goes past the cap');
   const past = out.notes.filter((n) => n.indexOf('box can show') !== -1);
@@ -188,10 +192,10 @@ test('a radius past what the box can show says so', () => {
 });
 
 test('a rounded value still says what it was, and both notes can appear together', () => {
-  const config = P.parseConfigBlockObject(BLOCK);
+  const config = starterConfig();
   const modular = JSON.parse(JSON.stringify(config));
-  modular.modes[0] = { name: 'desktop', scaleType: 'modular', ratio: 1.618, base: 40, roundTo: 2, extras: [0] };
-  const out = readout(L.radiusPreviewHtml(modular, 'radius', 'desktop'));
+  modular.modes[0] = { name: 'Value', scaleType: 'modular', ratio: 1.618, base: 40, roundTo: 2, extras: [0] };
+  const out = readout(L.radiusPreviewHtml(modular, 'radius', 'Value'));
 
   const rounded = out.notes.filter((n) => n.indexOf('Rounded from') !== -1);
   assert.ok(rounded.length > 0, 'a 1.618 ratio does not land on a grid of 2 by itself');
@@ -218,17 +222,17 @@ test('the two previews are one set of numbers in two shapes', () => {
   // `rampPreviewRows` was extracted so the radius preview could not compute its values a second way. A
   // preview that generates differently from the run is the thing nobody can judge, and two previews that
   // generate differently from each other is the same problem twice.
-  const config = P.parseConfigBlockObject(BLOCK);
-  const rows = L.rampPreviewRows(config, 'radius', 'desktop').rows;
-  const drawn = readout(L.radiusPreviewHtml(config, 'radius', 'desktop'));
+  const config = starterConfig();
+  const rows = L.rampPreviewRows(config, 'radius', 'Value').rows;
+  const drawn = readout(L.radiusPreviewHtml(config, 'radius', 'Value'));
   assert.deepEqual(drawn.values.map(Number), rows.map((r) => r.value));
 
-  const bars = L.spacingPreviewHtml(config, 'radius', 'desktop');
+  const bars = L.spacingPreviewHtml(config, 'radius', 'Value');
   const barValues = [...bars.matchAll(/spacing-preview-value">([^<]*)</g)].map((m) => Number(m[1]));
   assert.deepEqual(barValues, rows.map((r) => r.value), 'and the bar drawing agrees with the box drawing');
 });
 
-test('an unreadable config says so instead of drawing nothing', () => {
-  assert.match(L.radiusPreviewHtml(null, 'radius', null), /no config/i);
-  assert.match(L.radiusPreviewHtml({ radii: [], modes: [] }, 'radius', null), /names no tokens|no modes/i);
+test('an incomplete config hides the preview rather than drawing a placeholder', () => {
+  assert.equal(L.radiusPreviewHtml(null, 'radius', null), '');
+  assert.equal(L.radiusPreviewHtml({ radii: [], modes: [] }, 'radius', null), '');
 });

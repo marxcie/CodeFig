@@ -355,6 +355,13 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   var namedIndex = wanted ? steps.indexOf(wanted) : -1;
   var segments = colorsCurve(config, mode, oklch, steps, anchors,
     namedIndex >= 0 ? namedIndex : colorsMidIndex(steps));
+  // **Creating a new strip: Original has nothing to hold onto.** `[]` means "the file's colours",
+  // which a collection without a ramp does not have. Showing "Original has no colours…" there
+  // blocks the one thing the panel is for — drawing what typed steps would generate. Fall back to
+  // Linear from the anchors so 50, 900 (and a seed, later) can appear before anything is written.
+  if (segments.original && !held) {
+    segments = { curve: bezierFromEase('linear', 'none', 1), original: false };
+  }
   var curveId = segments.curve;
   var base = (oklch && sharedLadder) ? sharedLadder : oklchLadder(anchors, curveId, steps);
 
@@ -1428,7 +1435,7 @@ function colorsTolerance() {
 function colorsAlignment(config) {
   var parsed = colorsParseSteps(config.steps);
   var steps = parsed.steps.length ? parsed.steps : colorsPlaceholderSteps();
-  var oklch = (config.colorModel || 'hsl') !== 'hsl';
+  var oklch = (config.colorModel || 'oklch') !== 'hsl';
   // The shared ladder is built with the shared curve, or the two would disagree about the collection's.
   var sharedAnchors = colorsLightnessAnchors(config);
   var shared = oklch

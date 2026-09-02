@@ -250,7 +250,7 @@ test('the section heading rule names the tag the renderer actually emits', () =>
   // comment. Only the arithmetic is surface-specific; the size above is not.
   const gap = rules.find((r) => r.selector === formSelector);
   assert.ok(gap, 'the form has no spacing rule for its section heading');
-  assert.match(gap.body, /margin: calc\(var\(--section-gap\)/, 'and carries the section gap itself');
+  assert.match(gap.body, /margin-top: var\(--space-sm\)/, 'and carries the section gap itself');
   assert.doesNotMatch(gap.body, /font-size/,
     'the form is setting a heading size again — that belongs to the shared ladder rule');
 });

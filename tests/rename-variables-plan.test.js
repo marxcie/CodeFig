@@ -1,5 +1,5 @@
 /**
- * Fixture tests for the plan/apply split in scripts/EXAMPLE_SCRIPTS/rename-variables.js.
+ * Fixture tests for the plan/apply split in scripts/EXAMPLE_SCRIPTS/Variables/rename-variables.js.
  *
  * The wrinkle rename-styles does not have: a variable name is only unique **within its
  * collection**, so both the rows and the collision check work on the qualified
@@ -26,7 +26,7 @@ function loadPlanner() {
   const sources = [
     ['CODEFIG_LIBRARIES/@pattern-matching.js', ['escapeWildcards', 'applyFigmaPlaceholders', 'patternMode', 'patternToRegex', 'nameMatches', 'renameByPattern']],
     ['CODEFIG_LIBRARIES/@rename-preview.js', ['previewRow', 'flagPreviewCollisions', 'previewCounts']],
-    ['EXAMPLE_SCRIPTS/rename-variables.js', ['getMatchOpts', 'getScope', 'normalizeScopeSeparator', 'getScopePath', 'scopeMatchesSearchIn', 'toRenameOperations', 'applyOperationsToName', 'planRenameVariables', 'existingVariableNames']]
+    ['EXAMPLE_SCRIPTS/Variables/rename-variables.js', ['getMatchOpts', 'getScope', 'normalizeScopeSeparator', 'getScopePath', 'scopeMatchesSearchIn', 'toRenameOperations', 'applyOperationsToName', 'planRenameVariables', 'existingVariableNames']]
   ];
   for (const [rel, names] of sources) {
     const map = resolver.extractFunctionMap(read(rel));

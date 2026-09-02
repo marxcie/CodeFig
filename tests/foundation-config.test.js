@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
+const EXAMPLE = require('./dsf-example-configs.js');
 const resolver = require('../src/import-resolver.js');
 
 const SCRIPTS = path.join(__dirname, '..', 'scripts');
@@ -196,6 +197,9 @@ test('no shipped default block warns about itself', () => {
   // failure as 19b's metric configs warning about a `max` they never declared. `fontFamily`,
   // `light` and `dark` are in shipped blocks, so they are declared fields by definition, and
   // colors is a domain because it has a script.
+  //
+  // Empty `@CONFIG` blocks are intentional now — General stays blank until a collection is
+  // chosen. Grid with no modes cannot infer a domain yet; that one warning is expected.
   const dir = path.join(SCRIPTS, 'EXAMPLE_SCRIPTS', 'Design System Foundations');
   const checked = [];
 
@@ -207,11 +211,17 @@ test('no shipped default block warns about itself', () => {
 
     const block = vm.runInNewContext('({' + source.slice(start + '// @CONFIG_START'.length, end) + '})');
     const result = normaliseConfig(block);
-    assert.deepEqual(
-      result.warnings.map((w) => w.message), [],
-      file + ' warns about its own default config'
-    );
-    assert.notEqual(Object.keys(result.config.domains)[0], 'unknown', file + ' is not recognised');
+    const warnings = result.warnings.map((w) => w.message);
+    if (file === 'grid.js') {
+      assert.deepEqual(warnings, [
+        'Could not tell which kind of config this is. Its settings were kept but not interpreted.',
+      ], file + ' warns about an empty grid default');
+    } else {
+      assert.deepEqual(warnings, [], file + ' warns about its own default config');
+    }
+    if (file !== 'grid.js') {
+      assert.notEqual(Object.keys(result.config.domains)[0], 'unknown', file + ' is not recognised');
+    }
     checked.push(file);
   }
 
@@ -239,6 +249,34 @@ test('parameter sets survive the manifest, despite sharing a name with v1 sets',
   assert.equal(slice.sets.length, 1);
   assert.equal(slice.sets[0].appliesTo, '*');
   assert.equal(toDomainConfig(result.config, 'spacing').sets.length, 1, 'and come back out');
+});
+
+test('a recorded sets slice still fills the panel modes array', () => {
+  // Auto-import used toDomainConfig → fillConfigBlock. Dropping modes when sets were present left
+  // Mode settings empty after a load: tokens arrived, Base/curve did not.
+  const v1 = {
+    v: 1, collection: 'RS', group: 'Corner radius', viewports: [],
+    domains: {
+      radius: {
+        tokens: ['none', 'xs', 'sm'],
+        sets: [
+          { name: 'Desktop', appliesTo: 'Desktop', scaleType: 'bezier', base: 4, roundTo: 4, extras: [0],
+            curve: [0.333, 0.333, 0.667, 0.667] },
+          { name: 'Mobile', appliesTo: 'Mobile', scaleType: 'bezier', base: 2, roundTo: 2, extras: [0],
+            curve: [0.333, 0.333, 0.667, 0.667] }
+        ],
+        perViewport: {},
+        extra: {}
+      }
+    }
+  };
+  const back = toDomainConfig(v1, 'radius');
+  assert.deepEqual(back.radii, ['none', 'xs', 'sm']);
+  assert.equal(back.modes.length, 2);
+  assert.equal(back.modes[0].name, 'Desktop');
+  assert.equal(back.modes[0].base, 4);
+  assert.equal(back.modes[1].base, 2);
+  assert.equal(back.sets.length, 2, 'sets remain for paste');
 });
 
 test('an expanded token list is kept as tokens, and the spent steps is dropped', () => {
@@ -531,14 +569,14 @@ test('every field a shipped config declares survives the round trip', () => {
   // toggle, not a derivation, and dropping it on import would quietly change what a run does.
   // Renames are allowed and listed; anything else lost or invented is a bug.
   const cases = [
-    { file: 'grid.js', domain: 'grid', renames: {} },
-    { file: 'spacing.js', domain: 'spacing', renames: {} },
-    { file: 'corner-radius.js', domain: 'radius', renames: {} },
-    { file: 'typography.js', domain: 'typography', renames: { figmaStyles: 'styles', fontScaling: 'scaling' } }
+    { file: 'grid.js', domain: 'grid', config: EXAMPLE.grid, renames: {} },
+    { file: 'spacing.js', domain: 'spacing', config: EXAMPLE.spacing, renames: {} },
+    { file: 'corner-radius.js', domain: 'radius', config: EXAMPLE.radius, renames: {} },
+    { file: 'typography.js', domain: 'typography', config: EXAMPLE.typography, renames: { figmaStyles: 'styles', fontScaling: 'scaling' } },
   ];
 
-  for (const { file, domain, renames } of cases) {
-    const declared = shippedConfigBlock(file);
+  for (const { file, domain, config, renames } of cases) {
+    const declared = JSON.parse(JSON.stringify(config));
     const back = toDomainConfig(normaliseConfig(declared).config, domain) || {};
 
     for (const key of Object.keys(declared)) {
@@ -891,7 +929,7 @@ test('the typography manifest carries the tokens the panel needs back', () => {
 
 /** A Figma stub with one collection and the variable names given. */
 function fileWith(names, modes) {
-  const vars = names.map((name, i) => ({ id: 'v' + i, name }));
+  const vars = names.map((name, i) => ({ id: 'v' + i, name, resolvedType: 'FLOAT' }));
   const collection = {
     name: 'Responsive System',
     variableIds: vars.map((v) => v.id),

@@ -102,27 +102,36 @@ test('typography.js: @PANEL_START matches the pre-migration rows dump, field by 
   });
 });
 
-test('typography.js: live values from @CONFIG_START reach list / textarea / nested group fields', () => {
+test('typography.js: General fields start empty with placeholders until a collection is chosen', () => {
   const rows = liveTypography().rows;
   const fontScale = rows.find((r) => r.type === 'field' && r.name === 'fontScale');
-  assert.ok(Array.isArray(fontScale.value) && fontScale.value.length === 10);
+  assert.deepStrictEqual(fontScale.value, []);
   assert.strictEqual(fontScale.inputType, 'list');
+  assert.strictEqual(fontScale.placeholder, 'Text-Tiny, Text-Small, Text-Regular, Heading-1');
 
   const fontWeights = rows.find((r) => r.type === 'field' && r.name === 'fontWeights');
-  assert.deepStrictEqual(fontWeights.value, [400, 600]);
-  assert.strictEqual(fontWeights.inputType, 'list');
+  assert.deepStrictEqual(fontWeights.value, []);
+  assert.strictEqual(fontWeights.placeholder, '400, 600');
+
+  const fontFamily = rows.find((r) => r.type === 'field' && r.name === 'fontFamily');
+  assert.strictEqual(fontFamily.value, '');
+
+  const group = rows.find((r) => r.type === 'field' && r.name === 'group');
+  assert.strictEqual(group.value, '');
+  assert.strictEqual(group.placeholder, 'eg.: Typography');
 
   const previewText = rows.find((r) => r.type === 'field' && r.name === 'overviewPreviewText');
   assert.strictEqual(previewText.inputType, 'textarea');
-  assert.ok(previewText.value.indexOf('Sphinx') === 0);
+  assert.strictEqual(previewText.value, '');
+  assert.ok(!previewText.showWhenRules || previewText.showWhenRules.length === 0,
+    'Preview text reveals with the specimen, not on collection alone');
 
   const modes = rows.find((r) => r.type === 'field' && r.name === 'modes');
+  assert.deepStrictEqual(modes.value, []);
   const letterSpacing = modes.columns.find((c) => c.key === 'letterSpacing');
   assert.strictEqual(letterSpacing.type, 'group');
   assert.strictEqual(letterSpacing.columns[0].unit, '%');
   assert.strictEqual(letterSpacing.columns[1].unit, '%');
-  assert.deepStrictEqual(modes.value[0].letterSpacing, { base: 0, max: -2 });
-  assert.deepStrictEqual(modes.value[0].lineHeight, { base: 150, max: 110 });
 });
 
 test('typography.js: suggestions and preview markers are present', () => {

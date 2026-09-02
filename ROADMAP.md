@@ -1,12 +1,9 @@
 # CodeFig roadmap and status
 
 **One page that says where the project is.** Written for whoever picks it up next, in any tool.
-Last consolidated 2026-08-31 (evening): Cornerstones largely landed on `dsf-foundations`
-(HEAD includes `@PANEL_START` migrations, Variables + LocalStorage storage, canvas paste-share,
-foundation maintain). **Next:** config UX cleanup + consistency (37). §11 stamp identity
-(copy = new set id; Move keeps; boot forks clear collisions) is implemented — click-verify in
-Figma. Library edit UX deferred (one model later). LocalStorage stays as personal backup. Do not
-commit `.plans/` files (gitignored / local).
+Last consolidated 2026-09-01: **Release 2.0 — Foundations** in exit sequence on `dsf-foundations`
+(JSON `@PANEL_START` generational update; Variables storage; foundation maintain; DSF panel UX).
+Cornerstones landed. **Next after 2.0 tag:** Plan 37 cleanup pass (panel consistency for custom authors).
 
 Keep it current. If a plan's status changes, change it here too, in the same pass. A roadmap that
 lies is worse than none.
@@ -47,6 +44,37 @@ the sequence. **Do not commit `.plans/`.**
   a status or result message.
 - **`npm run build:production` disables the dev bridge.** `assertDevBuild` now refuses rather than
   hanging, but run `npm run build:dev` after.
+
+---
+
+## Release: 2.0 Foundations (in exit sequence)
+
+**Why 2.0.** Generational config UX: JSON `@PANEL_START` panel recipes, values-only `@CONFIG`,
+Configuration code tab gone. Shipped with script storage in Variables + canvas paste-share,
+foundation maintain + stamp identity, and DSF panels that stay empty until a collection is chosen.
+
+**Ships (cornerstones 37 / 38 / 39 + wiring 29–32):**
+
+| Pillar | What users get |
+|---|---|
+| Config format (37) | `@PANEL_START` on all shipped panels; form-only Configuration UI; Help teaches JSON recipes |
+| Storage (38) | Variables + LocalStorage; settings; canvas paste-share; export/sync menus |
+| Foundation maintain (39) | Boot repair; config script removed; copy = new stamp; Move keeps |
+| DSF panels | Empty General until collection; group scan; modes fix; scoped preview CSS |
+
+**Plan 37 in 2.0:** migration + tab removal + teaching surfaces — **not** the open-ended cleanup
+(panel language consistency for custom authors). That is **2.0.x / post-tag** work.
+
+**Exit gate (before `npm run build:release -- major` → 2.0.0):**
+
+1. ✅ `npm run validate && npm test` green (1305 tests, overnight 2026-09-01)
+2. ✅ `npm run build:production` pass
+3. ✅ `npm run build:style-reference` regenerated
+4. ⚠️ Figma click-verify — partial via `figma:ui`; see `artifacts/RELEASE-2.0-morning.md`. **Reload once** (disk one build ahead of open plugin).
+5. Changelog `[2.0.0] - TBD` — set date on tag
+6. Commit uncommitted DSF + test batch when ready
+
+**Explicitly not in 2.0:** Plan 37 cleanup; Colors dry-run; ramp recognition; library edit UX banner.
 
 ---
 

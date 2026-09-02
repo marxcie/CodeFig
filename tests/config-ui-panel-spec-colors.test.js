@@ -120,6 +120,13 @@ function stripRowNoise(row) {
   delete clone.attachTo;
   if (clone.helper !== undefined) clone.helper = normaliseHelper(clone.helper);
   if (clone.type === 'paragraph' && clone.text !== undefined) clone.text = normaliseParagraph(clone.text);
+  // Intentional product change: Collection modes chips unlock on collection (incl. *New
+  // collection*) without waiting for Color tokens. Mode settings still need steps. The frozen
+  // pre-migration block still gates chips on steps — drop that rule on both sides so this suite
+  // stays about migration parity, not the later unlock.
+  if (clone.type === 'chips' && Array.isArray(clone.showWhenRules)) {
+    clone.showWhenRules = clone.showWhenRules.filter((r) => r.field !== 'steps');
+  }
   if (clone.columns) {
     clone.columns = clone.columns.map((c) => {
       const cc = Object.assign({}, c);

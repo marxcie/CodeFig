@@ -189,24 +189,49 @@ These are the utility and help scripts included in the build (see **Shipped vs. 
 
 ### Utility Scripts
 
+General tools (layout, selection, API). Style, variable, and cross-cutting utilities live in their own sidebar groups (**Styles**, **Variables**, **Styles & Variables**).
+
 | Script | Description |
 |--------|-------------|
+| **Change case** | Renames frames, groups, and component variant labels and values to lower, Capital, or camelCase. |
 | **Comments to annotations** | Reads Figma comments via the REST API and converts them into annotations. Useful when duplicating designs across files, as comments don't carry over. The script preserves comment positions by creating hidden anchors (since comments are usually attached to the root frame, not individual elements). Requires a Read Comments API token. |
-| **Detach styles & variables** | Removes style and/or variable bindings from the current selection. You can choose which types to detach (fill, stroke, effect, typography, etc.) or remove all bindings. |
-| **Duplicate styles group** | Duplicate a styles group, with optionally rebinding its variable bindings to another collection. |
-| **Duplicate variable collection** | Duplicates a variable collection with its metadata and values. |
 | **Frame or auto layout selected** | Wraps (or unwraps) each selected layer in new frames or auto-layout containers individually. |
+| **Relink local instances** | Relinks instances to the canonical local component when several definitions share the same name. |
 | **Remove unnecessary nesting** | Detects and removes redundant wrapper frames (e.g. wrappers with only one child). Optionally normalizes wrappers (e.g. combining padding-x on wrapper 1 and padding-y on wrapper 2 into a single wrapper). |
-| **Rename styles** | Batch-renames styles using find/replace rules, similar to Figma's batch rename. |
-| **Rename variables** | Batch-renames variables using find/replace rules, similar to Figma's batch rename. |
-| **Render styles overview** | Generates a visual overview of a defined style group in a frame. Primarily used to support Replace Styles, which requires all styles to exist in the file. The easiest approach is to generate the overview in the library file and paste it into the target file. |
-| **Replace style variable bindings** | Batch find and replaces variable bindings inside style definitions. |
-| **Replace styles** | Batch finds and rebinds node style assignments to different styles based on name matching and the local style inventory. Style replacement is less smooth than with variables due to limited Figma styles API support, so it requires a two-step approach. |
-| **Replace variables** | Batch finds and rebinds layer variable references or collections to another. |
 | **Scale or resize elements** | Scales or resizes selected nodes by factor, ratio, or explicit dimensions (e.g. resize all selected to 16:9 with a width of 640px). |
-| **Select by styles or variables** | Selects all nodes that use a specific style or variable. |
+
+### Styles
+
+| Script | Description |
+|--------|-------------|
+| **Duplicate styles group** | Duplicate a styles group, with optionally rebinding its variable bindings to another collection. |
+| **Rename styles** | Batch-renames styles using find/replace rules, similar to Figma's batch rename. |
+| **Render styles overview** | Generates a visual overview of a defined style group in a frame. Primarily used to support Replace Styles, which requires all styles to exist in the file. The easiest approach is to generate the overview in the library file and paste it into the target file. |
+| **Relink local styles** | Relinks layers to the canonical local style when several definitions share the same name. |
+| **Replace styles** | Batch finds and rebinds node style assignments to different styles based on name matching and the local style inventory. Style replacement is less smooth than with variables due to limited Figma styles API support, so it requires a two-step approach. |
 | **Text to styles** | Creates text styles from selected text layers, keeping variable bindings (if there are any). |
+
+### Variables
+
+| Script | Description |
+|--------|-------------|
+| **Duplicate variable collection** | Duplicates a variable collection with its metadata and values. |
+| **Export / import variables** | Copies local variable collections between files as JSON. |
+| **Match colors to collection variables** | Binds raw paint colors in the selection to COLOR variables from chosen collections. |
+| **Merge variable collections** | Copies or moves variable definitions from a source collection into a target collection. |
+| **Rename variables** | Batch-renames variables using find/replace rules, similar to Figma's batch rename. |
+| **Replace variables** | Batch finds and rebinds layer variable references or collections to another. |
+| **Selection to variables** | Creates or updates variables from selected layers' names and values. |
 | **Variable inspector *(WIP)*** | Inspects variable bindings and usage details in the file or selection. The goal is to find broken or outdated bindings and disconnected library artifacts. Still in progress due to the complexity. |
+
+### Styles & Variables
+
+| Script | Description |
+|--------|-------------|
+| **Check style–variable bindings** | Audits the selection for style and variable bindings that are not available in this file. |
+| **Detach styles & variables** | Removes style and/or variable bindings from the current selection. You can choose which types to detach (fill, stroke, effect, typography, etc.) or remove all bindings. |
+| **Replace style variable bindings** | Batch find and replaces variable bindings inside style definitions. |
+| **Select by styles or variables** | Selects all nodes that use a specific style or variable. |
 
 ---
 

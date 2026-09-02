@@ -272,3 +272,29 @@ test('OKLCH strips show file/run comparison like HSL when steps differ', () => {
   assert.ok(/linear-gradient/.test(html), 'OKLCH must split the swatch when a step would change');
   assert.ok(!/color-ramp-preview-pin/.test(html), 'no chroma clamp note under each swatch');
 });
+
+test('Original without a file strip still previews typed steps', () => {
+  // Creating a new ramp: curve [] means Original, and there is nothing to hold onto. Falling back to
+  // Linear from the anchors is what lets "50, 900" draw two swatches before anything is written.
+  const config = {
+    collectionName: 'Brand',
+    group: '',
+    steps: '50, 900',
+    colorModel: 'hsl',
+    curve: [],
+    lightness: {},
+    modes: [{
+      name: 'Value',
+      curve: [],
+      chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [],
+      seed: { hex: '', placement: '', lock: false },
+      bright: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 98 },
+      middle: { hue: 0, hslHue: 0, chroma: 0, saturation: 0 },
+      dark: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 4 },
+    }],
+  };
+  const html = E.colorsPreviewHtml(config, 'colors');
+  assert.doesNotMatch(html, /Original has no colours/);
+  assert.match(html, /color-ramp-preview/);
+  assert.equal((html.match(/color-ramp-preview-swatch/g) || []).length, 2);
+});

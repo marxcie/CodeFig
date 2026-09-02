@@ -37,14 +37,19 @@
 //
 // ## Utility Scripts
 //
-// Browse **Utility Scripts** in the sidebar for ready-to-use scripts. They cover:
+// Browse **Utility Scripts** in the sidebar for ready-to-use scripts. They are grouped as:
 //
-// - **Variables:** duplicate-variable-collection, replace-variables, rename-variables, variable-inspector
-// - **Styles:** duplicate-styles, replace-styles, replace-style-variable-bindings, rename-styles, text-to-styles, render-styles-overview
-// - **Layout:** frame-or-auto-layout-selected, scale-selection, remove-unnecessary-nesting
-// - **Selection / detach:** select-by-styles-variables, detach styles & variables
+// - **Utility Scripts:** change-case, comments-to-annotations, frame-or-auto-layout-selected,
+//   remove-unnecessary-nesting, relink-local-instances, scale-selection
+// - **Styles:** duplicate-styles, rename-styles, replace-styles, text-to-styles,
+//   render-styles-overview, relink-local-styles
+// - **Variables:** duplicate-variable-collection, export-import-variables,
+//   merge-variable-collections, rename-variables, replace-variables, selection-to-variables,
+//   variable-inspector, match-colors-to-collection-variables
+// - **Styles & Variables:** check-style-variable-bindings, detach-styles_&_variables,
+//   replace-style-variable-bindings, select-by-styles-variables
 // - **Design System Foundations:** colors, grid, typography, spacing, corner-radius
-// - **API:** comments-to-annotations (Figma REST API + personal access token)
+// - **API (Utility Scripts):** comments-to-annotations (Figma REST API + personal access token)
 //
 // Files or folders whose names start with **`_`** are omitted from the plugin build (development-only).
 //
@@ -187,14 +192,14 @@
 // |---|---|---|
 // | `--bg-primary` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--bg-primary)"></span> | #fff |
 // | `--bg-secondary` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--bg-secondary)"></span> | #fafafa |
-// | `--bg-tertiary` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--bg-tertiary)"></span> | #f5f5f7 |
+// | `--bg-tertiary` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--bg-tertiary)"></span> | #efefef |
 // | `--text-primary` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--text-primary)"></span> | #1d1d1f |
 // | `--text-secondary` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--text-secondary)"></span> | #86868b |
 // | `--text-muted` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--text-muted)"></span> | #666 |
 // | `--text-link` / `--active-bg` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--text-link)"></span> | #0D99FF |
-// | `--border-color` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--border-color)"></span> | #e1e5e9 |
+// | `--border-color` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--border-color)"></span> | #e9e9e9 |
 // | `--border-light` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--border-light)"></span> | #e6e6e6 |
-// | `--code-bg` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--code-bg)"></span> | #f5f5f7 |
+// | `--code-bg` | <span style="display:inline-block;width:32px;height:14px;border:1px solid #0003;vertical-align:-2px;background:var(--code-bg)"></span> | #f5f5f5 |
 //
 // ### Buttons
 //

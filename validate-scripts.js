@@ -469,7 +469,7 @@ function validateImports(scripts) {
       s.filename === scriptName
     );
 
-    // If not found, try with "Utility Scripts / " or legacy "Example Scripts / " prefix
+    // If not found, try legacy "Utility Scripts / " prefix or any " / {name}" suffix
     if (!foundScript) {
       foundScript = scripts.find(s =>
         s.name === `Utility Scripts / ${scriptName}` ||

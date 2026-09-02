@@ -18,6 +18,25 @@ const parser = require('../src/config-ui/parser.js');
 const SCRIPTS_DIR = path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'utilities-fr');
 
+/** Utility scripts now live in subfolders (Styles, Variables, …); find by basename. */
+function utilityScriptPath(fileName) {
+  function walk(dir) {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        const hit = walk(p);
+        if (hit) return hit;
+      } else if (ent.name === fileName) {
+        return p;
+      }
+    }
+    return null;
+  }
+  const found = walk(SCRIPTS_DIR);
+  assert.ok(found, fileName + ' not found under EXAMPLE_SCRIPTS');
+  return found;
+}
+
 const FILES = [
   'replace-styles.js',
   'replace-variables.js',
@@ -80,7 +99,7 @@ function extract(src, startMarker, endMarker) {
 }
 
 function liveParse(fileName) {
-  const src = fs.readFileSync(path.join(SCRIPTS_DIR, fileName), 'utf8');
+  const src = fs.readFileSync(utilityScriptPath(fileName), 'utf8');
   assert.match(src, /@UI_CONFIG_START/, fileName + ' should keep @UI_CONFIG_START');
   assert.match(src, /@PANEL_START/, fileName + ' should have @PANEL_START');
   return parser.parse(

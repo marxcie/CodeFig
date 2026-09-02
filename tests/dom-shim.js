@@ -195,6 +195,18 @@ class Element {
 
   // --- children
   get children() { return this.childNodes.filter((n) => n.nodeType === 1); }
+  get previousElementSibling() {
+    if (!this.parentNode) return null;
+    const kids = this.parentNode.children;
+    const i = kids.indexOf(this);
+    return i > 0 ? kids[i - 1] : null;
+  }
+  get nextElementSibling() {
+    if (!this.parentNode) return null;
+    const kids = this.parentNode.children;
+    const i = kids.indexOf(this);
+    return i >= 0 && i < kids.length - 1 ? kids[i + 1] : null;
+  }
   get firstChild() { return this.childNodes[0] || null; }
   appendChild(node) {
     if (node.parentNode) node.parentNode.removeChild(node);

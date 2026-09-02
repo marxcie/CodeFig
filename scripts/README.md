@@ -17,6 +17,12 @@ Contains help and documentation scripts that appear in the "Help" category.
 Contains utility scripts that demonstrate various Figma automation capabilities.
 - **Type**: `prebuilt` 
 - **Purpose**: Ready-to-use scripts for common tasks
+- **Sidebar groups** (subfolders become collapsible groups in the plugin):
+  - *(root)* — general utilities → **Utility Scripts / …**
+  - `Styles/` — style-definition tools → **Styles / …**
+  - `Variables/` — collection and token tools → **Variables / …**
+  - `Styles & Variables/` — scripts that touch both → **Styles & Variables / …**
+  - `Design System Foundations/` — token generators → **Design System Foundations / …**
 
 ### `/CODEFIG_LIBRARIES/`
 Contains importable library scripts (prefixed with `@`) that provide reusable functions and utilities.

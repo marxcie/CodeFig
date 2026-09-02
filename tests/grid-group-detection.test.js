@@ -56,7 +56,7 @@ test('nothing that looks like a grid yields nothing', () => {
 
 test('the panel goes to one candidate and refuses to choose between two', () => {
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
-  const fn = ui.slice(ui.indexOf('function offerGridGroup'), ui.indexOf('function applyAutoImport'));
+  const fn = ui.slice(ui.indexOf('function offerDetectedGroup'), ui.indexOf('function applyAutoImport'));
 
   // Several: a message, and no write. Picking the bigger one would be a guess dressed as help.
   const many = fn.slice(fn.indexOf('candidates.length > 1'), fn.indexOf('var target'));
@@ -73,7 +73,7 @@ test('a group is never adopted twice, so this cannot loop', () => {
   // Adopting triggers a load at the new address; if that also came back empty, adopting again would be
   // a loop with a document read in it.
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
-  const fn = ui.slice(ui.indexOf('function offerGridGroup'), ui.indexOf('function applyAutoImport'));
+  const fn = ui.slice(ui.indexOf('function offerDetectedGroup'), ui.indexOf('function applyAutoImport'));
   assert.match(fn, /if \(groupsAdopted\[key\]\) return false;/);
   assert.match(fn, /groupsAdopted\[key\] = true;/);
   assert.match(ui, /var groupsAdopted = \{\};/);
@@ -85,7 +85,7 @@ test('detection only runs when the address came back empty', () => {
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
   const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
   const guard = apply.indexOf("found.source !== 'recognised'");
-  const offer = apply.indexOf('offerGridGroup(found)');
+  const offer = apply.indexOf('offerDetectedGroup(found)');
   assert.ok(guard > 0 && offer > guard, 'the offer sits inside the "nothing found" branch');
 });
 
@@ -140,7 +140,7 @@ test('opening a panel asks where the grid is, and only fills an untouched block'
   const handler = ui.slice(ui.indexOf("if (data.autoImport !== undefined)"));
   const branch = handler.slice(0, handler.indexOf('return;'));
   const detectPart = branch.slice(branch.indexOf('if (data.detectOnly)'), branch.indexOf('} else {'));
-  assert.match(detectPart, /offerGridGroup/, 'the detect-only half asks where the grid is');
+  assert.match(detectPart, /offerDetectedGroup/, 'the detect-only half asks where the grid is');
   assert.equal(detectPart.indexOf('applyAutoImport'), -1,
     'a detect-only answer must never reach the fill');
 });
@@ -149,7 +149,7 @@ test('one question per address, so a render cannot become a poll', () => {
   // Rendering asks, and applying the answer re-renders. The original loop was fill → re-render → fill;
   // this is bounded by two independent guards rather than by hoping the read is cheap.
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
-  const fn = ui.slice(ui.indexOf('function scheduleGroupDetection'), ui.indexOf('function offerGridGroup'));
+  const fn = ui.slice(ui.indexOf('function scheduleGroupDetection'), ui.indexOf('function offerDetectedGroup'));
   assert.match(fn, /if \(detectedFor\[key\]\) return;/);
   assert.match(fn, /detectedFor\[key\] = true;/);
   assert.match(fn, /collection \+ '\\u0000' \+ \(values\.group == null \? '' : values\.group\)/,

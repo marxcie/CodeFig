@@ -97,10 +97,14 @@ test('the markup carries the proportions, and is grey until there is a collectio
   assert.equal((html.match(/grid-preview-bar/g) || []).length, 12);
   assert.equal(html.indexOf('is-unset'), -1, 'a chosen collection is not the unset state');
 
-  // Grey when there is nowhere to write, even though the modes are set — which is what the Start and
-  // New frames show.
+  // Grey when there is nowhere to write — hide the block rather than drawing a placeholder diagram.
   const unset = lib.gridPreviewHtml({ collectionName: '', modes: [DESKTOP] }, 'grid', 'desktop');
-  assert.match(unset, /class="grid-preview is-unset"/);
+  assert.equal(unset, '');
+  const incomplete = lib.gridPreviewHtml({
+    collectionName: 'RS',
+    modes: [{ name: 'desktop', containerWidth: '', columns: '', gap: '', padding: '' }]
+  }, 'grid', 'desktop');
+  assert.equal(incomplete, '', 'width and columns are required before a preview appears');
 });
 
 test('the preview follows the mode it is asked for', () => {

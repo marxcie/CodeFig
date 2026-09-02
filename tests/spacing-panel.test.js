@@ -18,6 +18,8 @@ const shim = require('./dom-shim.js');
 const { document } = shim.install();
 const P = require('../src/config-ui/parser.js');
 const R = require('../src/config-ui/renderer.js');
+const EXAMPLE = require('./dsf-example-configs.js');
+const { buildPanelWithCollection } = require('./dsf-panel-helpers.js');
 
 const ROOT = path.join(__dirname, '..');
 const SPACING = path.join(ROOT, 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations', 'spacing.js');
@@ -58,7 +60,12 @@ const MODES = [
 function threeModeConfig() {
   const config = P.parseConfigBlockObject(BLOCK);
   config.modes = MODES.map((m) => JSON.parse(JSON.stringify(m)));
+  config.spacings = EXAMPLE.spacing.spacings;
   return config;
+}
+
+function starterConfig() {
+  return JSON.parse(JSON.stringify(EXAMPLE.spacing));
 }
 
 function readout(html) {
@@ -87,13 +94,8 @@ test('the block renders the panel the frames show', () => {
 });
 
 test('a mode shows the fields its scale type uses, and no others', () => {
-  // Márton: "add the fields that are required, and remove the ones that are not used in that mode."
-  const schema = parsePanel();
-  const container = document.createElement('div');
-  R.buildForm(schema, container);
-  R.attachListeners(container, schema, () => {});
-
-  const item = container.querySelectorAll('.config-ui-rows-item')[0];
+  const { items } = buildPanelWithCollection(R, parsePanel, starterConfig());
+  const item = items[0];
   function shown() {
     return [].filter.call(item.querySelectorAll('.config-ui-rows-cell'), (c) => c.style.display !== 'none')
       .map((c) => (c.querySelector('[data-row-field]') || {}).getAttribute
@@ -130,12 +132,9 @@ test('a mode shows the fields its scale type uses, and no others', () => {
 });
 
 test('Tokens and Extra spacings stay arrays in the config', () => {
-  // A string there would read as an array of one to `rampExtras` and generate nothing.
-  const schema = parsePanel();
-  const container = document.createElement('div');
-  R.buildForm(schema, container);
+  const { container } = buildPanelWithCollection(R, parsePanel, starterConfig());
   let values = null;
-  R.attachListeners(container, schema, (v) => { values = v; });
+  R.attachListeners(container, parsePanel(), (v) => { values = v; });
 
   const tokens = container.querySelector('[data-field="spacings"]');
   tokens.value = 'none, px, xs, sm, md';
@@ -146,8 +145,8 @@ test('Tokens and Extra spacings stay arrays in the config', () => {
 });
 
 test('the preview draws one mode, at half size, in pixels', () => {
-  const config = P.parseConfigBlockObject(BLOCK);
-  const out = readout(L.spacingPreviewHtml(config, 'spacing', 'desktop'));
+  const config = starterConfig();
+  const out = readout(L.spacingPreviewHtml(config, 'spacing', 'Value'));
 
   assert.deepEqual(out.names, ['px', 'xs', 'sm', 'md', 'lg', 'xl']);
   // The shipped default is a bezier ramp now: the extra of 1 fills `px`, and the curve takes over from
@@ -169,17 +168,24 @@ test('the preview follows the mode the panel is showing', () => {
   assert.notDeepEqual(mobile.values, readout(L.spacingPreviewHtml(config, 'spacing', 'desktop')).values);
 });
 
+test('a sibling mode with base 0 does not fail the open tab\'s preview', () => {
+  const config = threeModeConfig();
+  // Bezier refuses base 0; an aligned-but-unedited tab often lands there.
+  config.modes[1] = Object.assign({}, config.modes[1], { scaleType: 'bezier', base: 0, ratio: 1.5, curve: [] });
+  config.modes[2] = Object.assign({}, config.modes[2], { scaleType: 'bezier', base: 0, ratio: 1.5, curve: [] });
+  const desktop = readout(L.spacingPreviewHtml(config, 'spacing', 'desktop'));
+  assert.ok(desktop.values.length > 0, 'Desktop still draws');
+  assert.equal(L.spacingPreviewHtml(config, 'spacing', 'mobile'), '', 'unset Mobile stays hidden');
+});
+
 test('a rounded value says what it was, and a nudged one says why', () => {
   // Two different things. A value moved by the grid was *rounded*; a value moved because it landed on
   // the token below was *nudged*, and calling that rounding is a small lie in the one place that exists
   // to explain a number.
-  const config = P.parseConfigBlockObject(BLOCK);
-  // **Still written as `modular`, on purpose.** This is the shape a config saved before the curve editor
-  // has, and the numbers below are the ones it has always produced — the alias converting to a bezier ramp
-  // must not move a single one of them.
+  const config = starterConfig();
   const modular = JSON.parse(JSON.stringify(config));
-  modular.modes[0] = { name: 'desktop', scaleType: 'modular', ratio: 1.618, base: 4, roundTo: 2, extras: [1] };
-  const rounded = readout(L.spacingPreviewHtml(modular, 'spacing', 'desktop'));
+  modular.modes[0] = { name: 'Value', scaleType: 'modular', ratio: 1.618, base: 4, roundTo: 2, extras: [1] };
+  const rounded = readout(L.spacingPreviewHtml(modular, 'spacing', 'Value'));
   assert.deepEqual(rounded.values.map(Number), [1, 4, 6, 10, 16, 28]);
   assert.match(rounded.notes[0], /^Rounded from 6\.47$/, 'a φ scale needs the grid at nearly every step');
   assert.ok(rounded.notes.length >= 4);
@@ -187,8 +193,8 @@ test('a rounded value says what it was, and a nudged one says why', () => {
   // A duplicate is a different thing: `tablet`'s base of 3 rounds onto 4, and a value that lands on the
   // token below it was nudged rather than rounded.
   const collide = JSON.parse(JSON.stringify(config));
-  collide.modes[0] = { name: 'desktop', scaleType: 'metric', base: 2, step: 2, mod: 3, roundTo: 2, extras: [2] };
-  const nudged = readout(L.spacingPreviewHtml(collide, 'spacing', 'desktop'));
+  collide.modes[0] = { name: 'Value', scaleType: 'metric', base: 2, step: 2, mod: 3, roundTo: 2, extras: [2] };
+  const nudged = readout(L.spacingPreviewHtml(collide, 'spacing', 'Value'));
   assert.ok(nudged.notes.some((n) => /Nudged from/.test(n)),
     'the extra and the base are both 2, so one of them has to move');
 });
@@ -234,7 +240,7 @@ test('a mode carries every key the config gave it', () => {
 
 test('a bezier ramp draws its curve, and a straight one is the old modular scale', () => {
   const withCurve = (mode) => {
-    const config = P.parseConfigBlockObject(BLOCK);
+    const config = starterConfig();
     config.modes = [Object.assign({ name: 'Value', roundTo: 2, extras: [1] }, mode)];
     return readout(L.spacingPreviewHtml(config, 'spacing', 'Value')).values.map(Number);
   };
@@ -260,7 +266,7 @@ test('a scale the generator refused is reported, not filled in', () => {
   // `console.warn` nobody sees. A bezier mode reaches that on its first click: `max` is required, and a
   // mode switched over to it has none until somebody types one.
   const refused = (mode) => {
-    const config = P.parseConfigBlockObject(BLOCK);
+    const config = starterConfig();
     config.modes = [Object.assign({ name: 'Value', roundTo: 2, extras: [1] }, mode)];
     return L.spacingPreviewHtml(config, 'spacing', 'Value');
   };
@@ -269,9 +275,10 @@ test('a scale the generator refused is reported, not filled in', () => {
   assert.match(noRatio, /needs a `ratio`/, 'it should say what is missing');
   assert.deepEqual(readout(noRatio).values, [], 'and draw no numbers at all');
 
+  // Base 0 is not a previewable scale — hide rather than lecture about Extra values while a sibling
+  // tab is still empty from collection alignment.
   const zeroBase = refused({ scaleType: 'bezier', base: 0, ratio: 1.5, curve: [] });
-  assert.match(zeroBase, /base has to be above zero/);
-  assert.match(zeroBase, /Extra values/, 'and name the thing to do instead');
+  assert.equal(zeroBase, '');
   assert.deepEqual(readout(zeroBase).values, []);
 
   // A max of 0 is a different mistake — an empty field, usually a mode just switched to this model. It gets
@@ -291,7 +298,7 @@ test('a base of 0 is a base, not a missing one', () => {
   // `!sizes.base` treated it as a mode that declared nothing, so `buildRampScaleOpts` returned null and the
   // viewport produced no options — and the early return it took was missing `adjustments`, so the caller
   // died on `undefined.forEach` rather than saying anything. Two bugs behind one falsy check.
-  const config = P.parseConfigBlockObject(BLOCK);
+  const config = starterConfig();
   config.modes = [{ name: 'Value', scaleType: 'metric', base: 0, step: 4, mod: 3, roundTo: 2, extras: [1] }];
   const out = readout(L.spacingPreviewHtml(config, 'spacing', 'Value'));
   assert.equal(out.values.length, 6, 'every token got a value');

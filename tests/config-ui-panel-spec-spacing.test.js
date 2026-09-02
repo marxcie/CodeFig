@@ -96,15 +96,22 @@ test('corner-radius.js: live @PANEL parse matches the pre-migration normalized r
   assertPanelMatchesFixture('corner-radius.js', 'corner-radius-panel-rows.json');
 });
 
-test('spacing.js: modes carries the seeded Value mode from @CONFIG_START', () => {
+test('spacing.js: modes wait on collection and tokens', () => {
   const modes = liveParse('spacing.js').rows.find((r) => r.type === 'field' && r.name === 'modes');
   assert.ok(modes);
-  assert.strictEqual(modes.value[0].name, 'Value');
-  assert.deepStrictEqual(modes.value[0].extras, [1]);
+  assert.deepStrictEqual(modes.value, []);
+  assert.deepStrictEqual(modes.showWhenRules, [
+    { field: 'collectionName', values: ['*'] },
+    { field: 'spacings', values: ['*'] },
+  ]);
 });
 
-test('corner-radius.js: modes carries extras [0] from @CONFIG_START', () => {
+test('corner-radius.js: modes wait on collection and tokens', () => {
   const modes = liveParse('corner-radius.js').rows.find((r) => r.type === 'field' && r.name === 'modes');
   assert.ok(modes);
-  assert.deepStrictEqual(modes.value[0].extras, [0]);
+  assert.deepStrictEqual(modes.value, []);
+  assert.deepStrictEqual(modes.showWhenRules, [
+    { field: 'collectionName', values: ['*'] },
+    { field: 'radii', values: ['*'] },
+  ]);
 });

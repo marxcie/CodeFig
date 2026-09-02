@@ -1144,7 +1144,13 @@ async function foundationAutoImport(collectionName, group, domain) {
     // made. Without this, opening Typography on a file holding four tokens showed the shipped ten.
     if (domain !== 'grid') {
       var tokensKey = foundationTokensKey(domain);
-      var found = tokensKey ? await foundationTokensIn(collectionName, group, domain) : [];
+      var rampScan = tokensKey ? await rampGroupsIn(collectionName, domain) : { groups: [] };
+      var groupNorm = group == null ? '' : group;
+      var groupQualifies = rampScan.groups.some(function (entry) {
+        return entry.group === groupNorm && entry.tokens >= 2;
+      });
+      var found = tokensKey && groupQualifies
+        ? await foundationTokensIn(collectionName, group, domain) : [];
       if (found.length) {
         answer.source = 'recognised';
         answer.tokens = found;
@@ -1153,6 +1159,12 @@ async function foundationAutoImport(collectionName, group, domain) {
         answer.config = {};
         answer.config[tokensKey] = found;
         answer.modes = collection.modes.map(function (mode) { return mode.name; });
+      } else if (tokensKey) {
+        // Nothing where the panel is pointing. Say where a ramp set *is*, the same way Grid does for
+        // col-N — the default group and a real system's group rarely match.
+        answer.candidates = rampScan.groups.filter(function (entry) {
+          return entry.group !== groupNorm;
+        });
       }
       return answer;
     }
@@ -1338,6 +1350,140 @@ async function gridGroupsIn(collectionName) {
     if (variable && variable.resolvedType === 'FLOAT') names.push(variable.name);
   }
   answer.groups = gridGroupCandidates(names);
+  return answer;
+}
+
+/** Grid layout names — not spacing/radius token leaves. */
+function isGridStructureLeaf(seg) {
+  return seg === 'columns' || seg === 'gap' || seg === 'padding' || seg === 'viewport-width' ||
+    /^col-\d+$/.test(seg);
+}
+
+/** A spacing or radius token leaf — an identifier, not a label with spaces in it. */
+function isRampTokenLeaf(token) {
+  if (!token || isGridStructureLeaf(token)) return false;
+  if (/\s/.test(String(token))) return false;
+  return true;
+}
+
+/** Typography companions and size tokens — not flat spacing/radius tokens. */
+function isTypographyVariableName(name) {
+  var s = String(name);
+  if (/\/font-size$/.test(s)) return true;
+  if (/\/line-height$/.test(s)) return true;
+  if (/\/letter-spacing$/.test(s)) return true;
+  if (/\/font-weight(\/|$)/.test(s)) return true;
+  if (/\/font-family(\/|$)/.test(s)) return true;
+  return false;
+}
+
+/**
+ * Whether a discovered group belongs to the domain being scanned.
+ *
+ * Spacing and radius share the same flat `Group/token` shape, so a name-only pass over the whole
+ * collection finds both. Typography uses its own leaf rule. Test scratch groups are ignored.
+ */
+function rampGroupMatchesDomain(group, domain) {
+  var g = String(group == null ? '' : group);
+  if (g.indexOf('__codefig-test__') === 0) return false;
+  var lower = g.toLowerCase();
+  if (domain === 'spacing') {
+    if (/\bradius\b/.test(lower) || /\bcorner\b/.test(lower)) return false;
+    return true;
+  }
+  if (domain === 'radius') {
+    if (/\bspacing\b/.test(lower)) return false;
+    return true;
+  }
+  return true;
+}
+
+/**
+ * One flat FLOAT token under a group prefix — the same shape `foundationTokensIn` reads for spacing
+ * and radius. The group is everything before the last `/`; a bare name lives at the collection root.
+ */
+function rampFlatTokenGroup(name) {
+  var parts = String(name).split('/');
+  if (parts.length === 1) {
+    var lone = parts[0];
+    if (!isRampTokenLeaf(lone)) return null;
+    return { group: '', token: lone };
+  }
+  var token = parts[parts.length - 1];
+  if (!isRampTokenLeaf(token)) return null;
+  return { group: parts.slice(0, -1).join('/'), token: token };
+}
+
+/** Flat token parse for spacing or radius — skips typography-shaped names. */
+function rampFlatTokenGroupForDomain(name, domain) {
+  if (domain !== 'spacing' && domain !== 'radius') return null;
+  if (isTypographyVariableName(name)) return null;
+  return rampFlatTokenGroup(name);
+}
+
+/** A typography size token — `Group/Token/font-size`, same leaf rule as `foundationTokenLeaf`. */
+function rampTypographyTokenGroup(name) {
+  var m = /^(.+)\/([^/]+)\/font-size$/.exec(String(name));
+  if (!m) return null;
+  return { group: m[1], token: m[2] };
+}
+
+/**
+ * Which groups in a list of variable names look like a spacing, radius, or typography set.
+ *
+ * Names only — no values, no scale fit. Two tokens minimum so a lone float does not qualify.
+ * Returns `[{ group, tokens }]`, most tokens first; ties keep file order.
+ */
+function rampGroupCandidates(names, domain) {
+  if (domain !== 'spacing' && domain !== 'radius' && domain !== 'typography') return [];
+  // Inlined: `@import` extraction follows function calls, not top-level `var`s beside them.
+  var minTokens = 2;
+  var tokensByGroup = {};
+  var order = [];
+
+  (names || []).forEach(function (name) {
+    var parsed = domain === 'typography'
+      ? rampTypographyTokenGroup(name)
+      : rampFlatTokenGroupForDomain(name, domain);
+    if (!parsed) return;
+    var g = parsed.group;
+    if (!rampGroupMatchesDomain(g, domain)) return;
+    if (!tokensByGroup[g]) {
+      tokensByGroup[g] = {};
+      order.push(g);
+    }
+    tokensByGroup[g][parsed.token] = true;
+  });
+
+  return order.map(function (group) {
+    return { group: group, tokens: Object.keys(tokensByGroup[group]).length };
+  }).filter(function (entry) {
+    return entry.tokens >= minTokens;
+  }).sort(function (a, b) {
+    if (b.tokens !== a.tokens) return b.tokens - a.tokens;
+    return order.indexOf(a.group) - order.indexOf(b.group);
+  });
+}
+
+/**
+ * The groups in a collection that hold a ramp set, so the panel can point itself at one.
+ * Read-only; one pass over FLOAT variable names.
+ */
+async function rampGroupsIn(collectionName, domain) {
+  var answer = { collection: collectionName || null, groups: [] };
+  if (!collectionName || !domain) return answer;
+
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
+  if (!collection) return answer;
+
+  var names = [];
+  var ids = collection.variableIds || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    if (variable && variable.resolvedType === 'FLOAT') names.push(variable.name);
+  }
+  answer.groups = rampGroupCandidates(names, domain);
   return answer;
 }
 
@@ -2308,6 +2454,7 @@ async function foundationTokensIn(collectionName, group, domain) {
       if (parts.length === 2 && parts[1] === leaf) token = parts[0];
     } else if (parts.length === 1) {
       token = parts[0];
+      if (domain !== 'typography' && !isRampTokenLeaf(token)) continue;
     }
     if (!token || seen[token]) continue;
     seen[token] = true;
@@ -2870,10 +3017,28 @@ function toDomainConfig(v1, domain, options) {
 
   // Sets are the newer spelling of the same thing, and they carry `appliesTo`, which `perViewport`
   // has no way to say. A config holding both is not something we invent a resolution for — the
-  // sets win, because only a writer that knows about sets could have put them there.
+  // sets win as the *declared* shape.
+  //
+  // **The panel form is still `modes[]`.** Dropping modes here left auto-import writing `sets` into
+  // the block while Mode settings stayed empty — token names loaded, Base/curve did not. Keep modes
+  // for the form: prefer the perViewport rebuild above, otherwise unfold each set into a mode row.
   if (Array.isArray(config.sets) && config.sets.length > 0) {
     out.sets = foundationClone(config.sets);
-    delete out.modes;
+    if (!out.modes || out.modes.length === 0) {
+      out.modes = config.sets.map(function (set) {
+        var mode = {};
+        for (var sk in set) {
+          if (!Object.prototype.hasOwnProperty.call(set, sk) || sk === 'appliesTo') continue;
+          mode[sk] = foundationClone(set[sk]);
+        }
+        if (!mode.name) {
+          var target = set.appliesTo;
+          if (typeof target === 'string' && target && target !== '*') mode.name = target;
+          else if (Array.isArray(target) && target.length === 1) mode.name = target[0];
+        }
+        return mode;
+      }).filter(function (mode) { return mode.name; });
+    }
   }
 
   // Anything the reader kept but did not interpret goes last, so it never displaces a field the
@@ -2996,6 +3161,8 @@ function gridPreviewNumber(value) {
  */
 function gridPreviewHtml(config, domain, modeName) {
   var inner = (config && config.config) || config || {};
+  if (!inner.collectionName || String(inner.collectionName).trim() === '') return '';
+
   var modes = Array.isArray(inner.modes) ? inner.modes : [];
   var mode = null;
   for (var i = 0; i < modes.length; i++) {
@@ -3006,55 +3173,39 @@ function gridPreviewHtml(config, domain, modeName) {
   }
   if (!mode) mode = modes[0] || null;
 
-  var unset = !inner.collectionName || String(inner.collectionName).trim() === '';
   var model = gridPreviewModel(mode);
+  // **Hide until width and columns are set** — a grey placeholder diagram reads as a result.
+  if (!model.ok) return '';
 
-  var out = ['<div class="grid-preview' + (unset || !model.ok ? ' is-unset' : '') + '">'];
-
-  var columns = model.ok ? model.columns : (model.columns || 12);
+  var out = ['<div class="grid-preview">'];
+  var columns = model.columns;
   // Pixels, at exactly half. `col-1: 84` on a 1440 grid draws 42px wide, and a ruler on the screen
   // agrees with the number beside it.
   var px = function (value) { return Math.round(value * gridPreviewScale() * 100) / 100; };
 
   out.push('<div class="grid-preview-diagram">');
-  if (model.ok) {
-    out.push('<div class="grid-preview-margin" style="width:' + px(model.margin) + 'px"></div>');
-    for (var c = 0; c < columns; c++) {
-      if (c) out.push('<div class="grid-preview-gap" style="width:' + px(model.gap) + 'px"></div>');
-      out.push('<div class="grid-preview-col" style="width:' + px(model.colWidth) + 'px"></div>');
-    }
-    out.push('<div class="grid-preview-margin" style="width:' + px(model.margin) + 'px"></div>');
-  } else {
-    // Nothing to be proportional to yet, so an even field of columns stands in for the shape.
-    for (var e = 0; e < columns; e++) {
-      if (e) out.push('<div class="grid-preview-gap" style="width:1.5%"></div>');
-      out.push('<div class="grid-preview-col" style="width:' +
-        (Math.round((97 / columns) * 100) / 100) + '%"></div>');
-    }
+  out.push('<div class="grid-preview-margin" style="width:' + px(model.margin) + 'px"></div>');
+  for (var c = 0; c < columns; c++) {
+    if (c) out.push('<div class="grid-preview-gap" style="width:' + px(model.gap) + 'px"></div>');
+    out.push('<div class="grid-preview-col" style="width:' + px(model.colWidth) + 'px"></div>');
   }
+  out.push('<div class="grid-preview-margin" style="width:' + px(model.margin) + 'px"></div>');
   out.push('</div>');
 
   out.push('<div class="grid-preview-total">Total: <b>' +
-    (model.ok ? gridPreviewNumber(model.width) : '—') + '</b> (' +
+    gridPreviewNumber(model.width) + '</b> (' +
     Math.round(gridPreviewScale() * 100) + '%)</div>');
 
-  var inset = model.ok ? px(model.margin) : 0;
+  var inset = px(model.margin);
   out.push('<div class="grid-preview-guides" style="margin-left:' + inset + 'px;width:' +
-    (model.ok ? px(model.content) : 0) + 'px"></div>');
+    px(model.content) + 'px"></div>');
 
   for (var r = 0; r < columns; r++) {
-    var span = model.ok ? model.spans[r] : null;
-    if (span) {
-      out.push('<div class="grid-preview-bar" style="margin-left:' + inset + 'px;width:' +
-        px(span.span) + 'px"></div>');
-    } else {
-      // No width to be proportional to yet: the placeholder is a shape rather than a measurement, so
-      // it stays relative. It is grey, and it says nothing a ruler could contradict.
-      out.push('<div class="grid-preview-bar" style="width:' +
-        (Math.round(((r + 1) / columns) * 9000) / 100) + '%"></div>');
-    }
+    var span = model.spans[r];
+    out.push('<div class="grid-preview-bar" style="margin-left:' + inset + 'px;width:' +
+      px(span.span) + 'px"></div>');
     out.push('<div class="grid-preview-value">col-' + (r + 1) + ': <b>' +
-      (span ? gridPreviewNumber(span.span) : '—') + '</b></div>');
+      gridPreviewNumber(span.span) + '</b></div>');
   }
 
   out.push('</div>');

@@ -28,29 +28,21 @@ const PRE_MIGRATION_GRID_CONFIG = [
   '  // # General',
   '  collectionName: "", // @collection @label: Collection @placeholder="eg. Responsive System"',
   '  // @collectionModes: Collection modes',
-  '  group: "Grid", // @label: Group within collection @placeholder="eg. Grid"',
+  '  group: "", // @label: Group within collection @placeholder="eg. Grid"',
   '',
   '  // --- @section',
   '',
-  '  // # Mode settings',
-  '  extensionColumns: 0, // @label: Extra columns @helper: Extra column variables past the main grid, for layouts that need to overshoot.',
-  '  generateOverview: false, // @label: Generate overview @helper: Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied.',
+  '  // # Mode settings @showWhen: collectionName=*',
+  '  extensionColumns: 0, // @label: Extra columns @showWhen: collectionName=* @helper: Extra column variables past the main grid, for layouts that need to overshoot.',
+  '  generateOverview: false, // @label: Generate overview @showWhen: collectionName=* @helper: Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied.',
   '',
-  '  modes: [',
-  '    {',
-  '      name: "Value",',
-  '      containerWidth: 1920,',
-  '      columns: 12,',
-  '      gap: 40,',
-  '      padding: 80',
-  '    }',
-  '  ], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes',
+  '  modes: [], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes @showWhen: collectionName=*',
   '',
-  '  // # Suggested whole number divisions',
-  '  // @suggestions',
+  '  // # Suggested whole number divisions @showWhen: collectionName=*',
+  '  // @suggestions @showWhen: collectionName=*',
   '',
-  '  // # Preview',
-  '  // @preview',
+  '  // # Preview @showWhen: collectionName=*',
+  '  // @preview @showWhen: collectionName=*',
   '',
 ].join('\n');
 
@@ -130,12 +122,11 @@ test('grid.js: live @PANEL matches the pre-migration annotation parse, field by 
   });
 });
 
-test('grid.js: the rows/tabs field carries the live value from @CONFIG_START, not a placeholder', () => {
+test('grid.js: modes starts empty until a collection is chosen', () => {
   const modesRow = newParseGrid().rows.find((r) => r.type === 'field' && r.name === 'modes');
   assert.ok(modesRow);
-  assert.deepStrictEqual(modesRow.value, [
-    { name: 'Value', containerWidth: 1920, columns: 12, gap: 40, padding: 80 },
-  ]);
+  assert.deepStrictEqual(modesRow.value, []);
+  assert.deepStrictEqual(modesRow.showWhenRules, [{ field: 'collectionName', values: ['*'] }]);
 });
 
 test('grid.js: @fromFile stays in @CONFIG_START', () => {

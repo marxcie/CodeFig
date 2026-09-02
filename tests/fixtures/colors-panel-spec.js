@@ -34,7 +34,7 @@ const COLORS_PANEL_SPEC = [
   '//     { key: "collectionName", type: "collection", label: "Collection" },',
   '//     { type: "paragraph", attachTo: "next", text: "These chips are the collection\'s modes. Add, remove, or rename here. Each chip gets a mode block below." },',
   '//     { type: "chips", label: "Collection modes",',
-  '//       showWhen: { collectionName: "*", steps: "*" } },',
+  '//       showWhen: { collectionName: "*" } },',
   '//     { key: "group", type: "string", label: "Group within collection",',
   '//       placeholder: "eg.: Primitives/Neutrals" },',
   '//     { key: "steps", type: "string", label: "Color tokens",',

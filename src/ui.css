@@ -36,16 +36,16 @@
         /* Colors */
         --bg-primary: #fff;
         --bg-secondary: #fafafa;
-        --bg-tertiary: #f5f5f7;
+        --bg-tertiary: #efefef;
         --text-primary: #1d1d1f;
         --text-secondary: #86868b;
         --text-muted: #666;
         --text-link: #0D99FF;
-        --border-color: #e1e5e9;
+        --border-color: #e9e9e9;
         --border-light: #e6e6e6;
         --hover-bg: #fafafa;
         --active-bg: #0D99FF;
-        --code-bg: #f5f5f7;
+        --code-bg: #f5f5f5;
         --input-bg: #fff;
 
         /* Typography */
@@ -399,6 +399,10 @@
       .script-group {
         margin-bottom: 0;
       }
+
+      .system-scripts .script-group {
+        background: var(--bg-secondary);
+      }
       
       .group-header {
         font: var(--font-size-body) var(--font-family-base);
@@ -413,17 +417,13 @@
         user-select: none;
       }
       
-      .group-header.selected {
+      /* .script-group.selected {
         background: var(--hover-bg);
-      }
+      } */
       
-      .script-group.selected {
+      /* .script-group.selected .group-content {
         background: var(--hover-bg);
-      }
-      
-      .script-group.selected .group-content {
-        background: var(--hover-bg);
-      }
+      } */
       
       .group-header:hover {
         color: var(--text-primary);
@@ -455,7 +455,11 @@
         align-items: center;
         font: 11px var(--font-family-base);
         font-weight: var(--font-weight-normal);
-        color: var(--text-primary);
+        color: var(--text-secondary);
+      }
+
+      .system-scripts .script-item {
+        background: var(--bg-secondary);
       }
       
       .script-item:hover { 
@@ -467,7 +471,7 @@
         background: var(--active-bg); 
         color: #fff; 
       }
-      
+
       /*
        * Tree indent. Level 0 headers use --space-xl (20px) + chevron.
        * Level 1 aligns with system-script / top-section category text (~36px).
@@ -1357,18 +1361,11 @@
          Why the arithmetic differs from the Documentation tab's: a form is a **flex column**, where
          margins do not collapse but add to the row's own 12px `margin-bottom`. Each gap is therefore
          stated 12px short, to land on the same 48 and 24 the docs tab reaches by collapsing. */
-      .config-ui-form--rows .config-ui-row--heading h2 {
-        /* Below: 16px to the content, measured — the frame's title sits at y=24 and is 21 tall, and the
-           content slot starts at y=61. */
-        margin: calc(var(--section-gap) - var(--space-md)) 0 var(--space-lg) 0;
+      .config-ui-form--rows .config-ui-row--heading h2 { 
+        margin-top: var(--space-sm);
       }
       .config-ui-form--rows .config-ui-row--heading h3 {
         margin: calc(var(--section-gap) / 2 - var(--space-md)) 0 var(--space-sm) 0;
-      }
-      /* The first heading has no previous section to be separated from: the form's own top padding
-         plus this is the frame's 24 to the first title. */
-      .config-ui-form--rows .config-ui-row--heading:first-child h2 {
-        margin-top: var(--space-sm);
       }
       
       .config-ui-form--rows .config-ui-row--field .config-ui-field {

@@ -21,6 +21,8 @@ const shim = require('./dom-shim.js');
 const { document } = shim.install();
 const P = require('../src/config-ui/parser.js');
 const R = require('../src/config-ui/renderer.js');
+const EXAMPLE = require('./dsf-example-configs.js');
+const { buildPanelWithCollection } = require('./dsf-panel-helpers.js');
 const { resolveImports } = require('../src/import-resolver.js');
 const { findAllScripts } = require('../validate-scripts.js');
 
@@ -72,19 +74,31 @@ const MODES = [
 
 function threeModeConfig() {
   const config = P.parseConfigBlockObject(BLOCK);
+  Object.assign(config, {
+    group: EXAMPLE.typography.group,
+    fontScale: EXAMPLE.typography.fontScale,
+    fontFamily: EXAMPLE.typography.fontFamily,
+    fontWeights: EXAMPLE.typography.fontWeights,
+    createStyles: EXAMPLE.typography.createStyles,
+    styleNaming: EXAMPLE.typography.styleNaming,
+    overviewPreviewText: EXAMPLE.typography.overviewPreviewText,
+  });
   config.modes = MODES.map((m) => JSON.parse(JSON.stringify(m)));
   T.ensureCompatTypographyConfig(config);
   T.materializeFontSizes(config);
   return config;
 }
 
-function render() {
-  // Values + panel recipe — the live script no longer carries inline annotations.
-  const schema = P.parse(BLOCK, PANEL);
-  const container = document.createElement('div');
-  R.buildForm(schema, container);
-  const api = R.attachListeners(container, schema, () => {});
-  return { schema, container, api, items: container.querySelectorAll('.config-ui-rows-item') };
+function starterConfig(overrides) {
+  const config = JSON.parse(JSON.stringify(EXAMPLE.typography));
+  if (overrides) Object.assign(config, overrides);
+  T.ensureCompatTypographyConfig(config);
+  T.materializeFontSizes(config);
+  return config;
+}
+
+function render(overrides) {
+  return buildPanelWithCollection(R, () => P.parse(BLOCK, PANEL), starterConfig(overrides));
 }
 
 test('the block renders the four sections the frames show', () => {
@@ -139,7 +153,7 @@ test('the modes come from the config, not from a payload it no longer has', () =
   //
   // Asserted on the shipped block *and* on a config with several modes: one entry cannot tell a function
   // that reads a list from one that returns the first thing it finds.
-  assert.deepEqual(T.typographyViewportNames(T.data), ['Value']);
+  assert.deepEqual(T.typographyViewportNames(starterConfig()), ['Value']);
   assert.deepEqual(T.typographyViewportNames(threeModeConfig()), ['desktop', 'tablet', 'mobile']);
 });
 
@@ -147,7 +161,7 @@ test('the line-height ratio falls as the size grows, which is the whole point of
   // The bug worth pinning: interpolating the absolute px (12 → 66) against a geometric size ramp made
   // the ratio *rise* to 2.0 at Text-Regular — a 12px step with 24px of line height — before coming back
   // down to 1.1. Interpolating the ratio (1.5 → 1.1) is what the charts actually show.
-  const table = T.typeScaleTable({ config: T.data }, 'desktop');
+  const table = T.typeScaleTable({ config: starterConfig() }, 'Value');
   const ratios = table.rows.map((r) => r.ratio);
   assert.equal(ratios[0], 1.5, 'the base ratio is the one typed: 12 over 8');
   assert.equal(ratios[ratios.length - 1], 1.1, 'and the top is 66 over 60');
@@ -162,7 +176,7 @@ test('the line-height ratio falls as the size grows, which is the whole point of
 });
 
 test('tracking tightens as a share of the size, and the Overview shows that share', () => {
-  const rows = T.typeScaleTable({ config: T.data }, 'desktop').rows;
+  const rows = T.typeScaleTable({ config: starterConfig() }, 'Value').rows;
   assert.equal(rows[0].tracking, 0, 'nothing at the base, as typed');
   assert.equal(rows[rows.length - 1].tracking, -1.2, 'and the top is what was typed too');
   const percents = rows.map((r) => r.trackingPercent);
@@ -195,8 +209,9 @@ test('the base is the first token, so nothing has to say where it sits', () => {
 });
 
 test('rounding is per mode, and the table says what moved', () => {
-  const desktop = T.typeScaleTable({ config: T.data }, 'desktop').rows;
-  const mobile = T.typeScaleTable({ config: T.data }, 'mobile').rows;
+  const config = threeModeConfig();
+  const desktop = T.typeScaleTable({ config }, 'desktop').rows;
+  const mobile = T.typeScaleTable({ config }, 'mobile').rows;
   desktop.forEach((row) => assert.equal(row.size % 2, 0, 'desktop rounds to 2: ' + row.size));
   mobile.forEach((row) => assert.equal(row.size % 1, 0, 'mobile rounds to 1: ' + row.size));
 
@@ -206,8 +221,10 @@ test('rounding is per mode, and the table says what moved', () => {
 });
 
 test('the Overview lists every token with the variable a run would write', () => {
-  const html = T.typographyOverviewHtml({ config: T.data }, 'typography', 'desktop');
-  const table = T.typeScaleTable({ config: T.data }, 'desktop');
+  const data = starterConfig();
+  const html = T.typographyOverviewHtml({ config: data }, 'typography', 'Value');
+  const table = T.typeScaleTable({ config: data }, 'Value');
+  const variables = T.generateTypographyVariables(data);
   assert.match(html, /class="type-overview"/);
   ['Step', 'Size', 'Line height', 'Ratio', 'Tracking', 'Variables'].forEach((head) => {
     assert.ok(html.indexOf('<th>' + head + '</th>') !== -1, head + ' is a column');
@@ -220,7 +237,7 @@ test('the Overview lists every token with the variable a run would write', () =>
     // naming something no file contains.
     assert.match(row.variable, /\/$/, 'the folder, with its slash');
     ['font-size', 'line-height', 'letter-spacing'].forEach((leaf) => {
-      assert.ok(T.variables[row.variable + leaf], row.variable + leaf + ' is what a run writes');
+      assert.ok(variables[row.variable + leaf], row.variable + leaf + ' is what a run writes');
     });
   });
   // The numbers are the run's numbers. A preview computed a second way is the trap every one of these
@@ -229,9 +246,10 @@ test('the Overview lists every token with the variable a run would write', () =>
 });
 
 test('the specimen sets the type at its real size, largest last', () => {
-  const html = T.typographyPreviewHtml({ config: T.data }, 'typography', 'desktop');
+  const data = starterConfig();
+  const html = T.typographyPreviewHtml({ config: data }, 'typography', 'Value');
   const sizes = [...html.matchAll(/font-size:([\d.]+)px/g)].map((m) => Number(m[1]));
-  assert.deepEqual(sizes, T.typeScaleTable({ config: T.data }, 'desktop').rows.map((r) => r.size));
+  assert.deepEqual(sizes, T.typeScaleTable({ config: data }, 'Value').rows.map((r) => r.size));
   for (let i = 1; i < sizes.length; i++) assert.ok(sizes[i] > sizes[i - 1], 'ascending, so it reads as a scale');
   assert.match(html, /class="type-specimen"/);
   assert.ok(html.indexOf('Sphinx of black quartz') !== -1, 'the preview text is the config\'s');
@@ -270,14 +288,19 @@ test('the variables a run writes are the table, per mode', () => {
 
 test('the weights list becomes the map the styles are named from', () => {
   // `[400, "Semi Bold"]` is the frame's placeholder — a number is a weight, a word is a font style name.
-  const config = { fontScale: ['a'], fontWeights: [400, 'Semi Bold'], modes: [] };
-  T.ensureCompatTypographyConfig(config);
-  assert.deepEqual(config.fontWeights, { 400: 400, 'Semi Bold': 'Semi Bold' });
+  const raw = { fontScale: ['a'], fontWeights: [400, 'Semi Bold'], modes: [] };
+  T.ensureCompatTypographyConfig(raw);
+  assert.deepEqual(raw.fontWeights, { 400: 400, 'Semi Bold': 'Semi Bold' });
 
+  const config = starterConfig();
+  config.fontScale = ['a'];
+  config.fontWeights = [400, 'Semi Bold'];
+  T.ensureCompatTypographyConfig(config);
+  const variables = T.generateTypographyVariables(config);
   // A numeric weight gets a FLOAT variable; a style name gets a STRING one. Both already existed — this
   // only had to reach them.
-  assert.equal(T.variables['Typography/font-weight/400'].type, 'FLOAT');
-  assert.equal(T.variables['Typography/font-family/primary'].type, 'STRING');
+  assert.equal(variables['Typography/font-weight/400'].type, 'FLOAT');
+  assert.equal(variables['Typography/font-family/primary'].type, 'STRING');
 });
 
 test('a string of weights is read as the list, never enumerated character by character', () => {
@@ -308,10 +331,10 @@ test('a token series in the Tokens field is expanded before anything counts step
   assert.deepEqual(config.fontScale, ['heading-3', 'heading-2', 'heading-1']);
 });
 
-test('an empty scale says what to do rather than rendering nothing', () => {
+test('an empty scale stays hidden — no placeholder copy', () => {
   const bare = { config: { fontScale: [], modes: [] } };
-  assert.match(T.typographyOverviewHtml(bare, 'typography', null), /scale type|base unit/i);
-  assert.match(T.typographyPreviewHtml(bare, 'typography', null), /tokens|scale/i);
+  assert.equal(T.typographyOverviewHtml(bare, 'typography', null), '');
+  assert.equal(T.typographyPreviewHtml(bare, 'typography', null), '');
 });
 
 test('line height and letter spacing are percentages, and the old spelling still generates its numbers', () => {

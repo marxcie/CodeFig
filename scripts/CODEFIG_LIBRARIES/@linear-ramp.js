@@ -951,6 +951,19 @@ function describeRampAdjustments(adjustments) {
   return lines;
 }
 
+/** Modes the run left alone because their scale could not be built (e.g. bezier base 0). */
+function describeRampSkippedModes(skipped) {
+  if (!skipped || !skipped.length) return [];
+  var lines = [
+    'Skipped ' + skipped.length + ' mode' + (skipped.length === 1 ? '' : 's') +
+      ' — nothing to generate yet:'
+  ];
+  for (var i = 0; i < skipped.length; i++) {
+    lines.push('  ' + skipped[i].viewport + ': ' + skipped[i].message);
+  }
+  return lines;
+}
+
 /** Range curve or piecewise ramp, via the shared `generateScale`. */
 function calculateRampValue(scaleIndex, totalSteps, viewport, config, spec) {
   var opts = buildRampScaleOpts(totalSteps, viewport, config, spec);
@@ -1005,16 +1018,17 @@ function generateRampVariables(config, spec, report) {
     });
   });
 
-  // **A model that generated nothing stops the run, rather than being filled in.**
+  // **A model that generated nothing for a mode is skipped, not a reason to invent numbers.**
   //
-  // `rampValueAt` answers `opts.min` for a step the sequence does not have, and the monotonic guard below
-  // then walks those apart by the grid — so a scale the generator *refused* came out as a plausible-looking
-  // ladder with a `console.warn` nobody reads. A bezier mode makes that easy to reach: `max` is required
-  // and a mode switched over to it in the panel has none until someone types one, so the first thing the
-  // panel would have shown is six invented numbers.
+  // `rampValueAt` answers `opts.min` for a step the sequence does not have, and the monotonic guard
+  // below then walks those apart by the grid — so a scale the generator *refused* came out as a
+  // plausible-looking ladder with a `console.warn` nobody reads.
   //
-  // Thrown, because every caller already has a place to put it: both previews catch and print the message
-  // where the picture would be, and `runLinearRamp` reports it instead of writing.
+  // **Only abort when nothing is ready.** Collection alignment fills every mode chip; editing Base
+  // on Desktop leaves Pad / Mobile / Value at 0, and bezier refuses that. Throwing on the first
+  // incomplete sibling blocked the mode that *was* configured — the preview already draws only the
+  // open tab for the same reason. Incomplete modes are named in `report.skippedModes` and left alone.
+  var skippedModes = [];
   for (var v = 0; v < viewportNames.length; v++) {
     var seq = sequences[viewportNames[v]];
     if (!seq.opts || seq.values.length >= tokens.length) continue;
@@ -1023,8 +1037,24 @@ function generateRampVariables(config, spec, report) {
       if (seq.warnings[w].code !== 'scale-floor-held') { blocking = seq.warnings[w]; break; }
     }
     if (!blocking) continue;
-    throw new Error(viewportLabel(viewportNames[v]) + ': ' + blocking.message);
+    skippedModes.push({
+      viewport: viewportLabel(viewportNames[v]),
+      message: blocking.message,
+      code: blocking.code || ''
+    });
+    sequences[viewportNames[v]] = {
+      opts: null, values: [], warnings: seq.warnings, adjustments: [], raw: []
+    };
   }
+  var anyReady = false;
+  for (var r = 0; r < viewportNames.length; r++) {
+    var ready = sequences[viewportNames[r]];
+    if (ready && ready.opts && ready.values.length >= tokens.length) { anyReady = true; break; }
+  }
+  if (!anyReady && skippedModes.length) {
+    throw new Error(skippedModes[0].viewport + ': ' + skippedModes[0].message);
+  }
+  if (report && typeof report === 'object') report.skippedModes = skippedModes;
 
   var gridSize = getRampRoundGrid(config);
 
@@ -1096,7 +1126,10 @@ function generateRampVariables(config, spec, report) {
 
   // Every individual value the guard moved, for the summary. Always, not only when a case looks
   // like a problem — the two bugs this guard caused both looked fine until they did not.
-  if (report && typeof report === 'object') report.adjustments = adjustments;
+  if (report && typeof report === 'object') {
+    report.adjustments = adjustments;
+    if (!report.skippedModes) report.skippedModes = skippedModes;
+  }
 
   return variables;
 }
@@ -1454,7 +1487,8 @@ function rampPreviewHtml(config, domain) {
  */
 function rampPreviewRows(config, domain, modeName) {
   var spec = domain === 'radius' ? radiusRampSpec() : spacingRampSpec();
-  if (!config || typeof config !== 'object') return { error: 'There is no config to preview yet.' };
+  // **Hide until there is something real to draw** — no placeholder, no error about a sibling tab.
+  if (!config || typeof config !== 'object') return { hide: true };
 
   var data = JSON.parse(JSON.stringify(config.config || config));
   try {
@@ -1463,6 +1497,36 @@ function rampPreviewRows(config, domain, modeName) {
   } catch (e) {
     return { error: 'This config could not be read: ' + (e && e.message ? e.message : e) };
   }
+
+  var tokens = data[spec.tokensKey];
+  if (!Array.isArray(tokens) || tokens.length === 0) return { hide: true };
+
+  // **Only the active mode.** Collection alignment fills every mode; editing Base on Desktop left Pad
+  // at 0 and the preview failed for Pad while Desktop was the open tab. Sibling shells are not this
+  // picture's business.
+  var allModes = Array.isArray(data.modes) ? data.modes : [];
+  var active = null;
+  for (var mi = 0; mi < allModes.length; mi++) {
+    if (!modeName || String(allModes[mi].name || '').toLowerCase() === String(modeName).toLowerCase()) {
+      active = allModes[mi];
+      break;
+    }
+  }
+  if (!active && allModes.length) active = allModes[0];
+  if (!active || typeof active.name !== 'string' || !active.name) return { hide: true };
+
+  var baseValue = typeof active.base === 'number' ? active.base
+    : (active.base && typeof active.base === 'object' && typeof active.base.size === 'number'
+      ? active.base.size : null);
+  // Bezier/modular multiply the base — 0 is not a scale. Metric may start at 0 with extras for none.
+  var model = rampModelOf(active) || 'bezier';
+  if (model === 'bezier' || model === 'modular') {
+    if (!(typeof baseValue === 'number' && baseValue > 0)) return { hide: true };
+  } else if (typeof baseValue !== 'number' || !isFinite(baseValue)) {
+    return { hide: true };
+  }
+
+  data.modes = [active];
 
   var modeNames = rampModeNames(data, spec);
   var setPlan = materialiseRampSizes(data, spec, modeNames);
@@ -1476,20 +1540,9 @@ function rampPreviewRows(config, domain, modeName) {
   }
 
   var table = rampScaleTable(variables, resolveGroup(config) || data.group || '');
-  if (!table.rows.length || !table.modes.length) {
-    return { error: 'Nothing to draw yet \u2014 this config names no tokens or no modes.' };
-  }
+  if (!table.rows.length || !table.modes.length) return { hide: true };
 
-  // The mode the panel is showing, matched the way every other comparison here matches: by name, and
-  // case-insensitively, because a config writes `desktop` and a collection holds `Desktop`.
-  var wanted = null;
-  for (var i = 0; i < table.modes.length; i++) {
-    if (!modeName || String(table.modes[i]).toLowerCase() === String(modeName).toLowerCase()) {
-      wanted = table.modes[i];
-      break;
-    }
-  }
-  if (!wanted) wanted = table.modes[0];
+  var wanted = table.modes[0];
 
   var raw = spacingRawSequenceFor(wanted, data, spec);
   var grid = spacingModeGrid(wanted, data, spec);
@@ -1521,6 +1574,7 @@ function rampPreviewRows(config, domain, modeName) {
 
 function spacingPreviewHtml(config, domain, modeName) {
   var drawn = rampPreviewRows(config, domain, modeName);
+  if (drawn.hide) return '';
   if (drawn.error) return rampPreviewNote(drawn.error);
 
   var out = ['<div class="spacing-preview' + (drawn.unset ? ' is-unset' : '') + '">'];
@@ -1568,6 +1622,7 @@ function radiusPreviewCap() {
  */
 function radiusPreviewHtml(config, domain, modeName) {
   var drawn = rampPreviewRows(config, domain || 'radius', modeName);
+  if (drawn.hide) return '';
   if (drawn.error) return rampPreviewNote(drawn.error);
 
   var box = radiusPreviewBox();
@@ -1753,6 +1808,7 @@ async function runLinearRamp(config, spec) {
   describeRampModels(data, spec).forEach(function(line) { console.log(line); });
   describeRampSetPlan(setPlan).forEach(function(line) { console.log(line); });
   describeRampAdjustments(runReport.adjustments).forEach(function(line) { console.log(line); });
+  describeRampSkippedModes(runReport.skippedModes).forEach(function(line) { console.log(line); });
   console.log('Variables created: ' + stats.created);
   console.log('Variables updated: ' + stats.updated);
   console.log('Variables skipped: ' + stats.skipped);
@@ -1768,6 +1824,7 @@ async function runLinearRamp(config, spec) {
     stats: stats,
     manifest: manifest,
     undeclaredModes: undeclared,
+    skippedModes: runReport.skippedModes || [],
     table: table,
     scaleHtml: scaleHtml
   };

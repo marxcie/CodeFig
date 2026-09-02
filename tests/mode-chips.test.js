@@ -541,27 +541,104 @@ test('an entry still linked to a mode of this file is never dropped', () => {
 
 test('no shipped config block proposes a viewport system of its own', () => {
   // `desktop / tablet / mobile` were an example of one Figma file. Shipping them in four scripts made
-  // them the plugin\'s opinion about every file — and because mode setup takes a config\'s mode list
+  // them the plugin's opinion about every file — and because mode setup takes a config's mode list
   // literally, running any of the four on a new collection *created* those three modes. Márton:
   // "never something I meant to be built into the plugin."
   //
-  // One starter mode instead, named `Value` — what Figma\'s variables panel shows for a single-mode
-  // collection. Not zero: a collection cannot exist without at least one mode, so one is the floor.
-  // Point a panel at a collection and its real modes replace this.
+  // **Empty `modes` in the shipped block.** Chips stay in placeholder until collection intent
+  // (a named collection or *New collection*); `ui.html` then seeds a named `Value` mode, and a
+  // real collection's modes replace it via `orderConfigModesToFile`. Shipping Value in the block
+  // unlocked chips before anyone picked a collection.
   const DSF = path.join(__dirname, '..', 'scripts', 'EXAMPLE_SCRIPTS', 'Design System Foundations');
-  // colors.js was left off this list once — empty `name: ""` locked its chips (placeholder
-  // "Value" + "Modes locked by Collection scope") and Run answered "Add at least one mode".
-  ['grid.js', 'spacing.js', 'typography.js', 'corner-radius.js', 'colors.js'].forEach((file) => {
+  ['grid.js', 'spacing.js', 'typography.js', 'corner-radius.js'].forEach((file) => {
     const source = fs.readFileSync(path.join(DSF, file), 'utf8');
     const block = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(source)[1];
     const modes = P.parse(block).rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];
     assert.ok(modes, file + ' has no modes row');
-    assert.equal(modes.value.length, 1, file + ' ships more than one mode');
-    assert.equal(modes.value[0].name, 'Value', file + ' names its starter something else');
-    // And the starter carries that block\'s own columns, so its one tab has real fields rather than a
-    // name and nothing else.
-    assert.ok(Object.keys(modes.value[0]).length > 1, file + ' ships a starter with no settings');
+    assert.deepEqual(modes.value, [], file + ' ships starter modes — the collection supplies them');
   });
+  // Colors keeps one starter row so the mode block shape exists before steps are chosen; its chips
+  // unlock on collection (or *New collection*), while Mode settings still wait on tokens.
+  const colorsBlock = /@CONFIG_START\n([\s\S]*?)\n\s*\/\/ @CONFIG_END/.exec(
+    fs.readFileSync(path.join(DSF, 'colors.js'), 'utf8')
+  )[1];
+  const colorsModes = P.parse(colorsBlock).rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];
+  assert.equal(colorsModes.value.length, 1);
+  assert.equal(colorsModes.value[0].name, 'Value');
+});
+
+test('ui seeds a named Value mode for every DSF domain', () => {
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  assert.match(ui, /function starterModesForDomain/);
+  assert.match(ui, /function ensureStarterModesInBlock/);
+  assert.match(ui, /collectionCreating/);
+  ['spacing', 'radius', 'typography', 'grid', 'colors'].forEach((domain) => {
+    assert.ok(
+      ui.includes("domain === '" + domain + "'") || ui.includes('domain === "' + domain + '"'),
+      'starterModesForDomain covers ' + domain
+    );
+  });
+});
+
+test('Mode settings need a real collection name, not bare New collection', () => {
+  // *New collection* with an empty name is not a collection target yet — Mode settings stay
+  // closed until a name is typed (or an existing collection is picked). Chips can still unlock
+  // via a seeded Value mode; that is separate from this gate.
+  const block = [
+    'collectionName: "", // @collection @label: Collection',
+    '// # Mode settings @showWhen: collectionName=*',
+    'modes: [{ name: "Value" }], // @rows: name:text=Mode @tabs @label: Modes @showWhen: collectionName=*',
+  ].join('\n');
+  const schema = P.parse(block);
+  const container = document.createElement('div');
+  R.buildForm(schema, container);
+  const listeners = R.attachListeners(container, schema, function () {});
+  const heading = [...container.querySelectorAll('.config-ui-row--heading')]
+    .find((el) => /Mode settings/.test(el.textContent || ''));
+  assert.ok(heading, 'Mode settings heading missing');
+  assert.equal(heading.style.display, 'none', 'hidden with empty collection');
+
+  const select = container.querySelector('.config-ui-collection-select');
+  select.value = R.collectionNewSentinel();
+  listeners.applyVisibility();
+  assert.equal(heading.style.display, 'none', 'still hidden on New collection without a name');
+
+  const newName = container.querySelector('.config-ui-collection-new');
+  newName.value = 'My Grid';
+  newName.style.display = 'block';
+  listeners.applyVisibility();
+  assert.notEqual(heading.style.display, 'none', 'opens once the new collection is named');
+});
+
+test('ramp Mode settings also wait on tokens', () => {
+  const block = [
+    'collectionName: "Spacing", // @collection @label: Collection',
+    'spacings: [], // @list @label: Tokens',
+    '// # Mode settings @showWhen: collectionName=* @showWhen: spacings=*',
+    'modes: [{ name: "Value" }], // @rows: name:text=Mode @tabs @label: Modes @showWhen: collectionName=* @showWhen: spacings=*',
+  ].join('\n');
+  const schema = P.parse(block);
+  const container = document.createElement('div');
+  R.buildForm(schema, container);
+  const listeners = R.attachListeners(container, schema, function () {});
+  const heading = [...container.querySelectorAll('.config-ui-row--heading')]
+    .find((el) => /Mode settings/.test(el.textContent || ''));
+  assert.equal(heading.style.display, 'none', 'hidden without tokens');
+
+  const tokens = container.querySelector('[data-field="spacings"]');
+  tokens.value = 'xs, sm, md';
+  listeners.applyVisibility();
+  assert.notEqual(heading.style.display, 'none', 'opens with collection and tokens');
+});
+
+test('a miss with group candidates still aligns modes before returning', () => {
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const fn = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function configPreviewDomainLabel'));
+  const offerAt = fn.indexOf('var offered = offerDetectedGroup(found)');
+  const orderAt = fn.indexOf('var onMiss = orderConfigModesToFile()');
+  const offerReturn = fn.indexOf('if (offered) return');
+  assert.ok(offerAt > 0 && orderAt > offerAt, 'offer runs before ordering');
+  assert.ok(offerReturn > orderAt, 'ordering runs before the offer short-circuit');
 });
 
 test('the note names three modes as a person would write them', () => {
@@ -656,6 +733,13 @@ test('every exit from the ordering records why, so a stale success cannot be the
   assert.ok(returns >= 4, 'there are several ways out');
   assert.ok(records >= returns - 1, 'and all but the success path record a reason (' +
     records + ' records for ' + returns + ' exits)');
+});
+
+test('ordering rematches mode ids when the block and chip ids disagree in length', () => {
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const fn = ui.slice(ui.indexOf('function orderedModesInBlock'), ui.indexOf('function orderConfigModesToFile'));
+  assert.match(fn, /idsForAlign\.length !== row\.value\.length/);
+  assert.match(fn, /matchModeIds\(row\.value, fileModes\.modes\)/);
 });
 
 // ---------------------------------------------------------------------------
@@ -836,6 +920,24 @@ test('a config with no mode blocks at all takes the collection\'s', () => {
   assert.deepEqual(out.entries, [{ name: 'Desktop' }, { name: 'Mobile' }]);
   assert.deepEqual(out.ids, ['1', '2']);
   assert.equal(out.changed, true);
+});
+
+test('stale mode ids are rematched when the block has fewer entries than the chips', () => {
+  // Recorded auto-import replaces `modes` with one manifest entry while `chipModeIds` still holds the
+  // four ids from the collection alignment that ran a moment earlier. Matching by id then parks that
+  // lone entry on Desktop and inserts a fresh block for Value — the duplicate-Value preview conflict.
+  const file = [
+    { modeId: '12:0', name: 'Desktop' }, { modeId: '13:2', name: 'Pad' },
+    { modeId: '13:3', name: 'Mobile' }, { modeId: '354:3', name: 'Value' },
+  ];
+  const staleIds = ['12:0', '13:2', '13:3', '354:3'];
+  const recorded = [{ name: 'Value', base: 4, roundTo: 2, extras: 1 }];
+  const idsForAlign = staleIds.length !== recorded.length
+    ? P.matchModeIds(recorded, file) : staleIds;
+  assert.deepEqual(idsForAlign, ['354:3']);
+  const out = P.alignModesToFile(recorded, idsForAlign, file);
+  assert.deepEqual(out.entries.map((e) => e.name), ['Desktop', 'Pad', 'Mobile', 'Value']);
+  assert.deepEqual(out.ids, ['12:0', '13:2', '13:3', '354:3']);
 });
 
 test('a pending rename survives the file\'s spelling being adopted', () => {

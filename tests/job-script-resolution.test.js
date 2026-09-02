@@ -64,7 +64,7 @@ test('the full display name resolves, prefix and free-form title included', () =
   const scripts = realScripts();
   const { _codefigResolveJobScript: resolve } = loadResolver(scripts);
   const inspector = scripts.find((s) => s.filename === 'variable-inspector.js');
-  assert.equal(inspector.name, 'Utility Scripts / Variable inspector (WIP)', 'name shape changed');
+  assert.equal(inspector.name, 'Variables / Variable inspector (WIP)', 'name shape changed');
   assert.equal(resolve(inspector.name).script.filename, 'variable-inspector.js');
   assert.equal(resolve(inspector.name.toUpperCase()).script.filename, 'variable-inspector.js');
 });
@@ -75,6 +75,12 @@ test('the title alone resolves, ignoring the category prefix', () => {
   assert.equal(resolve('rename styles').script.filename, 'rename-styles.js');
   // A prefix is enough when it is unambiguous — "(WIP)" should not have to be typed.
   assert.equal(resolve('variable-inspector').script.filename, 'variable-inspector.js');
+});
+
+test('legacy Utility Scripts / … prefix still resolves after the sidebar split', () => {
+  const { _codefigResolveJobScript: resolve } = loadResolver(realScripts());
+  assert.equal(resolve('Utility Scripts / Rename styles').script.filename, 'rename-styles.js');
+  assert.equal(resolve('utility scripts / variable inspector (wip)').script.filename, 'variable-inspector.js');
 });
 
 test('an ambiguous name is reported, never guessed', () => {

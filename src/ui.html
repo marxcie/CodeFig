@@ -641,6 +641,12 @@
        * One variable, one job, and the name says which.
        */
       let configLastAddress = null;
+      /**
+       * *New collection* with an empty name still has to survive a form rebuild. Seeding a starter
+       * Value mode writes the block and reprojects; without this flag the select snaps back to the
+       * placeholder and every `collectionName: "*"` gate closes again.
+       */
+      let collectionCreating = false;
       const configUIContainer = document.getElementById('configUIContainer');
 
       // ======================================================================
@@ -974,6 +980,12 @@
                 // while acting only on commit would mean the commit always found the address unchanged —
                 // the trigger would never fire at all.
                 var committed = !!(opts && opts.committed) && !(opts && opts.live);
+                var creatingNow = isFormCreatingCollection();
+                if (committed) {
+                  // Settle the creating flag from the select itself — `collectionName` stays empty
+                  // until a name is typed, so addressChanged alone never sees *New collection*.
+                  collectionCreating = creatingNow;
+                }
                 var addressChanged = committed && (!configLastAddress ||
                   values.collectionName !== configLastAddress.collectionName ||
                   values.group !== configLastAddress.group);
@@ -1024,6 +1036,8 @@
                       collection: addrCollection,
                       group: addrGroup == null ? '' : addrGroup
                     });
+                  } else if (collectionCreating) {
+                    ensureStarterModesInBlock();
                   }
                   // Kick the sandbox off the click stack so the pristine form can paint first.
                   // Import resolution for Colors is ~1s the first time; caching makes later switches
@@ -1033,6 +1047,10 @@
                     autoImportTimer = null;
                     requestAutoImport();
                   }, 0);
+                } else if (committed && collectionCreating) {
+                  // *New collection* with no name yet: address unchanged (still ""), but Figma will
+                  // still create a one-mode collection — unlock chips with a named Value now.
+                  ensureStarterModesInBlock();
                 }
                 var dt = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
                 if (dt > 16 || addressChanged) {
@@ -1608,7 +1626,13 @@
         // The last render is already held for exactly this kind of question, so redrawing it costs nothing
         // and nothing can be stale: a *newer* run overwrites this the moment it lands, and if the config
         // changed, the run that changed it is already scheduled.
-        if (_previewLastHtml) renderConfigPreview(_previewLastHtml);
+        //
+        // **Same script only.** Restoring across a script switch painted Grid into Spacing (and so on)
+        // for the debounce window — content-reveal hid it eventually, which felt like "visible by
+        // default, then hidden".
+        if (_previewLastHtml && _previewOwnerKey && _previewOwnerKey === previewOwnerKey()) {
+          renderConfigPreview(_previewLastHtml);
+        }
         if (configUIInstance) {
           var projected = configUIInstance.getValues();
           configLastAddress = { collectionName: projected.collectionName, group: projected.group };
@@ -1617,6 +1641,7 @@
         }
         restoreActiveMode(wasShowing);
         restoreFieldFocus(hadFocus);
+        restoreCollectionCreating();
         syncChipsToPanelState();
         scheduleFileModes(0);
         scheduleGroupDetection();
@@ -2258,6 +2283,7 @@
         chipModeIds = [];
         removedModeIds = [];
         addedModeNames = [];
+        collectionCreating = false;
 
         debugLog('Selecting script:', script);
         currentScript = script;
@@ -2271,6 +2297,11 @@
         // form that switch had just built, on every script in the plugin.
         if (configUIContainer) configUIContainer.innerHTML = '';
         configUIInstance = null;
+        // **Before the new form is built.** `projectConfigIntoForm` used to redraw `_previewLastHtml`
+        // into the next script's slots; clearing after `switchTab` left the bleed on screen until the
+        // next silent run returned. Bump the seq here so any in-flight answer from the previous
+        // script is dropped too.
+        clearConfigPreviewState();
         clearInjectedScriptStyles();
         clearResolvedImportsCache();
         const fullCode = script.code || '';
@@ -2321,6 +2352,8 @@
         infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
         updateInfoPanelButtonVisibility();
         updateInfoPanelOwnership();
+        // Preview cache was already cleared before the form build — do not bump `_previewSeq`
+        // again here, or a scheduleConfigPreview that already stamped a seq would be orphaned.
         updateConfigPreviewVisibility();
         scheduleConfigPreview();
         // The script name already contains the group info if it exists (Group / Script Name)
@@ -2604,8 +2637,52 @@
       let _previewTimer = null;
       let _previewSeq = 0;
       let _previewLastHtml = '';
+      // Which script produced `_previewLastHtml`. Restoring into another script's form is the
+      // bleed Márton still sees: Grid diagram on Spacing, radius notes on Grid, colour hex dump
+      // on Corner radius — for the quiet window until the next silent run returns empty.
+      let _previewOwnerKey = '';
 
-      /** `// @PREVIEW: rampPreviewHtml` → the function name, or null. */
+      function previewOwnerKey() {
+        return currentScript ? String(currentScript.id || currentScript.name || '') : '';
+      }
+
+      /** Empty every preview / suggestions slot and the panel-level region. */
+      function wipeConfigPreviewDom() {
+        document.querySelectorAll('[data-preview-slot], [data-suggestions-slot]').forEach(function (slot) {
+          slot.innerHTML = '';
+          slot.style.display = 'none';
+          // Paired Preview/Overview headings stay closed until fillContentReveal opens them.
+          var el = slot.previousElementSibling;
+          while (el && el.getAttribute('data-content-reveal-pair') === 'true') {
+            el.style.display = 'none';
+            el = el.previousElementSibling;
+          }
+        });
+        const body = document.getElementById('configPreviewBody');
+        if (body) body.innerHTML = '';
+        const region = document.getElementById('configPreview');
+        if (region) region.style.display = 'none';
+      }
+
+      /** Drop cached preview/suggestion HTML and cancel an in-flight silent run's slot. */
+      function clearConfigPreviewState() {
+        _previewLastHtml = '';
+        _previewOwnerKey = '';
+        _previewWaitingSince = 0;
+        _previewSeq++;
+        if (_previewTimer) {
+          clearTimeout(_previewTimer);
+          _previewTimer = null;
+        }
+        wipeConfigPreviewDom();
+      }
+
+      /** After writing preview HTML, let `@showWhen` decide visibility — never override it here. */
+      function syncPreviewRowVisibility() {
+        if (configUIInstance && configUIInstance.applyVisibility) {
+          configUIInstance.applyVisibility();
+        }
+      }
       function scriptPreviewFunction(code) {
         const match = /^[^\S\n]*\/\/[^\S\n]*@PREVIEW:[^\S\n]*([A-Za-z_$][\w$]*)/m.exec(code || '');
         return match ? match[1] : null;
@@ -2726,13 +2803,30 @@
         region.style.display = on ? 'flex' : 'none';
         if (!on) {
           _previewLastHtml = '';
+          _previewOwnerKey = '';
           const body = document.getElementById('configPreviewBody');
           if (body) body.innerHTML = '';
         }
       }
 
+      /**
+       * Write preview/suggestions HTML through the shared content-reveal path.
+       * Slots start hidden; this is what opens them — never `@showWhen` alone.
+       */
+      function fillRevealSlot(slot, html) {
+        var api = window.CodeFigConfigUI;
+        if (api && api.fillContentReveal) {
+          api.fillContentReveal(slot, html || '');
+          return;
+        }
+        slot.innerHTML = html || '';
+        var empty = !(html && String(html).trim());
+        slot.style.display = empty ? 'none' : '';
+      }
+
       function renderConfigPreview(html) {
         _previewLastHtml = html;
+        _previewOwnerKey = previewOwnerKey();
         // A `@preview` marker row means the block said where this belongs, so it goes there rather than
         // in the panel-level region below the form.
         const slots = [...document.querySelectorAll('[data-preview-slot]')];
@@ -2757,20 +2851,20 @@
               ? (slot.getAttribute('data-preview-row') || '')
               : '__panel__';
             var part = Object.prototype.hasOwnProperty.call(byName, name) ? byName[name] : '';
-            slot.innerHTML = part;
-            // **A slot with nothing in it takes no room.** The panel-level slot holds the OKLCH alignment
-            // banner, which HSL has no equivalent of — so in HSL it drew an empty box the height of a
-            // section, under a heading that was itself hidden. An empty preview is not a preview.
-            slot.style.display = part ? '' : 'none';
+            // **Always set display from content.** Hiding empty slots used to leave `display:none` behind
+            // after steps were typed — Mode settings appeared, the strip HTML landed, and the swatches
+            // stayed invisible because nothing set display back.
+            fillRevealSlot(slot, part);
           });
+          syncPreviewRowVisibility();
           if (region) region.style.display = 'none';
           return;
         }
 
         const slot = slots[0];
         if (slot) {
-          slot.innerHTML = html;
-          slot.style.display = html ? '' : 'none';
+          fillRevealSlot(slot, html || '');
+          syncPreviewRowVisibility();
           if (region) region.style.display = 'none';
           return;
         }
@@ -2781,7 +2875,8 @@
       function renderConfigSuggestions(html) {
         const slot = document.querySelector('[data-suggestions-slot]');
         if (!slot) return;
-        slot.innerHTML = html || '';
+        fillRevealSlot(slot, html || '');
+        syncPreviewRowVisibility();
       }
 
       /**
@@ -3103,9 +3198,8 @@
         }
         if (!config) {
           // Mid-edit text is unparseable constantly. Holding the last good render beats blinking
-          // the picture out on every keystroke.
-          if (!_previewLastHtml) renderConfigPreview(
-            '<div style="font-size:11px;opacity:0.6;">Waiting for a config this can read.</div>');
+          // the picture out on every keystroke. Never invent a "waiting" placeholder — empty stays
+          // hidden until something real arrives.
           return;
         }
 
@@ -3389,15 +3483,136 @@
           return false;
         }
         if (!pristine) return null;
-        var filled = api.fillConfigBlock(pristine, {
+        // **Seed a named Value when the file has nothing to align yet.** Shipped DSF blocks keep
+        // `modes: []` so opening a script does not unlock chips — but choosing a collection (or
+        // *New collection*) is the moment a Figma collection always has ≥1 mode. Without a named
+        // starter here, address-reset rewrote the empty array back over any Value the panel had
+        // just seeded, and Mode settings stayed closed.
+        var fill = {
           collectionName: collection,
           group: group == null ? '' : group
-        });
+        };
+        var starters = starterModesForDomain(configPreviewDomain());
+        if (starters) fill.modes = starters;
+        var filled = api.fillConfigBlock(pristine, fill);
         if (!filled || !filled.text) return null;
         // Already at defaults for this address — the first collection anyone picks, or a retry. Nothing to
         // apply, so the caller keeps whatever is on screen.
         if (filled.text.trim() === currentConfigBlock().trim()) return null;
         return filled.text;
+      }
+
+      /**
+       * Domain-shaped `{ name: "Value", … }` for a collection that does not exist in the file yet.
+       * Numbers match the DSF example fixtures — enough for Mode settings tabs to be editable, and
+       * replaced wholesale when a real collection's modes are aligned in.
+       */
+      function starterModesForDomain(domain) {
+        if (domain === 'spacing') {
+          return [{
+            name: 'Value', scaleType: 'bezier', base: 4, ratio: 1.5, curve: [],
+            step: 4, mod: 3, roundTo: 2, extras: [1]
+          }];
+        }
+        if (domain === 'radius') {
+          return [{
+            name: 'Value', scaleType: 'bezier', base: 4, ratio: 1.5, curve: [],
+            step: 4, mod: 3, roundTo: 2, extras: [0]
+          }];
+        }
+        if (domain === 'typography') {
+          return [{
+            name: 'Value', scaleType: 'bezier', base: 8, ratio: 1.25, curve: [],
+            letterSpacing: { base: 0, max: -2 },
+            lineHeight: { base: 150, max: 110 },
+            roundTo: 2
+          }];
+        }
+        if (domain === 'grid') {
+          return [{
+            name: 'Value', containerWidth: 1920, columns: 12, gap: 40, padding: 80
+          }];
+        }
+        if (domain === 'colors') {
+          return [{
+            name: 'Value',
+            curve: [0.333333, 0.333333, 0.666667, 0.666667],
+            chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [],
+            seed: { hex: '', placement: '', lock: false },
+            bright: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 98 },
+            middle: { hue: 0, hslHue: 0, chroma: 0, saturation: 0 },
+            dark: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 4 }
+          }];
+        }
+        return null;
+      }
+
+      function configHasNamedModes(text) {
+        if (!window.CodeFigConfigUI) return false;
+        try {
+          var schema = window.CodeFigConfigUI.parse(text, currentPanelSpecText());
+          var row = (schema.rows || []).filter(function (r) {
+            return r.type === 'field' && r.name === 'modes' && Array.isArray(r.value);
+          })[0];
+          if (!row) return false;
+          return row.value.some(function (e) {
+            return e && typeof e.name === 'string' && e.name.trim() !== '';
+          });
+        } catch (e) {
+          return false;
+        }
+      }
+
+      /**
+       * Unlock chips / Mode settings when the panel has collection intent but no named modes yet —
+       * *New collection* (name still empty) or a miss with no file modes to align.
+       */
+      function ensureStarterModesInBlock() {
+        var api = window.CodeFigConfigUI;
+        if (!api || !scriptHasConfig) return;
+        var domain = configPreviewDomain();
+        var starters = starterModesForDomain(domain);
+        if (!starters) return;
+        var cur = currentConfigBlock();
+        if (configHasNamedModes(cur)) return;
+        try {
+          var schema = api.parse(cur, currentPanelSpecText());
+          var next = api.serialize(schema, { modes: starters });
+          if (!next || next.trim() === cur.trim()) return;
+          writeConfigBlockText(next, 'starter-modes');
+          if (addedModeNames.indexOf('Value') === -1) {
+            addedModeNames = addedModeNames.concat(['Value']);
+          }
+        } catch (e) { /* leave the block alone */ }
+      }
+
+      function collectionNewSentinelValue() {
+        return (window.CodeFigConfigUI && window.CodeFigConfigUI.collectionNewSentinel)
+          ? window.CodeFigConfigUI.collectionNewSentinel()
+          : '\u0000codefig-new';
+      }
+
+      function isFormCreatingCollection() {
+        if (collectionCreating) return true;
+        if (!configUIContainer) return false;
+        var wrap = configUIContainer.querySelector('[data-collection-field]');
+        var select = wrap && wrap.querySelector('.config-ui-collection-select');
+        return !!(select && select.value === collectionNewSentinelValue());
+      }
+
+      /** Put *New collection* back after a rebuild that would otherwise clear the sentinel. */
+      function restoreCollectionCreating() {
+        if (!collectionCreating || !configUIContainer) return;
+        var wrap = configUIContainer.querySelector('[data-collection-field]');
+        if (!wrap) return;
+        var select = wrap.querySelector('.config-ui-collection-select');
+        var newName = wrap.querySelector('.config-ui-collection-new');
+        if (!select) return;
+        select.value = collectionNewSentinelValue();
+        if (newName) newName.style.display = 'block';
+        if (configUIInstance && configUIInstance.applyVisibility) {
+          configUIInstance.applyVisibility();
+        }
       }
 
       /** The collection the last real read was for, so a change of collection can drop a stale group. */
@@ -3832,7 +4047,15 @@
         // Both intents travel with it, and they have to: neither "I took that one out" nor "I asked for
         // that one" can be read off a config, and each one's absence turns into the panel undoing
         // something a moment after it was done.
-        var out = api.alignModesToFile(row.value, chipModeIds, fileModes.modes, {
+        // **Rematch when the block and the id list disagree in length.** A recorded fill replaces the
+        // whole `modes` array with one entry while `chipModeIds` still carries the four ids from the
+        // collection alignment that ran a moment earlier — and matching by id then parks the lone entry
+        // on Desktop while a fresh block is inserted for Value, which is the duplicate-Value preview.
+        var idsForAlign = chipModeIds;
+        if (!Array.isArray(idsForAlign) || idsForAlign.length !== row.value.length) {
+          idsForAlign = api.matchModeIds(row.value, fileModes.modes);
+        }
+        var out = api.alignModesToFile(row.value, idsForAlign, fileModes.modes, {
           removedIds: removedModeIds, addedNames: addedModeNames
         });
         chipModeIds = out.ids;
@@ -4072,17 +4295,23 @@
       }
 
       /**
-       * Nothing where the panel is pointing, but a grid is somewhere in this collection.
+       * Nothing where the panel is pointing, but a set is somewhere in this collection.
        *
-       * **One candidate: go there.** Márton's point is that a numbered column series *is* a grid, so
-       * finding it is a search rather than a question, and a panel that sits on an empty default while
-       * the answer is one field away is being coy. The Group field is the address, so this changes the
-       * address and lets the ordinary load happen — no second loading path.
-       *
-       * **More than one: say so and touch nothing.** Two grids in a collection means the choice is
-       * real, and picking the bigger one would be a guess dressed as help.
+       * Grid, spacing, radius, and typography all report `candidates` from `@Foundation` when the
+       * current group holds nothing. **One candidate: go there.** **More than one: say so and touch
+       * nothing.**
        */
-      function offerGridGroup(found) {
+      function foundationGroupDetail(candidate) {
+        if (!candidate) return '';
+        if (candidate.columns != null) return candidate.columns + ' columns';
+        if (candidate.tokens != null) return candidate.tokens + ' tokens';
+        return '';
+      }
+
+      /**
+       * **One candidate: go there.** **More than one: say so and touch nothing.**
+       */
+      function offerDetectedGroup(found) {
         var candidates = (found && found.candidates) || [];
         if (!candidates.length) return false;
 
@@ -4113,10 +4342,11 @@
         })[0];
         if (!groupRow) return false;
 
+        var detail = foundationGroupDetail(candidates[0]);
         writeConfigBlockText(api.serialize(schema, { group: target }), 'group-detected');
         setAutoImportNote('No ' + configPreviewDomainLabel() + ' set under that group. This ' +
-          'collection has one under ' + (target || 'no group') + ' (' + candidates[0].columns +
-          ' columns), so Group was set to it.');
+          'collection has one under ' + (target || 'no group') +
+          (detail ? ' (' + detail + ')' : '') + ', so Group was set to it.');
         // The address changed, so ask again — the ordinary load, at the new address.
         scheduleAutoImport();
         return true;
@@ -4147,26 +4377,28 @@
 
         if (!found || !found.config ||
             (found.source !== 'recorded' && found.source !== 'recognised')) {
-          if (offerGridGroup(found)) return;
+          var offered = offerDetectedGroup(found);
+          // **Modes follow the collection even when group detection short-circuits.** An offer returns
+          // before a fill — several candidate groups, or one group written and a second import queued —
+          // but the chips must still leave placeholder state the moment `fileModes` arrives. Writing
+          // `pendingPristine` after alignment used to undo that (`modes: []` in the shipped defaults).
+          //
+          // When the offer rewrote Group, the pristine block captured at request time is for the old
+          // address and must not be applied on top.
+          if (offered) pendingPristine = null;
+          else if (pendingPristine) {
+            writeConfigBlockText(pendingPristine, 'address-reset');
+            pendingPristine = null;
+          }
+          var onMiss = orderConfigModesToFile();
+          // No file modes yet (new collection, or read before anything exists): still unlock with Value.
+          if (!fileModes.found) ensureStarterModesInBlock();
+          if (offered) return;
           // **The modes are still read, because they were never the manifest's to give.** This branch used
           // to return here, and choosing a collection from the dropdown is exactly what reaches it — so a
           // five-mode collection with no recorded set left the panel on the script's three modes, and the
           // only pass that aligned them was the probe that runs when a script opens. Two paths, one of
           // which quietly did less than the other.
-          var onMiss = orderConfigModesToFile();
-          // **Say that nothing was read.** Clearing the note leaves the panel pointing at one collection while
-          // showing another's numbers, with no sign of it — which is how every mismatch this panel has had
-          // stayed hidden. Pointing at `color - moss` with blocks named Granite and Moss read nothing, changed
-          // nothing, and said nothing; the steps and the ladder still described the collection before it.
-          //
-          // Both sentences, in that order: the settings were not read, *and* here is what the modes did. One
-          // without the other is a half-answer, and the half that goes missing is whichever was written last.
-          // Nothing to fill, so the prepared defaults *are* the result — this is the write that used to
-          // happen before the read went out.
-          if (pendingPristine) {
-            writeConfigBlockText(pendingPristine, 'address-reset');
-            pendingPristine = null;
-          }
           var missNote = nothingReadNote(found);
           var addedNote = insertedModesNote(onMiss.added, onMiss.dropped);
           setAutoImportNote(
@@ -6465,7 +6697,11 @@
                   : current;
                 if (window.CodeFigConfigUI && window.CodeFigConfigUI.populateCollectionControl) {
                   // `true`: the list is real now, so a name that is not in it genuinely is not here.
-                  window.CodeFigConfigUI.populateCollectionControl(wrap, options, live || current, true);
+                  // Fifth arg: keep *New collection* selected across the list landing after a
+                  // starter-mode rebuild wiped the select.
+                  window.CodeFigConfigUI.populateCollectionControl(
+                    wrap, options, live || current, true, collectionCreating
+                  );
                 }
               });
 
@@ -6596,8 +6832,9 @@
                     // Read-only half: point the panel at a grid if this address holds none, and
                     // otherwise leave everything exactly as the person left it — bar the modes, which
                     // are a view of the collection rather than something the person set here.
-                    if (!offerGridGroup(data.autoImport)) {
-                      var onProbe = orderConfigModesToFile();
+                    var offered = offerDetectedGroup(data.autoImport);
+                    var onProbe = orderConfigModesToFile();
+                    if (!offered) {
                       setAutoImportNote(insertedModesNote(onProbe.added, onProbe.dropped));
                     }
                   } else {
@@ -6765,7 +7002,7 @@
         if (level === 'error' && !codefigJob.firstError) codefigJob.firstError = payload;
       }
 
-      /** "Utility Scripts / Variable inspector (WIP)" -> "variable-inspector-wip" */
+      /** "Variables / Variable inspector (WIP)" -> "variable-inspector-wip" */
       function _codefigScriptSlug(text) {
         var last = String(text == null ? '' : text).split('/').pop();
         return last.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -6785,12 +7022,19 @@
         var bare = wanted.replace(/\.js$/, '');
         var slug = _codefigScriptSlug(bare);
         var i, script;
+        // Legacy display prefix before the 2026-09 sidebar split — filenames and titles still work.
+        var legacyUtility = /^utility scripts\s*\/\s*/;
 
         for (i = 0; i < allScripts.length; i++) {
           script = allScripts[i];
           var file = String(script.filename || '').toLowerCase().replace(/\.js$/, '');
           if (file && file === bare) return { script: script };
           if (String(script.name || '').toLowerCase() === wanted) return { script: script };
+          if (legacyUtility.test(wanted)) {
+            var legacyTail = wanted.replace(legacyUtility, '');
+            if (String(script.name || '').toLowerCase().endsWith(' / ' + legacyTail)) return { script: script };
+            if (_codefigScriptSlug(legacyTail) === _codefigScriptSlug(script.name)) return { script: script };
+          }
           if (_codefigScriptSlug(script.name) === slug) return { script: script };
         }
 

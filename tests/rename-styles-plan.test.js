@@ -1,5 +1,5 @@
 /**
- * Fixture tests for the plan/apply split in scripts/EXAMPLE_SCRIPTS/rename-styles.js.
+ * Fixture tests for the plan/apply split in scripts/EXAMPLE_SCRIPTS/Styles/rename-styles.js.
  *
  * Plan 11 turned "rename as you go" into "compute a plan, then apply it", because that is the
  * only way a preview and the apply pass cannot disagree. The property worth pinning is exactly
@@ -27,7 +27,7 @@ function loadPlanner() {
   const sources = [
     ['CODEFIG_LIBRARIES/@pattern-matching.js', ['escapeWildcards', 'applyFigmaPlaceholders', 'patternMode', 'patternToRegex', 'nameMatches', 'renameByPattern']],
     ['CODEFIG_LIBRARIES/@rename-preview.js', ['previewRow', 'flagPreviewCollisions', 'previewCounts', 'previewSignature']],
-    ['EXAMPLE_SCRIPTS/rename-styles.js', ['getMatchOpts', 'toRenameOperations', 'planRenameStyles', 'applyRenamePlan', 'hasRenameOperation', 'filterBySearchIn']]
+    ['EXAMPLE_SCRIPTS/Styles/rename-styles.js', ['getMatchOpts', 'toRenameOperations', 'planRenameStyles', 'applyRenamePlan', 'hasRenameOperation', 'filterBySearchIn']]
   ];
   for (const [rel, names] of sources) {
     const map = resolver.extractFunctionMap(read(rel));

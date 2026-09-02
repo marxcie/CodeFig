@@ -368,9 +368,7 @@ function typeScaleNumber(value) {
  */
 function typographyOverviewHtml(config, domain, modeName) {
   var table = typeScaleTable(config, modeName);
-  if (table.rows.length === 0) {
-    return '<div class="config-ui-empty">Pick a scale type and a base unit, and the steps appear here.</div>';
-  }
+  if (table.rows.length === 0) return '';
 
   var head = '<thead><tr><th>Step</th><th>Size</th><th>Line height</th><th>Ratio</th>' +
     '<th>Tracking</th><th>Variables</th></tr></thead>';
@@ -419,9 +417,7 @@ function typeScaleSpecimenWeight(config) {
 function typographyPreviewHtml(config, domain, modeName) {
   var data = (config && config.config) || config || {};
   var table = typeScaleTable(config, modeName);
-  if (table.rows.length === 0) {
-    return '<div class="config-ui-empty">Name some tokens and pick a scale, and the type appears here.</div>';
-  }
+  if (table.rows.length === 0) return '';
 
   var family = typeof data.fontFamily === 'string' && data.fontFamily ? data.fontFamily : 'Inter';
   var weight = typeScaleSpecimenWeight(config);

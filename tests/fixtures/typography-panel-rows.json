@@ -21,7 +21,7 @@
   {
     "type": "field",
     "name": "group",
-    "value": "Typography",
+    "value": "",
     "label": "Group within collection",
     "labelSpelled": true,
     "tooltip": "",
@@ -31,28 +31,18 @@
   {
     "type": "field",
     "name": "fontScale",
-    "value": [
-      "Text-Tiny",
-      "Text-Small",
-      "Text-Regular",
-      "Text-Large",
-      "Heading-6",
-      "Heading-5",
-      "Heading-4",
-      "Heading-3",
-      "Heading-2",
-      "Heading-1"
-    ],
+    "value": [],
     "label": "Tokens",
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "list",
+    "placeholder": "Text-Tiny, Text-Small, Text-Regular, Heading-1",
     "helper": "Names from smallest to largest. heading-{6,1} expands to six sizes. Base unit is the size of the first name."
   },
   {
     "type": "field",
     "name": "fontFamily",
-    "value": "Inter",
+    "value": "",
     "label": "Font family",
     "labelSpelled": true,
     "tooltip": "",
@@ -62,20 +52,18 @@
   {
     "type": "field",
     "name": "fontWeights",
-    "value": [
-      400,
-      600
-    ],
+    "value": [],
     "label": "Font weights",
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "list",
+    "placeholder": "400, 600",
     "helper": "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold."
   },
   {
     "type": "field",
     "name": "createStyles",
-    "value": true,
+    "value": false,
     "label": "Create and update text styles",
     "labelSpelled": true,
     "tooltip": "",
@@ -84,7 +72,7 @@
   {
     "type": "field",
     "name": "styleNaming",
-    "value": "Typography/{$fontScale}/{$fontWeight}",
+    "value": "",
     "label": "Style naming",
     "labelSpelled": true,
     "tooltip": "",
@@ -98,7 +86,21 @@
   {
     "type": "heading",
     "level": 1,
-    "text": "Mode settings"
+    "text": "Mode settings",
+    "showWhenRules": [
+      {
+        "field": "collectionName",
+        "values": [
+          "*"
+        ]
+      },
+      {
+        "field": "fontScale",
+        "values": [
+          "*"
+        ]
+      }
+    ]
   },
   {
     "type": "field",
@@ -108,33 +110,44 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "boolean",
-    "helper": "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight."
+    "helper": "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight.",
+    "showWhenRules": [
+      {
+        "field": "collectionName",
+        "values": [
+          "*"
+        ]
+      },
+      {
+        "field": "fontScale",
+        "values": [
+          "*"
+        ]
+      }
+    ]
   },
   {
     "type": "field",
     "name": "modes",
-    "value": [
-      {
-        "name": "Value",
-        "scaleType": "bezier",
-        "base": 8,
-        "ratio": 1.25,
-        "curve": [],
-        "letterSpacing": {
-          "base": 0,
-          "max": -2
-        },
-        "lineHeight": {
-          "base": 150,
-          "max": 110
-        },
-        "roundTo": 2
-      }
-    ],
+    "value": [],
     "label": "Modes",
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "rows",
+    "showWhenRules": [
+      {
+        "field": "collectionName",
+        "values": [
+          "*"
+        ]
+      },
+      {
+        "field": "fontScale",
+        "values": [
+          "*"
+        ]
+      }
+    ],
     "columns": [
       {
         "key": "name",
@@ -289,7 +302,7 @@
   {
     "type": "field",
     "name": "overviewPreviewText",
-    "value": "Sphinx of black quartz,\njudge my vow.",
+    "value": "",
     "label": "Preview text",
     "labelSpelled": true,
     "tooltip": "",
