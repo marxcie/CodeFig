@@ -66,20 +66,20 @@ var variableType = "Color";
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { type: "paragraph", attachTo: "next",
-//       text: "Where the variables go. Pick a collection in this file, or choose \"New collection\" and type a\nname — a name that is not in this file is created on Run." },
-//     { key: "targetCollection", type: "collection", label: "Collection" },
-//     { type: "paragraph", attachTo: "next", text: "Which mode the values are written to. Empty means the collection's default mode." },
-//     { key: "targetMode", type: "mode", label: "Mode", collection: "targetCollection" },
-//     { type: "paragraph", attachTo: "next",
-//       text: "A group inside the collection that every variable goes under. Empty means the collection root." },
-//     { key: "targetGroup", type: "string", label: "Group within collection", placeholder: "eg.: primitives/bark" },
-//     { key: "variableType", type: "select", options: ["Color", "Number", "String"] },
-//     { type: "paragraph", attachTo: "previous", text: "Color: solid fill on shapes. Number / String: text layers." }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { type: "paragraph", attachTo: "next",
+      text: "Where the variables go. Pick a collection in this file, or choose \"New collection\" and type a\nname — a name that is not in this file is created on Run." },
+    { key: "targetCollection", type: "collection", label: "Collection" },
+    { type: "paragraph", attachTo: "next", text: "Which mode the values are written to. Empty means the collection's default mode." },
+    { key: "targetMode", type: "mode", label: "Mode", collection: "targetCollection" },
+    { type: "paragraph", attachTo: "next",
+      text: "A group inside the collection that every variable goes under. Empty means the collection root." },
+    { key: "targetGroup", type: "string", label: "Group within collection", placeholder: "eg.: primitives/bark" },
+    { key: "variableType", type: "select", options: ["Color", "Number", "String"] },
+    { type: "paragraph", attachTo: "previous", text: "Color: solid fill on shapes. Number / String: text layers." }
+  ]
+};
 // @PANEL_END
 
 function trimTarget(v) {

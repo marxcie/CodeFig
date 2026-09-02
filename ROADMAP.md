@@ -1,9 +1,10 @@
 # CodeFig roadmap and status
 
 **One page that says where the project is.** Written for whoever picks it up next, in any tool.
-Last consolidated 2026-09-01: **Release 2.0 — Foundations** in exit sequence on `dsf-foundations`
-(JSON `@PANEL_START` generational update; Variables storage; foundation maintain; DSF panel UX).
-Cornerstones landed. **Next after 2.0 tag:** Plan 37 cleanup pass (panel consistency for custom authors).
+Last consolidated 2026-09-02: **Release 2.0 — Foundations** in exit sequence on `dsf-foundations`.
+Cornerstones landed. **Plan 37 stays pre-2.0:** lock panel syntax (`var __codefigPanel = {…}`),
+script/library clarity, and architecture before the tag. Visual UI polish may run in parallel or
+after; it must not leave the format undecided.
 
 Keep it current. If a plan's status changes, change it here too, in the same pass. A roadmap that
 lies is worse than none.
@@ -18,7 +19,7 @@ lies is worse than none.
 | `CLAUDE.md` | How the codebase works. Architecture, invariants, gotchas. | Behaviour or structure changes. |
 | `.plans/NN-*.md` | One initiative each. Its own `**Status.**` block at the top is the source of truth for that item. **Local only — never commit.** | That initiative moves. |
 | `.plans/00-INDEX.md` | The 01 to 27 history and their ordering constraints. | Rarely. Historical. |
-| `.plans/37-config-format-decision.md` | Script language / config UX: JSON `@PANEL_START`; drop Configuration code tab; panel consistency. **Next: cleanup.** | A format or UX decision changes. |
+| `.plans/37-config-format-decision.md` | Script language / config UX: `@PANEL_START` recipe; drop Configuration code tab; panel consistency. **Entire Plan 37 cleanup is pre-2.0** (syntax + architecture locked; UI polish may parallel). | A format or UX decision changes. |
 | `.plans/38-script-storage-variables.md` | Script storage: Variables + LocalStorage (both keep). Library edit UX deferred. | A storage decision changes. |
 | `.plans/39-foundation-maintenance.md` | DSF metadata hygiene; config script gone. Copy/duplicate → new identity (§11 implemented); tied collisions still skipped. | A maintenance decision changes. |
 | `DEFERRED.md` | Known problems nobody is fixing yet, with what fixing involves. | Something is found and left. |
@@ -49,21 +50,24 @@ the sequence. **Do not commit `.plans/`.**
 
 ## Release: 2.0 Foundations (in exit sequence)
 
-**Why 2.0.** Generational config UX: JSON `@PANEL_START` panel recipes, values-only `@CONFIG`,
-Configuration code tab gone. Shipped with script storage in Variables + canvas paste-share,
-foundation maintain + stamp identity, and DSF panels that stay empty until a collection is chosen.
+**Why 2.0.** Generational config UX: `@PANEL_START` panel recipes (live JS object in Source —
+syntax-highlighted, not `//`-commented JSON), values-only `@CONFIG`, Configuration code tab gone.
+Shipped with script storage in Variables + canvas paste-share, foundation maintain + stamp
+identity, and DSF panels that stay empty until a collection is chosen.
 
 **Ships (cornerstones 37 / 38 / 39 + wiring 29–32):**
 
 | Pillar | What users get |
 |---|---|
-| Config format (37) | `@PANEL_START` on all shipped panels; form-only Configuration UI; Help teaches JSON recipes |
+| Config format (37) | `@PANEL_START` as `var __codefigPanel = {…}`; form-only Configuration UI; one clear author model (cleanup locked before tag) |
 | Storage (38) | Variables + LocalStorage; settings; canvas paste-share; export/sync menus |
 | Foundation maintain (39) | Boot repair; config script removed; copy = new stamp; Move keeps |
 | DSF panels | Empty General until collection; group scan; modes fix; scoped preview CSS |
 
-**Plan 37 in 2.0:** migration + tab removal + teaching surfaces — **not** the open-ended cleanup
-(panel language consistency for custom authors). That is **2.0.x / post-tag** work.
+**Plan 37 in 2.0 (pre-tag — not post-tag):** live object syntax + **cleanup locked** — one panel
+language/structure for shipped scripts and custom authors; teaching surfaces match; script vs
+library vs CodeFigUI builder unambiguous. **May parallel or follow:** visual UI polish
+(panel layout tweaks Márton does by eye). Format and architecture are decided.
 
 **Exit gate (before `npm run build:release -- major` → 2.0.0):**
 
@@ -72,9 +76,15 @@ foundation maintain + stamp identity, and DSF panels that stay empty until a col
 3. ✅ `npm run build:style-reference` regenerated
 4. ⚠️ Figma click-verify — partial via `figma:ui`; see `artifacts/RELEASE-2.0-morning.md`. **Reload once** (disk one build ahead of open plugin).
 5. Changelog `[2.0.0] - TBD` — set date on tag
-6. Commit uncommitted DSF + test batch when ready
+6. ✅ DSF + test batch committed (`2371552` and prior on `dsf-foundations`)
+7. ✅ **Plan 37 — syntax:** `@PANEL_START` as `var __codefigPanel = { blocks: […] }` (Source
+   highlighting). Same IR; comment form kept readable during migration. Shipped panels + Help
+   migrated 2026-09-02. **Go-ahead 2026-09-02.**
+8. ✅ **Plan 37 — cleanup / architecture:** every shipped `@PANEL_START` uses the same Help-style
+   live object (`blocks:` bare keys). Teaching surfaces state runnable script vs library vs
+   CodeFigUI builder. Visual UI polish is not a blocker for this item.
 
-**Explicitly not in 2.0:** Plan 37 cleanup; Colors dry-run; ramp recognition; library edit UX banner.
+**Explicitly not in 2.0:** Colors dry-run; ramp recognition; library edit UX banner; HTML/JSX panel skin.
 
 ---
 
@@ -89,9 +99,12 @@ paste-share + Copy or move / Replace variables).
 - **2026-08-28:** ramp **recognition** deferred — manifest load + recreate is enough.
 - **2026-08-31:** **LocalStorage stays** as personal backup beside Variables (teams). Do not
   demote/remove it. **Library / remote edit UX** deferred until one model covers prebuilts, DSF,
-  `@` libs, and remotes (`DEFERRED.md`). **Next work** is config UX cleanup + consistency (37),
-  including copy/move respecting manifests as core behaviour. Colors dry-run / DSF polish sits
-  with the deferred polish cluster, not first.
+  `@` libs, and remotes (`DEFERRED.md`).
+- **2026-09-02:** **Plan 37 stays pre-2.0.** (1) `@PANEL_START` as `var __codefigPanel = {…}` —
+  syntax-highlighted, not `//`-commented JSON. (2) Cleanup that locks architecture and
+  script/library clarity for custom authors — required before tag. Visual UI polish may run in
+  parallel or after; it must not leave the format undecided. Colors dry-run / DSF visual polish
+  sit with the deferred polish cluster.
 
 **Typography:** write path exists; if a panel fails to load, debug the read path.
 
@@ -101,7 +114,7 @@ paste-share + Copy or move / Replace variables).
 
 | Initiative | Plan | Locked | Status / next |
 |---|---|---|---|
-| **Script language & config UX** | `.plans/37` | JSON `@PANEL_START`; drop Configuration code tab | **Migrations done; tab deleted; teaching surfaces retargeted 2026-08-31.** **Next:** consistent panel language/structure for custom-script authors. |
+| **Script language & config UX** | `.plans/37` | `@PANEL_START` = `var __codefigPanel`; drop Configuration code tab; **cleanup pre-2.0** | **Done for 2.0 gate:** object binding + Help-style print across utilities + script/library/builder clarity in Help. **Parallel / later OK:** visual UI polish. |
 | **Script storage & sharing** | `.plans/38` | Variables + LocalStorage (both keep); settings; canvas paste-share | **Landed.** Library edit UX deferred (consistent model later). |
 | **Foundation metadata maintenance** | `.plans/39` | Auto-repair clear cases on open; no UI noise; config script gone | **Part A+B landed.** **§11 implemented 2026-08-31:** copy/duplicate → restamp new objects; originals keep stamps; boot forks clear `ambiguous-set-groups`. Move keeps identity. Tied collisions still skipped. |
 
@@ -129,7 +142,7 @@ fork). Tied collisions still skipped.
 
 ## Next (priority)
 
-1. **Polish cluster** — Colors live dry-run; DSF/utility polish; curve acceptance + probes;
+1. **Polish cluster** — Colors live dry-run; DSF/utility visual polish; curve acceptance + probes;
    on-demand fit hang; fitter corners; other `DEFERRED.md` user-facing items.
 2. **Click-verify DSF previews** — after reload, confirm library `@STYLE_START` paints form + side preview.
 

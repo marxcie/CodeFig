@@ -135,10 +135,14 @@ test('grid.js: @fromFile stays in @CONFIG_START', () => {
   assert.match(config, /@fromFile:\s*domains\.grid/);
 });
 
-test('grid.js: variables function remains a sibling after @PANEL_END', () => {
+test('grid.js: variables stays on the config object; panel is a top-level __codefigPanel', () => {
   const src = fs.readFileSync(GRID_PATH, 'utf8');
-  const panelEnd = src.indexOf('// @PANEL_END');
-  assert.ok(panelEnd !== -1);
-  const after = src.slice(panelEnd + '// @PANEL_END'.length);
-  assert.match(after, /^\s*,\s*(?:\/\/[^\n]*\n\s*)*variables:\s*function\s*\(/);
+  const configEnd = src.indexOf('// @CONFIG_END');
+  const panelStart = src.indexOf('// @PANEL_START');
+  assert.ok(configEnd !== -1 && panelStart !== -1);
+  const between = src.slice(configEnd, panelStart);
+  assert.match(between, /variables:\s*function\s*\(/, 'variables remains inside the config object');
+  assert.match(src.slice(panelStart), /var __codefigPanel\s*=/, 'panel is the live object form');
+  // Panel follows the config object's closing `};`
+  assert.match(between, /\};\s*$/);
 });

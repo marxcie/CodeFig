@@ -148,8 +148,11 @@ test('typography.js: @fromFile stays in @CONFIG_START', () => {
 
 test('typography.js: ensureCompatTypographyConfig still sits after the config object', () => {
   const src = fs.readFileSync(TYPOGRAPHY_PATH, 'utf8');
-  const end = src.indexOf('// @PANEL_END');
-  assert.ok(end !== -1);
-  const after = src.slice(end);
-  assert.match(after, /};\s*\n\s*ensureCompatTypographyConfig\(typographyConfigData\);/);
+  const panelEnd = src.indexOf('// @PANEL_END');
+  assert.ok(panelEnd !== -1);
+  // Panel is top-level after the config object; compat helpers follow the panel.
+  assert.match(
+    src.slice(panelEnd),
+    /\/\/ @PANEL_END\s*\n+ensureCompatTypographyConfig\(typographyConfigData\);/
+  );
 });

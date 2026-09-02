@@ -76,100 +76,37 @@ var batchReplacement = "";
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   "blocks": [
-//     {
-//       "key": "rebindScope",
-//       "type": "radio",
-//       "options": ["selection", "variablesCollection", "both"]
-//     },
-//     { "type": "divider" },
-//     { "type": "heading", "text": "Search for" },
-//     {
-//       "key": "sourceCollection",
-//       "type": "select",
-//       "label": "Collection",
-//       "options": "variableCollections"
-//     },
-//     {
-//       "key": "sourceGroup",
-//       "type": "string",
-//       "label": "Group",
-//       "placeholder": "UI"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Path prefix to match, e.g. `UI` or `UI/*`. Leave empty to ignore group."
-//     },
-//     {
-//       "key": "sourceVariables",
-//       "type": "string",
-//       "label": "Variables",
-//       "placeholder": "white"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Variable name or fragment to find. Combined with Group as `group/name`. Leave empty for every variable in the collection filter."
-//     },
-//     { "type": "divider" },
-//     { "type": "heading", "text": "Replace with" },
-//     {
-//       "key": "targetCollection",
-//       "type": "select",
-//       "label": "Collection",
-//       "options": "variableCollections"
-//     },
-//     {
-//       "key": "targetGroup",
-//       "type": "string",
-//       "label": "Group",
-//       "placeholder": "UI"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Destination path prefix. Leave empty to keep the matched group structure."
-//     },
-//     {
-//       "key": "targetVariables",
-//       "type": "string",
-//       "label": "Variables",
-//       "placeholder": "accent-color"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Name to bind to instead. Leave empty to keep each variable’s own name and only change collection or group."
-//     },
-//     { "type": "divider" },
-//     {
-//       "key": "useRegex",
-//       "type": "boolean",
-//       "label": "Use regular expression"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Reads the composed find path as a regular expression rather than plain text with `*` wildcards."
-//     },
-//     {
-//       "key": "batchReplacement",
-//       "type": "textarea"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides Group and Variables. No quotes, no trailing commas."
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "```\ncolor 2, color 1\nred, blue\n```"
-//     }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "rebindScope", type: "radio", options: ["selection", "variablesCollection", "both"] },
+    { type: "divider" },
+    { type: "heading", text: "Search for" },
+    { key: "sourceCollection", type: "select", label: "Collection", options: "variableCollections" },
+    { key: "sourceGroup", type: "string", label: "Group", placeholder: "UI" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Path prefix to match, e.g. `UI` or `UI/*`. Leave empty to ignore group." },
+    { key: "sourceVariables", type: "string", label: "Variables", placeholder: "white" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Variable name or fragment to find. Combined with Group as `group/name`. Leave empty for every variable in the collection filter." },
+    { type: "divider" },
+    { type: "heading", text: "Replace with" },
+    { key: "targetCollection", type: "select", label: "Collection", options: "variableCollections" },
+    { key: "targetGroup", type: "string", label: "Group", placeholder: "UI" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Destination path prefix. Leave empty to keep the matched group structure." },
+    { key: "targetVariables", type: "string", label: "Variables", placeholder: "accent-color" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Name to bind to instead. Leave empty to keep each variable’s own name and only change collection or group." },
+    { type: "divider" },
+    { key: "useRegex", type: "boolean", label: "Use regular expression" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Reads the composed find path as a regular expression rather than plain text with `*` wildcards." },
+    { key: "batchReplacement", type: "textarea" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides Group and Variables. No quotes, no trailing commas." },
+    { type: "paragraph", attachTo: "previous", text: "```\ncolor 2, color 1\nred, blue\n```" }
+  ]
+};
 // @PANEL_END
 //
 // Batch replacement in script only mode:

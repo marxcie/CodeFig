@@ -48,21 +48,21 @@ var aspectRatio = "";
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { key: "scaleOrResize", type: "radio", options: ["scale", "resize"] },
-//     { type: "heading", level: 2, text: "Scale", showWhen: { scaleOrResize: "scale" } },
-//     { key: "scaleMethod", type: "radio", options: ["factor", "width", "height"], showWhen: { scaleOrResize: "scale" } },
-//     { key: "scaleFactor", type: "number", showWhen: { scaleOrResize: "scale", scaleMethod: "factor" } },
-//     { key: "scaleWidthTo", type: "string", showWhen: { scaleOrResize: "scale", scaleMethod: "width" } },
-//     { key: "scaleHeightTo", type: "string", showWhen: { scaleOrResize: "scale", scaleMethod: "height" } },
-//     { type: "heading", level: 2, text: "Resize", showWhen: { scaleOrResize: "resize" } },
-//     { key: "resizeUnitMode", type: "radio", options: ["factor", "pixels"], showWhen: { scaleOrResize: "resize" } },
-//     { key: "widthTo", type: "string", showWhen: { scaleOrResize: "resize" } },
-//     { key: "heightTo", type: "string", showWhen: { scaleOrResize: "resize" } },
-//     { key: "aspectRatio", type: "string", showWhen: { scaleOrResize: "resize" } }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "scaleOrResize", type: "radio", options: ["scale", "resize"] },
+    { type: "heading", level: 2, text: "Scale", showWhen: { scaleOrResize: "scale" } },
+    { key: "scaleMethod", type: "radio", options: ["factor", "width", "height"], showWhen: { scaleOrResize: "scale" } },
+    { key: "scaleFactor", type: "number", showWhen: { scaleOrResize: "scale", scaleMethod: "factor" } },
+    { key: "scaleWidthTo", type: "string", showWhen: { scaleOrResize: "scale", scaleMethod: "width" } },
+    { key: "scaleHeightTo", type: "string", showWhen: { scaleOrResize: "scale", scaleMethod: "height" } },
+    { type: "heading", level: 2, text: "Resize", showWhen: { scaleOrResize: "resize" } },
+    { key: "resizeUnitMode", type: "radio", options: ["factor", "pixels"], showWhen: { scaleOrResize: "resize" } },
+    { key: "widthTo", type: "string", showWhen: { scaleOrResize: "resize" } },
+    { key: "heightTo", type: "string", showWhen: { scaleOrResize: "resize" } },
+    { key: "aspectRatio", type: "string", showWhen: { scaleOrResize: "resize" } }
+  ]
+};
 // @PANEL_END
 
 // Random range helper function

@@ -61,72 +61,28 @@ var batchReplacement = "";
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   "blocks": [
-//     {
-//       "key": "searchIn",
-//       "type": "string",
-//       "placeholder": "color/*"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Rebinds only styles whose name contains this — `color/`, `Typography/`. Leave it empty for every style."
-//     },
-//     {
-//       "type": "heading",
-//       "text": "Library styles must already be in the file",
-//       "level": 2
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Figma caches styles per file, so a library style can only be rebound once the document has seen it.\nRun **Render styles overview** in the library file, then copy the frame it makes into this one. The\nstyles become available and the rebind works. Local styles need none of this."
-//     },
-//     {
-//       "key": "searchFor",
-//       "type": "string",
-//       "placeholder": "Text V1"
-//     },
-//     {
-//       "key": "replaceWith",
-//       "type": "string",
-//       "placeholder": "Text V2"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, and `$1` `$2` are capture groups when **Use regular expression** is on."
-//     },
-//     {
-//       "key": "useRegex",
-//       "type": "boolean",
-//       "label": "Use regular expression"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
-//     },
-//     {
-//       "type": "divider"
-//     },
-//     {
-//       "key": "batchReplacement",
-//       "type": "textarea"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas."
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "```\nText V1, Text V2\nHeading V1, Heading V2\n```"
-//     }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "searchIn", type: "string", placeholder: "color/*" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Rebinds only styles whose name contains this — `color/`, `Typography/`. Leave it empty for every style." },
+    { type: "heading", text: "Library styles must already be in the file", level: 2 },
+    { type: "paragraph", attachTo: "previous",
+      text: "Figma caches styles per file, so a library style can only be rebound once the document has seen it.\nRun **Render styles overview** in the library file, then copy the frame it makes into this one. The\nstyles become available and the rebind works. Local styles need none of this." },
+    { key: "searchFor", type: "string", placeholder: "Text V1" },
+    { key: "replaceWith", type: "string", placeholder: "Text V2" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, and `$1` `$2` are capture groups when **Use regular expression** is on." },
+    { key: "useRegex", type: "boolean", label: "Use regular expression" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards." },
+    { type: "divider" },
+    { key: "batchReplacement", type: "textarea" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Many rebinds in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas." },
+    { type: "paragraph", attachTo: "previous", text: "```\nText V1, Text V2\nHeading V1, Heading V2\n```" }
+  ]
+};
 // @PANEL_END
 //
 // Script-only batch: var batchReplacement = [["500","50"],["4xl","3xl"]]; or [{ searchPattern: "500", replacePattern: "50" }];

@@ -37,12 +37,12 @@ var recursive = true;
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { key: "normalize", type: "boolean", label: "Normalize (merge padding + gap when safe)" },
-//     { key: "recursive", type: "boolean", label: "Process descendants" }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "normalize", type: "boolean", label: "Normalize (merge padding + gap when safe)" },
+    { key: "recursive", type: "boolean", label: "Process descendants" }
+  ]
+};
 // @PANEL_END
 
 var PADDING_PROPS = ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom'];

@@ -37,20 +37,20 @@ var importPayload = "";
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { key: "mode", type: "radio", options: ["Export", "Import"] },
-//     { type: "divider" },
-//     { type: "heading", text: "Export", showWhen: { mode: "Export" } },
-//     { key: "collections", type: "multiselect", options: "localVariableCollections", showWhen: { mode: "Export" } },
-//     { type: "paragraph", attachTo: "previous", text: "Every collection you tick goes into the payload, with its modes and values.", showWhen: { mode: "Export" } },
-//     { type: "heading", text: "Import", showWhen: { mode: "Import" } },
-//     { key: "importPayload", type: "textarea", placeholder: "Paste JSON exported from another file", showWhen: { mode: "Import" } },
-//     { type: "paragraph", attachTo: "previous",
-//       showWhen: { mode: "Import" },
-//       text: "The JSON that Export produced in the other file. Collections that do not exist here are created." }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "mode", type: "radio", options: ["Export", "Import"] },
+    { type: "divider" },
+    { type: "heading", text: "Export", showWhen: { mode: "Export" } },
+    { key: "collections", type: "multiselect", options: "localVariableCollections", showWhen: { mode: "Export" } },
+    { type: "paragraph", attachTo: "previous", text: "Every collection you tick goes into the payload, with its modes and values.", showWhen: { mode: "Export" } },
+    { type: "heading", text: "Import", showWhen: { mode: "Import" } },
+    { key: "importPayload", type: "textarea", placeholder: "Paste JSON exported from another file", showWhen: { mode: "Import" } },
+    { type: "paragraph", attachTo: "previous",
+      showWhen: { mode: "Import" },
+      text: "The JSON that Export produced in the other file. Collections that do not exist here are created." }
+  ]
+};
 // @PANEL_END
 
 var EXPORT_VERSION = 1;

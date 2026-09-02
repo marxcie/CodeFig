@@ -4,9 +4,10 @@
 //
 // ## Overview
 //
-// **Shipped Configuration UI panels** use `@PANEL_START`…`@PANEL_END` (JSON recipe) plus a values block (`@UI_CONFIG_*` or `@CONFIG_*`). That is the authoring model — see **Help & documentation** (Style & UI reference).
+// **Shipped Configuration UI panels** use `@PANEL_START`…`@PANEL_END` (`var __codefigPanel = { blocks: […] }` with bare keys)
+// plus a values block (`@UI_CONFIG_*` or `@CONFIG_*`). That is the authoring model for **runnable scripts** — see **Help & documentation** (Style & UI reference; three roles).
 //
-// This library's builder API (`section()`, `sendToUI()`, …) is for **forms built at run time**, not a replacement for `@PANEL_START`.
+// This library's builder API (`section()`, `sendToUI()`, …) is for **forms built at run time**, not a replacement for `@PANEL_START`. A **library** (`@`-prefixed script) exports functions for `@import` and is not Run on its own.
 //
 // **Names:** **CodeFigUI** is the feature (this library and the Config tab form). **`@UI_CONFIG_*`** markers wrap **values** in a script.
 //

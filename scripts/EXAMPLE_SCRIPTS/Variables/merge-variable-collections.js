@@ -50,31 +50,30 @@ var moveOrCopy = 'Move';
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   "blocks": [
-//     { "type": "heading", "text": "Source" },
-//     { "key": "sourceCollection", "type": "collection", "label": "Collection" },
-//     { "key": "sourceGroup", "type": "string", "label": "Group", "placeholder": "color" },
-//     { "type": "paragraph", "attachTo": "previous",
-//       "text": "Only variables under this path. Leave empty for the whole collection." },
-//     { "key": "sourceMode", "type": "mode", "label": "Mode", "collection": "sourceCollection" },
-//     { "type": "paragraph", "attachTo": "previous",
-//       "text": "Only this mode’s values. Leave empty to take every mode." },
-//     { "type": "divider" },
-//     { "type": "heading", "text": "Target" },
-//     { "key": "targetCollection", "type": "collection", "label": "Collection" },
-//     { "key": "targetGroup", "type": "string", "label": "Group", "placeholder": "brand" },
-//     { "type": "paragraph", "attachTo": "previous",
-//       "text": "Destination path prefix. Leave empty to keep each variable’s name under the source group." },
-//     { "key": "targetMode", "type": "mode", "label": "Mode", "collection": "targetCollection" },
-//     { "type": "paragraph", "attachTo": "previous",
-//       "text": "Mode to write into. Pick an existing one or New mode. Leave empty to match source modes by name." },
-//     { "type": "divider" },
-//     { "key": "moveOrCopy", "type": "radio", "label": "Move or copy", "options": ["Move", "Copy"] },
-//     { "type": "paragraph", "attachTo": "previous",
-//       "text": "Move rebinds this file and removes the source variables. Copy leaves the source alone. Design System Foundations stamps: Copy gets a new set id; Move keeps the same one." }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { type: "heading", text: "Source" },
+    { key: "sourceCollection", type: "collection", label: "Collection" },
+    { key: "sourceGroup", type: "string", label: "Group", placeholder: "color" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Only variables under this path. Leave empty for the whole collection." },
+    { key: "sourceMode", type: "mode", label: "Mode", collection: "sourceCollection" },
+    { type: "paragraph", attachTo: "previous", text: "Only this mode’s values. Leave empty to take every mode." },
+    { type: "divider" },
+    { type: "heading", text: "Target" },
+    { key: "targetCollection", type: "collection", label: "Collection" },
+    { key: "targetGroup", type: "string", label: "Group", placeholder: "brand" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Destination path prefix. Leave empty to keep each variable’s name under the source group." },
+    { key: "targetMode", type: "mode", label: "Mode", collection: "targetCollection" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Mode to write into. Pick an existing one or New mode. Leave empty to match source modes by name." },
+    { type: "divider" },
+    { key: "moveOrCopy", type: "radio", label: "Move or copy", options: ["Move", "Copy"] },
+    { type: "paragraph", attachTo: "previous",
+      text: "Move rebinds this file and removes the source variables. Copy leaves the source alone. Design System Foundations stamps: Copy gets a new set id; Move keeps the same one." }
+  ]
+};
 // @PANEL_END
 
 @import { foundationNamespace, parseManifest, writeManifest, foundationMintSetId, foundationSetIdFromKey, foundationModeIds, stampToken, readStamp, planCopyMoveSetIdentity } from "@Foundation"

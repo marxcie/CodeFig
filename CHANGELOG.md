@@ -19,6 +19,14 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Changed
+
+- **`@PANEL_START` is a live JS object.** Shipped panels use `var __codefigPanel = { blocks: […] }`
+  between the markers so Source syntax-highlights the recipe. The old `//`-commented JSON form
+  still parses (saved scripts). Panel regions sit at top level — not inside the `@CONFIG` object.
+  Utility panels that still looked like JSON (`"blocks":`) are reprinted in the same bare-key
+  Help style as Design System Foundations, so every shipped recipe teaches one language.
+
 ### Fixed
 
 - **DSF Mode settings gates differ by script.** Spacing / Typography / Corner radius / Colors

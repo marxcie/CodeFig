@@ -52,62 +52,26 @@ var batchReplacement = "";
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   "blocks": [
-//     {
-//       "key": "searchIn",
-//       "type": "string",
-//       "placeholder": "text/*"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Narrows the rename to styles whose name contains this — `color/`, `V4/*/Primary`. Leave it empty\nto search every style."
-//     },
-//     {
-//       "key": "searchFor",
-//       "type": "string",
-//       "placeholder": "font-"
-//     },
-//     {
-//       "key": "replaceWith",
-//       "type": "string",
-//       "placeholder": "text-"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, `$1` a capture group, `$n` counts up and `$N` counts down."
-//     },
-//     {
-//       "key": "useRegex",
-//       "type": "boolean",
-//       "label": "Use regular expression"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards."
-//     },
-//     {
-//       "type": "divider"
-//     },
-//     {
-//       "key": "batchReplacement",
-//       "type": "textarea"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Many renames in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas."
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "```\nSemiBold, semibold\nRegular, regular\nSmall, small\n```"
-//     }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "searchIn", type: "string", placeholder: "text/*" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Narrows the rename to styles whose name contains this — `color/`, `V4/*/Primary`. Leave it empty\nto search every style." },
+    { key: "searchFor", type: "string", placeholder: "font-" },
+    { key: "replaceWith", type: "string", placeholder: "text-" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Leave **Search for** empty to replace the whole name. In the replacement, `$&` is the text that\nmatched, `$1` a capture group, `$n` counts up and `$N` counts down." },
+    { key: "useRegex", type: "boolean", label: "Use regular expression" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Reads **Search in** and **Search for** as regular expressions rather than plain text with `*` wildcards." },
+    { type: "divider" },
+    { key: "batchReplacement", type: "textarea" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Many renames in one run: one pair per line, search first, replace after the comma. Overrides\n**Search for** and **Replace with**. No quotes, no trailing commas." },
+    { type: "paragraph", attachTo: "previous",
+      text: "```\nSemiBold, semibold\nRegular, regular\nSmall, small\n```" }
+  ]
+};
 // @PANEL_END
 //
 // Batch replacement in script only mode:

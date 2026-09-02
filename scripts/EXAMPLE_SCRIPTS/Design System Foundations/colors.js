@@ -134,119 +134,120 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   ]
 // @CONFIG_END
 
-// @PANEL_START
-// {
-//   blocks: [
-//     { type: "heading", text: "General" },
-//     { key: "collectionName", type: "collection", label: "Collection" },
-//     { type: "paragraph", attachTo: "next", text: "These chips are the collection's modes. Add, remove, or rename here. Each chip gets a mode block below." },
-//     { type: "chips", label: "Collection modes",
-//       showWhen: { collectionName: "*" } },
-//     { key: "group", type: "string", label: "Group within collection",
-//       placeholder: "eg.: Primitives/Neutrals" },
-//     { key: "steps", type: "string", label: "Color tokens",
-//       placeholder: "Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950",
-//       helper: "Names for each step, lightest to darkest. Variables are created as group/step." },
-//     { key: "colorModel", type: "radio", label: "Color model",
-//       options: [{ hsl: "HSL" }, { oklch: "OKLCH" }],
-//       helper: "OKLCH when every mode should share the same lightness steps. HSL when you are matching a palette that already uses HSL. When to pick each: Documentation." },
-//     { type: "paragraph", attachTo: "previous", text: "Each end keeps an OKLCH hue and an HSL hue. Both fill when a collection is read, so switching model keeps your anchors." },
-//     { type: "divider", section: true },
-//     { type: "heading", text: "OKLCH settings",
-//       showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" } },
-//     { type: "paragraph", attachTo: "previous", text: "One lightness curve for every mode. Each mode only sets its own hue and chroma." },
-//     { type: "paragraph", attachTo: "previous", text: "Name Color tokens first. Mode settings and the ramp appear after that." },
-//     { type: "paragraph", attachTo: "next", text: "New scales start on Linear. Original means the ramp already in the file, so it stays empty until a collection is read. A read replaces Linear with the fitted curve." },
-//     { key: "curve", type: "curve", label: "Shared lightness", allowOriginal: true,
-//       ramp: "oklch($% 0 0)", ends: "lightness.bright..lightness.dark", range: [0, 100],
-//       showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" },
-//       helper: "One curve from bright to dark. Drag a handle or pick a preset. Add middle point to bend the two halves differently." },
-//     { type: "preview" },
-//     { key: "lightness", type: "group", label: "Lightness",
-//       showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" },
-//       helper: "0–100 at the two ends. The curve fills everything between.",
-//       fields: [
-//         { key: "bright", type: "number", label: "Bright" },
-//         { key: "dark", type: "number", label: "Dark" }
-//       ] },
-//     { type: "heading", text: "Mode settings", showWhen: { collectionName: "*", steps: "*" } },
-//     { key: "modes", type: "rows", label: "Modes", layout: "blocks",
-//       showWhen: { collectionName: "*", steps: "*" },
-//       columns: [
-//         { key: "name", type: "text", label: "Mode" },
-//         { key: "seed", type: "group", label: "Seed color", fields: [
-//           { key: "hex", type: "text", label: "Hex", placeholder: "eg. #71717A" },
-//           { key: "placement", type: "text", label: "Token", placeholder: "Auto" },
-//           { key: "lock", type: "checkbox", label: "Lock seed color",
-//             helper: "On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder." }
-//         ] },
-//         { type: "tab", names: [{ text: "Hue" }], columns: [
-//           { key: "hueCurve", type: "curve", label: "Hue curve", overshoot: true,
-//             ramp: "oklch(70% ~bright.chroma $)",
-//             ends: "bright.hue..middle.hue..dark.hue", range: [0, 360],
-//             showWhen: { colorModel: "oklch" },
-//             helper: "How hue shifts from the light end to the dark end. Leave it as it is unless the palette is warm (amber, orange), where it usually needs its own timing. Near-greys can stay empty." },
-//           { key: "hslHueCurve", type: "curve", label: "Hue curve", overshoot: true,
-//             ramp: "hsl($ ~bright.saturation% 50%)",
-//             ends: "bright.hslHue..middle.hslHue..dark.hslHue", range: [0, 360],
-//             showWhen: { colorModel: "hsl" },
-//             helper: "Same control for HSL hue. Separate from OKLCH because the two models use different angles." },
-//           { type: "anchors", positions: ["bright", "middle", "dark"],
-//             fields: [
-//               { key: "hue", showWhen: { colorModel: "oklch" },
-//                 labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },
-//                 placeholders: "eg. 264" },
-//               { key: "hslHue", showWhen: { colorModel: "hsl" },
-//                 labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },
-//                 placeholders: "eg. 264" }
-//             ] }
-//         ] },
-//         { type: "tab",
-//           names: [
-//             { text: "Saturation", showWhen: { colorModel: "hsl" } },
-//             { text: "Chroma", showWhen: { colorModel: "oklch" } }
-//           ],
-//           columns: [
-//             { key: "chromaCurve", type: "curve", label: "Chroma curve", overshoot: true,
-//               ramp: "oklch(70% $ ~bright.hue)",
-//               ends: "bright.chroma..middle.chroma..dark.chroma", range: [0, 0.4],
-//               showWhen: { colorModel: "oklch" },
-//               helper: "How colourfulness builds between the ends. Most palettes peak mid-ramp, then fall." },
-//             { key: "saturationCurve", type: "curve", label: "Saturation curve", overshoot: true,
-//               ramp: "hsl(~bright.hslHue $% 50%)",
-//               ends: "bright.saturation..middle.saturation..dark.saturation", range: [0, 100],
-//               showWhen: { colorModel: "hsl" },
-//               helper: "Same idea for HSL saturation. Kept separate from chroma so switching model keeps the right curve." },
-//             { type: "anchors", positions: ["bright", "middle", "dark"],
-//               fields: [
-//                 { key: "chroma", showWhen: { colorModel: "oklch" },
-//                   labels: { bright: "Chroma start", middle: "Chroma middle", dark: "Chroma end" },
-//                   placeholders: "eg. 0.012" },
-//                 { key: "saturation", showWhen: { colorModel: "hsl" },
-//                   labels: { bright: "Saturation start", middle: "Saturation middle", dark: "Saturation end" },
-//                   placeholders: "eg. 12" }
-//               ] }
-//         ] },
-//         { type: "tab", names: [{ text: "Lightness" }], columns: [
-//           { key: "curve", type: "curve", label: "Lightness curve", allowOriginal: true,
-//             ramp: "hsl(~bright.hslHue ~bright.saturation% $%)",
-//             ends: "bright.lightness..dark.lightness", range: [0, 100],
-//             showWhen: { colorModel: "hsl" },
-//             helper: "One curve from bright to dark. Drag a handle or pick a preset. Add middle point to bend the two halves differently." },
-//           { type: "anchors", positions: ["bright", "dark"],
-//             notes: { dark: "Anchors take effect once you choose a curve." },
-//             fields: [
-//               { key: "lightness", showWhen: { colorModel: "hsl" },
-//                 labels: { bright: "Bright", dark: "Dark" },
-//                 placeholders: { bright: "eg. 98", dark: "eg. 4" } }
-//             ] }
-//         ] },
-//         { type: "preview" }
-//       ] }
-//   ]
-// }
-// @PANEL_END
 };
+
+// @PANEL_START
+var __codefigPanel = {
+  blocks: [
+    { type: "heading", text: "General" },
+    { key: "collectionName", type: "collection", label: "Collection" },
+    { type: "paragraph", attachTo: "next", text: "These chips are the collection's modes. Add, remove, or rename here. Each chip gets a mode block below." },
+    { type: "chips", label: "Collection modes",
+      showWhen: { collectionName: "*" } },
+    { key: "group", type: "string", label: "Group within collection",
+      placeholder: "eg.: Primitives/Neutrals" },
+    { key: "steps", type: "string", label: "Color tokens",
+      placeholder: "Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950",
+      helper: "Names for each step, lightest to darkest. Variables are created as group/step." },
+    { key: "colorModel", type: "radio", label: "Color model",
+      options: [{ hsl: "HSL" }, { oklch: "OKLCH" }],
+      helper: "OKLCH when every mode should share the same lightness steps. HSL when you are matching a palette that already uses HSL. When to pick each: Documentation." },
+    { type: "paragraph", attachTo: "previous", text: "Each end keeps an OKLCH hue and an HSL hue. Both fill when a collection is read, so switching model keeps your anchors." },
+    { type: "divider", section: true },
+    { type: "heading", text: "OKLCH settings",
+      showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" } },
+    { type: "paragraph", attachTo: "previous", text: "One lightness curve for every mode. Each mode only sets its own hue and chroma." },
+    { type: "paragraph", attachTo: "previous", text: "Name Color tokens first. Mode settings and the ramp appear after that." },
+    { type: "paragraph", attachTo: "next", text: "New scales start on Linear. Original means the ramp already in the file, so it stays empty until a collection is read. A read replaces Linear with the fitted curve." },
+    { key: "curve", type: "curve", label: "Shared lightness", allowOriginal: true,
+      ramp: "oklch($% 0 0)", ends: "lightness.bright..lightness.dark", range: [0, 100],
+      showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" },
+      helper: "One curve from bright to dark. Drag a handle or pick a preset. Add middle point to bend the two halves differently." },
+    { type: "preview" },
+    { key: "lightness", type: "group", label: "Lightness",
+      showWhen: { colorModel: "oklch", collectionName: "*", steps: "*" },
+      helper: "0–100 at the two ends. The curve fills everything between.",
+      fields: [
+        { key: "bright", type: "number", label: "Bright" },
+        { key: "dark", type: "number", label: "Dark" }
+      ] },
+    { type: "heading", text: "Mode settings", showWhen: { collectionName: "*", steps: "*" } },
+    { key: "modes", type: "rows", label: "Modes", layout: "blocks",
+      showWhen: { collectionName: "*", steps: "*" },
+      columns: [
+        { key: "name", type: "text", label: "Mode" },
+        { key: "seed", type: "group", label: "Seed color", fields: [
+          { key: "hex", type: "text", label: "Hex", placeholder: "eg. #71717A" },
+          { key: "placement", type: "text", label: "Token", placeholder: "Auto" },
+          { key: "lock", type: "checkbox", label: "Lock seed color",
+            helper: "On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder." }
+        ] },
+        { type: "tab", names: [{ text: "Hue" }], columns: [
+          { key: "hueCurve", type: "curve", label: "Hue curve", overshoot: true,
+            ramp: "oklch(70% ~bright.chroma $)",
+            ends: "bright.hue..middle.hue..dark.hue", range: [0, 360],
+            showWhen: { colorModel: "oklch" },
+            helper: "How hue shifts from the light end to the dark end. Leave it as it is unless the palette is warm (amber, orange), where it usually needs its own timing. Near-greys can stay empty." },
+          { key: "hslHueCurve", type: "curve", label: "Hue curve", overshoot: true,
+            ramp: "hsl($ ~bright.saturation% 50%)",
+            ends: "bright.hslHue..middle.hslHue..dark.hslHue", range: [0, 360],
+            showWhen: { colorModel: "hsl" },
+            helper: "Same control for HSL hue. Separate from OKLCH because the two models use different angles." },
+          { type: "anchors", positions: ["bright", "middle", "dark"],
+            fields: [
+              { key: "hue", showWhen: { colorModel: "oklch" },
+                labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },
+                placeholders: "eg. 264" },
+              { key: "hslHue", showWhen: { colorModel: "hsl" },
+                labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },
+                placeholders: "eg. 264" }
+            ] }
+        ] },
+        { type: "tab",
+          names: [
+            { text: "Saturation", showWhen: { colorModel: "hsl" } },
+            { text: "Chroma", showWhen: { colorModel: "oklch" } }
+          ],
+          columns: [
+            { key: "chromaCurve", type: "curve", label: "Chroma curve", overshoot: true,
+              ramp: "oklch(70% $ ~bright.hue)",
+              ends: "bright.chroma..middle.chroma..dark.chroma", range: [0, 0.4],
+              showWhen: { colorModel: "oklch" },
+              helper: "How colourfulness builds between the ends. Most palettes peak mid-ramp, then fall." },
+            { key: "saturationCurve", type: "curve", label: "Saturation curve", overshoot: true,
+              ramp: "hsl(~bright.hslHue $% 50%)",
+              ends: "bright.saturation..middle.saturation..dark.saturation", range: [0, 100],
+              showWhen: { colorModel: "hsl" },
+              helper: "Same idea for HSL saturation. Kept separate from chroma so switching model keeps the right curve." },
+            { type: "anchors", positions: ["bright", "middle", "dark"],
+              fields: [
+                { key: "chroma", showWhen: { colorModel: "oklch" },
+                  labels: { bright: "Chroma start", middle: "Chroma middle", dark: "Chroma end" },
+                  placeholders: "eg. 0.012" },
+                { key: "saturation", showWhen: { colorModel: "hsl" },
+                  labels: { bright: "Saturation start", middle: "Saturation middle", dark: "Saturation end" },
+                  placeholders: "eg. 12" }
+              ] }
+        ] },
+        { type: "tab", names: [{ text: "Lightness" }], columns: [
+          { key: "curve", type: "curve", label: "Lightness curve", allowOriginal: true,
+            ramp: "hsl(~bright.hslHue ~bright.saturation% $%)",
+            ends: "bright.lightness..dark.lightness", range: [0, 100],
+            showWhen: { colorModel: "hsl" },
+            helper: "One curve from bright to dark. Drag a handle or pick a preset. Add middle point to bend the two halves differently." },
+          { type: "anchors", positions: ["bright", "dark"],
+            notes: { dark: "Anchors take effect once you choose a curve." },
+            fields: [
+              { key: "lightness", showWhen: { colorModel: "hsl" },
+                labels: { bright: "Bright", dark: "Dark" },
+                placeholders: { bright: "eg. 98", dark: "eg. 4" } }
+            ] }
+        ] },
+        { type: "preview" }
+      ] }
+  ]
+};
+// @PANEL_END
 
 // ========================================
 // EXECUTION

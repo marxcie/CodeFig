@@ -838,26 +838,41 @@
     };
   }
 
-  // --- @PANEL_START: the panel spec as JSON, beside the values -------------------------------
+  // --- @PANEL_START: the panel recipe beside the values --------------------------------------
   //
-  // See .plans/31-panel-spec-json.md. `@CONFIG_START` stays a value list — this is a second,
-  // separate region naming the panel's structure. Comment-region JSON (`// {` … `// }`), same
-  // convention @DOC_START and @STYLE_START already use for a `//`-prefixed block of real content.
+  // See .plans/31-panel-spec-json.md and .plans/37-config-format-decision.md.
+  // `@CONFIG_START` stays a value list — this is a second, separate region naming the panel's
+  // structure.
+  //
+  // **Two Source shapes (Plan 37 / 2.0):**
+  //   1. Live object (shipped): `var __codefigPanel = { blocks: […] };` — syntax-highlighted.
+  //   2. Comment JSON (legacy): `// {` … `// }` — still accepted so saved scripts keep loading.
+  // Both compile to the same IR. Bare `{…}` at statement level is illegal JS (a block); the
+  // reserved binding is required for the live form.
   //
   // **Dispatch lives at the top of `parse()`, not in the caller.** Every existing call site keeps
-  // calling `parse(code)` with one argument; `panelSpecText` is a second, optional parameter no
-  // current caller passes, so this is purely additive. **Not yet wired into `src/ui.html`'s own
-  // `@CONFIG_START`/`@CONFIG_END` extraction** — that logic does not currently look for a second,
-  // separate `@PANEL_START` region elsewhere in a script's source, and touching every one of its
-  // call sites without the ability to reload the plugin and check script loading still works was
-  // judged too risky for this pass. A future pass wires the caller; the reader and its tests do
-  // not depend on that wiring.
+  // calling `parse(code)` with one argument; `panelSpecText` is a second, optional parameter.
 
   /** Strips a leading `// ` (or bare `//`) from every line — the same convention @DOC_START uses. */
   function stripLinePrefixes(text) {
     return String(text || "").split(/\r?\n/).map(function (line) {
       return line.replace(/^\s*\/\/ ?/, "");
     }).join("\n");
+  }
+
+  /**
+   * Turn extracted `@PANEL_START`…`@PANEL_END` body into the object text `looseJsonToJson` expects.
+   *
+   * Live form wins when present; otherwise comment prefixes are stripped (legacy).
+   */
+  function normalizePanelSpecText(text) {
+    var raw = String(text || "");
+    var trimmed = raw.replace(/^\s+/, "").replace(/\s+$/, "");
+    var assign = /^(?:var|let|const)\s+__codefigPanel\s*=\s*/.exec(trimmed);
+    if (assign) {
+      return trimmed.slice(assign[0].length).replace(/;\s*$/, "").replace(/^\s+/, "").replace(/\s+$/, "");
+    }
+    return stripLinePrefixes(raw).replace(/^\s+/, "").replace(/\s+$/, "");
   }
 
   /** `{ value: label }` or `[{value,label}]` → `[{value,label}]`, the shape columns already carry. */
@@ -1218,7 +1233,7 @@
   function parsePanelSpec(panelSpecText, values) {
     var spec;
     try {
-      spec = JSON.parse(looseJsonToJson(stripLinePrefixes(panelSpecText)));
+      spec = JSON.parse(looseJsonToJson(normalizePanelSpecText(panelSpecText)));
     } catch (e) {
       return { rows: [], error: "unreadable @PANEL_START: " + e.message };
     }
@@ -3412,6 +3427,7 @@
     // to `parsePanelSpec` on its own; these are exported so the differential test can call the new
     // reader directly without needing a script on disk that uses it yet.
     parsePanelSpec: parsePanelSpec,
-    stripLinePrefixes: stripLinePrefixes
+    stripLinePrefixes: stripLinePrefixes,
+    normalizePanelSpecText: normalizePanelSpecText
   };
 });

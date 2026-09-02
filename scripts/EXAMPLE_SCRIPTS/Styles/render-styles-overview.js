@@ -56,12 +56,12 @@ var previewText = "Sphinx of black quartz,\njudge my vow.";
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { key: "styleGroup", type: "string", placeholder: "Text styles" },
-//     { key: "previewText", type: "textarea", placeholder: "Preview for text styles — Enter = soft line break" }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "styleGroup", type: "string", placeholder: "Text styles" },
+    { key: "previewText", type: "textarea", placeholder: "Preview for text styles — Enter = soft line break" }
+  ]
+};
 // @PANEL_END
 
 var renderStylesIncludeText = true;

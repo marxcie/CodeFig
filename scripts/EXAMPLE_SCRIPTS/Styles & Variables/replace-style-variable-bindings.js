@@ -48,62 +48,26 @@ var breakUnmatchedBindings = false;
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   "blocks": [
-//     {
-//       "key": "searchIn",
-//       "type": "string",
-//       "placeholder": "V5/*"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Only styles whose name contains this, with `*` allowed. Empty means every local text, paint and\neffect style."
-//     },
-//     {
-//       "key": "useRegex",
-//       "type": "boolean",
-//       "label": "Use regular expression"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Reads **Search in** as a regular expression rather than plain text with `*` wildcards."
-//     },
-//     {
-//       "key": "sourceCollection",
-//       "type": "select",
-//       "options": "variableCollections"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Bindings pointing at this collection are the ones that move. Pick a real collection — *(all\ncollections)* does nothing here."
-//     },
-//     {
-//       "key": "targetCollection",
-//       "type": "select",
-//       "options": "variableCollections"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "Each binding moves to the same-named variable in this collection."
-//     },
-//     {
-//       "type": "divider"
-//     },
-//     {
-//       "key": "breakUnmatchedBindings",
-//       "type": "boolean"
-//     },
-//     {
-//       "type": "paragraph",
-//       "attachTo": "previous",
-//       "text": "What to do when the target has no variable of that name. **On** removes the binding and leaves the\nraw value behind; **off** leaves the binding pointing where it already does."
-//     }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "searchIn", type: "string", placeholder: "V5/*" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Only styles whose name contains this, with `*` allowed. Empty means every local text, paint and\neffect style." },
+    { key: "useRegex", type: "boolean", label: "Use regular expression" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Reads **Search in** as a regular expression rather than plain text with `*` wildcards." },
+    { key: "sourceCollection", type: "select", options: "variableCollections" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Bindings pointing at this collection are the ones that move. Pick a real collection — *(all\ncollections)* does nothing here." },
+    { key: "targetCollection", type: "select", options: "variableCollections" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Each binding moves to the same-named variable in this collection." },
+    { type: "divider" },
+    { key: "breakUnmatchedBindings", type: "boolean" },
+    { type: "paragraph", attachTo: "previous",
+      text: "What to do when the target has no variable of that name. **On** removes the binding and leaves the\nraw value behind; **off** leaves the binding pointing where it already does." }
+  ]
+};
 // @PANEL_END
 
 /**

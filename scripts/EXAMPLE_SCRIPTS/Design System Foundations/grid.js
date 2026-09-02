@@ -117,39 +117,6 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   modes: []
 // @CONFIG_END
 
-// @PANEL_START
-// {
-//   blocks: [
-//     { type: "heading", text: "General" },
-//     { key: "collectionName", type: "collection", label: "Collection",
-//       placeholder: "eg. Responsive System" },
-//     { type: "chips", label: "Collection modes", from: "modes" },
-//     { key: "group", type: "string", label: "Group within collection", placeholder: "eg. Grid" },
-//     { type: "divider", section: true },
-//     { type: "heading", text: "Mode settings", showWhen: { collectionName: "*" } },
-//     { key: "extensionColumns", type: "number", label: "Extra columns",
-//       showWhen: { collectionName: "*" },
-//       helper: "Extra column variables past the main grid, for layouts that need to overshoot." },
-//     { key: "generateOverview", type: "boolean", label: "Generate overview",
-//       showWhen: { collectionName: "*" },
-//       helper: "Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied." },
-//     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
-//       showWhen: { collectionName: "*" },
-//       columns: [
-//         { key: "name", type: "text", label: "Mode" },
-//         { key: "containerWidth", type: "number", label: "Width" },
-//         { key: "columns", type: "number", label: "Columns" },
-//         { key: "gap", type: "number", label: "Gap" },
-//         { key: "padding", type: "number", label: "Margins" }
-//       ] },
-//     { type: "heading", text: "Suggested whole number divisions",
-//       showWhen: { collectionName: "*" } },
-//     { type: "suggestions", showWhen: { collectionName: "*" } },
-//     { type: "heading", text: "Preview", showWhen: { collectionName: "*" } },
-//     { type: "preview", showWhen: { collectionName: "*" } }
-//   ]
-// }
-// @PANEL_END
   ,
   // Variables to be created in Figma (function of config; max columns = viewport with most columns)
   // Second arg is the full grid config (optional); used for extensionColumns
@@ -228,6 +195,40 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
     return basicVariables;
   }
 };
+
+// @PANEL_START
+var __codefigPanel = {
+  blocks: [
+    { type: "heading", text: "General" },
+    { key: "collectionName", type: "collection", label: "Collection",
+      placeholder: "eg. Responsive System" },
+    { type: "chips", label: "Collection modes", from: "modes" },
+    { key: "group", type: "string", label: "Group within collection", placeholder: "eg. Grid" },
+    { type: "divider", section: true },
+    { type: "heading", text: "Mode settings", showWhen: { collectionName: "*" } },
+    { key: "extensionColumns", type: "number", label: "Extra columns",
+      showWhen: { collectionName: "*" },
+      helper: "Extra column variables past the main grid, for layouts that need to overshoot." },
+    { key: "generateOverview", type: "boolean", label: "Generate overview",
+      showWhen: { collectionName: "*" },
+      helper: "Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied." },
+    { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+      showWhen: { collectionName: "*" },
+      columns: [
+        { key: "name", type: "text", label: "Mode" },
+        { key: "containerWidth", type: "number", label: "Width" },
+        { key: "columns", type: "number", label: "Columns" },
+        { key: "gap", type: "number", label: "Gap" },
+        { key: "padding", type: "number", label: "Margins" }
+      ] },
+    { type: "heading", text: "Suggested whole number divisions",
+      showWhen: { collectionName: "*" } },
+    { type: "suggestions", showWhen: { collectionName: "*" } },
+    { type: "heading", text: "Preview", showWhen: { collectionName: "*" } },
+    { type: "preview", showWhen: { collectionName: "*" } }
+  ]
+};
+// @PANEL_END
 
 // ========================================
 // CORE FUNCTIONS

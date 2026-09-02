@@ -259,70 +259,71 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
   overviewPreviewText: ""
 // @CONFIG_END
 
-// @PANEL_START
-// {
-//   blocks: [
-//     { type: "heading", text: "General" },
-//     { key: "collectionName", type: "collection", label: "Collection" },
-//     { type: "chips", label: "Collection modes", from: "modes" },
-//     { key: "group", type: "string", label: "Group within collection",
-//       placeholder: "eg.: Typography" },
-//     { key: "fontScale", type: "list", label: "Tokens",
-//       placeholder: "Text-Tiny, Text-Small, Text-Regular, Heading-1",
-//       helper: "Names from smallest to largest. heading-{6,1} expands to six sizes. Base unit is the size of the first name." },
-//     { key: "fontFamily", type: "string", label: "Font family",
-//       placeholder: "eg.: Inter Tight" },
-//     { key: "fontWeights", type: "list", label: "Font weights",
-//       placeholder: "400, 600",
-//       helper: "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold." },
-//     { key: "createStyles", type: "boolean", label: "Create and update text styles" },
-//     { key: "styleNaming", type: "string", label: "Style naming",
-//       placeholder: "eg.: Typography/{$fontScale}/{$fontWeight}" },
-//     { type: "divider", section: true },
-//     { type: "heading", text: "Mode settings",
-//       showWhen: { collectionName: "*", fontScale: "*" } },
-//     { key: "generateOverview", type: "boolean", label: "Generate overview",
-//       showWhen: { collectionName: "*", fontScale: "*" },
-//       helper: "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight." },
-//     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
-//       showWhen: { collectionName: "*", fontScale: "*" },
-//       columns: [
-//         { key: "name", type: "text", label: "Mode" },
-//         { key: "scaleType", type: "radio", label: "Scale type",
-//           options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
-//         { key: "curve", type: "curve", label: "Scale", growth: "ratio",
-//           showWhen: { scaleType: "bezier" },
-//           helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
-//         { key: "step", type: "number", label: "Step",
-//           showWhen: { scaleType: ["metric", "fibonacci"] },
-//           helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
-//         { key: "mod", type: "number", label: "Every N steps",
-//           showWhen: { scaleType: "metric" },
-//           helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
-//         { key: "base", type: "number", label: "Base unit" },
-//         { key: "letterSpacing", type: "group", label: "Letter spacing",
-//           helper: "Percent of font size (as Figma shows it). Interpolated between the two ends, then written in pixels.",
-//           fields: [
-//             { key: "base", type: "number", label: "Base", unit: "%" },
-//             { key: "max", type: "number", label: "Largest", unit: "%" }
-//           ] },
-//         { key: "lineHeight", type: "group", label: "Line height",
-//           helper: "Percent of font size. 150 suits body text; use the second field when large sizes need less.",
-//           fields: [
-//             { key: "base", type: "number", label: "Base", unit: "%" },
-//             { key: "max", type: "number", label: "Largest", unit: "%" }
-//           ] },
-//         { key: "roundTo", type: "number", label: "Round numbers to" }
-//       ] },
-//     { type: "heading", text: "Overview" },
-//     { type: "suggestions" },
-//     { type: "heading", text: "Preview" },
-//     { key: "overviewPreviewText", type: "textarea", label: "Preview text" },
-//     { type: "preview" }
-//   ]
-// }
-// @PANEL_END
 };
+
+// @PANEL_START
+var __codefigPanel = {
+  blocks: [
+    { type: "heading", text: "General" },
+    { key: "collectionName", type: "collection", label: "Collection" },
+    { type: "chips", label: "Collection modes", from: "modes" },
+    { key: "group", type: "string", label: "Group within collection",
+      placeholder: "eg.: Typography" },
+    { key: "fontScale", type: "list", label: "Tokens",
+      placeholder: "Text-Tiny, Text-Small, Text-Regular, Heading-1",
+      helper: "Names from smallest to largest. heading-{6,1} expands to six sizes. Base unit is the size of the first name." },
+    { key: "fontFamily", type: "string", label: "Font family",
+      placeholder: "eg.: Inter Tight" },
+    { key: "fontWeights", type: "list", label: "Font weights",
+      placeholder: "400, 600",
+      helper: "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold." },
+    { key: "createStyles", type: "boolean", label: "Create and update text styles" },
+    { key: "styleNaming", type: "string", label: "Style naming",
+      placeholder: "eg.: Typography/{$fontScale}/{$fontWeight}" },
+    { type: "divider", section: true },
+    { type: "heading", text: "Mode settings",
+      showWhen: { collectionName: "*", fontScale: "*" } },
+    { key: "generateOverview", type: "boolean", label: "Generate overview",
+      showWhen: { collectionName: "*", fontScale: "*" },
+      helper: "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight." },
+    { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+      showWhen: { collectionName: "*", fontScale: "*" },
+      columns: [
+        { key: "name", type: "text", label: "Mode" },
+        { key: "scaleType", type: "radio", label: "Scale type",
+          options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
+        { key: "curve", type: "curve", label: "Scale", growth: "ratio",
+          showWhen: { scaleType: "bezier" },
+          helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
+        { key: "step", type: "number", label: "Step",
+          showWhen: { scaleType: ["metric", "fibonacci"] },
+          helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
+        { key: "mod", type: "number", label: "Every N steps",
+          showWhen: { scaleType: "metric" },
+          helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
+        { key: "base", type: "number", label: "Base unit" },
+        { key: "letterSpacing", type: "group", label: "Letter spacing",
+          helper: "Percent of font size (as Figma shows it). Interpolated between the two ends, then written in pixels.",
+          fields: [
+            { key: "base", type: "number", label: "Base", unit: "%" },
+            { key: "max", type: "number", label: "Largest", unit: "%" }
+          ] },
+        { key: "lineHeight", type: "group", label: "Line height",
+          helper: "Percent of font size. 150 suits body text; use the second field when large sizes need less.",
+          fields: [
+            { key: "base", type: "number", label: "Base", unit: "%" },
+            { key: "max", type: "number", label: "Largest", unit: "%" }
+          ] },
+        { key: "roundTo", type: "number", label: "Round numbers to" }
+      ] },
+    { type: "heading", text: "Overview" },
+    { type: "suggestions" },
+    { type: "heading", text: "Preview" },
+    { key: "overviewPreviewText", type: "textarea", label: "Preview text" },
+    { type: "preview" }
+  ]
+};
+// @PANEL_END
 
 ensureCompatTypographyConfig(typographyConfigData);
 materializeFontSizes(typographyConfigData);

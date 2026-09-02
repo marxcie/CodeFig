@@ -37,14 +37,14 @@ var recursively = true;
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { type: "paragraph", attachTo: "next", text: "Action and scope." },
-//     { key: "wrapperType", type: "select", options: ["frame", "autoLayout"] },
-//     { key: "removeSelectedType", type: "boolean" },
-//     { key: "recursively", type: "boolean", showWhen: { removeSelectedType: "true" } }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { type: "paragraph", attachTo: "next", text: "Action and scope." },
+    { key: "wrapperType", type: "select", options: ["frame", "autoLayout"] },
+    { key: "removeSelectedType", type: "boolean" },
+    { key: "recursively", type: "boolean", showWhen: { removeSelectedType: "true" } }
+  ]
+};
 // @PANEL_END
 
 var WRAPPER_PLUGIN_KEY = 'codefigWrapper';

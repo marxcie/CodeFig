@@ -45,21 +45,21 @@ var selectionOnly = true;
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { key: "searchFor", type: "string", placeholder: "Text/*/Regular" },
-//     { type: "paragraph", attachTo: "previous", text: "Part of a style or variable name — `Regular`, `Text/5xl`, `Text/*/Bold`." },
-//     { key: "useRegex", type: "boolean", label: "Use regular expression" },
-//     { type: "paragraph", attachTo: "previous",
-//       text: "Reads **Search for** as a regular expression rather than plain text with `*` wildcards." },
-//     { key: "selectMixed", type: "boolean", label: "Include mixed layers" },
-//     { type: "paragraph", attachTo: "previous",
-//       text: "Layers using more than one style or variable at once — a text layer that is part bold, part regular." },
-//     { type: "divider" },
-//     { key: "selectionOnly", type: "boolean", label: "Selection only" },
-//     { type: "paragraph", attachTo: "previous", text: "Off searches the whole page." }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "searchFor", type: "string", placeholder: "Text/*/Regular" },
+    { type: "paragraph", attachTo: "previous", text: "Part of a style or variable name — `Regular`, `Text/5xl`, `Text/*/Bold`." },
+    { key: "useRegex", type: "boolean", label: "Use regular expression" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Reads **Search for** as a regular expression rather than plain text with `*` wildcards." },
+    { key: "selectMixed", type: "boolean", label: "Include mixed layers" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Layers using more than one style or variable at once — a text layer that is part bold, part regular." },
+    { type: "divider" },
+    { key: "selectionOnly", type: "boolean", label: "Selection only" },
+    { type: "paragraph", attachTo: "previous", text: "Off searches the whole page." }
+  ]
+};
 // @PANEL_END
 
 @import { traverseNodes } from "@Core Library"

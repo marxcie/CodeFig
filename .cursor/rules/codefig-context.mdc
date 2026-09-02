@@ -9,10 +9,11 @@ alwaysApply: true
 - `CLAUDE.md` — how the codebase works. Architecture, invariants, gotchas.
 - `.plans/NN-*.md` — one initiative each. The `**Status.**` block at the top of a plan is the source
   of truth for that initiative.
-- `.plans/37-config-format-decision.md` — script language / config UX: JSON `@PANEL_START`; drop
-  Configuration code tab; migrate remaining DSF panels. HTML/JSX skin deferred. **Next: cleanup +
-  panel consistency (go-ahead 2026-08-28; priority call 2026-08-31).** Read before touching
-  `@PANEL_START`, `@CONFIG_START`, `src/config-ui/parser.js`, or the Configuration code tab.
+- `.plans/37-config-format-decision.md` — script language / config UX: `@PANEL_START` as
+  `var __codefigPanel = {…}`; drop Configuration code tab. HTML/JSX skin deferred.
+  **Plan 37 cleanup is pre-2.0** (syntax + architecture locked before tag; visual UI polish may
+  parallel). Read before touching `@PANEL_START`, `@CONFIG_START`, `src/config-ui/parser.js`, or
+  the Configuration code tab.
 - `.plans/38-script-storage-variables.md` — script storage & sharing: Variables + LocalStorage
   (both keep); library edit UX deferred for a consistent model. Read before changing how user
   scripts are saved, loaded, or shared.

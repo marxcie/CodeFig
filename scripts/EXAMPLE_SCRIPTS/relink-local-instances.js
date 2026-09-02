@@ -30,11 +30,11 @@ var scope = "Selection";
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { key: "scope", type: "radio", options: ["Selection", "This page", "All pages"] }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { key: "scope", type: "radio", options: ["Selection", "This page", "All pages"] }
+  ]
+};
 // @PANEL_END
 
 function getScopeValue() {

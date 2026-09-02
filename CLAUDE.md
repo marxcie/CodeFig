@@ -99,9 +99,10 @@ Neither is derived from a printer that renders the other. **The block is the for
 **`src/config-ui/`** (`parser.js`, `renderer.js`, `controller.js`, `bridge.js`) turns a script's config comment block into a rendered form. `build-config-ui.js` exports `inlineConfigUI(html)`, a pure string transform that concatenates these four files into the `<script id="config-ui-js">` block on the way to `dist/ui.html`. In `src/ui.html` that block is a one-line stub and stays that way — the bundle is never written back to source.
 
 **`parser.js`'s `parse()` takes an optional second argument, `panelSpecText`, for reading a
-`@PANEL_START` JSON block instead of the one-line-per-field annotation syntax.** Every shipped
+`@PANEL_START` recipe block instead of the one-line-per-field annotation syntax.** Every shipped
 config script passes it — values stay in `@UI_CONFIG_*` / `@CONFIG_*`, the form recipe lives in
-`@PANEL_START`. A script with no `@PANEL_START` still takes the annotation path unchanged; the two
+`@PANEL_START` as `var __codefigPanel = { blocks: […] }` (legacy `//`-commented JSON still
+parses). A script with no `@PANEL_START` still takes the annotation path unchanged; the two
 coexist indefinitely. `renderer.js` does not know or care which reader ran; both produce the same
 `{ rows }` shape it already consumes.
 
@@ -117,6 +118,8 @@ Two rules a spec must follow: call `testFinish()` (completion is inferred, so si
 
 Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `prebuilt`, `HELP/` → type `help`. Library files are `@`-prefixed (`@core-library.js`, `@variables.js`, `@styles.js`, `@pattern-matching.js`, `@replacement-engine.js`, `@math-helpers.js`, `@bezier.js`, `@infopanel.js`, `@codefig-ui.js`, `@foundation-overview.js`). New folders become new categories.
 
+**Three roles (do not mix):** (1) **Runnable script** — `@PANEL_START` recipe (`var __codefigPanel = { blocks: […] }`, bare keys like Help) plus values in `@UI_CONFIG_*` / `@CONFIG_*`; this is what you Run. (2) **Library** — `@`-prefixed; export top-level `function`s for `@import`; not Run on its own. (3) **CodeFigUI builder** — `@codefig-ui`'s `section()` / `sendToUI()` builds a form **at run time**; it is not the Source panel recipe. Help documents the same split.
+
 **Excluded from the build:** anything whose file or folder name starts with `_` or `.`, and `.bak*`/`.backup`/`.old`/`.tmp` files (`shouldExclude()`, duplicated in `build-scripts.js` and `validate-scripts.js`). `_` means **"never shipped"**, which covers two different things:
 
 - **Work in progress** — a staging area, not a parking lot: graduate it or archive it. `scripts/EXAMPLE_SCRIPTS/` is kept empty of `_` files by convention; every `.js` there today ships. Superseded scripts were evicted in Aug 2026 and live outside the repo at `~/codefig-archive/` (local only, never committed).
@@ -126,9 +129,10 @@ Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `pr
 
 **Marker blocks** (all line comments, parsed by the UI):
 - `// @DOC_START` … `// @DOC_END` — markdown docs tab.
-- `// @PANEL_START` … `// @PANEL_END` — the **form recipe** as JSON in `//` comments. Shipped scripts
-  and anything with a real panel use this. Configuration UI is the form; Source holds the recipe
-  beside the values. There is no Configuration code tab.
+- `// @PANEL_START` … `// @PANEL_END` — the **form recipe** as `var __codefigPanel = { blocks: […] }`
+  (live object so Source highlights it; bare keys like the Help specimen; comment-JSON still
+  accepted). Shipped scripts and anything with a real panel use this. Configuration UI is the
+  form; Source holds the recipe beside the values. There is no Configuration code tab.
 - `// @UI_CONFIG_START` … `// @UI_CONFIG_END` — **values only** (`var` lines) when paired with
   `@PANEL_START`. Without a PANEL block, trailing annotations on each `var` line still drive the
   form (legacy / tiny scripts): `@options: a|b|c`, `@radio`, `@multi`, `@label:`, `@placeholder:`,

@@ -46,17 +46,17 @@ var renameInstances = false;
 // @UI_CONFIG_END
 
 // @PANEL_START
-// {
-//   blocks: [
-//     { type: "heading", text: "Change case" },
-//     { key: "caseStyle", type: "select", label: "Case style", options: ["lower case", "Capital case", "camel Case"] },
-//     { key: "frames", type: "boolean", label: "Frames" },
-//     { key: "groups", type: "boolean", label: "Groups" },
-//     { key: "variantLabels", type: "boolean", label: "Variant labels" },
-//     { key: "variantValues", type: "boolean", label: "Variant values" },
-//     { key: "renameInstances", type: "boolean", label: "Rename instances" }
-//   ]
-// }
+var __codefigPanel = {
+  blocks: [
+    { type: "heading", text: "Change case" },
+    { key: "caseStyle", type: "select", label: "Case style", options: ["lower case", "Capital case", "camel Case"] },
+    { key: "frames", type: "boolean", label: "Frames" },
+    { key: "groups", type: "boolean", label: "Groups" },
+    { key: "variantLabels", type: "boolean", label: "Variant labels" },
+    { key: "variantValues", type: "boolean", label: "Variant values" },
+    { key: "renameInstances", type: "boolean", label: "Rename instances" }
+  ]
+};
 // @PANEL_END
 
 function splitWords(text) {
