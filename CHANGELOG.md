@@ -19,6 +19,13 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Added
+
+- **Spacing / Corner radius / Typography Scale chart tip.** Hovering or dragging the growth
+  handle (or a shape handle) shows the stored growth ratio and the open mode’s generated sizes as
+  a number list — e.g. `1.5` above `0, 2, 4, 8, 16, 24, 40, 80, 120`. Tip sits right-centre of the
+  handle.
+
 ### Changed
 
 - **`@PANEL_START` is a live JS object.** Shipped panels use `var __codefigPanel = { blocks: […] }`
@@ -28,6 +35,21 @@ a plain statement of the new default.
   Help style as Design System Foundations, so every shipped recipe teaches one language.
 
 ### Fixed
+
+- **Spacing no longer loads ungrouped radius tokens as spacing.** Discovery uses stamp domain
+  first, then Figma scopes (`CORNER_RADIUS` vs `GAP`/`WIDTH_HEIGHT`), then an exact Description
+  match (`Corner radius` / `Spacing`). No token-name guessing. Generate writes that Description
+  only when empty (human edits are left alone).
+
+- **Spacing / Corner radius seed empty sibling modes from the first filled mode.** When Desktop
+  (or the first mode written) has a value and Tablet/Mobile are still empty or `0` — typical when
+  those mode blocks were left incomplete and skipped — they receive the first mode's value. Modes
+  that already hold a non-zero value are not overwritten.
+
+- **Colors: new collection no longer clears Color tokens on blur.** Naming a new collection
+  starts a read that finds nothing; when that miss landed it re-applied empty defaults and wiped
+  steps typed (or committed) while the read was in flight — ramp appeared, then vanished on click
+  away. Miss wipe is skipped when Collection/Group settle already reset the address.
 
 - **DSF Mode settings gates differ by script.** Spacing / Typography / Corner radius / Colors
   open Mode settings only with a **named collection** (existing or New collection + name) **and
@@ -39,6 +61,9 @@ a plain statement of the new default.
   (even before typing a name) seeds a renameable **Value** mode. Colors chips no longer wait on
   Color tokens (Mode settings still do). Address reset no longer writes empty `modes: []` back
   over that starter.
+
+- **Preview-snippet test slice** updated so New-collection unlock helpers after
+  `pristineConfigForAddress` do not fail the “address change leaves no trace” guard.
 
 ## [2.0.0] - TBD
 

@@ -1112,9 +1112,20 @@ function generateRampVariables(config, spec, report) {
     variables[prefix + tokenName] = {
       type: 'FLOAT',
       scopes: spec.scopes.slice(),
+      // Neutral purpose label — secondary discovery net; stamp + scopes are primary.
+      description: spec.label,
       values: values
     };
   });
+
+  // Incomplete sibling modes (base left at 0 → sequence skipped) never got a key. Fill them from
+  // the first mode that did generate, so Tablet/Mobile are not left at 0 after Desktop is set.
+  // Modes that already have a number — including an intentional 0 — are left alone.
+  seedSkippedRampModeValues(
+    variables,
+    viewportNames.map(function (v) { return viewportLabel(v); }),
+    report
+  );
 
   // The cause, once per distinct collision: the same one across three viewports is one problem.
   var said = {};
@@ -1132,6 +1143,37 @@ function generateRampVariables(config, spec, report) {
   }
 
   return variables;
+}
+
+/**
+ * Copy the first generated mode's value into modes the sequence skipped.
+ * Pure: only fills missing keys; never overwrites an existing number (including 0).
+ */
+function seedSkippedRampModeValues(variables, modeNames, report) {
+  var seeded = [];
+  var names = modeNames || [];
+  Object.keys(variables || {}).forEach(function (varName) {
+    var vals = variables[varName] && variables[varName].values;
+    if (!vals) return;
+    var sourceKey = null;
+    var sourceVal = null;
+    for (var i = 0; i < names.length; i++) {
+      if (typeof vals[names[i]] === 'number' && !isNaN(vals[names[i]])) {
+        sourceKey = names[i];
+        sourceVal = vals[names[i]];
+        break;
+      }
+    }
+    if (sourceKey === null) return;
+    for (var j = 0; j < names.length; j++) {
+      if (vals[names[j]] !== undefined) continue;
+      vals[names[j]] = sourceVal;
+      seeded.push({ token: varName, mode: names[j], from: sourceKey, value: sourceVal });
+    }
+  });
+  if (report && typeof report === 'object' && seeded.length) {
+    report.seededModes = seeded;
+  }
 }
 
 // ============================================================================

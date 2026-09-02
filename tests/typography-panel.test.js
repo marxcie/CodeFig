@@ -252,6 +252,13 @@ test('the specimen sets the type at its real size, largest last', () => {
   assert.deepEqual(sizes, T.typeScaleTable({ config: data }, 'Value').rows.map((r) => r.size));
   for (let i = 1; i < sizes.length; i++) assert.ok(sizes[i] > sizes[i - 1], 'ascending, so it reads as a scale');
   assert.match(html, /class="type-specimen"/);
+  assert.match(html, /data-curve-tip-scale="/, 'specimen carries sizes for the Scale chart tip');
+  const tipScale = html.match(/data-curve-tip-scale="([^"]+)"/);
+  assert.ok(tipScale);
+  assert.deepEqual(
+    tipScale[1].split(', ').map(Number),
+    T.typeScaleTable({ config: data }, 'Value').rows.map((r) => r.size)
+  );
   assert.ok(html.indexOf('Sphinx of black quartz') !== -1, 'the preview text is the config\'s');
   // **Beside the number it moved**, not on a line of its own — `Font size: 218 (218.37)`. A separate
   // *Rounded from* line left you matching it back to whichever value it belonged to.

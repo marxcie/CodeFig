@@ -141,18 +141,29 @@ test('an address change leaves no trace of the previous one', () => {
 
   // Defaults come from the script as opened, not from the block on screen — which by then holds the
   // previous collection's values, so resetting to it would clear nothing.
+  // End at `starterModesForDomain` — New-collection unlock helpers sit after pristine and must not
+  // widen this slice (they call `writeConfigBlockText`; pristine itself must not).
   const fn = ui.slice(ui.indexOf('function pristineConfigForAddress('),
-    ui.indexOf('\n      /** The collection the last real read was for'));
+    ui.indexOf('\n      function starterModesForDomain('));
   assert.match(fn, /extractConfigSection\(originalCode/,
     'the defaults no longer come from the script as it was opened');
   assert.match(fn, /collectionName: collection/, 'the address is not carried through');
   assert.doesNotMatch(fn, /writeConfigBlockText/,
     'preparing the defaults must not write — that is the second rebuild this removed');
+  // Starter Value is filled into the prepared text (not written here) so Mode settings can open.
+  assert.match(fn, /starters = starterModesForDomain/,
+    'an empty modes array must get a starter Value for the new address');
 
-  // And the rule itself: a read that finds nothing leaves an empty panel rather than the last one's values.
+  // And the rule itself: a read that finds nothing leaves an empty panel rather than the last one's values
+  // — but only when Collection / Group settle did *not* already reset. Re-applying after settle races with
+  // tokens typed during the miss (new collection → steps → blur → ramp gone).
   const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
   assert.match(apply, /writeConfigBlockText\(pendingPristine/,
-    'a read that finds nothing no longer clears the panel');
+    'a read that finds nothing no longer clears the panel when settle has not already');
+  assert.match(apply, /if \(!addressAlreadyReset\)/,
+    'miss must not wipe again after address settle already wrote defaults');
+  assert.match(ui, /addressAlreadyReset = true/,
+    'address settle must claim the reset so the miss path can skip');
   assert.match(apply, /var base = pendingPristine \|\| currentConfigBlock\(\)/,
     'a read that finds something must fill onto the defaults, or the previous address survives in every ' +
     'key the payload does not mention');

@@ -942,7 +942,19 @@ async function createOrUpdateVariable(collection, name, config, modes) {
     existing.scopes = desiredScopes;
   }
 
+  // Purpose Description: write when empty so discovery has a secondary net; never overwrite
+  // a human-edited note.
+  if (actualConfig.description && typeof actualConfig.description === 'string') {
+    var wantDesc = String(actualConfig.description).trim();
+    var haveDesc = String(existing.description || '').trim();
+    if (wantDesc && !haveDesc) {
+      existing.description = wantDesc;
+    }
+  }
+
   // Set values for each mode
+  var firstWrittenValue = null;
+  var wroteMode = {};
   actualModes.forEach(function(modeName) {
     try {
       var mode = collection.modes.find(function(m) { return m.name === modeName; });
@@ -976,10 +988,14 @@ async function createOrUpdateVariable(collection, name, config, modes) {
         }
 
         if (!isNew && variableValueEquals(existing, mode.modeId, value)) {
+          wroteMode[modeName] = true;
+          if (firstWrittenValue === null && typeof value === 'number') firstWrittenValue = value;
           return;
         }
         
         existing.setValueForMode(mode.modeId, value);
+        wroteMode[modeName] = true;
+        if (firstWrittenValue === null && typeof value === 'number') firstWrittenValue = value;
         console.log('  ' + modeName + ': ' + (actualConfig.type === 'COLOR' ? rgbToHex(value.r, value.g, value.b) : value));
       }
     } catch (e) {
@@ -994,6 +1010,26 @@ async function createOrUpdateVariable(collection, name, config, modes) {
       });
     }
   });
+
+  // New set / incomplete sibling modes: copy the first written value into modes that are
+  // still empty or 0. Skipped panel modes (base left at 0) never enter `values`, so Figma
+  // would leave Tablet/Mobile at 0 after Desktop was filled — seed those only.
+  if (actualConfig.type === 'FLOAT' && typeof firstWrittenValue === 'number') {
+    for (var mi = 0; mi < collection.modes.length; mi++) {
+      var sibling = collection.modes[mi];
+      if (wroteMode[sibling.name]) continue;
+      var cur = existing.valuesByMode ? existing.valuesByMode[sibling.modeId] : undefined;
+      if (cur === undefined || cur === null || cur === 0) {
+        try {
+          existing.setValueForMode(sibling.modeId, firstWrittenValue);
+          console.log('  ' + sibling.name + ': ' + firstWrittenValue + ' (from first mode)');
+        } catch (seedErr) {
+          console.warn('Could not seed mode ' + sibling.name + ': ' +
+            (seedErr && seedErr.message ? seedErr.message : seedErr));
+        }
+      }
+    }
+  }
   
   return action;
 }
@@ -1060,7 +1096,9 @@ async function processVariables(collection, variables, configValues, modes) {
       if (varConfig.scopes && Array.isArray(varConfig.scopes)) {
         calculatedConfig.scopes = varConfig.scopes;
       }
-
+      if (varConfig.description && typeof varConfig.description === 'string') {
+        calculatedConfig.description = varConfig.description;
+      }
 
       var result = await createOrUpdateVariable(collection, varName, calculatedConfig, modes);
       if (result === 'skipped') {

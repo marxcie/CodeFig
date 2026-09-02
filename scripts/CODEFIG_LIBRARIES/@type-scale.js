@@ -456,7 +456,11 @@ function typographyPreviewHtml(config, domain, modeName) {
   }).join('');
 
   var mode = table.mode && table.mode.name ? table.mode.name : '';
-  return '<div class="type-specimen">' +
+  var tipScale = table.rows.map(function (row) {
+    return typeScaleNumber(row.size);
+  }).join(', ');
+  return '<div class="type-specimen"' +
+    (tipScale ? ' data-curve-tip-scale="' + typeScaleEscape(tipScale) + '"' : '') + '>' +
     '<div class="type-specimen-family">' + typeScaleEscape(family) + '</div>' +
     '<div class="type-specimen-note">' +
       typeScaleEscape(mode ? mode + ' · font weight ' + weight : 'Font weight ' + weight) +

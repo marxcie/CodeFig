@@ -1378,24 +1378,73 @@ function isTypographyVariableName(name) {
 }
 
 /**
- * Whether a discovered group belongs to the domain being scanned.
- *
- * Spacing and radius share the same flat `Group/token` shape, so a name-only pass over the whole
- * collection finds both. Typography uses its own leaf rule. Test scratch groups are ignored.
+ * Whether a discovered group path looks like test scratch.
+ * Domain membership for spacing vs radius is decided per variable (stamp / scopes /
+ * description) — not by parsing group or token names.
  */
 function rampGroupMatchesDomain(group, domain) {
   var g = String(group == null ? '' : group);
   if (g.indexOf('__codefig-test__') === 0) return false;
-  var lower = g.toLowerCase();
-  if (domain === 'spacing') {
-    if (/\bradius\b/.test(lower) || /\bcorner\b/.test(lower)) return false;
-    return true;
-  }
+  return domain === 'spacing' || domain === 'radius' || domain === 'typography';
+}
+
+/**
+ * Scopes that positively identify a ramp domain. `null` = no signal (empty / ALL_SCOPES).
+ * `true` / `false` = belongs / does not belong.
+ */
+function rampScopesMatchDomain(scopes, domain) {
+  var list = scopes || [];
+  if (!list.length) return null;
+  var set = {};
+  for (var i = 0; i < list.length; i++) set[list[i]] = true;
+  if (set.ALL_SCOPES) return null;
+
   if (domain === 'radius') {
-    if (/\bspacing\b/.test(lower)) return false;
-    return true;
+    if (set.CORNER_RADIUS) return true;
+    if (set.GAP || set.WIDTH_HEIGHT || set.FONT_SIZE || set.LINE_HEIGHT ||
+        set.LETTER_SPACING || set.FONT_WEIGHT || set.FONT_STYLE || set.FONT_FAMILY) {
+      return false;
+    }
+    return null;
   }
-  return true;
+  if (domain === 'spacing') {
+    if (set.CORNER_RADIUS) return false;
+    if (set.FONT_SIZE || set.LINE_HEIGHT || set.LETTER_SPACING ||
+        set.FONT_WEIGHT || set.FONT_STYLE || set.FONT_FAMILY) {
+      return false;
+    }
+    if (set.GAP || set.WIDTH_HEIGHT) return true;
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Neutral Description labels written on generate — same words as the script titles.
+ * Exact match only (secondary net; humans edit Description freely).
+ */
+function rampDescriptionMatchesDomain(description, domain) {
+  var want = foundationDomainScriptName(domain);
+  if (!want || want === domain) return false;
+  return String(description || '').trim().toLowerCase() === String(want).toLowerCase();
+}
+
+/**
+ * Does this FLOAT belong to the domain being scanned?
+ *
+ * Order: stamp (authority) → scopes → Description. No name heuristics — unstamped,
+ * unscored, undescribed floats are not claimed by either ramp panel.
+ */
+function rampVariableMatchesDomain(variable, domain) {
+  if (!variable || (domain !== 'spacing' && domain !== 'radius')) return false;
+  var stamp = readStamp(variable);
+  if (stamp && stamp.domain) {
+    return String(stamp.domain) === String(domain);
+  }
+  var scopeHit = rampScopesMatchDomain(variable.scopes, domain);
+  if (scopeHit === true) return true;
+  if (scopeHit === false) return false;
+  return rampDescriptionMatchesDomain(variable.description, domain);
 }
 
 /**
@@ -1467,7 +1516,8 @@ function rampGroupCandidates(names, domain) {
 
 /**
  * The groups in a collection that hold a ramp set, so the panel can point itself at one.
- * Read-only; one pass over FLOAT variable names.
+ * Read-only. Membership is stamp → scopes → Description (see `rampVariableMatchesDomain`),
+ * never token-name guessing.
  */
 async function rampGroupsIn(collectionName, domain) {
   var answer = { collection: collectionName || null, groups: [] };
@@ -1481,7 +1531,13 @@ async function rampGroupsIn(collectionName, domain) {
   var ids = collection.variableIds || [];
   for (var i = 0; i < ids.length; i++) {
     var variable = await figma.variables.getVariableByIdAsync(ids[i]);
-    if (variable && variable.resolvedType === 'FLOAT') names.push(variable.name);
+    if (!variable || variable.resolvedType !== 'FLOAT') continue;
+    if (domain === 'typography') {
+      names.push(variable.name);
+      continue;
+    }
+    if (!rampVariableMatchesDomain(variable, domain)) continue;
+    names.push(variable.name);
   }
   answer.groups = rampGroupCandidates(names, domain);
   return answer;
@@ -2455,6 +2511,8 @@ async function foundationTokensIn(collectionName, group, domain) {
     } else if (parts.length === 1) {
       token = parts[0];
       if (domain !== 'typography' && !isRampTokenLeaf(token)) continue;
+      if ((domain === 'spacing' || domain === 'radius') &&
+          !rampVariableMatchesDomain(variable, domain)) continue;
     }
     if (!token || seen[token]) continue;
     seen[token] = true;

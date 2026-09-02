@@ -115,6 +115,19 @@ function shippedConfigBlock(file) {
   return configBlockOf(fs.readFileSync(path.join(SCRIPTS, 'EXAMPLE_SCRIPTS', 'Design System Foundations', file), 'utf8'));
 }
 
+/**
+ * Parity fixtures predate purpose Descriptions on generated FLOATs. Strip them so identity
+ * checks stay about values/scopes; description itself is asserted separately.
+ */
+function withoutDescription(variables) {
+  const out = {};
+  for (const name of Object.keys(variables || {})) {
+    out[name] = Object.assign({}, variables[name]);
+    delete out[name].description;
+  }
+  return out;
+}
+
 const DOMAINS = [
   {
     label: 'spacing',
@@ -150,7 +163,7 @@ for (const domain of DOMAINS) {
     const config = frozenConfigBlock(domain.fixture);
     const old = before()(config);
     assert.ok(Object.keys(old).length > 0, 'the fixture really generated something');
-    assert.deepEqual(after()(config), old);
+    assert.deepEqual(withoutDescription(after()(config)), old);
   });
 
   test(`${domain.label}: a template plus steps generates identically`, () => {
@@ -158,7 +171,7 @@ for (const domain of DOMAINS) {
       [domain.tokensKey]: domain.template,
       steps: 5
     });
-    assert.deepEqual(after()(config), before()(config));
+    assert.deepEqual(withoutDescription(after()(config)), before()(config));
   });
 
   test(`${domain.label}: every scaling alias it accepts still means the same`, () => {
@@ -166,7 +179,7 @@ for (const domain of DOMAINS) {
       const config = frozenConfigBlock(domain.fixture);
       delete config.scaling;
       config[alias] = { type: 'quad', ease: 'out', roundUpperValuesTo: 4 };
-      assert.deepEqual(after()(config), before()(config), alias);
+      assert.deepEqual(withoutDescription(after()(config)), before()(config), alias);
     }
   });
 
@@ -176,7 +189,7 @@ for (const domain of DOMAINS) {
       // Collapsing them must not quietly grant spacing a new alias.
       const config = frozenConfigBlock(domain.fixture);
       config[domain.notMyAlias] = { type: 'quad', ease: 'out' };
-      assert.deepEqual(after()(config), before()(config));
+      assert.deepEqual(withoutDescription(after()(config)), before()(config));
     });
   }
 
@@ -189,7 +202,7 @@ for (const domain of DOMAINS) {
     ];
     for (const rounding of roundings) {
       const config = Object.assign(frozenConfigBlock(domain.fixture), rounding);
-      assert.deepEqual(after()(config), before()(config), JSON.stringify(rounding));
+      assert.deepEqual(withoutDescription(after()(config)), before()(config), JSON.stringify(rounding));
     }
   });
 
@@ -201,6 +214,14 @@ for (const domain of DOMAINS) {
     }
   });
 
+  test(`${domain.label}: generated variables carry the domain Description`, () => {
+    const generated = after()(frozenConfigBlock(domain.fixture));
+    const expectLabel = domain.label === 'spacing' ? 'Spacing' : 'Corner radius';
+    for (const name of Object.keys(generated)) {
+      assert.equal(generated[name].description, expectLabel, name);
+    }
+  });
+
   test(`${domain.label}: a token of 0 is generated, not skipped`, () => {
     const config = Object.assign(frozenConfigBlock(domain.fixture), {
       modes: [{ name: 'mobile', min: 0, max: 0 }]
@@ -208,7 +229,7 @@ for (const domain of DOMAINS) {
     const generated = after()(config);
     const first = generated[Object.keys(generated)[0]];
     assert.strictEqual(first.values.Mobile, 0);
-    assert.deepEqual(generated, before()(config));
+    assert.deepEqual(withoutDescription(generated), before()(config));
   });
 
   test(`${domain.label}: a monotonic bump still bumps`, () => {
@@ -217,7 +238,7 @@ for (const domain of DOMAINS) {
       scaling: { type: 'linear', ease: 'none', roundTo: 4 },
       modes: [{ name: 'mobile', min: 4, max: 12 }]
     });
-    assert.deepEqual(after()(config), before()(config));
+    assert.deepEqual(withoutDescription(after()(config)), before()(config));
   });
 }
 
@@ -640,9 +661,10 @@ test('a scale the guard never touches reports no adjustments', () => {
   assert.deepEqual(ctx.describeRampAdjustments([]), [], 'and says nothing about it');
 });
 
-test('incomplete sibling modes are skipped on write — they do not abort a ready mode', () => {
-  // Same shape as the Corner radius Run failure: Desktop has a real base; Pad/Mobile sit at 0
-  // after collection alignment. Bezier refuses 0; the run used to throw on Pad and write nothing.
+test('incomplete sibling modes inherit the first ready mode on write', () => {
+  // Desktop has a real base; Pad/Mobile/Value sit at 0 after collection alignment. Bezier refuses
+  // those — they used to be omitted from the map and left at 0 in Figma. They now take Desktop's
+  // values (only where missing; an intentional 0 already in the map would stay).
   const ctx = baseContext();
   loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
   const spec = ctx.radiusRampSpec();
@@ -666,13 +688,32 @@ test('incomplete sibling modes are skipped on write — they do not abort a read
   const names = Object.keys(variables);
   assert.ok(names.length > 0, 'Desktop still writes');
   names.forEach((name) => {
-    const modes = Object.keys(variables[name].values);
-    assert.deepEqual(modes, ['Desktop'], 'only the ready mode is in the map: ' + name);
+    const vals = variables[name].values;
+    assert.ok(typeof vals.Desktop === 'number', name + ' has Desktop');
+    assert.equal(vals.Pad, vals.Desktop, name + ' Pad seeded from Desktop');
+    assert.equal(vals.Mobile, vals.Desktop, name + ' Mobile seeded from Desktop');
+    assert.equal(vals.Value, vals.Desktop, name + ' Value seeded from Desktop');
   });
   assert.equal(report.skippedModes.length, 3);
   assert.deepEqual(report.skippedModes.map((s) => s.viewport).sort(), ['Mobile', 'Pad', 'Value']);
+  assert.ok(report.seededModes && report.seededModes.length > 0, 'seed pass recorded');
   assert.match(report.skippedModes[0].message, /base has to be above zero/);
   assert.match(ctx.describeRampSkippedModes(report.skippedModes)[0], /Skipped 3 modes/);
+});
+
+test('seedSkippedRampModeValues never overwrites an existing number', () => {
+  const ctx = baseContext();
+  loadInto(ctx, fs.readFileSync(path.join(SCRIPTS, 'CODEFIG_LIBRARIES', '@linear-ramp.js'), 'utf8'));
+  const variables = {
+    'Corner radius/sm': { type: 'FLOAT', values: { Desktop: 8, Mobile: 0 } },
+  };
+  const report = {};
+  ctx.seedSkippedRampModeValues(variables, ['Desktop', 'Tablet', 'Mobile'], report);
+  assert.equal(variables['Corner radius/sm'].values.Desktop, 8);
+  assert.equal(variables['Corner radius/sm'].values.Mobile, 0, 'intentional 0 kept');
+  assert.equal(variables['Corner radius/sm'].values.Tablet, 8, 'missing Tablet seeded');
+  assert.equal(report.seededModes.length, 1);
+  assert.equal(report.seededModes[0].mode, 'Tablet');
 });
 
 test('when every mode is incomplete, generate still refuses', () => {

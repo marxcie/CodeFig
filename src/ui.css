@@ -2958,6 +2958,39 @@
         margin-bottom: 0;
       }
 
+      /* Growth-curve value tip (Spacing / Corner radius / Typography): ratio + generated sizes.
+         Own class so it cannot pick up the ⓘ bubble's markdown padding or pin behaviour.
+         Positioned right-centre of the handle in JS (`placeCurveTip`). */
+      .config-ui-curve-tip {
+        position: fixed;
+        z-index: 100;
+        max-width: 280px;
+        padding: 6px 8px;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: var(--border-color);
+        color: var(--text-primary);
+        font-size: var(--font-size-small);
+        line-height: 1.35;
+        font-variant-numeric: tabular-nums;
+        pointer-events: none;
+      }
+
+      .config-ui-curve-tip[hidden] {
+        display: none;
+      }
+
+      .config-ui-curve-tip__value {
+        font-weight: 600;
+      }
+
+      .config-ui-curve-tip__scale {
+        margin-top: 2px;
+        opacity: 0.75;
+        white-space: normal;
+        word-break: break-word;
+      }
+
       /* ============================================================
          THE CURVE EDITOR — `.config-ui-curve`
 

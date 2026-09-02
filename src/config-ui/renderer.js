@@ -65,6 +65,82 @@
     return tipEl;
   }
 
+  /**
+   * Value tip for Spacing / Corner radius growth curves — not the ⓘ helper bubble.
+   *
+   * Shows the stored growth ratio (what the end-handle height means) and the generated token
+   * numbers for the open mode. Kept as its own element so pinning an ⓘ cannot leave a scale
+   * readout stuck open, and so a drag can refresh it every frame without rebuilding markdown.
+   */
+  var curveTipEl = null;
+  var curveTipOwner = null;
+
+  function curveTipHost() {
+    if (curveTipEl && typeof document !== "undefined" && document.body &&
+        curveTipEl.parentNode !== document.body) {
+      curveTipEl = null;
+    }
+    if (curveTipEl) return curveTipEl;
+    if (typeof document === "undefined" || !document.body) return null;
+    curveTipEl = document.createElement("div");
+    curveTipEl.className = "config-ui-curve-tip";
+    curveTipEl.setAttribute("role", "tooltip");
+    curveTipEl.hidden = true;
+    document.body.appendChild(curveTipEl);
+    return curveTipEl;
+  }
+
+  function hideCurveTip() {
+    curveTipOwner = null;
+    if (curveTipEl) curveTipEl.hidden = true;
+  }
+
+  function showCurveTip(anchor, primary, scaleText) {
+    var el = curveTipHost();
+    if (!el || !anchor || primary == null || primary === "") {
+      hideCurveTip();
+      return;
+    }
+    el.innerHTML = "";
+    var valueEl = document.createElement("div");
+    valueEl.className = "config-ui-curve-tip__value";
+    valueEl.textContent = String(primary);
+    el.appendChild(valueEl);
+    var scale = scaleText == null ? "" : String(scaleText).trim();
+    if (scale) {
+      var scaleEl = document.createElement("div");
+      scaleEl.className = "config-ui-curve-tip__scale";
+      scaleEl.textContent = scale;
+      el.appendChild(scaleEl);
+    }
+    el.hidden = false;
+    curveTipOwner = anchor;
+    placeCurveTip(el, anchor);
+  }
+
+  /**
+   * Growth-curve tip: right of the handle, vertically centred on it.
+   * Falls back to the left if there is no room on the right (narrow panel edge).
+   */
+  function placeCurveTip(el, anchor) {
+    if (!anchor.getBoundingClientRect || !el.getBoundingClientRect) return;
+    var a = anchor.getBoundingClientRect();
+    var vw = window.innerWidth || 320;
+    var vh = window.innerHeight || 480;
+    var gap = 8;
+    el.style.left = "0px";
+    el.style.top = "0px";
+    var box = el.getBoundingClientRect();
+    var left = a.right + gap;
+    if (left + box.width > vw - 8) {
+      left = Math.max(8, a.left - box.width - gap);
+    }
+    var top = a.top + a.height / 2 - box.height / 2;
+    top = Math.min(Math.max(8, top), Math.max(8, vh - box.height - 8));
+    el.style.left = Math.round(left) + "px";
+    el.style.top = Math.round(top) + "px";
+  }
+
   function fillTip(el, blocks) {
     el.innerHTML = "";
     blocks.forEach(function (b) {
@@ -3206,6 +3282,8 @@
           (ax ? grips : svg).appendChild(dot);
         });
       }
+      // Handles were replaced — re-anchor the value tip if one is open.
+      if (tipKind !== null) refreshCurveTip();
     }
 
     /**
@@ -3528,6 +3606,66 @@
     var draggingEnd = null;
     var panning = null;
     var dragSmooth = false;
+    /**
+     * Which handle the value tip is tracking. `draw()` replaces every SVG node each frame, so the
+     * tip cannot keep a DOM reference — only the kind (`"growth"` or a `data-curve-index`), and it
+     * re-finds the live node after each redraw.
+     */
+    var tipKind = null;
+
+    function curveTipScaleText() {
+      var stamped = wrap.getAttribute("data-curve-tip-scale");
+      if (stamped != null && String(stamped).trim() !== "") return String(stamped).trim();
+      // Fallback: the live Preview for this script, when the host has not stamped yet.
+      var root = (typeof wrap.closest === "function" && wrap.closest(".config-ui-form")) ||
+        (typeof document !== "undefined" ? document : null);
+      if (!root || !root.querySelectorAll) return "";
+      var nums = [];
+      root.querySelectorAll(".spacing-preview-value, .radius-preview-value").forEach(function (node) {
+        var t = String(node.textContent || "").trim();
+        if (t && t !== "\u2014") nums.push(t);
+      });
+      if (nums.length) return nums.join(", ");
+      var specimen = root.querySelector(".type-specimen[data-curve-tip-scale]");
+      if (specimen) {
+        var fromType = specimen.getAttribute("data-curve-tip-scale");
+        if (fromType != null && String(fromType).trim() !== "") return String(fromType).trim();
+      }
+      return "";
+    }
+
+    function tipAnchor() {
+      if (tipKind === "growth") return svg.querySelector("[data-curve-growth]");
+      if (typeof tipKind === "number" && !isNaN(tipKind)) {
+        return svg.querySelector('[data-curve-index="' + tipKind + '"]');
+      }
+      return null;
+    }
+
+    function refreshCurveTip() {
+      if (!growthKey || tipKind === null) {
+        hideCurveTip();
+        return;
+      }
+      var ratio = growthRatio();
+      if (ratio === null) {
+        hideCurveTip();
+        return;
+      }
+      showCurveTip(tipAnchor(), String(ratio), curveTipScaleText());
+    }
+
+    function tipKindFromTarget(target) {
+      if (!growthKey || !target || typeof target.getAttribute !== "function") return null;
+      if (target.getAttribute("data-curve-growth")) return "growth";
+      var idx = target.getAttribute("data-curve-index");
+      if (idx !== null && idx !== "") {
+        var n = parseInt(idx, 10);
+        return isNaN(n) ? null : n;
+      }
+      return null;
+    }
+
     svg.addEventListener("pointerdown", function (evt) {
       var target = evt.target;
       if (!target || typeof target.getAttribute !== "function") return;
@@ -3535,6 +3673,7 @@
         draggingEnd = target.getAttribute("data-curve-end");
       } else if (target.getAttribute("data-curve-growth")) {
         draggingGrowth = true;
+        tipKind = "growth";
       } else {
         var dot = target.getAttribute("data-curve-index");
         if (dot !== null) {
@@ -3551,6 +3690,7 @@
           dragSmooth = B ? B.bezierNodeIsSmooth(held) : false;
           // Alt inverts it, the way every vector tool does: break a smooth node, or restore a broken one.
           if (evt.altKey) dragSmooth = !dragSmooth;
+          tipKind = tipKindFromTarget(target);
         }
         if (dot === null) {
           // **Empty chart with an axis: scroll it.** A tight window has ramp above or below it, and this is
@@ -3573,6 +3713,7 @@
       // there also means the arrow keys work straight after a drag without tabbing back.
       if (target.focus) target.focus();
       evt.preventDefault();
+      if (tipKind !== null) refreshCurveTip();
     });
     /**
      * **One update per frame, not one per pointer event.**
@@ -3698,10 +3839,31 @@
         draw();
         return;
       }
-      if (dragging === null && !draggingGrowth && !draggingEnd) return;
+      if (dragging === null && !draggingGrowth && !draggingEnd) {
+        // Hover tip for growth charts: ratio + generated token list beside the handle.
+        if (growthKey) {
+          var hoverKind = tipKindFromTarget(evt.target);
+          if (hoverKind === null) {
+            if (tipKind !== null) {
+              tipKind = null;
+              hideCurveTip();
+            }
+          } else if (hoverKind !== tipKind) {
+            tipKind = hoverKind;
+            refreshCurveTip();
+          } else {
+            refreshCurveTip();
+          }
+        }
+        return;
+      }
       var at = pointAt(evt);
       if (!at) return;
-      if (typeof requestAnimationFrame !== "function") { applyMove(at); return; }
+      if (typeof requestAnimationFrame !== "function") {
+        applyMove(at);
+        if (draggingGrowth || dragging !== null) refreshCurveTip();
+        return;
+      }
       queuedAt = at;
       if (frame !== null) return;
       frame = requestAnimationFrame(function () {
@@ -3710,7 +3872,13 @@
         queuedAt = null;
         if (!next || (dragging === null && !draggingGrowth && !draggingEnd)) return;
         applyMove(next);
+        if (draggingGrowth || dragging !== null) refreshCurveTip();
       });
+    });
+    svg.addEventListener("pointerleave", function () {
+      if (dragging !== null || draggingGrowth || draggingEnd || panning) return;
+      tipKind = null;
+      hideCurveTip();
     });
     function endDrag(evt) {
       if (panning) {
@@ -3735,6 +3903,8 @@
       if (svg.releasePointerCapture && evt.pointerId != null) {
         try { svg.releasePointerCapture(evt.pointerId); } catch (err) { /* already gone */ }
       }
+      // Keep the tip up if the pointer is still on the handle; drop it otherwise.
+      if (tipKind !== null) refreshCurveTip();
     }
     svg.addEventListener("pointerup", endDrag);
     svg.addEventListener("pointercancel", endDrag);

@@ -617,6 +617,44 @@ test("grabbing a handle takes focus, so the label's tooltip lets go", () => {
   assert.equal(handle._focused, true, "the handle did not take focus");
 });
 
+test("hovering the growth handle shows the ratio and generated token values", () => {
+  // The end-handle height is the growth ratio on a log axis — that is the number the tip leads with.
+  // Token sizes come from Preview (stamped onto the chart), numbers only.
+  const f = growthForm({ name: "V", ratio: 1.5, curve: [] });
+  f.curve.setAttribute("data-curve-tip-scale", "0, 2, 4, 8, 16, 24, 40, 80, 120");
+  const svg = f.curve.querySelector(".config-ui-curve__canvas");
+  const dot = f.growthDot();
+  dot._rect = { left: 90, top: 40, width: 10, height: 10, right: 100, bottom: 50 };
+  svg.dispatch("pointermove", { target: dot });
+  const tip = document.body.querySelector(".config-ui-curve-tip");
+  assert.ok(tip && tip.hidden !== true && tip.hidden !== "true", "tip should be visible");
+  assert.equal(tip.querySelector(".config-ui-curve-tip__value").textContent, "1.5");
+  assert.equal(
+    tip.querySelector(".config-ui-curve-tip__scale").textContent,
+    "0, 2, 4, 8, 16, 24, 40, 80, 120"
+  );
+  // Right of the handle, vertically centred: handle right 100, gap 8 → left 108;
+  // handle mid-y 45, tip height 20 → top 35.
+  tip._rect = { left: 0, top: 0, width: 40, height: 20, right: 40, bottom: 20 };
+  svg.dispatch("pointermove", { target: dot });
+  assert.equal(tip.style.left, "108px");
+  assert.equal(tip.style.top, "35px");
+});
+
+test("dragging the growth handle keeps the tip on the live ratio", () => {
+  const f = growthForm({ name: "V", ratio: 1.5, curve: [] });
+  f.curve.setAttribute("data-curve-tip-scale", "4, 6, 9");
+  const svg = f.curve.querySelector(".config-ui-curve__canvas");
+  const dot = f.growthDot();
+  dot._rect = { left: 90, top: 40, width: 10, height: 10, right: 100, bottom: 50 };
+  svg.dispatch("pointerdown", { target: dot, pointerId: 1 });
+  svg.dispatch("keydown", { key: "ArrowUp", target: dot, bubbles: true });
+  const tip = document.body.querySelector(".config-ui-curve-tip");
+  assert.ok(tip && tip.hidden !== true && tip.hidden !== "true");
+  assert.equal(tip.querySelector(".config-ui-curve-tip__value").textContent, f.growth());
+  assert.equal(tip.querySelector(".config-ui-curve-tip__scale").textContent, "4, 6, 9");
+});
+
 test("a cell carrying an \u24D8 is not a label, or the whole cell clicks the explanation", () => {
   // **A `<button>` is a labelable element.** A `<label>` with no `for` hands its clicks to the first
   // labelable descendant, and the caption comes first — so an \u24D8 became the cell's control and clicking

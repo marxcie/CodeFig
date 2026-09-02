@@ -1026,6 +1026,9 @@
                   var resetText = (addrCollection && String(addrCollection).trim())
                     ? pristineConfigForAddress(addrCollection, addrGroup)
                     : null;
+                  // Mark before the miss lands: `applyAutoImport` must not re-apply the same
+                  // pristine defaults after Color tokens (etc.) have been typed during the read.
+                  addressAlreadyReset = true;
                   if (resetText) {
                     var r0 = (typeof performance !== 'undefined' && performance.now)
                       ? performance.now() : Date.now();
@@ -2858,6 +2861,7 @@
           });
           syncPreviewRowVisibility();
           if (region) region.style.display = 'none';
+          stampCurveTipScales();
           return;
         }
 
@@ -2866,10 +2870,39 @@
           fillRevealSlot(slot, html || '');
           syncPreviewRowVisibility();
           if (region) region.style.display = 'none';
+          stampCurveTipScales();
           return;
         }
         const body = document.getElementById('configPreviewBody');
         if (body) body.innerHTML = html;
+        stampCurveTipScales();
+      }
+
+      /**
+       * Put the open mode's generated token numbers on the growth curve, so the handle tip can show
+       * them without scraping Preview markup mid-drag (and so a test can set the same attribute).
+       * Spacing / radius: value cells. Typography: sizes on the specimen root.
+       */
+      function stampCurveTipScales() {
+        var nums = [];
+        document.querySelectorAll('.spacing-preview-value, .radius-preview-value').forEach(function (node) {
+          var t = String(node.textContent || '').trim();
+          if (t && t !== '\u2014') nums.push(t);
+        });
+        var text = nums.join(', ');
+        if (!text) {
+          var specimen = document.querySelector('.type-specimen[data-curve-tip-scale]');
+          if (specimen) {
+            var fromType = specimen.getAttribute('data-curve-tip-scale');
+            if (fromType != null && String(fromType).trim() !== '') text = String(fromType).trim();
+          }
+        }
+        // Preview is the active mode only; stamp every growth chart — only the visible tab's
+        // handle can be hovered, so inactive tabs holding the same string is harmless.
+        document.querySelectorAll('.config-ui-curve--growth').forEach(function (wrap) {
+          if (text) wrap.setAttribute('data-curve-tip-scale', text);
+          else wrap.removeAttribute('data-curve-tip-scale');
+        });
       }
 
       function renderConfigSuggestions(html) {
@@ -3619,6 +3652,16 @@
       var lastReadCollection = null;
       /** The pristine block for the address being read, applied when the answer lands. */
       var pendingPristine = null;
+      /**
+       * True when Collection / Group settle already wrote (or confirmed) defaults for this address.
+       *
+       * The miss path used to re-apply `pendingPristine` when the read found nothing. That was right
+       * when the only reset lived in `applyAutoImport`. Address settle now resets immediately so the
+       * previous collection does not linger — and a second wipe when the miss arrives races with
+       * tokens typed (or committed) while the sandbox read was in flight: empty `steps`, Mode settings
+       * and the ramp collapse. Skip the miss wipe when settle already did the job.
+       */
+      var addressAlreadyReset = false;
 
       function requestAutoImport(attempt, detectOnly) {
         // **Must clear, not only null.** `scheduleGroupDetection` (and the 350ms address debounce)
@@ -4372,6 +4415,8 @@
       }
 
       function applyAutoImport(found) {
+        // Held keystrokes must land before any rewrite, or a form rebuild drops them.
+        flushConfigSync();
         lastAutoImport.source = found ? found.source : 'no-answer';
         rememberReadResult(found);
 
@@ -4385,11 +4430,18 @@
           //
           // When the offer rewrote Group, the pristine block captured at request time is for the old
           // address and must not be applied on top.
+          //
+          // When Collection / Group settle already reset this address, do not wipe again: that race
+          // cleared Color tokens typed while the miss was in flight (new collection → type steps →
+          // click away → ramp gone).
           if (offered) pendingPristine = null;
           else if (pendingPristine) {
-            writeConfigBlockText(pendingPristine, 'address-reset');
+            if (!addressAlreadyReset) {
+              writeConfigBlockText(pendingPristine, 'address-reset');
+            }
             pendingPristine = null;
           }
+          addressAlreadyReset = false;
           var onMiss = orderConfigModesToFile();
           // No file modes yet (new collection, or read before anything exists): still unlock with Value.
           if (!fileModes.found) ensureStarterModesInBlock();
@@ -4406,6 +4458,7 @@
           );
           return;
         }
+        addressAlreadyReset = false;
         var where = found.collection + (found.group ? ' \u00b7 ' + found.group : '');
 
         // No untouched rule and no offer. Loading overwrites, because choosing an address is the

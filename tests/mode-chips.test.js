@@ -718,6 +718,8 @@ test('the fill and the ordering are one write, not two', () => {
   const missWrite = apply.indexOf('writeConfigBlockText(pendingPristine');
   assert.ok(missWrite !== -1, 'a read that finds nothing no longer applies the prepared defaults');
   assert.ok(missWrite < orderAt, 'the nothing-found write must sit on the branch that returns before the fill');
+  assert.match(apply, /if \(!addressAlreadyReset\)/,
+    'miss wipe is gated: address settle already reset, so typed tokens must survive the miss');
 
   // The load path that brings no config of its own still orders what is already there.
   assert.match(ui, /function orderConfigModesToFile\(\)[\s\S]{0,220}orderedModesInBlock\(currentConfigBlock\(\)\)/);

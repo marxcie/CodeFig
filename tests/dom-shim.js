@@ -403,6 +403,7 @@ class ShimEvent {
 }
 
 function install(extras) {
+  const body = new Element('body');
   const document = {
     createElement: (tag) => new Element(tag),
     // SVG, for the curve editor. The namespace is dropped: nothing here resolves one, and the only
@@ -412,12 +413,17 @@ function install(extras) {
     createElementNS: (ns, tag) => new Element(tag),
     createTextNode: (t) => new TextNode(t),
     documentElement: new Element('html'),
+    // Tooltips append here (`config-ui-tip`, growth-curve value tip). Without a body the host
+    // returns null and hover behaviour is untestable.
+    body: body,
+    querySelector: (sel) => body.querySelector(sel),
+    querySelectorAll: (sel) => body.querySelectorAll(sel),
   };
   // `CodeFigBezier` is what `build-bezier.js` puts on the real window. A test that wants the curve
   // editor to do arithmetic passes it in; one that only wants the markup does not, and the control
   // degrades to drawing a straight line rather than throwing — which is also what the plugin does if
   // the inlined block ever goes missing.
-  const window = Object.assign({ marked: undefined }, extras || {});
+  const window = Object.assign({ marked: undefined, innerWidth: 320, innerHeight: 480 }, extras || {});
   global.document = document;
   global.window = window;
   global.Event = ShimEvent;
