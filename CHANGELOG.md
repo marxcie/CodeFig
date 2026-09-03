@@ -24,9 +24,6 @@ you what they will do before they do it.
 
 ### Changed
 
-- **Typography can now stamp a text wrap style onto generated text styles.** Set
-  `figmaStyles.textWrapStyle` to `AUTO`, `BALANCE`, or `PRETTY` in the Typography script config
-  to control paragraph wrapping on the created/updated Figma text styles.
 - **Find/replace now means one thing across the library.** Six scripts took a name pattern and
   no two agreed: contains vs prefix, case-sensitive vs not, wildcards in three of them, three
   separate replace implementations. All six now share one matcher.
