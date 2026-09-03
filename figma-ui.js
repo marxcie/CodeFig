@@ -22,6 +22,7 @@
  *   --timeout <ms>   how long to wait for an answer (default 20000)
  *   --json           print the raw answer as JSON rather than formatted
  *   --text-file <p>  read a file into the `text` argument (for writeConfig)
+ *   --code-file <p>  read a file into the `code` argument (for saveScript)
  *
  * Commands are **named, not evaluated**: there is deliberately no way to send JavaScript for the
  * iframe to run. Every UI action worth driving is nameable, so an eval channel would be a strictly
@@ -128,6 +129,8 @@ function parseArgs(argv) {
       out.args.index = Number(argv[++i]);
     } else if (token === '--text-file') {
       out.args.text = fs.readFileSync(argv[++i], 'utf8');
+    } else if (token === '--code-file') {
+      out.args.code = fs.readFileSync(argv[++i], 'utf8');
     } else if (token.indexOf('=') !== -1) {
       const at = token.indexOf('=');
       out.args[token.slice(0, at)] = token.slice(at + 1);

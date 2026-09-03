@@ -113,6 +113,7 @@ test('the block renders the four sections the frames show', () => {
   assert.equal(fields.collectionName, 'collection');
   assert.equal(fields.fontScale, 'list', 'Tokens is one input holding a comma list');
   assert.equal(fields.fontWeights, 'list', 'and so are the weights: "400, Semi Bold"');
+  assert.equal(fields.textWrapStyle, 'radio', 'text wrap style is a radio row beside the style controls');
   assert.equal(fields.modes, 'rows');
   assert.equal(fields.overviewPreviewText, 'textarea');
 
@@ -310,6 +311,25 @@ test('the weights list becomes the map the styles are named from', () => {
   assert.equal(variables['Typography/font-family/primary'].type, 'STRING');
 });
 
+test('450:Regular writes the number and names the style Regular', () => {
+  const typed = { fontScale: ['a'], fontWeights: ['450:Regular', '550:Semibold'], modes: [] };
+  T.ensureCompatTypographyConfig(typed);
+  assert.deepEqual(typed.fontWeights, { Regular: 450, Semibold: 550 });
+
+  const flipped = { fontScale: ['a'], fontWeights: 'Regular:450, Semibold:550', modes: [] };
+  T.ensureCompatTypographyConfig(flipped);
+  assert.deepEqual(flipped.fontWeights, { Regular: 450, Semibold: 550 });
+
+  const config = starterConfig();
+  config.fontScale = ['a'];
+  config.fontWeights = ['450:Regular'];
+  T.ensureCompatTypographyConfig(config);
+  const variables = T.generateTypographyVariables(config);
+  assert.equal(variables['Typography/font-weight/Regular'].type, 'FLOAT');
+  assert.equal(variables['Typography/font-weight/Regular'].values.Value, 450);
+  assert.equal(variables['Typography/font-weight/450'], undefined);
+});
+
 test('a string of weights is read as the list, never enumerated character by character', () => {
   // Everything downstream reads the weights with `Object.keys`, and a string enumerates as its
   // character *indices* — so a quoted value in the block generated a text style called `0`, one called
@@ -325,11 +345,32 @@ test('a string of weights is read as the list, never enumerated character by cha
 });
 
 test('the flat style fields fold into the nested object the generator reads', () => {
-  const config = { fontScale: ['a'], createStyles: false, styleNaming: 'T/{$fontScale}', modes: [] };
+  const config = {
+    fontScale: ['a'],
+    createStyles: false,
+    styleNaming: 'T/{$fontScale}',
+    textWrapStyle: 'BALANCE',
+    modes: []
+  };
   T.ensureCompatTypographyConfig(config);
   assert.equal(config.figmaStyles.createAndUpdateStyles, false);
   assert.equal(config.figmaStyles.styleNaming, 'T/{$fontScale}');
+  assert.equal(config.figmaStyles.textWrapStyle, 'BALANCE');
   assert.equal(config.styles, config.figmaStyles, 'and the older alias still points at it');
+});
+
+test('the shipped block defaults to creating styles with Auto wrap', () => {
+  const config = P.parseConfigBlockObject(BLOCK);
+  assert.equal(config.createStyles, true);
+  assert.equal(config.styleNaming, '{$fontScale}/{$fontWeight}');
+  assert.equal(config.textWrapStyle, 'AUTO');
+});
+
+test('turning styles on fills an empty naming pattern', () => {
+  const config = { fontScale: ['a'], createStyles: true, styleNaming: '', modes: [] };
+  T.ensureCompatTypographyConfig(config);
+  assert.equal(config.styleNaming, '{$fontScale}/{$fontWeight}');
+  assert.equal(config.figmaStyles.styleNaming, '{$fontScale}/{$fontWeight}');
 });
 
 test('a token series in the Tokens field is expanded before anything counts steps', () => {

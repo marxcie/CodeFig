@@ -12,14 +12,17 @@
 //
 // - **Remove**: Unwrap containers that do nothing (single child, no padding, no effective spacing).
 // - **Normalize** (optional): When the parent has padding and only one child, and that child has
-//   gap but no padding, merge padding and gap onto the inner container and remove the outer one.
-//   Variable bindings are preserved.
+//   gap but no padding, merge gap onto the outer container, lift the grandchildren up, and remove
+//   the inner one. The outer frame keeps its name, size, and place in the tree. Variable bindings
+//   are preserved. Min/max width and height move onto the surviving container.
 //
 // ### Merge rules
 //
 // - Only merge when properties do not overlap (for example parent has padding, child has gap).
 // - Do not merge when both have padding (values would add together).
 // - Variable-based values are inherited when merging.
+// - Min/max constraints on a removed container are copied onto the survivor (more restrictive
+//   wins when both already have a number; an existing variable binding on the survivor is kept).
 //
 // ## Configuration options
 //
@@ -46,6 +49,7 @@ var __codefigPanel = {
 // @PANEL_END
 
 var PADDING_PROPS = ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom'];
+var MIN_MAX_PROPS = ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'];
 
 function isContainer(node) {
   return node && 'children' in node && (node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE' || node.type === 'GROUP');
@@ -53,6 +57,10 @@ function isContainer(node) {
 
 function hasLayoutMode(node) {
   return node && 'layoutMode' in node && node.layoutMode !== 'NONE';
+}
+
+function isAlive(node) {
+  return !!(node && !node.removed);
 }
 
 function getNumericValue(node, prop) {
@@ -75,6 +83,12 @@ function getBoundVariableId(node, prop) {
   var b = node.boundVariables[prop];
   if (Array.isArray(b) && b[0]) return b[0].id;
   return b && b.id ? b.id : null;
+}
+
+function hasConstraint(node, prop) {
+  if (!node || !(prop in node)) return false;
+  if (hasBoundVariable(node, prop)) return true;
+  return typeof node[prop] === 'number';
 }
 
 function hasAnyPadding(node) {
@@ -118,21 +132,38 @@ function hasEffects(node) {
 }
 
 function isRedundantContainer(node) {
-  if (!isContainer(node)) return false;
+  if (!isAlive(node) || !isContainer(node)) return false;
   if (node.children.length !== 1) return false;
   if (hasVisibleFills(node) || hasVisibleStrokes(node) || hasEffects(node)) return false;
   if (hasAnyPadding(node)) return false;
   return true;
 }
 
+function uniqueAlive(nodes) {
+  var seen = {};
+  var out = [];
+  for (var i = 0; i < nodes.length; i++) {
+    var n = nodes[i];
+    if (!isAlive(n) || seen[n.id]) continue;
+    seen[n.id] = true;
+    out.push(n);
+  }
+  return out;
+}
+
 function collectDescendants(nodes) {
   var out = [];
-  var stack = nodes.slice();
+  var stack = uniqueAlive(nodes);
   while (stack.length > 0) {
     var n = stack.pop();
+    if (!isAlive(n)) continue;
     out.push(n);
-    if ('children' in n) {
-      for (var i = n.children.length - 1; i >= 0; i--) stack.push(n.children[i]);
+    if (!('children' in n)) continue;
+    try {
+      var kids = n.children;
+      for (var i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
+    } catch (e) {
+      // Node was removed between the alive check and the children read.
     }
   }
   return out;
@@ -148,7 +179,46 @@ function sortDeepestFirst(nodes) {
   return nodes.slice().sort(function (a, b) { return nodeDepth(b) - nodeDepth(a); });
 }
 
-function unwrapContainer(container) {
+function isMinProp(prop) {
+  return prop === 'minWidth' || prop === 'minHeight';
+}
+
+/** Copy min/max from source onto target. More restrictive number wins; target bindings stay. */
+async function transferMinMaxAsync(source, target) {
+  if (!isAlive(source) || !isAlive(target)) return;
+  var varIds = [];
+  for (var i = 0; i < MIN_MAX_PROPS.length; i++) {
+    var prop = MIN_MAX_PROPS[i];
+    if (!(prop in source) || !(prop in target)) continue;
+    if (!hasConstraint(source, prop)) continue;
+
+    var sourceBound = getBoundVariableId(source, prop);
+    var targetBound = getBoundVariableId(target, prop);
+    var sourceNum = typeof source[prop] === 'number' ? source[prop] : null;
+    var targetNum = typeof target[prop] === 'number' ? target[prop] : null;
+    var targetHas = hasConstraint(target, prop);
+
+    if (targetBound) continue;
+
+    if (!targetHas) {
+      if (sourceBound) varIds.push({ prop: prop, id: sourceBound });
+      else if (sourceNum !== null) target[prop] = sourceNum;
+      continue;
+    }
+
+    if (sourceBound) continue;
+    if (sourceNum === null || targetNum === null) continue;
+    var next = isMinProp(prop) ? Math.max(sourceNum, targetNum) : Math.min(sourceNum, targetNum);
+    if (next !== targetNum) target[prop] = next;
+  }
+
+  for (var j = 0; j < varIds.length; j++) {
+    var v = await figma.variables.getVariableByIdAsync(varIds[j].id);
+    if (v && target.setBoundVariable) target.setBoundVariable(varIds[j].prop, v);
+  }
+}
+
+async function unwrapContainerAsync(container) {
   var parent = container.parent;
   if (!parent || !('children' in container)) return;
   var idx = parent.children.indexOf(container);
@@ -156,6 +226,9 @@ function unwrapContainer(container) {
   var dx = 'x' in container ? container.x : 0;
   var dy = 'y' in container ? container.y : 0;
   var parentIsAutoLayout = hasLayoutMode(parent);
+
+  if (children.length === 1) await transferMinMaxAsync(container, children[0]);
+
   for (var i = 0; i < children.length; i++) {
     var c = children[i];
     parent.insertChild(idx + i, c);
@@ -171,6 +244,7 @@ function unwrapContainer(container) {
 }
 
 function canMerge(parent, child) {
+  if (!isAlive(parent) || !isAlive(child)) return false;
   if (!isContainer(parent) || !isContainer(child)) return false;
   if (parent.children.length !== 1 || parent.children[0] !== child) return false;
   if (child.children.length < 2) return false;
@@ -205,42 +279,59 @@ function copyLayoutPropSync(source, target, prop) {
 }
 
 async function mergeContainersAsync(parent, child) {
+  // Keep the outer frame: absorb the inner's padding/gap, lift its children, remove the inner.
+  // Promoting the inner used to drop a FILL/HUG frame onto the page and delete the selected outer.
   var varIds = [];
-  if (hasAnyPadding(parent)) {
+  if (hasAnyPadding(child) && !hasAnyPadding(parent)) {
     for (var i = 0; i < PADDING_PROPS.length; i++) {
       var p = PADDING_PROPS[i];
       if (p in child && p in parent) {
-        var vid = copyLayoutPropSync(parent, child, p);
+        var vid = copyLayoutPropSync(child, parent, p);
         if (vid) varIds.push({ prop: p, id: vid });
       }
     }
   }
-  if (hasAnySpacing(parent) && !hasAnySpacing(child) && 'itemSpacing' in child) {
-    var vid = copyLayoutPropSync(parent, child, 'itemSpacing');
-    if (vid) varIds.push({ prop: 'itemSpacing', id: vid });
-    if ('counterAxisSpacing' in parent && 'counterAxisSpacing' in child)
-      copyLayoutPropSync(parent, child, 'counterAxisSpacing');
+  if (hasAnySpacing(child) && !hasAnySpacing(parent) && 'itemSpacing' in parent) {
+    var vidSp = copyLayoutPropSync(child, parent, 'itemSpacing');
+    if (vidSp) varIds.push({ prop: 'itemSpacing', id: vidSp });
+    if ('counterAxisSpacing' in child && 'counterAxisSpacing' in parent)
+      copyLayoutPropSync(child, parent, 'counterAxisSpacing');
   }
 
   for (var j = 0; j < varIds.length; j++) {
     var v = await figma.variables.getVariableByIdAsync(varIds[j].id);
-    if (v && child.setBoundVariable) child.setBoundVariable(varIds[j].prop, v);
+    if (v && parent.setBoundVariable) parent.setBoundVariable(varIds[j].prop, v);
   }
 
-  var grandparent = parent.parent;
-  if (!grandparent) return;
-  var idx = grandparent.children.indexOf(parent);
-  if (hasLayoutMode(grandparent) && 'layoutAlign' in parent && 'layoutAlign' in child) {
-    child.layoutAlign = parent.layoutAlign;
-    if ('layoutGrow' in parent && 'layoutGrow' in child) child.layoutGrow = parent.layoutGrow;
-    if ('layoutPositioning' in parent && 'layoutPositioning' in child) child.layoutPositioning = parent.layoutPositioning;
+  await transferMinMaxAsync(child, parent);
+
+  var idx = parent.children.indexOf(child);
+  var grandkids = child.children.slice();
+  for (var g = 0; g < grandkids.length; g++) {
+    parent.insertChild(idx + g, grandkids[g]);
   }
-  grandparent.insertChild(idx, child);
-  parent.remove();
+  child.remove();
+}
+
+function resolveRoots(selection, survivorByRemovedId) {
+  var roots = [];
+  for (var i = 0; i < selection.length; i++) {
+    var n = selection[i];
+    if (isAlive(n)) {
+      roots.push(n);
+      continue;
+    }
+    var survivor = survivorByRemovedId[n && n.id];
+    while (survivor && survivor.removed && survivorByRemovedId[survivor.id]) {
+      survivor = survivorByRemovedId[survivor.id];
+    }
+    if (isAlive(survivor)) roots.push(survivor);
+  }
+  return uniqueAlive(roots);
 }
 
 async function runNormalize(selection) {
-  var nodes = recursive ? collectDescendants(selection) : selection.slice();
+  var nodes = recursive ? collectDescendants(selection) : uniqueAlive(selection);
   var toMerge = [];
   for (var i = 0; i < nodes.length; i++) {
     var n = nodes[i];
@@ -253,28 +344,32 @@ async function runNormalize(selection) {
   toMerge = [];
   for (var s = 0; s < sorted.length; s++) {
     var p = sorted[s];
-    if (p.parent && p.children.length === 1 && canMerge(p, p.children[0]))
+    if (isAlive(p) && p.parent && p.children.length === 1 && canMerge(p, p.children[0]))
       toMerge.push({ parent: p, child: p.children[0] });
   }
 
+  var survivorByRemovedId = {};
   for (var k = 0; k < toMerge.length; k++) {
     var pair = toMerge[k];
-    if (!pair.parent.parent || pair.parent.children.length !== 1) continue;
+    if (!isAlive(pair.parent) || !pair.parent.parent || pair.parent.children.length !== 1) continue;
+    var survivor = pair.parent;
+    var removedId = pair.child.id;
     await mergeContainersAsync(pair.parent, pair.child);
+    survivorByRemovedId[removedId] = survivor;
   }
 
-  return runRemove(selection);
+  return runRemove(resolveRoots(selection, survivorByRemovedId));
 }
 
-function runRemove(selection) {
-  var nodes = recursive ? collectDescendants(selection) : selection.slice();
+async function runRemove(selection) {
+  var nodes = recursive ? collectDescendants(selection) : uniqueAlive(selection);
   var redundant = nodes.filter(isRedundantContainer);
   var targets = sortDeepestFirst(redundant);
   var count = 0;
   for (var i = 0; i < targets.length; i++) {
     var t = targets[i];
-    if (t.parent && isRedundantContainer(t)) {
-      unwrapContainer(t);
+    if (isAlive(t) && t.parent && isRedundantContainer(t)) {
+      await unwrapContainerAsync(t);
       count++;
     }
   }
@@ -285,20 +380,14 @@ var sel = figma.currentPage.selection;
 if (sel.length === 0) {
   figma.notify('Select at least one node');
 } else {
-  try {
-    if (normalize) {
-      runNormalize(sel).then(function (count) {
-        figma.notify('Normalized and removed ' + count + ' redundant container(s)');
-      }).catch(function (err) {
-        figma.notify('Error: ' + (err && err.message ? err.message : String(err)));
-        console.error('remove-unnecessary-nesting:', err);
-      });
-    } else {
-      var count = runRemove(sel);
-      figma.notify('Removed ' + count + ' redundant container(s)');
-    }
-  } catch (err) {
+  var work = normalize ? runNormalize(sel) : runRemove(sel);
+  work.then(function (count) {
+    figma.notify(
+      (normalize ? 'Normalized and removed ' : 'Removed ') +
+      count + ' redundant container(s)'
+    );
+  }).catch(function (err) {
     figma.notify('Error: ' + (err && err.message ? err.message : String(err)));
     console.error('remove-unnecessary-nesting:', err);
-  }
+  });
 }

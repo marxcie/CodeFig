@@ -58,12 +58,12 @@
     "tooltip": "",
     "inputType": "list",
     "placeholder": "400, 600",
-    "helper": "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold."
+    "helper": "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold. For a variable font, 450:Regular writes 450 and names the style Regular."
   },
   {
     "type": "field",
     "name": "createStyles",
-    "value": false,
+    "value": true,
     "label": "Create and update text styles",
     "labelSpelled": true,
     "tooltip": "",
@@ -72,12 +72,44 @@
   {
     "type": "field",
     "name": "styleNaming",
-    "value": "",
+    "value": "{$fontScale}/{$fontWeight}",
     "label": "Style naming",
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "string",
-    "placeholder": "eg.: Typography/{$fontScale}/{$fontWeight}"
+    "placeholder": "eg.: text/{$fontScale}/{$fontWeight}",
+    "helper": "{$fontScale} and {$fontWeight} become the token and weight names. Add a folder with a prefix, e.g. text/{$fontScale}/{$fontWeight}.",
+    "fillIfEmpty": "{$fontScale}/{$fontWeight}",
+    "showWhenRules": [
+      {
+        "field": "createStyles",
+        "values": [
+          "true"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "textWrapStyle",
+    "value": "AUTO",
+    "label": "Text wrap style",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "radio",
+    "options": [
+      "AUTO:Auto",
+      "BALANCE:Balance",
+      "PRETTY:Pretty"
+    ],
+    "showWhenRules": [
+      {
+        "field": "createStyles",
+        "values": [
+          "true"
+        ]
+      }
+    ]
   },
   {
     "type": "divider",

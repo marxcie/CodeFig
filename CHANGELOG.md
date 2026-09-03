@@ -19,6 +19,10 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+## [2.0.0] - TBD
+
+**Foundations.** Generational config UX: `@PANEL_START` as live `var __codefigPanel = {…}` (values stay in `@CONFIG_*` / `@UI_CONFIG_*`); Configuration code tab removed. Script storage in Figma Variables with LocalStorage backup, settings gear, and canvas paste-share. Foundation maintain on open; copy/duplicate → new stamp identity. Design System Foundations open empty until a collection is chosen; ramp scripts scan for the group when none is recorded. Scoped preview CSS on DSF libraries (plans 29–32). Help rewritten as onboarding; utilities regrouped; Change case and nesting cleanup expanded.
+
 ### Added
 
 - **Spacing / Corner radius / Typography Scale chart tip.** Hovering or dragging the growth
@@ -28,6 +32,27 @@ a plain statement of the new default.
 
 ### Changed
 
+- **Typography** now creates and updates text styles by default, with **Style naming** filled as
+  `{$fontScale}/{$fontWeight}` (add a folder prefix if you want). **Font weights** accept
+  `450:Regular` so a variable-font number can keep a Regular / Semibold name. The panel adds a
+  **Text wrap style** radio (`Auto`, `Balance`, `Pretty`); the font is loaded before wrap style is
+  applied, so a run no longer stops after the first style.
+- **Help: when to use `@UI_CONFIG` vs `@CONFIG`.** Writing a script now says: flat `var`s for a few
+  separate settings; an object under `@CONFIG` when the body takes one nested config (Foundations).
+  The form treats both the same.
+- **Sidebar default width is 280px** (was 240px). Search + script list still resize between 200–400px.
+- **Change case** panel is Target (canvas / styles-and-variables / optional collection) then General
+  (case style, scope, recursive). Recursive stays visible for every target mix.
+- **Change case** expands beyond frames and groups. Tick Canvas targets (component names, variant
+  labels/values, layer names) and/or Styles and variables (variable names, style groups, style
+  names). Scope is Selection / This page / All pages for canvas only. Case style adds hyphenated
+  and ALL CAPS forms; the camelCase label is `camelCase`. Variables use one collection, optional
+  group, and Recursive (target + children). Collisions are skipped and reported.
+- **Help & documentation is CodeFig onboarding.** Overview, getting started, writing a script,
+  three roles, library catalogue (each library’s DOC title), shipped-script catalogue (display name
+  + DOC title), and common patterns come first. Style & UI reference stays last. Configuration UI
+  opens with a specimen intro; the unsupported nested-object demo explains what that empty control
+  means. Library API detail stays on each library’s Documentation tab.
 - **`@PANEL_START` is a live JS object.** Shipped panels use `var __codefigPanel = { blocks: […] }`
   between the markers so Source syntax-highlights the recipe. The old `//`-commented JSON form
   still parses (saved scripts). Panel regions sit at top level — not inside the `@CONFIG` object.
@@ -36,38 +61,54 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Config block blank lines.** Editing a Configuration UI field no longer stacks empty lines
+  under `// @CONFIG_START` on every save (Colors and other object-config scripts).
+- **Change case** Collection / Group only appear when **Variable names** is ticked (not for Style
+  groups / Style names). Multiselect `@showWhen` now tests membership in the ticked list.
+- **Change case** Variant labels now rename every component property name (BOOLEAN / TEXT /
+  INSTANCE_SWAP as well as VARIANT). `Icon: False` was left alone before because only VARIANT
+  properties were edited; boolean true/false display casing is still Figma's and not renameable.
+- **Change case** missed component sets on dense pages. The layer scan stopped at 15 000 nodes
+  (mostly instances), before any `COMPONENT_SET` was reached. It now keeps only rename targets
+  while walking, so Component names / Variant labels / values work on pages like a DS inventory.
+- **Change case** multiselect ticks no longer snap back. The Collection field was named
+  `collectionName`, which the Configuration UI treats as a Design System Foundations address — the
+  first tick looked like a collection change and rebuilt the form from defaults.
+- **Help Configuration UI no longer lists every specimen field as blank.** Docs examples that
+  contained `// // @UI_CONFIG_START` fooled `extractSection` via `indexOf`; extraction now uses the
+  line-anchored regex match index. Marker position finds for DOC/CONFIG splice use the same rule.
+- **Remove unnecessary nesting no longer crashes after Normalize.** Merging the selected frame
+  away left a dead node in the selection; the follow-up Remove pass then threw
+  `get_children: The node … does not exist`. Survivors are tracked and min/max width/height
+  (including variable bindings) move onto the remaining container when unwrapping or merging.
+- **Normalize keeps the outer frame.** It used to delete the outer and promote the inner, which
+  could drop a `FILL` child onto the page and make the section vanish. Gap/padding now merge onto
+  the outer; the inner wrapper is removed.
+- **InfoPanel clears when you open another script.** Results belong to the script that produced
+  them; switching no longer leaves the last run open under a "from …" note.
 - **Spacing no longer loads ungrouped radius tokens as spacing.** Discovery uses stamp domain
   first, then Figma scopes (`CORNER_RADIUS` vs `GAP`/`WIDTH_HEIGHT`), then an exact Description
   match (`Corner radius` / `Spacing`). No token-name guessing. Generate writes that Description
   only when empty (human edits are left alone).
-
 - **Spacing / Corner radius seed empty sibling modes from the first filled mode.** When Desktop
   (or the first mode written) has a value and Tablet/Mobile are still empty or `0` — typical when
   those mode blocks were left incomplete and skipped — they receive the first mode's value. Modes
   that already hold a non-zero value are not overwritten.
-
 - **Colors: new collection no longer clears Color tokens on blur.** Naming a new collection
   starts a read that finds nothing; when that miss landed it re-applied empty defaults and wiped
   steps typed (or committed) while the read was in flight — ramp appeared, then vanished on click
   away. Miss wipe is skipped when Collection/Group settle already reset the address.
-
 - **DSF Mode settings gates differ by script.** Spacing / Typography / Corner radius / Colors
   open Mode settings only with a **named collection** (existing or New collection + name) **and
   Tokens**. Grid opens Mode settings, suggestions, and Preview once a collection is named —
   choosing *New collection* alone no longer pre-fills Width/Columns or shows suggestions.
   Collection modes chips can still unlock earlier via a seeded Value mode.
-
 - **New collection unlocks Collection modes on every DSF panel.** Choosing *New collection*
   (even before typing a name) seeds a renameable **Value** mode. Colors chips no longer wait on
   Color tokens (Mode settings still do). Address reset no longer writes empty `modes: []` back
   over that starter.
-
 - **Preview-snippet test slice** updated so New-collection unlock helpers after
   `pristineConfigForAddress` do not fail the “address change leaves no trace” guard.
-
-## [2.0.0] - TBD
-
-**Foundations.** Generational config UX: JSON `@PANEL_START` panel recipes (values stay in `@CONFIG_*`); Configuration code tab removed. Script storage in Figma Variables with LocalStorage backup, settings gear, and canvas paste-share. Foundation maintain on open; copy/duplicate → new stamp identity. Design System Foundations open empty until a collection is chosen; ramp scripts scan for the group when none is recorded. Scoped preview CSS on DSF libraries (plans 29–32).
 
 ### Removed
 

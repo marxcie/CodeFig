@@ -37,9 +37,10 @@
 // | **Group within collection**<br>`group` | Prefix used to group variables. Empty means the collection root. |
 // | **Tokens**<br>`fontScale` | Token names from smallest to largest. A series works: `heading-{1,6}`, and it can mix with names you write. |
 // | **Font family**<br>`fontFamily` | Font family name, e.g. `Inter`. |
-// | **Font weights**<br>`fontWeights` | A number is a weight (`400`). A word is a Figma style name, e.g. `Semi Bold`. |
-// | **Create and update text styles**<br>`createStyles` | When on, creates and updates text styles bound to the variables. |
-// | **Style naming**<br>`styleNaming` | Naming pattern for text styles, e.g. `Typography/{$fontScale}/{$fontWeight}`. |
+// | **Font weights**<br>`fontWeights` | A number is a weight (`400`). A word is a Figma style name, e.g. `Semi Bold`. `450:Regular` writes 450 and names the style Regular. |
+// | **Create and update text styles**<br>`createStyles` | When on, creates and updates text styles bound to the variables. On by default. |
+// | **Style naming**<br>`styleNaming` | Pattern for each text style. Defaults to `{$fontScale}/{$fontWeight}`. A prefix puts them in a folder, e.g. `text/{$fontScale}/{$fontWeight}`. |
+// | **Text wrap style**<br>`textWrapStyle` | How text styles wrap multi-line text: Auto, Balance, or Pretty. |
 // | **Generate overview**<br>`generateOverview` | When on, creates a typography overview on the canvas: one specimen tile per text style, grouped by weight. Off by default. |
 // | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
 // | **Scale type**<br>`modes[].scaleType` | Bezier, Metric, or Fibonacci for this mode. |
@@ -101,6 +102,43 @@ function materializeFontSizes(config) {
   config.fontSizes = resolveFontSizes(config);
 }
 
+function typographyWeightIsNumber(text) {
+  return /^-?\d+(\.\d+)?$/.test(String(text == null ? '' : text).trim());
+}
+
+/**
+ * One Font weights term: a number, a Figma style name, or `450:Regular`.
+ *
+ * The map key is what styles and variable names show. The value is what Figma stores — a number is a
+ * FONT_WEIGHT axis, a word is a FONT_STYLE name. `450:Regular` (or `Regular:450`) is the variable-font
+ * case: write 450, name the style Regular.
+ */
+function typographyParseWeightEntry(entry) {
+  if (entry === null || entry === undefined || entry === '') return null;
+  var text = String(entry).trim();
+  if (!text) return null;
+  var colon = text.indexOf(':');
+  if (colon !== -1) {
+    var left = text.slice(0, colon).trim();
+    var right = text.slice(colon + 1).trim();
+    if (left && right) {
+      if (left === right) {
+        return typographyWeightIsNumber(left)
+          ? { name: left, value: Number(left) }
+          : { name: left, value: left };
+      }
+      if (typographyWeightIsNumber(left) && !typographyWeightIsNumber(right)) {
+        return { name: right, value: Number(left) };
+      }
+      if (typographyWeightIsNumber(right) && !typographyWeightIsNumber(left)) {
+        return { name: left, value: Number(right) };
+      }
+    }
+  }
+  if (typographyWeightIsNumber(text)) return { name: text, value: Number(text) };
+  return { name: text, value: text };
+}
+
 /**
  * The panel's spelling of the font weights: a comma list, where a number is a weight and a word is a
  * Figma font style name.
@@ -109,6 +147,8 @@ function materializeFontSizes(config) {
  * supported, as a map from a name to either. So the list is promoted into that map rather than the
  * generator learning a second shape: `[400, "Semi Bold"]` becomes
  * `{ "400": 400, "Semi Bold": "Semi Bold" }`, and the style path reads `Typography/Heading-1/400`.
+ *
+ * `450:Regular` becomes `{ Regular: 450 }`, so the variable holds 450 and the style is named Regular.
  *
  * **A string is read as that same list.** Every other shape here is enumerated with `Object.keys`, and
  * a string enumerates as its character *indices* — so a quoted value in the config block generated a
@@ -124,20 +164,15 @@ function typographyPromoteFontWeights(config) {
     config.fontWeights = config.fontWeights
       .replace(/^\s*\{/, '').replace(/\}\s*$/, '')
       .split(',')
-      .map(function (item) {
-        var pair = item.split(':');
-        if (pair.length !== 2) return item;
-        return pair[0].trim() === pair[1].trim() ? pair[0] : item;
-      });
+      .map(function (item) { return String(item).trim(); })
+      .filter(function (item) { return !!item; });
   }
   if (!Array.isArray(config.fontWeights)) return;
   var out = {};
   config.fontWeights.forEach(function (entry) {
-    if (entry === null || entry === undefined || entry === '') return;
-    var text = String(entry).trim();
-    if (!text) return;
-    var asNumber = Number(text);
-    out[text] = isFinite(asNumber) && text !== '' && /^-?\d+(\.\d+)?$/.test(text) ? asNumber : text;
+    var parsed = typographyParseWeightEntry(entry);
+    if (!parsed) return;
+    out[parsed.name] = parsed.value;
   });
   config.fontWeights = out;
 }
@@ -150,10 +185,14 @@ function typographyPromoteFontWeights(config) {
  * untouched.
  */
 function typographyPromoteStyleFields(config) {
-  if (config.createStyles === undefined && config.styleNaming === undefined) return;
+  if (config.createStyles === undefined && config.styleNaming === undefined && config.textWrapStyle === undefined) return;
   var styles = (config.figmaStyles && typeof config.figmaStyles === 'object') ? config.figmaStyles : {};
   if (config.createStyles !== undefined) styles.createAndUpdateStyles = config.createStyles === true;
+  if (config.createStyles === true && (!config.styleNaming || !String(config.styleNaming).trim())) {
+    config.styleNaming = '{$fontScale}/{$fontWeight}';
+  }
   if (typeof config.styleNaming === 'string' && config.styleNaming) styles.styleNaming = config.styleNaming;
+  if (typeof config.textWrapStyle === 'string' && config.textWrapStyle) styles.textWrapStyle = config.textWrapStyle;
   config.figmaStyles = styles;
 }
 
@@ -252,8 +291,9 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
   fontScale: [],
   fontFamily: "",
   fontWeights: [],
-  createStyles: false,
-  styleNaming: "",
+  createStyles: true,
+  styleNaming: "{$fontScale}/{$fontWeight}",
+  textWrapStyle: "AUTO",
   generateOverview: false,
   modes: [],
   overviewPreviewText: ""
@@ -276,10 +316,16 @@ var __codefigPanel = {
       placeholder: "eg.: Inter Tight" },
     { key: "fontWeights", type: "list", label: "Font weights",
       placeholder: "400, 600",
-      helper: "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold." },
+      helper: "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold. For a variable font, 450:Regular writes 450 and names the style Regular." },
     { key: "createStyles", type: "boolean", label: "Create and update text styles" },
     { key: "styleNaming", type: "string", label: "Style naming",
-      placeholder: "eg.: Typography/{$fontScale}/{$fontWeight}" },
+      placeholder: "eg.: text/{$fontScale}/{$fontWeight}",
+      helper: "{$fontScale} and {$fontWeight} become the token and weight names. Add a folder with a prefix, e.g. text/{$fontScale}/{$fontWeight}.",
+      fillIfEmpty: "{$fontScale}/{$fontWeight}",
+      showWhen: { createStyles: true } },
+    { key: "textWrapStyle", type: "radio", label: "Text wrap style",
+      options: [{ AUTO: "Auto" }, { BALANCE: "Balance" }, { PRETTY: "Pretty" }],
+      showWhen: { createStyles: true } },
     { type: "divider", section: true },
     { type: "heading", text: "Mode settings",
       showWhen: { collectionName: "*", fontScale: "*" } },
@@ -855,25 +901,41 @@ async function createOrUpdateCollection(config) {
   return Promise.resolve(finishTypographySummary(styleStats));
 }
 
+async function loadFontForTextStyle(textStyle) {
+  var fontName = textStyle && textStyle.fontName;
+  if (!fontName || fontName === figma.mixed) return false;
+  try {
+    await figma.loadFontAsync(fontName);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Function to create or update text styles using the variables
 function createOrUpdateTextStyles(config, collection) {
   var stats = {created: 0, updated: 0};
   return figma.getLocalTextStylesAsync().then(async function(existingStyles) {
   var variableList = await Promise.all(collection.variableIds.map(function(id) { return figma.variables.getVariableByIdAsync(id); }));
-  try {
-    config.config.fontScale.forEach(function(scaleName) {
-      Object.keys(config.config.fontWeights).forEach(function(weightName) {
+  var wrapStyle = getFigmaStyles(config.config).textWrapStyle;
+  var scaleNames = config.config.fontScale;
+  var weightNames = Object.keys(config.config.fontWeights);
+  for (var si = 0; si < scaleNames.length; si++) {
+    var scaleName = scaleNames[si];
+    for (var wi = 0; wi < weightNames.length; wi++) {
+      var weightName = weightNames[wi];
+      try {
         var styleName = (getFigmaStyles(config.config).styleNaming || '{$fontScale}/{$fontWeight}')
           .replace('{$fontScale}', scaleName)
           .replace('{$fontWeight}', weightName);
-        
+
         var existingStyle = existingStyles.find(function(style) {
           return style.name === styleName;
         });
-        
+
         var textStyle;
         var action;
-        
+
         if (existingStyle) {
           textStyle = existingStyle;
           action = 'updated';
@@ -884,20 +946,20 @@ function createOrUpdateTextStyles(config, collection) {
           action = 'created';
           stats.created++;
         }
-        
+
         var prefix = namePrefix(resolveGroup(config));
         var fontSizeVar = variableList.find(function(v) { return v && v.name === prefix + scaleName + '/font-size'; });
-        
+
         var lineHeightVar = variableList.find(function(v) { return v && v.name === prefix + scaleName + '/line-height'; });
-        
+
         var letterSpacingVar = variableList.find(function(v) { return v && v.name === prefix + scaleName + '/letter-spacing'; });
-        
+
         var fontWeightVar = variableList.find(function(v) { return v && v.name === prefix + 'font-weight/' + weightName; });
-          
+
         var fontStyleVar = variableList.find(function(v) { return v && v.name === prefix + 'font-style/' + weightName; });
-        
+
         var fontFamilyVar = variableList.find(function(v) { return v && v.name === prefix + 'font-family/primary'; });
-        
+
         // Apply variables to the text style
         if (fontSizeVar) {
           textStyle.setBoundVariable('fontSize', fontSizeVar);
@@ -908,7 +970,7 @@ function createOrUpdateTextStyles(config, collection) {
         if (letterSpacingVar) {
           textStyle.setBoundVariable('letterSpacing', letterSpacingVar);
         }
-        
+
         // Bind font weight (numeric) or font style (string) variable
         if (fontWeightVar) {
           textStyle.setBoundVariable('fontWeight', fontWeightVar);
@@ -918,7 +980,7 @@ function createOrUpdateTextStyles(config, collection) {
           var fontStyleValue = config.config.fontWeights[weightName];
           console.log('Font style variable found for ' + styleName + ': ' + fontStyleValue);
         }
-        
+
         if (fontFamilyVar) {
           try {
             textStyle.setBoundVariable('fontFamily', fontFamilyVar);
@@ -928,19 +990,30 @@ function createOrUpdateTextStyles(config, collection) {
           }
         }
 
+        if (typeof wrapStyle === 'string' && wrapStyle) {
+          // Setting wrap style writes into the style's type properties, which Figma refuses
+          // until the current font is loaded — even when family/weight are bound to variables.
+          var loaded = await loadFontForTextStyle(textStyle);
+          if (loaded) {
+            textStyle.textWrapStyle = wrapStyle;
+          } else {
+            console.warn('Could not set text wrap style on ' + styleName + ': font is not loaded.');
+          }
+        }
+
         // Set style description (info) with scaling and rounding
         if (typeof textStyle.description !== 'undefined') {
           textStyle.description = getStyleDescription(config.config);
         }
-        
+
         console.log('Text style ' + action + ': ' + styleName);
-      });
-    });
-  } catch (error) {
-    console.error('Error creating text styles:', error);
-    figma.notify('Error creating text styles. Font may not be available.');
+      } catch (error) {
+        console.error('Error creating text styles:', error);
+        figma.notify('Error creating text styles. Font may not be available.');
+      }
+    }
   }
-  
+
   return stats;
   });
 }

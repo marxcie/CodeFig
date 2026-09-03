@@ -162,6 +162,60 @@ test('merge reads the form only; writeConfig splices Source', () => {
   assert.equal(/configCode/.test(write[0]), false);
 });
 
+test('config block splices strip leading newlines so saves do not stack blanks', () => {
+  // Both writers always insert one `\n` after the start marker. Without stripping a leading
+  // `\n` from the body (the marker line's own terminator, which serialize preserves), each
+  // form save grew another empty row under `@CONFIG_START`.
+  const merge = UI.match(
+    /function mergeConfigIntoMain\(\)[\s\S]*?const newCode = before \+ '\\n' \+ trimmed \+ '\\n' \+ after;/
+  );
+  assert.ok(merge, 'merge splice not found');
+  assert.match(merge[0], /configContent\.replace\(\/\^\\n\+\/, ''\)\.replace\(\/\\n\\s\*\$\/, ''\)/);
+
+  const write = UI.match(/function writeConfigBlockText\([\s\S]*?mainCode\.slice\(j\);/);
+  assert.ok(write, 'writeConfigBlockText splice not found');
+  assert.match(write[0], /text\.replace\(\/\^\\n\+\/, ''\)\.replace\(\/\\n\\s\*\$\/, ''\)/);
+
+  const P = require('../src/config-ui/parser.js');
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts/EXAMPLE_SCRIPTS/Design System Foundations/colors.js'),
+    'utf8'
+  );
+  const startMarker = '// @CONFIG_START';
+  const endMarker = '// @CONFIG_END';
+  const panel = (() => {
+    const a = source.indexOf('// @PANEL_START') + '// @PANEL_START'.length;
+    const b = source.indexOf('// @PANEL_END');
+    return source.slice(a, b);
+  })();
+
+  function splice(mainCode, edit) {
+    const i = mainCode.indexOf(startMarker);
+    const j = mainCode.indexOf(endMarker);
+    const blockNow = mainCode.slice(i + startMarker.length, j);
+    const schema = P.parse(blockNow, panel);
+    const values = Object.assign({}, P.parseConfigBlockObject(blockNow) || {}, edit || {});
+    const trimmed = P.serialize(schema, values).replace(/^\n+/, '').replace(/\n\s*$/, '');
+    return mainCode.slice(0, i + startMarker.length) + '\n' + trimmed + '\n' + mainCode.slice(j);
+  }
+
+  function leadingNewlines(mainCode) {
+    const i = mainCode.indexOf(startMarker);
+    const j = mainCode.indexOf(endMarker);
+    return (mainCode.slice(i + startMarker.length, j).match(/^\n*/) || [''])[0].length;
+  }
+
+  let code = source;
+  const initial = leadingNewlines(code);
+  for (let n = 0; n < 6; n++) code = splice(code, { group: 'round-' + n });
+  assert.equal(leadingNewlines(code), initial, 'repeated form saves must not grow blank lines');
+
+  const bloated = source.replace(startMarker + '\n', startMarker + '\n\n\n\n\n');
+  assert.ok(leadingNewlines(bloated) > initial);
+  assert.equal(leadingNewlines(splice(bloated, { group: 'healed' })), initial,
+    'one save must collapse blanks already stacked under the marker');
+});
+
 test('syncUIToCode always merges through the form path', () => {
   const fn = UI.match(/function syncUIToCode\(values\) \{[\s\S]*?\n      \}/);
   assert.ok(fn, 'syncUIToCode not found');

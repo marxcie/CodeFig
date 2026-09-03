@@ -43,3 +43,32 @@ test('a real marker on its own line still counts', () => {
   assert.equal(hasSection(code, '@CONFIG_START'), true);
   assert.match(extractSection(code, '@CONFIG_START', '@CONFIG_END'), /foo: 1/);
 });
+
+test('a Docs example with // // @UI_CONFIG_START does not steal the real values region', () => {
+  // Help used to embed a minimal sample that nested `// @UI_CONFIG_START` as a substring of
+  // `// // @UI_CONFIG_START`. indexOf(match[0]) sliced that example; every specimen field opened blank.
+  const { extractSection } = loadHasSection();
+  const code = [
+    '// @DOC_START',
+    '// Minimal shape:',
+    '// ```',
+    '// // @UI_CONFIG_START',
+    '// var dryRun = true;',
+    '// // @UI_CONFIG_END',
+    '// ```',
+    '// @DOC_END',
+    '',
+    '// @UI_CONFIG_START',
+    'var textField = "Sample";',
+    'var toggle = true;',
+    '// @UI_CONFIG_END',
+    '',
+    '// @PANEL_START',
+    'var __codefigPanel = { blocks: [] };',
+    '// @PANEL_END',
+  ].join('\n');
+  const values = extractSection(code, '@UI_CONFIG_START', '@UI_CONFIG_END');
+  assert.match(values, /textField/);
+  assert.match(values, /toggle/);
+  assert.doesNotMatch(values, /dryRun/);
+});

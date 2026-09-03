@@ -193,7 +193,7 @@ General tools (layout, selection, API). Style, variable, and cross-cutting utili
 
 | Script | Description |
 |--------|-------------|
-| **Change case** | Renames frames, groups, and component variant labels and values to lower, Capital, or camelCase. |
+| **Change case** | Renames canvas layers, components, variants, styles, and variables to a chosen case style (including hyphenated and ALL CAPS forms). |
 | **Comments to annotations** | Reads Figma comments via the REST API and converts them into annotations. Useful when duplicating designs across files, as comments don't carry over. The script preserves comment positions by creating hidden anchors (since comments are usually attached to the root frame, not individual elements). Requires a Read Comments API token. |
 | **Frame or auto layout selected** | Wraps (or unwraps) each selected layer in new frames or auto-layout containers individually. |
 | **Relink local instances** | Relinks instances to the canonical local component when several definitions share the same name. |

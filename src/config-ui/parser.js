@@ -1172,6 +1172,7 @@
     };
     if (block.placeholder) row.placeholder = block.placeholder;
     if (block.helper) row.helper = block.helper;
+    if (block.fillIfEmpty) row.fillIfEmpty = String(block.fillIfEmpty);
     // Dynamic lists (`@options: localVariableCollections`) are a string source name, not a
     // static option array — same split the one-liner path makes on `|`. A bare string in
     // `options` is that source; `optionSource` is accepted as an explicit spelling of the same

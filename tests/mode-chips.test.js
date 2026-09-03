@@ -782,6 +782,11 @@ test('the mode table is identified by document as well as collection', () => {
   const reset = select.slice(0, select.indexOf('infoPanelAvailable'));
   assert.match(reset, /fileModes = \{ document: null, collection: null, collectionId: null, modes: \[\], found: false \}/);
   assert.match(reset, /chipModeIds = \[\]/);
+  // InfoPanel results belong to the script that produced them — a switch clears them rather than
+  // leaving a "from …" note that still reads as this script's output.
+  assert.match(reset, /clearInfoPanelForScriptSwitch/);
+  assert.doesNotMatch(ui, /function updateInfoPanelOwnership/, 'ownership note path is gone');
+  assert.doesNotMatch(ui, /info-stale-note/, 'and so is its markup');
 });
 
 test('the structure sniff reads the editor and does not merge into it', () => {

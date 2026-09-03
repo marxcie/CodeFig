@@ -1152,13 +1152,23 @@
         if (!code || typeof code !== 'string') return '';
         const startPattern = sectionMarkerRe(startMarker);
         const endPattern = sectionMarkerRe(endMarker);
-        const startMatch = code.match(startPattern);
-        const endMatch = code.match(endPattern);
+        // Use the regex match indices — not indexOf(match[0]). A Docs example line like
+        // `// // @UI_CONFIG_START` contains the substring `// @UI_CONFIG_START`, so indexOf
+        // would slice the example instead of the real region (Help showed every field blank).
+        const startMatch = startPattern.exec(code);
+        const endMatch = endPattern.exec(code);
         if (!startMatch || !endMatch) return '';
-        const startIdx = code.indexOf(startMatch[0]) + startMatch[0].length;
-        const endIdx = code.indexOf(endMatch[0]);
+        const startIdx = startMatch.index + startMatch[0].length;
+        const endIdx = endMatch.index;
         if (startIdx >= endIdx) return '';
         return code.slice(startIdx, endIdx).replace(/^\s*\n|\n\s*$/g, '');
+      }
+
+      /** Index of a line-anchored `// @MARKER`, or -1. Same rule as extractSection. */
+      function sectionMarkerIndex(code, marker) {
+        if (!code || typeof code !== 'string') return -1;
+        const match = sectionMarkerRe(marker).exec(code);
+        return match ? match.index : -1;
       }
 
       /** True when the config block yields at least one form field (or fails to parse — still show the tab so the error note can land). */
@@ -1304,12 +1314,12 @@
         }
         const docContent = hasDocs ? extractDocContent(fullCode) : '';
         const configContent = hasConfig ? extractConfigSection(fullCode, hasUIConfig) : '';
-        const docStart = fullCode.indexOf('// @DOC_START');
-        const docEnd = fullCode.indexOf('// @DOC_END');
+        const docStart = sectionMarkerIndex(fullCode, '@DOC_START');
+        const docEnd = sectionMarkerIndex(fullCode, '@DOC_END');
         const configStartMarker = hasUIConfig ? '// @UI_CONFIG_START' : '// @CONFIG_START';
         const configEndMarker = hasUIConfig ? '// @UI_CONFIG_END' : '// @CONFIG_END';
-        const configStart = fullCode.indexOf(configStartMarker);
-        const configEnd = fullCode.indexOf(configEndMarker);
+        const configStart = sectionMarkerIndex(fullCode, hasUIConfig ? '@UI_CONFIG_START' : '@CONFIG_START');
+        const configEnd = sectionMarkerIndex(fullCode, hasUIConfig ? '@UI_CONFIG_END' : '@CONFIG_END');
         let preDoc = '';
         let postDocPreConfig = '';
         let postConfig = '';
@@ -1399,7 +1409,11 @@
         const configContent = window.CodeFigConfigUI.serialize(schema, configUIInstance.getValues(schema));
         const before = mainCode.slice(0, i + startMarker.length);
         const after = mainCode.slice(j);
-        const trimmed = configContent.replace(/\n\s*$/, '');
+        // The slice after the start marker includes that line's terminator (`\n`). Serialize keeps
+        // leading newlines verbatim, and we always write one `\n` after the marker below — so
+        // leaving the terminator in `trimmed` stacked a blank line on every form save (Colors
+        // grew a wall of empty rows after a few edits). Same strip `extractSection` already does.
+        const trimmed = configContent.replace(/^\n+/, '').replace(/\n\s*$/, '');
         const newCode = before + '\n' + trimmed + '\n' + after;
         if (newCode === mainCode) return;
 
@@ -2289,6 +2303,7 @@
         collectionCreating = false;
 
         debugLog('Selecting script:', script);
+        var switchingScript = !scriptListIsActive(script);
         currentScript = script;
 
         // **Clear the form first.** `projectConfigIntoForm` empties it when a config has no showable
@@ -2347,14 +2362,15 @@
         switchTab(initialTab);
         originalCode = fullCode;
         
-        // Check if this script uses @InfoPanel
         // A different script is a different question: what was edited about the last one is not an
         // edit to this one.
         setAutoImportNote(null);
 
+        // InfoPanel results belong to the script that produced them — clear on a real switch rather
+        // than leaving the last run under a "from …" note (that still read as this script's output).
+        if (switchingScript) clearInfoPanelForScriptSwitch();
         infoPanelAvailable = checkInfoPanelAvailability(script.code || '');
         updateInfoPanelButtonVisibility();
-        updateInfoPanelOwnership();
         // Preview cache was already cleared before the form build — do not bump `_previewSeq`
         // again here, or a scheduleConfigPreview that already stamped a seq would be orphaned.
         updateConfigPreviewVisibility();
@@ -3332,8 +3348,9 @@
         var i = mainCode.indexOf(startMarker);
         var j = mainCode.indexOf(endMarker);
         if (i === -1 || j === -1 || j <= i) return;
+        // Strip leading newlines: see mergeConfigIntoMain — same splice, same stack-on-save bug.
         var next = mainCode.slice(0, i + startMarker.length) + '\n' +
-          text.replace(/\n\s*$/, '') + '\n' + mainCode.slice(j);
+          text.replace(/^\n+/, '').replace(/\n\s*$/, '') + '\n' + mainCode.slice(j);
         if (next === mainCode) return;
         code.setValue(next);
 
@@ -4675,25 +4692,28 @@
       let _infoPanelScript = null;
 
       /**
-       * Say when the panel is showing someone else's results.
+       * Drop InfoPanel contents when leaving the script that produced them.
        *
-       * Clearing on every script switch is the other option, and it is worse: results you were
-       * comparing against vanish because you looked at another script. Naming the source keeps
-       * them and removes the ambiguity, which is the actual complaint.
+       * Results used to travel with a "Showing results from …" note. That still read as the open
+       * script's output. The panel is per-script: close it, reset the title, and leave the empty
+       * placeholder until this script runs.
        */
-      function updateInfoPanelOwnership() {
-        const existing = document.getElementById('info-stale-note');
-        if (existing) existing.remove();
-        if (!_infoPanelScript || !currentScript) return;
-        if (_infoPanelScript === currentScript.name) return;
-        if (!infoContent || !infoContent.firstChild) return;
-
-        const note = document.createElement('div');
-        note.id = 'info-stale-note';
-        note.className = 'info-stale-note';
-        note.textContent = 'Showing results from ' + _infoPanelScript +
-          '. You are now on ' + currentScript.name + ' — run it to replace these.';
-        infoContent.insertBefore(note, infoContent.firstChild);
+      function clearInfoPanelForScriptSwitch() {
+        _infoPanelScript = null;
+        window.currentInfoData = null;
+        _codefigLastRunConsole = [];
+        _codefigConsoleDirty = true;
+        if (infoPanelOpen) {
+          infoPanelOpen = false;
+          infoPanel.classList.remove('open');
+          infoPanelBtn.classList.remove('active');
+        }
+        var infoTitle = document.querySelector('.info-title');
+        if (infoTitle) infoTitle.textContent = 'Results & Information';
+        if (infoContent) {
+          infoContent.innerHTML =
+            '<div class="info-placeholder"><p>No results yet. Run a script to see information here.</p></div>';
+        }
       }
 
       function displayInfoResults(data) {
@@ -4722,8 +4742,7 @@
           infoTitle.textContent = title;
         }
         
-        // Whose results these are. The panel outlives the script that filled it, so without this
-        // switching scripts leaves you reading the last one's output under the new one's name.
+        // Whose results these are — kept for readInfoPanel; cleared again on script switch.
         _infoPanelScript = currentScript ? currentScript.name : null;
 
         // Clear previous content

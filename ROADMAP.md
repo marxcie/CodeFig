@@ -1,10 +1,10 @@
 # CodeFig roadmap and status
 
 **One page that says where the project is.** Written for whoever picks it up next, in any tool.
-Last consolidated 2026-09-02: **Release 2.0 — Foundations** in exit sequence on `dsf-foundations`.
-Cornerstones landed. **Plan 37 stays pre-2.0:** lock panel syntax (`var __codefigPanel = {…}`),
-script/library clarity, and architecture before the tag. Visual UI polish may run in parallel or
-after; it must not leave the format undecided.
+Last consolidated 2026-09-02: **Release 2.0 — Foundations** on `dsf-foundations`.
+Cornerstones + Plan 37 syntax/cleanup landed (`a58d0fd`). **Do not tag 2.0.0 until Márton
+finishes an extensive testing round** — no `build:release`, no version bump, no changelog date
+until he says so. Visual UI polish may still parallel; it is not a release gate.
 
 Keep it current. If a plan's status changes, change it here too, in the same pass. A roadmap that
 lies is worse than none.
@@ -71,18 +71,21 @@ library vs CodeFigUI builder unambiguous. **May parallel or follow:** visual UI 
 
 **Exit gate (before `npm run build:release -- major` → 2.0.0):**
 
-1. ✅ `npm run validate && npm test` green (1305 tests, overnight 2026-09-01)
-2. ✅ `npm run build:production` pass
-3. ✅ `npm run build:style-reference` regenerated
-4. ⚠️ Figma click-verify — partial via `figma:ui`; see `artifacts/RELEASE-2.0-morning.md`. **Reload once** (disk one build ahead of open plugin).
-5. Changelog `[2.0.0] - TBD` — set date on tag
-6. ✅ DSF + test batch committed (`2371552` and prior on `dsf-foundations`)
-7. ✅ **Plan 37 — syntax:** `@PANEL_START` as `var __codefigPanel = { blocks: […] }` (Source
-   highlighting). Same IR; comment form kept readable during migration. Shipped panels + Help
-   migrated 2026-09-02. **Go-ahead 2026-09-02.**
-8. ✅ **Plan 37 — cleanup / architecture:** every shipped `@PANEL_START` uses the same Help-style
-   live object (`blocks:` bare keys). Teaching surfaces state runnable script vs library vs
-   CodeFigUI builder. Visual UI polish is not a blocker for this item.
+**Hold:** extensive manual testing round first. Do **not** bump to 2.0.0 or run `build:release`
+until Márton says so.
+
+1. ✅ `npm run validate && npm test` green on working tree 2026-09-03 (1345 pass; re-check on
+   the commit tip before tag — polish still uncommitted)
+2. ✅ `npm run build:production` pass (2026-09-03 working tree)
+3. ✅ `npm run build:style-reference` regenerated (2026-09-03)
+4. ⚠️ Figma click-verify — automated scripts green (`_verify-panel-object-form`,
+   `_verify-dsf-content-reveal`, cleaned `_verify-dsf-2.0`). **Formal sign-off waits on
+   Márton's testing round** (see `artifacts/RELEASE-2.0-morning.md`). Do not treat this as
+   closed until he says so.
+5. Changelog `[2.0.0] - TBD` — Unreleased polish folded in; set date **on tag only** (not before)
+6. ✅ DSF + Plan 37 committed on `dsf-foundations` (`2371552`, `a58d0fd`, and prior)
+7. ✅ **Plan 37 — syntax:** `@PANEL_START` as `var __codefigPanel = { blocks: […] }`
+8. ✅ **Plan 37 — cleanup / architecture:** Help-style bare keys; runnable vs library vs builder
 
 **Explicitly not in 2.0:** Colors dry-run; ramp recognition; library edit UX banner; HTML/JSX panel skin.
 
@@ -142,9 +145,12 @@ fork). Tied collisions still skipped.
 
 ## Next (priority)
 
-1. **Polish cluster** — Colors live dry-run; DSF/utility visual polish; curve acceptance + probes;
+1. **Extensive testing round (Márton)** — then tag 2.0.0 only when he says so.
+2. **Figma click-verify remaining** — Spacing mode conflict on Responsive System; Colors with
+   group + steps; DSF preview CSS eyeball. Automate what `figma:ui` can; leave the rest for the
+   testing round.
+3. **Polish cluster** — Colors live dry-run; DSF/utility visual polish; curve acceptance + probes;
    on-demand fit hang; fitter corners; other `DEFERRED.md` user-facing items.
-2. **Click-verify DSF previews** — after reload, confirm library `@STYLE_START` paints form + side preview.
 
 ## Done recently
 

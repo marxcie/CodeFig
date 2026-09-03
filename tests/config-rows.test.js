@@ -166,6 +166,27 @@ test('a static @multi list is a multiselect, not a text input', () => {
   assert.deepEqual(f.options, ['gap', 'margin', 'padding']);
 });
 
+test('multiselect @showWhen tests membership in the ticked list', () => {
+  // Change case gates Collection on `stylesAndVariables=Variable names`. Joining ticks as
+  // "Variable names,Style groups" and exact-matching that string hid the field whenever a second
+  // item was also ticked, and `*` opened it for Style groups alone.
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const renderer = fs2.readFileSync(
+    path2.join(__dirname, '..', 'src', 'config-ui', 'renderer.js'), 'utf8'
+  );
+  assert.match(
+    renderer,
+    /if \(Array\.isArray\(current\)\)/,
+    'conditionAccepts must accept a multiselect array by membership'
+  );
+  assert.match(
+    renderer,
+    /if \(Array\.isArray\(v\)\) return v\.map\(String\)/,
+    'conditionValueOf must keep multiselect arrays rather than joining them'
+  );
+});
+
 test('every control kind reaches onChange, not only the ones with data-field', () => {
   // `@rows` shipped able to render and unable to save. The delegated listeners tested for
   // `data-field`, which the rows cells, its Add/Remove and the collection picker deliberately omit —

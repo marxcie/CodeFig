@@ -564,6 +564,7 @@
       ti.className = "config-ui-input config-ui-input--text";
       ti.setAttribute("data-field", n);
       if (field.placeholder) ti.setAttribute("placeholder", field.placeholder);
+      if (field.fillIfEmpty) ti.setAttribute("data-fill-if-empty", field.fillIfEmpty);
       cw.appendChild(ti);
     }
     row.appendChild(cw);
@@ -4112,9 +4113,26 @@
    * One function, because the same question is asked in four places — field rows, headings, row cells and
    * the disabled state — and a vocabulary that means different things in each is worse than none.
    */
+  /**
+   * Does `current` satisfy this rule's allowed `values`?
+   *
+   * A multiselect's form value is an **array** of ticked labels. `@showWhen: field=Variable names`
+   * must mean "Variable names is among the ticks", not "the joined string equals Variable names" —
+   * otherwise Collection gated on one item in a list never opens once a second item is also ticked,
+   * and Style groups alone wrongly opened it when the gate was `*`.
+   */
   function conditionAccepts(values, current) {
     if (!values || !values.length) return true;
-    if (values.indexOf("*") !== -1) return String(current == null ? "" : current) !== "";
+    if (values.indexOf("*") !== -1) {
+      if (Array.isArray(current)) return current.length > 0;
+      return String(current == null ? "" : current) !== "";
+    }
+    if (Array.isArray(current)) {
+      for (var i = 0; i < values.length; i++) {
+        if (current.indexOf(values[i]) !== -1) return true;
+      }
+      return false;
+    }
     return values.indexOf(current) !== -1;
   }
 
@@ -5186,6 +5204,30 @@
       return vals;
     }
 
+    /**
+     * Fill an empty field the moment it appears. `fillIfEmpty` is the value to write when the row
+     * goes from hidden to shown (or on first paint) and the input is still blank — not on every
+     * visibility pass, or clearing the field would be impossible.
+     */
+    function fillEmptyOnReveal() {
+      container.querySelectorAll("[data-fill-if-empty]").forEach(function (el) {
+        var row = el.closest(".config-ui-row");
+        if (!row) return;
+        var hidden = row.style.display === "none";
+        var primed = row.getAttribute("data-fill-primed") === "true";
+        if (hidden) {
+          row.setAttribute("data-fill-hidden", "true");
+          return;
+        }
+        var revealed = row.getAttribute("data-fill-hidden") === "true";
+        if ((!primed || revealed) && !el.value) {
+          el.value = el.getAttribute("data-fill-if-empty") || "";
+        }
+        row.removeAttribute("data-fill-hidden");
+        row.setAttribute("data-fill-primed", "true");
+      });
+    }
+
     function applyVisibility() {
       var vals = getValues();
       /**
@@ -5199,6 +5241,7 @@
        */
       function showWhenValueStr(v) {
         // A token list is an array in the form; `*` means "at least one name", not `String([])`.
+        // Prefer passing arrays through `conditionValueOf` — joining here loses membership tests.
         if (Array.isArray(v)) return v.length > 0 ? v.join(",") : "";
         return v === undefined || v === null ? "" : String(v);
       }
@@ -5213,7 +5256,10 @@
       var curveFields = curveFieldNames();
       function conditionValueOf(name) {
         if (curveFields[name]) return (vals[name] && vals[name].length) ? "curve" : "original";
-        return showWhenValueStr(vals[name]);
+        var v = vals[name];
+        // Multiselect: keep the array so `conditionAccepts` can test membership.
+        if (Array.isArray(v)) return v.map(String);
+        return showWhenValueStr(v);
       }
       function visRules(row) {
         var rs = row.getAttribute("data-show-when-rules");
@@ -5247,6 +5293,7 @@
         }
         row.style.display = v ? "" : "none";
       });
+      fillEmptyOnReveal();
       // Slots with no showWhen still need a pass after a rebuild / empty fill.
       container.querySelectorAll("[data-content-reveal]").forEach(function (row) {
         if (row.getAttribute("data-show-when-rules")) return;
@@ -5293,7 +5340,9 @@
               found = true;
             }
           }
-          var reading = found ? showWhenValueStr(seen) : conditionValueOf(field);
+          var reading = found
+            ? (Array.isArray(seen) ? seen.map(String) : showWhenValueStr(seen))
+            : conditionValueOf(field);
           if (!conditionAccepts(rules[i].values, reading)) return false;
         }
         return true;
@@ -5370,7 +5419,9 @@
               }
             }
             // Same reader as the `{…}` branch above, for the same reason.
-            var offReading = found ? showWhenValueStr(seen) : conditionValueOf(field);
+            var offReading = found
+              ? (Array.isArray(seen) ? seen.map(String) : showWhenValueStr(seen))
+              : conditionValueOf(field);
             if (!conditionAccepts(rules[i].values, offReading)) off = false;
           }
           el.classList.toggle("is-disabled", off);

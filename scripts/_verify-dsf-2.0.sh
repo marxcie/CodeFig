@@ -32,6 +32,12 @@ verify() {
   echo "--- form pristine ---" >> "$OUT"
   "${UI[@]}" readForm --json 2>&1 >> "$OUT" || true
 
+  # Clear Group before Collection so a leftover group from the previous script cannot
+  # pull the wrong domain's recorded set into this panel.
+  echo "--- clear group ---" >> "$OUT"
+  "${UI[@]}" setField "name=group" "value=" 2>&1 >> "$OUT" || true
+  sleep 1
+
   echo "--- set collection ---" >> "$OUT"
   "${UI[@]}" setField "name=collectionName" "value=$collection" 2>&1 >> "$OUT" || true
   sleep 5

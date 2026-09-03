@@ -409,7 +409,11 @@ test('a group part can depend on a field outside its row', () => {
   // The fallback, in the spelling it has now: the row scopes first, then the form. `conditionValueOf` is
   // the form-level reader rather than a raw `vals[field]`, because a **curve** field answers `original` or
   // `curve` — its coordinates match no condition anyone would write.
-  assert.match(R, /found \? showWhenValueStr\(seen\) : conditionValueOf\(field\)/,
+  // Multiselect values are arrays — keep membership tests; still fall back to conditionValueOf
+  // (form-level reader) when the field is not in any nearer scope.
+  assert.match(R, /Array\.isArray\(seen\) \? seen\.map\(String\) : showWhenValueStr\(seen\)/,
+    'a scoped array value is not stringified before the membership test');
+  assert.match(R, /: conditionValueOf\(field\)/,
     'a condition no longer falls back to the form');
   assert.match(R, /config-ui-rows-group"\)\.forEach\(function \(group\)/,
     'field-level groups are no longer swept, so a part condition inside one never evaluates');

@@ -5,7 +5,7 @@
 // ## Overview
 //
 // **Shipped Configuration UI panels** use `@PANEL_START`…`@PANEL_END` (`var __codefigPanel = { blocks: […] }` with bare keys)
-// plus a values block (`@UI_CONFIG_*` or `@CONFIG_*`). That is the authoring model for **runnable scripts** — see **Help & documentation** (Style & UI reference; three roles).
+// plus a values block (`@UI_CONFIG_*` or `@CONFIG_*`). That is the authoring model for **runnable scripts**. See **Help & documentation** (Writing a script → Two shapes for values; three roles; Style & UI reference at the end).
 //
 // This library's builder API (`section()`, `sendToUI()`, …) is for **forms built at run time**, not a replacement for `@PANEL_START`. A **library** (`@`-prefixed script) exports functions for `@import` and is not Run on its own.
 //
@@ -22,7 +22,9 @@
 //
 // ### Values blocks
 //
-// With `@PANEL_START`, `@UI_CONFIG_START`…`@UI_CONFIG_END` and `@CONFIG_START`…`@CONFIG_END` hold **values only**. Without a PANEL block, trailing annotations on each `var` line still drive a simple form:
+// With `@PANEL_START`, `@UI_CONFIG_*` and `@CONFIG_*` hold **values only**. Which marker: **Help &
+// documentation** → Writing a script → **Two shapes for values**. Without a PANEL block, trailing
+// annotations on each `var` line still drive a simple form:
 //
 // | Annotation | Effect |
 // |---|---|

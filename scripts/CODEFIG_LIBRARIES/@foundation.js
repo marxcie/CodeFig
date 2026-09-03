@@ -2317,7 +2317,7 @@ function foundationSliceKeys(domain) {
   // A field in a shipped default block is declared by definition — leave one out and the script warns
   // about its own untouched config the first time anyone runs it.
   if (domain === 'typography') {
-    return keys.concat(['fontFamily', 'createStyles', 'styleNaming', 'overviewPreviewText']);
+    return keys.concat(['fontFamily', 'createStyles', 'styleNaming', 'textWrapStyle', 'overviewPreviewText']);
   }
   // `light` and `dark` are the old declarative block's; `colorModel`, `curve` and `lightness` are the
   // panel's. A field in a shipped default block is declared by definition — leave one out and the script
@@ -2338,7 +2338,7 @@ function foundationDomainKeys(domain) {
   if (domain === 'radius') return common.concat(['radii']);
   if (domain === 'typography') {
     return common.concat(['fontScale', 'fontWeights', 'styles', 'figmaStyles', 'createStyles',
-      'styleNaming', 'overviewPreviewText']);
+      'styleNaming', 'textWrapStyle', 'overviewPreviewText']);
   }
   if (domain === 'grid') return common.concat(['extensionColumns']);
   if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
@@ -2593,14 +2593,15 @@ function foundationClone(value) {
 
 /**
  * `{ "400": 400, "Semi Bold": "Semi Bold" }` → `[400, "Semi Bold"]`.
+ * `{ Regular: 450 }` → `["450:Regular"]`.
  *
  * The panel's Font weights field is a comma list, and the generator promotes that list into a map
  * before it runs — so a map whose every key is its own value spelled out is a *list on its way home*,
  * not something anybody wrote. Handing it back as an object put `{ 400: 400 }` into a text field,
  * which came back out as a string and generated a text style per character.
  *
- * A map whose keys differ from its values is the legacy spelling — `{ Regular: 400 }`, a name for each
- * weight — and stays a map, because that naming is the whole of what it says.
+ * A map whose keys differ from its values is `number:Name` in that same list — `{ Regular: 450 }`
+ * is what `450:Regular` becomes on a run, and it has to come back as the term the field accepts.
  */
 function foundationFontWeightsForBlock(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return foundationClone(value);
@@ -2610,8 +2611,13 @@ function foundationFontWeightsForBlock(value) {
   for (var i = 0; i < keys.length; i++) {
     var entry = value[keys[i]];
     if (typeof entry !== 'number' && typeof entry !== 'string') return foundationClone(value);
-    if (String(entry) !== keys[i]) return foundationClone(value);
-    list.push(entry);
+    if (String(entry) === keys[i]) {
+      list.push(entry);
+    } else if (typeof entry === 'number') {
+      list.push(String(entry) + ':' + keys[i]);
+    } else {
+      return foundationClone(value);
+    }
   }
   return list;
 }
@@ -2838,6 +2844,7 @@ function buildDomainSlice(inner, domain, translations, warnings) {
     // way in would mean guessing which one the author meant when a config holds both.
     if (inner.createStyles !== undefined) slice.createStyles = !!inner.createStyles;
     if (typeof inner.styleNaming === 'string') slice.styleNaming = inner.styleNaming;
+    if (typeof inner.textWrapStyle === 'string') slice.textWrapStyle = inner.textWrapStyle;
     if (typeof inner.overviewPreviewText === 'string') {
       slice.overviewPreviewText = inner.overviewPreviewText;
     }
@@ -3042,6 +3049,7 @@ function toDomainConfig(v1, domain, options) {
   // config carries it — these are the flat two the panel writes.
   if (config.createStyles !== undefined) out.createStyles = config.createStyles;
   if (config.styleNaming !== undefined) out.styleNaming = foundationClone(config.styleNaming);
+  if (config.textWrapStyle !== undefined) out.textWrapStyle = foundationClone(config.textWrapStyle);
   if (config.overviewPreviewText !== undefined) {
     out.overviewPreviewText = foundationClone(config.overviewPreviewText);
   }

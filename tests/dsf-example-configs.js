@@ -51,6 +51,7 @@ module.exports = {
     fontWeights: [400, 600],
     createStyles: true,
     styleNaming: 'Typography/{$fontScale}/{$fontWeight}',
+    textWrapStyle: 'AUTO',
     generateOverview: false,
     modes: [{
       name: 'Value',

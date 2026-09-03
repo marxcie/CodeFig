@@ -116,6 +116,17 @@ test('typography.js: General fields start empty with placeholders until a collec
   const fontFamily = rows.find((r) => r.type === 'field' && r.name === 'fontFamily');
   assert.strictEqual(fontFamily.value, '');
 
+  const createStyles = rows.find((r) => r.type === 'field' && r.name === 'createStyles');
+  assert.strictEqual(createStyles.value, true);
+
+  const styleNaming = rows.find((r) => r.type === 'field' && r.name === 'styleNaming');
+  assert.strictEqual(styleNaming.value, '{$fontScale}/{$fontWeight}');
+  assert.strictEqual(styleNaming.placeholder, 'eg.: text/{$fontScale}/{$fontWeight}');
+
+  const textWrapStyle = rows.find((r) => r.type === 'field' && r.name === 'textWrapStyle');
+  assert.strictEqual(textWrapStyle.inputType, 'radio');
+  assert.strictEqual(textWrapStyle.value, 'AUTO');
+
   const group = rows.find((r) => r.type === 'field' && r.name === 'group');
   assert.strictEqual(group.value, '');
   assert.strictEqual(group.placeholder, 'eg.: Typography');

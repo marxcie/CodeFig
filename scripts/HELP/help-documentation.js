@@ -1,29 +1,41 @@
 // @Help & documentation
 // @DOC_START
-// # Documents CodeFig scripting: Documentation and Script tabs, imports, shortcuts, and the Style and UI reference
+// # Runs JavaScript in Figma for Variables, Styles, and design-system scripts you can customise
 //
 // ## Overview
 //
-// CodeFig runs plain JavaScript in the Figma plugin sandbox. Use the sidebar for Utility Scripts,
-// Design System Foundations, libraries, and your saved scripts.
+// CodeFig is a plugin that runs plain JavaScript inside Figma. Use it to rename and rebind Styles
+// and Variables at scale, generate Design System Foundations token sets, or write a small tool with
+// a settings form.
 //
-// Scripts can ship a Documentation tab (`@DOC_START`…`@DOC_END`, Markdown) and a Configuration UI
-// (`@PANEL_START` recipe plus `@UI_CONFIG_*` / `@CONFIG_*` values). Open this script's **Configuration UI**
-// for a live specimen of every control; sizes and tokens are under **Style & UI reference** below.
+// Open CodeFig from the plugin menu. The sidebar is the catalogue:
 //
-// ## Documentation tab
+// - **Utility Scripts:** ready-to-run tools for selection, styles, and variables
+// - **Design System Foundations:** Colors, Grid, Typography, Spacing, Corner radius
+// - **Libraries:** shared functions you import into your own scripts (names start with `@`)
+// - **Your scripts:** scripts you create, import, or save
 //
-// The block between `// @DOC_START` and `// @DOC_END` renders as Markdown.
+// Each script has up to three tabs. **Configuration UI** is the settings form. **Documentation**
+// explains what the script does. **Source** is the code. Run with the Run button or Cmd/Ctrl+R.
+// Results land in the InfoPanel when the script shows them; some scripts also write to the canvas.
 //
-// Supported: headings (`#`, `##`, `###`), **bold**, *italic*, `code`, lists (`- item`), and more.
+// This Help entry is the onboarding page: how to use CodeFig, how to write a script, which libraries
+// and shipped scripts exist. Open this script's **Configuration UI** for a live specimen of every
+// form control authors can build.
 //
-// Spacing: one newline between comment lines is a line break. A blank line or empty `//` starts a new
-// paragraph.
+// ## Getting started
 //
-// ## Script tab
+// 1. Pick a Utility Script or a Foundations script in the sidebar.
+// 2. Fill **Configuration UI**, or leave the defaults.
+// 3. Run. Read the InfoPanel or the canvas for what changed.
+// 4. Export a copy with Cmd/Ctrl+E when you want a file; edits to your own scripts auto-save.
 //
-// The main editor. Code must be valid JavaScript at run time (no TypeScript-only syntax). Run with
-// Cmd/Ctrl+R; changes auto-save. Use the sidebar to open scripts.
+// New script: Cmd/Ctrl+N. Import someone else's JSON: Cmd/Ctrl+I. Code must be plain JavaScript at
+// run time (no TypeScript-only syntax).
+//
+// To learn a shipped tool, open it and read its **Documentation** tab first. To learn how panels are
+// built, stay on this Help script: Documentation for authoring rules, Configuration UI for the
+// specimen shelf, Source for the recipe beside the values.
 //
 // ## Keyboard shortcuts
 //
@@ -35,70 +47,184 @@
 // | Cmd/Ctrl + E | Export current script as JSON |
 // | Cmd/Ctrl + I | Import script from JSON file |
 //
-// ## Utility Scripts
+// ## Writing a script
 //
-// Browse **Utility Scripts** in the sidebar for ready-to-use scripts. They are grouped as:
+// A runnable script is plain JS plus optional regions in Source:
 //
-// - **Utility Scripts:** change-case, comments-to-annotations, frame-or-auto-layout-selected,
-//   remove-unnecessary-nesting, relink-local-instances, scale-selection
-// - **Styles:** duplicate-styles, rename-styles, replace-styles, text-to-styles,
-//   render-styles-overview, relink-local-styles
-// - **Variables:** duplicate-variable-collection, export-import-variables,
-//   merge-variable-collections, rename-variables, replace-variables, selection-to-variables,
-//   variable-inspector, match-colors-to-collection-variables
-// - **Styles & Variables:** check-style-variable-bindings, detach-styles_&_variables,
-//   replace-style-variable-bindings, select-by-styles-variables
-// - **Design System Foundations:** colors, grid, typography, spacing, corner-radius
-// - **API (Utility Scripts):** comments-to-annotations (Figma REST API + personal access token)
+// - **Body:** what runs when you press Run (`figma`, `console`, `selection`, `currentPage`)
+// - **Documentation block:** Markdown for the Documentation tab (`@DOC_START` … `@DOC_END`)
+// - **Values block:** what the form edits (two shapes below)
+// - **Panel recipe:** `var __codefigPanel = { blocks: […] }` between `@PANEL_START` and `@PANEL_END`
 //
-// Files or folders whose names start with **`_`** are omitted from the plugin build (development-only).
+// Values and recipe stay in Source next to each other. There is no Configuration code tab.
+// Configuration UI is the form people fill in. This Help script's Configuration UI is a live
+// specimen of every control. Token sizes and the full recipe list live under **Style & UI
+// reference** at the end of this document.
 //
-// ## @import system
+// ### Two shapes for values
 //
-// Reuse code across scripts:
+// The form reads either shape the same way. Pick from how the **body** uses the settings:
+//
+// | Use when | Marker | Shape in Source |
+// |---|---|---|
+// | A few flat settings the body reads as separate variables | `@UI_CONFIG_START` … `@UI_CONFIG_END` | `var searchIn = "";` one line per field |
+// | One nested object the body takes as a unit (modes, curves, pasteable config) | `@CONFIG_START` … `@CONFIG_END` | Properties inside that object, e.g. `colorsConfigData = { … }` |
+//
+// Utilities almost always use `@UI_CONFIG`. Design System Foundations use `@CONFIG`. Start with
+// `@UI_CONFIG` unless you already have a single object to hand around.
+//
+// Minimal idea (regions named in prose so examples here cannot confuse the real markers):
 //
 // ```
-// @import { getAllStyles, generateScale } from "@Core Library"
+// // Documentation block: functional # title, then Overview
+//
+// // Values: e.g. var dryRun = true;
+//
+// // Panel recipe: var __codefigPanel = { blocks: [
+// //   { key: "dryRun", type: "boolean", label: "Dry run" }
+// // ] };
+//
+// @import { displayResults } from "@InfoPanel"
+//
+// displayResults({ title: "Done", results: [], type: "success" });
+// ```
+//
+// Open a Utility script in Source for `@UI_CONFIG` plus a panel recipe. Open Colors (or another
+// Foundations script) for `@CONFIG` inside an object. The panel recipe language is the same in both.
+//
+// ## Three roles (do not mix them)
+//
+// | Role | What it is | Configuration UI |
+// |---|---|---|
+// | **Runnable script** | A script you Run. Values in a values block; form recipe in `@PANEL_START` as `var __codefigPanel = { blocks: […] }` (bare keys, same shape as this Help specimen). | The form authors edit in Source |
+// | **Library** | `@`-prefixed script. Export top-level `function`s for `@import`. Not run on its own. | Usually none. Helpers, not a product panel |
+// | **CodeFigUI builder** | `@codefig-ui`'s `section()` / `sendToUI()` API | A form built while the script runs, not a Source panel recipe |
+//
+// Shipped panels and custom scripts with a real settings form use the **runnable** path.
+//
+// ## Libraries
+//
+// Reuse functions across scripts with `@import`. Import only top-level `function` declarations. If A
+// calls B in the same library, import both (or the call fails at run time). Examples inside a
+// Documentation block are not executed. Outside a doc block, a commented-out `// @import` still
+// imports.
+//
+// ```
+// @import { getAllStyles, processWithOptimization } from "@Core Library"
 // @import { getCollection, setVariableValue } from "@Variables"
 // @import { displayResults } from "@InfoPanel"
 // @import { myFunction } from "My Custom Script"
 // ```
 //
-// **Libraries:** @Core Library, @Math Helpers, @Variables, @InfoPanel, @Pattern Matching, @Replacement Engine, @Styles, @codefig-ui
+// **Your own library:** name the script with an `@` prefix (for example `@My Utils`). Other scripts
+// can import from it; you do not Run a library on its own.
 //
-// **User libraries:** Name a script with an `@` prefix (e.g. `@My Utils`) to make it a library. Other scripts can `@import` from it; libraries are not run directly.
+// Open a library in the sidebar and read its **Documentation** tab for the exported API. What each
+// shipped library is for:
 //
-// ### Three roles (do not mix them)
-//
-// | Role | What it is | Configuration UI |
-// |---|---|---|
-// | **Runnable script** | A script you Run. Values in `@UI_CONFIG_*` or `@CONFIG_*`; form recipe in `@PANEL_START` as `var __codefigPanel = { blocks: […] }` (bare keys, same shape as this Help specimen). | The form authors edit in Source |
-// | **Library** | `@`-prefixed script. Export top-level `function`s for `@import`. Not run on its own. | Usually none — helpers, not a product panel |
-// | **CodeFigUI builder** | `@codefig-ui`'s `section()` / `sendToUI()` API | A form **built while the script runs**, not a Source `@PANEL_START` recipe |
-//
-// Shipped panels and custom scripts with a real settings form use the **runnable** path. Open any utility or Design System Foundations script in Source: the recipe language is the same.
-//
-// **In your own docs:** the examples above are inside this script's doc block, so they are *not* executed. Outside a doc block, `@import` is matched as text — a commented-out `// @import` still imports.
+// | Library | What it does |
+// |---|---|
+// | `@Core Library` | Traverses nodes, replaces styles by pattern, yields for long runs, and converts hex colours |
+// | `@Variables` | Gets and creates Figma variable collections, modes, and variables without deleting them |
+// | `@Styles` | Finds, analyses, and replaces Figma styles, including rebinding variable references |
+// | `@InfoPanel` | Displays script results in the plugin InfoPanel with grouping, filters, and selectable rows |
+// | `@Pattern Matching` | Matches and renames names with wildcards, regex, and Figma-style replacement tokens |
+// | `@Replacement Engine` | Plans and executes find-and-replace across node styles and variables |
+// | `@Rename Preview` | Previews find/replace renames with collision flags before writing |
+// | `@Math Helpers` | Interpolates, eases, and generates number scales including piecewise snapped ladders |
+// | `@Bezier` | Evaluates and edits cubic bezier curves as flat number arrays for scale and colour ladders |
+// | `@Scale Models` | Turns bezier, metric, fibonacci, and endpoints descriptions into number sequences |
+// | `@Foundation` | Stores Design System Foundations manifests, viewport registry, stamps, and portable config |
+// | `@Foundation overview` | Builds Design System Foundations overview frames for typography, grid, spacing, and corner radius |
+// | `@Linear Ramp` | Generates spacing and corner-radius variable ramps from a shared ramp spec |
+// | `@Type Scale` | Builds typography size, line-height, and tracking ladders per mode for preview and Overview |
+// | `@Color Ramp` | Generates colour ramp values from config and draws preview strips without calling the Figma API |
+// | `@OKLCH` | Converts and interpolates OKLCH and HSL colours, builds lightness ladders, and fits chroma to sRGB |
+// | `@codefig-ui` | Builds run-time Configuration UI forms; prefer `@PANEL_START` for new shipped panels |
+// | `@Test Harness` | Runs in-Figma specs against the real API (development; used with `npm run test:figma`) |
 //
 // ## Common patterns
 //
-// - **Get data:** `figma.variables.getLocalVariableCollections()`, `figma.getLocalTextStyles()`
-// - **User feedback:** `figma.notify('message')`, `console.log(...)`
-// - **Selection:** `selection.forEach(node => { ... })`
+// - **Selection:** `selection.forEach(function (node) { ... })`
+// - **Notify:** `figma.notify('Done')` for a toast; `displayResults(...)` from `@InfoPanel` for a list
+// - **Long runs:** `processWithOptimization` / `yieldToUI` / `showProgress` from `@Core Library`
+// - **Finish cleanly:** call `displayResults` or `codefigRunComplete` so the run does not time out
+// - **Never delete** a variable, collection, or style to regenerate it. Update in place (rename is
+//   safe). Deleting breaks bindings in this file and in published libraries.
+//
+// ## Shipped scripts
+//
+// Browse the sidebar. Purpose of each shipped script (from its Documentation title). Open the
+// script for full Documentation and settings.
+//
+// ### Utility Scripts
+//
+// | Script | What it does |
+// |---|---|
+// | Change case | Renames canvas layers, components, variants, styles, and variables to a chosen case style |
+// | Comments to annotations | Converts file comments into Figma annotations and optional invisible anchor frames |
+// | Frame or auto layout selected | Wraps the selection in a frame or auto layout, unwraps such frames, or removes auto layout |
+// | Relink local component instances | Relinks instances to the canonical local component when several definitions share the same name |
+// | Remove unnecessary nesting | Removes or merges redundant frames and auto layouts that do nothing for their children |
+// | Scale or resize elements | Scales or resizes top-level selected layers by factor, target size, or aspect ratio |
+//
+// ### Styles
+//
+// | Script | What it does |
+// |---|---|
+// | Duplicate styles collection | Duplicates local styles under a source path into a target path, optionally rebinding variables |
+// | Relink local styles | Relinks layers to the canonical local style when several definitions share the same name |
+// | Rename styles | Renames local paint, text, effect, and grid styles by search and replace patterns |
+// | Render styles overview | Renders local text, paint, and effect styles as a structured overview of auto-layout frames |
+// | Replace styles | Rebinds layers from one style to another by rewriting style names with search and replace |
+// | Text to styles | Creates or updates local text styles from selected text layers, keeping variable bindings |
+//
+// ### Variables
+//
+// | Script | What it does |
+// |---|---|
+// | Duplicate variable collection | Clones a local variable collection including modes, values, metadata, and Design System Foundations sets |
+// | Export/import variables | Copies local variable collections between files as JSON (export to clipboard or import from paste) |
+// | Match colors to collection variables | Binds raw paint colors in the selection to COLOR variables from chosen collections |
+// | Copy or move variables | Copies or moves variable definitions from a source collection into a target collection |
+// | Rename variables | Renames variables by search and replace across collections and groups |
+// | Replace variables | Rebinds variable bindings on layers and in the variables table by collection, group, and name |
+// | Selection to variables | Creates or updates variables from selected layers' names and values |
+// | Variable inspector (WIP) | Reports variables with values, health, and usage on the selection and in styles |
+//
+// ### Styles & Variables
+//
+// | Script | What it does |
+// |---|---|
+// | Check style and variable bindings | Audits the selection for style and variable bindings that are not available in this file |
+// | Detach styles & variables | Removes style and variable bindings from selected nodes so they keep local values |
+// | Replace variables in local styles | Rebinds variables on local style definitions from a source collection to same-named variables in a target |
+// | Select by styles or variables | Selects layers that use styles or variables matching a search pattern |
+//
+// ### Design System Foundations
+//
+// | Script | What it does |
+// |---|---|
+// | Colors | Creates a colour ramp per Variable Mode: separate Hue, Saturation and Lightness curves in HSL; shared Lightness with separate Chroma and Hue in OKLCH |
+// | Grid | Creates a layout grid per Variable Mode with column, gap and margin variables and one Layout Guide style |
+// | Typography | Creates a type scale per Variable Mode with precise control of the font-size, line-height and letter-spacing ladder |
+// | Spacing | Creates a spacing scale per Variable Mode with bezier, metric or fibonacci ladders and width and gap bindings |
+// | Corner radius | Creates a corner radius scale per Variable Mode with CORNER_RADIUS bindings and bezier, metric or fibonacci ladders |
+//
+// Files or folders whose names start with `_` are development-only and do not ship in the plugin.
 //
 // ## Style & UI reference
 //
-// Every text style and control the plugin can render. Two places to look:
+// For authors building a Configuration UI. Two places to look:
 //
-// - **Configuration UI** — this script's own settings tab is the live specimen shelf. Each control's
-//   ⓘ quotes the `@PANEL_START` recipe that produced it, so a change can be asked for by pointing at
-//   the thing rather than describing it.
-// - **Here** — the values behind them: tokens, the heading ladder, and what is deliberately not
+// - **Configuration UI:** this script's settings tab is the live specimen shelf. Each control's ⓘ
+//   quotes the `@PANEL_START` recipe that produced it.
+// - **Here:** the values behind them: tokens, the heading ladder, and what is deliberately not
 //   covered.
 //
-// There is also `artifacts/style-reference.html` in the repo, which loads the same `src/ui.css` in a
-// browser and **prints every computed size next to the specimen**. Font sizes cannot be measured
-// inside Figma, so that page is where a number gets checked rather than eyeballed.
+// In the repo, `artifacts/style-reference.html` loads the same `src/ui.css` in a browser and prints
+// every computed size next to the specimen. Font sizes cannot be measured inside Figma, so that page
+// is where a number gets checked rather than eyeballed.
 //
 // ### One heading ladder
 //
@@ -223,16 +349,16 @@
 //
 // ### Controls, and the PANEL block that makes each
 //
-// Two regions in Source. **Values** live in `@UI_CONFIG_START`…`@UI_CONFIG_END` (`var` lines) or
-// `@CONFIG_START`…`@CONFIG_END` (object literal — Design System Foundations style). The **recipe**
-// lives in `@PANEL_START`…`@PANEL_END` as a live object (`var __codefigPanel = { blocks: […] }`)
-// so Source syntax-highlights it. Configuration UI is the form;
-// Source holds both regions. There is no Configuration code tab.
+// Two regions in Source. **Values** use `@UI_CONFIG_*` (`var` lines) or `@CONFIG_*` (object
+// properties). Which one: see **Two shapes for values** under Writing a script. The **recipe**
+// lives in `@PANEL_START`…`@PANEL_END` as `var __codefigPanel = { blocks: […] }` so Source
+// syntax-highlights it. Configuration UI is the form; Source holds both regions. There is no
+// Configuration code tab.
 //
 // Every control below is rendered live in this script's **Configuration UI** tab. Shipped scripts
 // and anything with a real panel use `@PANEL_START`. Trailing annotations on `var` lines still work
-// for scripts *without* `@PANEL_START` (legacy / tiny utilities) — the annotation parser path is
-// kept, not the authoring model for new panels.
+// for scripts *without* `@PANEL_START` (legacy / tiny utilities). Prefer `@PANEL_START` for new
+// panels.
 //
 // | PANEL (short example) | Control |
 // |---|---|
@@ -360,6 +486,11 @@ var nested = { outer: { inner: 1 } };
 var __codefigPanel = {
   blocks: [
     { type: "directive", name: "prose" },
+    { type: "heading", level: 1, text: "Configuration UI specimen" },
+    { type: "paragraph", attachTo: "previous",
+      text: "This tab shows every control a CodeFig Configuration UI can render. It is a specimen shelf, not a\nsettings form for a run. Running Help does nothing to your document." },
+    { type: "paragraph", attachTo: "previous",
+      text: "Build your own panels with a values block plus a `@PANEL_START` recipe in Source. Utilities use\n`@UI_CONFIG` (`var` lines); Foundations use `@CONFIG` inside an object. See **Two shapes for values**\nin this script's Documentation. Token sizes and the full recipe table are under **Style & UI\nreference**. Each ⓘ below quotes the recipe that made that control." },
     { type: "heading", level: 1, text: "Heading level 1" },
     { type: "paragraph", attachTo: "previous",
       text: "The level every panel uses for its section titles: `{ type: \"heading\", level: 1, text: \"…\" }`. The Configuration UI renders it as `h2` (never `h1`), and it\ncarries the 48px gap that separates one section from the next." },
@@ -468,7 +599,10 @@ var __codefigPanel = {
         { key: "curve", type: "curve", label: "Scale", growth: "ratio" },
       ] },
     { type: "heading", level: 1, text: "What the form cannot hold" },
-    { key: "nested", type: "unsupported", label: "Nested object", helper: "an object with no type: \"rows\" or type: \"group\"" },
+    { type: "paragraph", attachTo: "next",
+      text: "An arbitrary nested object is not a control. The form cannot edit it. Source keeps the value; the\npanel shows a note that it is only editable in Source. Use `type: \"rows\"` for a list of entries, or\n`type: \"group\"` for one object made of labelled parts." },
+    { key: "nested", type: "unsupported", label: "Nested object",
+      helper: "Shown when a value is an object with no type: \"rows\" or type: \"group\". Edit it in Source." },
   ]
 };
 // @PANEL_END

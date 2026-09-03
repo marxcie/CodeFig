@@ -376,12 +376,14 @@ test('typography keeps roundLowerValuesTo, and figmaStyles becomes styles', () =
   const result = normaliseConfig({
     fontScale: ['Text-Small', 'Text-Regular'],
     fontScaling: { type: 'majorSecond', roundLowerValuesTo: 1, roundUpperValuesTo: 2 },
-    figmaStyles: { create: true }
+    figmaStyles: { create: true },
+    textWrapStyle: 'BALANCE'
   });
   const slice = result.config.domains.typography;
   assert.deepEqual(slice.tokens, ['Text-Small', 'Text-Regular']);
   assert.equal(slice.roundLowerValuesTo, 1);
   assert.deepEqual(slice.styles, { create: true });
+  assert.equal(slice.textWrapStyle, 'BALANCE');
   assert.ok(translated(result).includes('figmaStyles'));
 });
 
@@ -395,12 +397,12 @@ test('the font weights come back as the list the block holds, not the map a run 
   }).config;
   assert.deepEqual(toDomainConfig(promoted, 'typography').fontWeights, [400, 600]);
 
-  // A name that is not its own value is the legacy spelling, and the naming is the whole of what it
-  // says — so it stays a map.
+  // A name that is not its own value is `number:Name` in the list field: `{ Regular: 450 }` is what
+  // a run makes of `450:Regular`, and that is what has to come back so the field can show it.
   const named = normaliseConfig({
     fontScale: ['Text-Small'], fontWeights: { Regular: 400, Semibold: 600 }
   }).config;
-  assert.deepEqual(toDomainConfig(named, 'typography').fontWeights, { Regular: 400, Semibold: 600 });
+  assert.deepEqual(toDomainConfig(named, 'typography').fontWeights, ['400:Regular', '600:Semibold']);
 
   // A style name promotes to a key equal to itself, so it demotes back too.
   const styles = normaliseConfig({
@@ -927,9 +929,28 @@ test('the typography manifest carries the tokens the panel needs back', () => {
 // Loading the tokens a file already has
 // ---------------------------------------------------------------------------
 
-/** A Figma stub with one collection and the variable names given. */
+/**
+ * A Figma stub with one collection and the variable names given.
+ * Spacing / radius membership is stamp → scopes → Description (no name guessing), so FLOAT
+ * stubs need scopes (or Description) or `rampGroupsIn` will not claim them.
+ */
 function fileWith(names, modes) {
-  const vars = names.map((name, i) => ({ id: 'v' + i, name, resolvedType: 'FLOAT' }));
+  const vars = names.map((name, i) => {
+    var scopes = [];
+    if (/^Corner radius\b/i.test(name) || /(^|\/)radii?\b/i.test(name)) {
+      scopes = ['CORNER_RADIUS'];
+    } else if (/^Spacing\b/i.test(name)) {
+      scopes = ['GAP', 'WIDTH_HEIGHT'];
+    }
+    return {
+      id: 'v' + i,
+      name,
+      resolvedType: 'FLOAT',
+      scopes: scopes,
+      description: '',
+      getSharedPluginData: function () { return ''; },
+    };
+  });
   const collection = {
     name: 'Responsive System',
     variableIds: vars.map((v) => v.id),

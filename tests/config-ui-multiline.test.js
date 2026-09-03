@@ -428,9 +428,10 @@ test('every shipped config block survives as written, byte for byte', () => {
     // so the test reads the real artifact and is stronger for it.
     assert.deepEqual(valuesOf(block), shippedConfig(file), file + ': the block lost content');
 
-    // Trailing whitespace only. The blank lines *after* a block belong to `mergeConfigIntoMain`,
-    // which writes its own newlines; the indentation *before* the first key belongs to the block, and
-    // trimming it left the first line flush while every other line kept its indent.
+    // Trailing whitespace only. Leading newlines after the start marker are stripped by
+    // `mergeConfigIntoMain` / `writeConfigBlockText` (they write their own `\n` after the marker);
+    // the indentation *before* the first key belongs to the block, and trimming it left the first
+    // line flush while every other line kept its indent.
     assert.equal(
       P.serialize(P.parse(block), {}),
       block.replace(/\s+$/, ''),

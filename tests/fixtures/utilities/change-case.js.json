@@ -2,7 +2,83 @@
   {
     "type": "heading",
     "level": 1,
-    "text": "Change case"
+    "text": "Target"
+  },
+  {
+    "type": "field",
+    "name": "canvasTargets",
+    "value": [],
+    "label": "Canvas",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "multiselect",
+    "options": [
+      "Component names",
+      "Variant labels",
+      "Variant values",
+      "Layer names"
+    ]
+  },
+  {
+    "type": "field",
+    "name": "stylesAndVariables",
+    "value": [],
+    "label": "Styles and variables",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "multiselect",
+    "options": [
+      "Variable names",
+      "Style groups",
+      "Style names"
+    ]
+  },
+  {
+    "type": "field",
+    "name": "variableCollection",
+    "value": "",
+    "label": "Collection",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "select",
+    "helper": "Which collection to rename. Only used when Variable names is ticked.",
+    "optionSource": "localVariableCollections",
+    "showWhenRules": [
+      {
+        "field": "stylesAndVariables",
+        "values": [
+          "Variable names"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "field",
+    "name": "groupName",
+    "value": "",
+    "label": "Group",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "Color/Brand",
+    "helper": "Optional path under the collection. Empty means the collection root.",
+    "showWhenRules": [
+      {
+        "field": "stylesAndVariables",
+        "values": [
+          "Variable names"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "divider",
+    "section": false
+  },
+  {
+    "type": "heading",
+    "level": 1,
+    "text": "General"
   },
   {
     "type": "field",
@@ -14,53 +90,44 @@
     "inputType": "select",
     "options": [
       "lower case",
+      "lower-case",
       "Capital case",
-      "camel Case"
+      "Capital-case",
+      "ALL CAPS",
+      "ALL-CAPS",
+      "camelCase"
     ]
   },
   {
     "type": "field",
-    "name": "frames",
-    "value": true,
-    "label": "Frames",
+    "name": "scope",
+    "value": "Selection",
+    "label": "Scope",
     "labelSpelled": true,
     "tooltip": "",
-    "inputType": "boolean"
+    "inputType": "radio",
+    "options": [
+      "Selection",
+      "This page",
+      "All pages"
+    ],
+    "showWhenRules": [
+      {
+        "field": "canvasTargets",
+        "values": [
+          "*"
+        ]
+      }
+    ]
   },
   {
     "type": "field",
-    "name": "groups",
+    "name": "recursive",
     "value": true,
-    "label": "Groups",
+    "label": "Recursive",
     "labelSpelled": true,
     "tooltip": "",
-    "inputType": "boolean"
-  },
-  {
-    "type": "field",
-    "name": "variantLabels",
-    "value": true,
-    "label": "Variant labels",
-    "labelSpelled": true,
-    "tooltip": "",
-    "inputType": "boolean"
-  },
-  {
-    "type": "field",
-    "name": "variantValues",
-    "value": true,
-    "label": "Variant values",
-    "labelSpelled": true,
-    "tooltip": "",
-    "inputType": "boolean"
-  },
-  {
-    "type": "field",
-    "name": "renameInstances",
-    "value": false,
-    "label": "Rename instances",
-    "labelSpelled": true,
-    "tooltip": "",
-    "inputType": "boolean"
+    "inputType": "boolean",
+    "helper": "Canvas: on walks descendants; off only the scope roots. Variable names: on changes the target group and everything under it; off only the target segment."
   }
 ]
