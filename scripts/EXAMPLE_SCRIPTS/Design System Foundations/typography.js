@@ -19,7 +19,7 @@
 // | fontScaling.rangeMode | `full` — single min→max ramp (default for piecewise). `twoSegment` — min→base→max (default for range curves). |
 // | fontScaling.ease | For range curves: none, in, out, inout, outin. Ignored for piecewise/modular font size. Line height / letter spacing still use range lerp. |
 // | fontScaling.roundLowerValuesTo, roundUpperValuesTo | Rounding grid for font size and line height. |
-// | figmaStyles | `createAndUpdateStyles`, `styleNaming` (e.g. `Typography/{$fontScale}/{$fontWeight}`). Legacy: `styles`. |
+// | figmaStyles | `createAndUpdateStyles`, `styleNaming` (e.g. `Typography/{$fontScale}/{$fontWeight}`), optional `textWrapStyle` (`AUTO`, `BALANCE`, `PRETTY`). Legacy: `styles`. |
 // | scaling, round* (legacy) | Old top-level keys; use `fontScaling` instead. |
 // | generateOverview | Optional boolean (default `false`). When `true`, fills **Render styles — overview** inside **`Design System Foundations`** (see `@Foundation overview`). |
 // | overviewStyleFilter | Optional substring for text style names (case-insensitive). When empty, defaults to styles containing `group/` (e.g. `Typography/`). |
@@ -92,6 +92,31 @@ function ensureCompatTypographyConfig(config) {
 function getFigmaStyles(config) {
   if (!config || typeof config !== 'object') return {};
   return config.figmaStyles || config.styles || {};
+}
+
+var KNOWN_TYPOGRAPHY_TEXT_WRAP_STYLES = {
+  AUTO: true,
+  BALANCE: true,
+  PRETTY: true
+};
+
+function resolveTypographyTextWrapStyle(config) {
+  var figmaStyles = getFigmaStyles(config);
+  if (!figmaStyles || typeof figmaStyles !== 'object') return null;
+  var value = figmaStyles.textWrapStyle;
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') {
+    console.warn('Typography: figmaStyles.textWrapStyle must be a string. Received ' + typeof value + '.');
+    return null;
+  }
+  var normalized = value.trim().toUpperCase();
+  if (!KNOWN_TYPOGRAPHY_TEXT_WRAP_STYLES[normalized]) {
+    console.warn(
+      'Typography: figmaStyles.textWrapStyle "' + value + '" is not recognized. Use AUTO, BALANCE, or PRETTY.'
+    );
+    return null;
+  }
+  return normalized;
 }
 
 // Musical-interval ratios (same as typescale.com presets); phi ≈ golden ratio 1.618 — re-exported via @Math Helpers import.
@@ -214,7 +239,8 @@ var typographyConfigData = typeof typographyConfigData !== 'undefined' ? typogra
 
   figmaStyles: {
     createAndUpdateStyles: true,
-    styleNaming: "Typography/{$fontScale}/{$fontWeight}"
+    styleNaming: "Typography/{$fontScale}/{$fontWeight}",
+    textWrapStyle: "AUTO" // AUTO | BALANCE | PRETTY
   },
 
   // When true: update **Render styles — overview** inside **Design System Foundations** (after variables and styles run)
@@ -732,10 +758,14 @@ async function createOrUpdateCollection(config) {
 function createOrUpdateTextStyles(config, collection) {
   var stats = {created: 0, updated: 0};
   return figma.getLocalTextStylesAsync().then(async function(existingStyles) {
-  var variableList = await Promise.all(collection.variableIds.map(function(id) { return figma.variables.getVariableByIdAsync(id); }));
-  try {
-    config.config.fontScale.forEach(function(scaleName) {
-      Object.keys(config.config.fontWeights).forEach(function(weightName) {
+    var variableList = await Promise.all(collection.variableIds.map(function(id) { return figma.variables.getVariableByIdAsync(id); }));
+    var textWrapStyle = resolveTypographyTextWrapStyle(config.config);
+    try {
+      for (var scaleIndex = 0; scaleIndex < config.config.fontScale.length; scaleIndex++) {
+        var scaleName = config.config.fontScale[scaleIndex];
+        var weightNames = Object.keys(config.config.fontWeights);
+        for (var weightIndex = 0; weightIndex < weightNames.length; weightIndex++) {
+          var weightName = weightNames[weightIndex];
         var styleName = (getFigmaStyles(config.config).styleNaming || '{$fontScale}/{$fontWeight}')
           .replace('{$fontScale}', scaleName)
           .replace('{$fontWeight}', weightName);
@@ -801,20 +831,31 @@ function createOrUpdateTextStyles(config, collection) {
           }
         }
 
+        if (textWrapStyle) {
+          try {
+            if (textStyle.fontName && textStyle.fontName !== figma.mixed) {
+              await figma.loadFontAsync(textStyle.fontName);
+            }
+            textStyle.textWrapStyle = textWrapStyle;
+          } catch (wrapError) {
+            console.warn('Could not set textWrapStyle for ' + styleName + ': ' + wrapError.message);
+          }
+        }
+
         // Set style description (info) with scaling and rounding
         if (typeof textStyle.description !== 'undefined') {
           textStyle.description = getStyleDescription(config.config);
         }
         
         console.log('Text style ' + action + ': ' + styleName);
-      });
-    });
-  } catch (error) {
-    console.error('Error creating text styles:', error);
-    figma.notify('Error creating text styles. Font may not be available.');
-  }
-  
-  return stats;
+        }
+      }
+    } catch (error) {
+      console.error('Error creating text styles:', error);
+      figma.notify('Error creating text styles. Font may not be available.');
+    }
+    
+    return stats;
   });
 }
 
