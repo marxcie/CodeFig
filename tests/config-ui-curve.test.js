@@ -1662,7 +1662,8 @@ test('typing a middle value above both ends leaves pacing alone and moves the ha
   /**
    * **Two-segment axis:** a Hue middle of 293.5° with ends near 100° is a real colour endpoint, not
    * an out-of-range pacing height. The curve's `pts[5]` stays put (generation still divides by it);
-   * the field holds 293.5; the handle sits at that value on the chart.
+   * the field holds 293.5; the handle sits on the continuous short-arc axis (down through 0°, so at
+   * the low end of the opened window — not at wrapped 293° on a 0…360 chart).
    */
   const startCurve = [0.185, 0, 0.3425, 0.25, 0.5, 0.5, 0.6575, 0.75, 0.815, 1];
   const source = [
@@ -1690,7 +1691,11 @@ test('typing a middle value above both ends leaves pacing alone and moves the ha
   const pts = JSON.parse(wrap.getAttribute('data-curve-value'));
   assert.equal(pts[5], startCurve[5], 'pacing height must not move for a middle-colour edit');
   const cy = parseFloat(wrap.querySelector('[data-curve-index="4"]').getAttribute('cy'));
-  assert.ok(cy < 30, 'handle must sit near the top for middle=293.5, cy=' + cy);
+  const endCys = Array.from(wrap.querySelectorAll('.config-ui-curve__axis-end'))
+    .map((el) => parseFloat(el.getAttribute('cy')));
+  assert.ok(cy > Math.max.apply(null, endCys) + 20,
+    'short-arc middle must sit past both ends on the continuous axis, cy=' + cy +
+    ' ends=' + endCys.join(','));
 });
 
 test('adding a middle point stays visible-dim-free even though the anchor cell is shared with a hidden model', () => {
@@ -1883,10 +1888,79 @@ test('a channel pinned at its range ceiling still opens a value axis with zoom a
   assert.ok(Math.abs(ey0 - ys[0]) < 2, 'end grips sit on the horizontal path');
 });
 
-test('dragging a Hue middle across the short arc does not put a wrap spike in the path', () => {
+test('a Linear Hue ramp across the short arc is a straight path, not a wrap gap', () => {
   /**
-   * 100° → 290° short-way crosses 0°. Connecting wrapped samples with a line drew a vertical spike
-   * while the swatch strip stayed smooth. The path must break (`M`) across that wrap instead.
+   * 60° → 280° short-way crosses 0°. Plotting wrapped degrees on a 0…360 axis put Linear "all over
+   * the chart" (path through 350° while the dashed diagonal took the long chord). Display-unwrapped
+   * Y keeps one continuous subpath that meets both end grips.
+   */
+  const form = dragSensitivityForm({ bright: 60, dark: 280, range: [0, 360] });
+  const path = form.container.querySelector('.config-ui-curve__path');
+  assert.ok(path, 'path missing');
+  const d = path.getAttribute('d') || '';
+  assert.equal((d.match(/M/g) || []).length, 1,
+    'Linear short-arc hue must be one subpath, d=' + d.slice(0, 120));
+  const pts = [];
+  d.replace(/[ML]\s*([\d.+-]+)\s+([\d.+-]+)/g, function (_, x, y) {
+    pts.push({ x: parseFloat(x, 10), y: parseFloat(y, 10) });
+    return _;
+  });
+  assert.ok(pts.length > 2, 'path should be sampled');
+  for (let i = 1; i < pts.length; i++) {
+    assert.ok(Math.abs(pts[i].y - pts[i - 1].y) < 8,
+      'Linear must stay nearly straight in Y, jump ' + Math.abs(pts[i].y - pts[i - 1].y));
+  }
+  const ends = form.container.querySelectorAll('.config-ui-curve__axis-end');
+  assert.equal(ends.length, 2);
+  const ey0 = parseFloat(ends[0].getAttribute('cy'));
+  const ey1 = parseFloat(ends[1].getAttribute('cy'));
+  assert.ok(Math.abs(ey0 - pts[0].y) < 2, 'start grip on the path');
+  assert.ok(Math.abs(ey1 - pts[pts.length - 1].y) < 2, 'end grip on the path');
+  const diag = form.container.querySelector('.config-ui-curve__diagonal');
+  assert.ok(diag, 'diagonal missing');
+  assert.ok(Math.abs(parseFloat(diag.getAttribute('y1')) - ey0) < 2, 'diagonal starts at bright');
+  assert.ok(Math.abs(parseFloat(diag.getAttribute('y2')) - ey1) < 2, 'diagonal ends at dark');
+});
+
+test('a Linear Hue ramp of exactly 180° does not climb the long way around the wheel', () => {
+  /**
+   * axisHueDelta(0, 180) is −180, so Linear walks 0 → 270 → 180 in wrapped degrees. Display space
+   * opens on that continuous arc (0…−180); the path is one straight subpath that meets both grips,
+   * not a Euclidean 0→180 chord with handles parked near 300°.
+   */
+  const form = dragSensitivityForm({ bright: 0, dark: 180, range: [0, 360] });
+  const path = form.container.querySelector('.config-ui-curve__path');
+  const d = path.getAttribute('d') || '';
+  assert.equal((d.match(/M/g) || []).length, 1, 'one subpath');
+  const pts = [];
+  d.replace(/[ML]\s*([\d.+-]+)\s+([\d.+-]+)/g, function (_, x, y) {
+    pts.push({ x: parseFloat(x, 10), y: parseFloat(y, 10) });
+    return _;
+  });
+  for (let i = 1; i < pts.length; i++) {
+    assert.ok(Math.abs(pts[i].y - pts[i - 1].y) < 8, 'adjacent samples stay close');
+  }
+  const ends = form.container.querySelectorAll('.config-ui-curve__axis-end');
+  assert.equal(ends.length, 2);
+  assert.ok(Math.abs(parseFloat(ends[0].getAttribute('cy')) - pts[0].y) < 2, 'start on path');
+  assert.ok(Math.abs(parseFloat(ends[1].getAttribute('cy')) - pts[pts.length - 1].y) < 2, 'end on path');
+  // Handles of the Linear cubic sit on the same diagonal, not up near 300° on a 0…360 chart.
+  const handles = form.container.querySelectorAll('.config-ui-curve__handle');
+  assert.ok(handles.length >= 2);
+  const hys = Array.from(handles).map((h) => parseFloat(h.getAttribute('cy')));
+  const pathMin = Math.min.apply(null, pts.map((p) => p.y));
+  const pathMax = Math.max.apply(null, pts.map((p) => p.y));
+  hys.forEach(function (hy) {
+    assert.ok(hy >= pathMin - 3 && hy <= pathMax + 3,
+      'Linear handle must sit on the path band, cy=' + hy + ' path=' + pathMin + '..' + pathMax);
+  });
+});
+
+test('dragging a Hue middle across the short arc keeps a continuous path (no wrap spike)', () => {
+  /**
+   * 100° → 290° short-way crosses 0°. Plotting wrapped samples used to need a path break (`M`) to
+   * avoid a vertical spike. Continuous display space keeps one subpath; the middle still sits near
+   * the top of the opened window.
    */
   const form = dragSensitivityForm({
     bright: 100, dark: 99.2, mid: 290, range: [0, 360],
@@ -1895,31 +1969,25 @@ test('dragging a Hue middle across the short arc does not put a wrap spike in th
   const path = form.container.querySelector('.config-ui-curve__path');
   assert.ok(path, 'path missing');
   const d = path.getAttribute('d') || '';
-  assert.ok((d.match(/M/g) || []).length >= 2,
-    'path must break at the hue wrap (expected a second M), d=' + d.slice(0, 120));
+  assert.equal((d.match(/M/g) || []).length, 1,
+    'path must stay continuous across the hue wrap, d=' + d.slice(0, 120));
   const ys = [];
   d.replace(/[ML]\s*([\d.+-]+)\s+([\d.+-]+)/g, function (_, x, y) {
     ys.push(parseFloat(y, 10));
     return _;
   });
-  // Within one subpath, adjacent samples stay close; ignore the jump at an M by scanning runs.
-  const parts = d.split(/(?=M)/);
-  parts.forEach(function (part) {
-    const pys = [];
-    part.replace(/[ML]\s*([\d.+-]+)\s+([\d.+-]+)/g, function (_, x, y) {
-      pys.push(parseFloat(y, 10));
-      return _;
-    });
-    for (let i = 1; i < pys.length; i++) {
-      assert.ok(Math.abs(pys[i] - pys[i - 1]) < 25,
-        'subpath still has a spike: jump ' + Math.abs(pys[i] - pys[i - 1]) + ' in ' + part.slice(0, 80));
-    }
-  });
+  for (let i = 1; i < ys.length; i++) {
+    assert.ok(Math.abs(ys[i] - ys[i - 1]) < 25,
+      'path still has a spike: jump ' + Math.abs(ys[i] - ys[i - 1]));
+  }
   const midField = form.container.querySelector('[data-row-field="a.middle"]');
   assert.equal(parseFloat(midField.value, 10), 290);
   const handle = form.container.querySelector('[data-curve-index="4"]');
   const cy = parseFloat(handle.getAttribute('cy'));
-  assert.ok(cy < 40, 'wrapped middle 290° must sit near the top of the chart, cy=' + cy);
+  const endCys = Array.from(form.container.querySelectorAll('.config-ui-curve__axis-end'))
+    .map((el) => parseFloat(el.getAttribute('cy')));
+  assert.ok(cy > Math.max.apply(null, endCys) + 20,
+    'short-arc middle 290° sits past both ends on the continuous axis, cy=' + cy);
 });
 
 test('zoom and range columns stay visible when ends are equal', () => {
@@ -1996,8 +2064,8 @@ test('derived middle placeholder matches valueAlongRamp at the plot midpoint', (
 
 test('dragging the middle anchor writes the channel value under the pointer, not a single-span map of pts[5]', () => {
   /**
-   * **Two-segment axis:** the middle handle is the colour at the corner. Dragging it to the top of
-   * the chart writes the window's high value into the middle field and leaves `pts[5]` (pacing)
+   * **Two-segment axis:** the middle handle is the colour at the corner. Dragging it along the
+   * continuous short-arc axis writes that value into the middle field and leaves `pts[5]` (pacing)
    * alone. The old single-span path forced the field through `unitToValue(pts[5])` after a margin
    * clamp, which pinned a Hue middle of 300° back near 100° on the chart while generation still
    * used 300° — the cyan-spike disagreement.
@@ -2008,6 +2076,7 @@ test('dragging the middle anchor writes the channel value under the pointer, not
   });
   const ptsBefore = form.points().slice();
   const handle = form.container.querySelector('[data-curve-index="4"]');
+  // Top of the short-arc window is further above both ends (100° → 200° is +100°).
   form.svg.dispatch('pointerdown', { target: handle, clientX: 50, clientY: 50, pointerId: 1 });
   form.svg.dispatch('pointermove', { clientX: 50, clientY: 0, pointerId: 1 });
   form.svg.dispatch('pointerup', { clientX: 50, clientY: 0, pointerId: 1 });
@@ -2019,9 +2088,9 @@ test('dragging the middle anchor writes the channel value under the pointer, not
     'dragging the middle colour must not rewrite pacing pts[5]: was ' + ptsBefore[5] + ', now ' + pts[5]);
   const midField = form.container.querySelector('[data-row-field="a.middle"]');
   const fieldValue = parseFloat(midField.value, 10);
-  // Top of the chart is the top of the window opened on [99.2, 100, 200] — well above both ends.
-  assert.ok(fieldValue > 150,
-    'middle field must follow the pointer on the value axis, got ' + fieldValue);
+  // Top of the short-arc window is further above both ends (100° → 200° is +100°).
+  assert.ok(fieldValue > 200,
+    'middle field must follow the pointer further along the short arc, got ' + fieldValue);
 });
 
 test('typing a Hue middle above both ends moves the handle there without rewriting the curve shape', () => {
@@ -2035,8 +2104,11 @@ test('typing a Hue middle above both ends moves the handle there without rewriti
   midField.dispatchEvent(new Event('input', { bubbles: true }));
   const handle = form.container.querySelector('[data-curve-index="4"]');
   const cy = parseFloat(handle.getAttribute('cy'));
-  // Window opens on ~[90, 210]; 200° sits near the top of a 190px chart.
-  assert.ok(cy < 40, 'handle should sit near the top for middle=200, cy=' + cy);
+  const endCys = Array.from(form.container.querySelectorAll('.config-ui-curve__axis-end'))
+    .map((el) => parseFloat(el.getAttribute('cy')));
+  // 200° is on the short arc above both ends (100 → 200 continuous).
+  assert.ok(cy < Math.min.apply(null, endCys) - 10,
+    'handle should sit above both ends for middle=200, cy=' + cy);
   const pts = form.points();
   assert.deepEqual(Array.from(pts), Array.from(ptsBefore),
     'typing the middle colour must not rewrite curve coordinates');

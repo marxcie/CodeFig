@@ -19,8 +19,29 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hue curve chart: Linear across 0° is a straight line again.** Short-arc ramps (e.g. 60°→280°,
+  or a middle at 290° between ends near 100°) were plotted as wrapped 0…360° samples, so the blue
+  path wrapped around the wheel while the dashed guide took the long chord — start and end did not
+  connect. Chart Y now follows the continuous short arc (same walk generation uses); tick labels
+  stay ordinary degrees.
+- **Typography Generate overview** now finds the text styles it just created. It used the
+  variable Group (`Typography/`) as a style-name filter, but Style naming defaults to
+  `{$fontScale}/{$fontWeight}` with no group folder — so the overview warned and drew nothing.
+  It now matches the style names from Style naming × tokens × weights.
+- **Typography** refuses to run when required fields are empty (Collection, Tokens, Font
+  family; Font weights when Create text styles is on; at least one mode with a Base unit).
+  Missing Font family used to write an empty `FONT_FAMILY` string, hit Figma's "unloaded
+  font" error, and could move stamped variables first. The Info panel lists what to fill;
+  nothing is written until the form is complete.
+
 ### Added
 
+- **Copy these values to: Mode…** on Spacing, Corner radius, and Typography. On a mode tab when
+  there are two or more modes, each other mode is a text link; click one to copy this mode's
+  scale settings onto it (names stay). Asks before replacing settings that already differ. Grid
+  and Colors stay unchanged.
 - **DSF Group candidates as links.** When Collection holds more than one Grid / Spacing /
   Radius / Typography / Colors set (or the current Group points at none of them), their names
   appear as text links directly under the Group input. Click one to fill Group and load that

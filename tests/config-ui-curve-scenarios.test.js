@@ -194,7 +194,7 @@ test('Hue 100…100: two-point overshoot updates the derived middle, not a stale
     'derived middle must track the bent arch, not 292: ' + mid.placeholder);
 });
 
-test('Hue with anchor: typing 293.5° moves the handle to the top of the chart', () => {
+test('Hue with anchor: typing 293.5° moves the handle along the short arc past both ends', () => {
   const form = h.mountCurve(ctx, {
     bright: 100, dark: 99.2, mid: 100, range: [0, 360],
     curve: ctx.B.bezierWithMiddle([0.37, 0, 0.63, 1], 0.5),
@@ -203,8 +203,10 @@ test('Hue with anchor: typing 293.5° moves the handle to the top of the chart',
   mid.value = '293.5';
   mid.dispatchEvent(new Event('input', { bubbles: true }));
   assert.equal(mid.value, '293.5', 'typed middle must stick');
-  assert.ok(h.middleCy(form) < 30,
-    '293.5° must sit near the top of the chart, cy=' + h.middleCy(form));
+  const endCys = Array.from(form.container.querySelectorAll('.config-ui-curve__axis-end'))
+    .map((el) => parseFloat(el.getAttribute('cy')));
+  assert.ok(h.middleCy(form) > Math.max.apply(null, endCys) + 20,
+    '293.5° short-arc must sit past both ends, cy=' + h.middleCy(form));
 });
 
 test('Colors @rows Hue: Add middle fills middle.hue through the host callback', () => {

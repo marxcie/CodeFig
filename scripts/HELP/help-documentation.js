@@ -382,6 +382,7 @@
 // | `{ type: "chips", label: "…", from: "modes" }` | the mode chips — a marker row of its own, reading names from the `modes` field |
 // | `{ key: "x", type: "rows", columns: […] }` | a table, one line per array entry |
 // | `layout: "tabs"` on `type: "rows"` | the same array as one tab per entry, fields stacked and labelled |
+// | `copyToOthers: true` on `type: "rows"` with `layout: "tabs"` | **Copy these values to:** on the open tab — a text link per other mode; click one to copy this entry's settings onto it (names stay). Hidden with one mode; confirms when that target already differs |
 // | `layout: "blocks"` on `type: "rows"` | every entry in full, one under the next, each titled from its `name` |
 // | `{ key: "x", type: "group", fields: […] }` | an **object** as one labelled row of captioned parts |
 // | `{ key: "x", type: "curve" }` | the bezier curve editor, on an **array**. Four numbers is one segment, ten is two, `[]` is none |

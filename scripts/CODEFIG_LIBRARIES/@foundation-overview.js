@@ -571,10 +571,21 @@ async function foundationCreateSpacingOverview(collection, data) {
 
 async function foundationCreateTypographyTextStylesOverview(options) {
   var opt = options || {};
-  var groupPrefix = typeof opt.groupPrefix === "string" ? opt.groupPrefix : "";
+  // Prefer an exact name list (what Typography just created). Variable *group* is not a style
+  // folder — styleNaming defaults to `{$fontScale}/{$fontWeight}` with no group prefix — so
+  // falling back to `groupPrefix + "/"` matched nothing and skipped the overview.
+  var exactNames = null;
+  if (Array.isArray(opt.styleNames)) {
+    exactNames = {};
+    for (var ni = 0; ni < opt.styleNames.length; ni++) {
+      var sn = opt.styleNames[ni];
+      if (typeof sn === "string" && sn) exactNames[sn] = true;
+    }
+  }
   var needle = typeof opt.styleNameNeedle === "string" ? opt.styleNameNeedle : "";
-  if (!needle.trim() && groupPrefix) {
-    needle = groupPrefix + "/";
+  if (!needle.trim() && exactNames === null) {
+    var groupPrefix = typeof opt.groupPrefix === "string" ? opt.groupPrefix : "";
+    if (groupPrefix) needle = groupPrefix + "/";
   }
   var needleLo = needle.trim().toLowerCase();
 
@@ -583,6 +594,7 @@ async function foundationCreateTypographyTextStylesOverview(options) {
   var all = await figma.getLocalTextStylesAsync();
   var filtered = all.filter(function (s) {
     if (!s || !s.name) return false;
+    if (exactNames !== null) return !!exactNames[s.name];
     if (!needleLo) return true;
     return String(s.name).toLowerCase().indexOf(needleLo) !== -1;
   });

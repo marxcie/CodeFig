@@ -47,6 +47,7 @@ function load() {
     ' typeScaleLineHeights: typeScaleLineHeights, typeScaleTrackings: typeScaleTrackings,' +
     ' typographyOverviewHtml: typographyOverviewHtml, typographyPreviewHtml: typographyPreviewHtml,' +
     ' typographyViewportNames: typographyViewportNames,' +
+    ' typographyPreflightResults: typographyPreflightResults,' +
     ' ensureCompatTypographyConfig: ensureCompatTypographyConfig,' +
     ' materializeFontSizes: materializeFontSizes };'
   )({ notify() {} }, { log() {}, warn() {}, error() {} }, {});
@@ -207,6 +208,36 @@ test('the base is the first token, so nothing has to say where it sits', () => {
   assert.equal(T.typeScaleSizes(mode, 5).values[0], 4);
   const fib = { name: 'm', scaleType: 'fibonacci', base: 4, step: 4 };
   assert.deepEqual(T.typeScaleSizes(fib, 6).values, [4, 8, 12, 20, 32, 52]);
+});
+
+test('preflight lists every missing required field and stays quiet when the form is complete', () => {
+  const empty = T.typographyPreflightResults({
+    collectionName: '',
+    fontScale: [],
+    fontFamily: '',
+    fontWeights: {},
+    createStyles: true,
+    figmaStyles: { createAndUpdateStyles: true },
+    modes: []
+  });
+  const messages = empty.map((r) => r.message);
+  assert.ok(messages.indexOf('Choose a collection') !== -1);
+  assert.ok(messages.indexOf('Add tokens') !== -1);
+  assert.ok(messages.indexOf('Add a font family') !== -1);
+  assert.ok(messages.indexOf('Add font weights') !== -1);
+
+  const noFamily = T.typographyPreflightResults({
+    collectionName: 'Responsive',
+    fontScale: ['heading-1'],
+    fontFamily: '   ',
+    fontWeights: { Regular: 400 },
+    figmaStyles: { createAndUpdateStyles: true },
+    modes: [{ name: 'FHD', scaleType: 'bezier', base: 12, ratio: 1.25, curve: [] }]
+  });
+  assert.deepEqual(noFamily.map((r) => r.message), ['Add a font family']);
+
+  const ok = starterConfig({ collectionName: 'Responsive' });
+  assert.deepEqual(T.typographyPreflightResults(ok), []);
 });
 
 test('rounding is per mode, and the table says what moved', () => {

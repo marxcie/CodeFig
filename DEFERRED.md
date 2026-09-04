@@ -1334,11 +1334,11 @@ pin; Hue feels worse when overshoot + short-arc wrap interact with the split.
 "symmetric middle" action) without changing the evaluated path enough to surprise generation —
 or accept De Casteljau as correct and document it.
 
-## Hue short-arc through 0° still looks gappy on the chart — known
+## Hue short-arc through 0° still looks gappy on the chart — SUPERSEDED
 
-When Bright≈Dark≈100° and Middle≈290°, generation takes the short arc through 0° for each half.
-A linear axis must either spike, gap (path break), or dip below 0 in continuous space — Pomax /
-any cubic library does not remove that. Path break avoids the spike; the gap is honest.
+Was: path break at the 0° wrap traded spikes for gaps when Bright≈Dark≈100° and Middle≈290°.
+**Fixed:** chart Y uses continuous short-arc display space (`valueAlongRampDisplay`); generation
+still stores wrapped degrees. Linear is a straight line along the arc; tick labels stay 0…360.
 
 ---
 

@@ -43,6 +43,7 @@
 // | **Text wrap style**<br>`textWrapStyle` | How text styles wrap multi-line text: Auto, Balance, or Pretty. |
 // | **Generate overview**<br>`generateOverview` | When on, creates a typography overview on the canvas: one specimen tile per text style, grouped by weight. Off by default. |
 // | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
+// | **Copy these values to:** | On the open mode tab when there are two or more modes. Each other mode is a link; click one to copy this mode's scale settings onto it. Mode names stay. Asks before replacing settings that already differ. |
 // | **Scale type**<br>`modes[].scaleType` | Bezier, Metric, or Fibonacci for this mode. |
 // | **Scale**<br>`modes[].curve` | Bezier only. Curve that shapes the type scale. |
 // | **Step**<br>`modes[].step` | Metric: how much each step adds before growth starts. Fibonacci: the first increment. |
@@ -66,6 +67,7 @@
 @import { foundationCreateTypographyTextStylesOverview } from "@Foundation overview"
 @import { viewportLabel, namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, findFoundationSet, normaliseConfig, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
 @import { typeScaleTokens, typeScaleModes, typeScaleModeIsScaled, typeScaleModeNamed, typeScaleSizes, typeScaleLineHeights, typeScaleTrackings, typographyOverviewHtml, typographyPreviewHtml } from "@Type Scale"
+@import { displayResults, createResult } from "@InfoPanel"
 
 // ========================================
 // CONFIG HELPERS (collection, modes, fontSizes)
@@ -229,6 +231,78 @@ function getFigmaStyles(config) {
   return config.figmaStyles || config.styles || {};
 }
 
+/**
+ * Required fields before any document write. Empty Font family used to reach setValueForMode and
+ * fail with Figma's "unloaded font" message after stamp alignment had already moved variables.
+ *
+ * → createResult[] — empty means the run may proceed.
+ */
+function typographyPreflightResults(data) {
+  var results = [];
+  if (!data || typeof data !== 'object') {
+    results.push(createResult(
+      'Nothing to run',
+      'Fill Collection, Tokens, and Font family, then run again.',
+      'error'
+    ));
+    return results;
+  }
+
+  if (!data.collectionName || !String(data.collectionName).trim()) {
+    results.push(createResult(
+      'Choose a collection',
+      'Nothing to write without one.',
+      'error'
+    ));
+  }
+
+  var tokens = Array.isArray(data.fontScale)
+    ? data.fontScale.filter(function (t) { return t != null && String(t).trim(); })
+    : [];
+  if (tokens.length === 0) {
+    results.push(createResult(
+      'Add tokens',
+      'Name them smallest to largest, then run again.',
+      'error'
+    ));
+  }
+
+  if (!data.fontFamily || !String(data.fontFamily).trim()) {
+    results.push(createResult(
+      'Add a font family',
+      'Needed for the font-family variable, e.g. Inter.',
+      'error'
+    ));
+  }
+
+  var weights = data.fontWeights;
+  var weightCount = 0;
+  if (weights && typeof weights === 'object' && !Array.isArray(weights)) {
+    weightCount = Object.keys(weights).length;
+  } else if (Array.isArray(weights)) {
+    for (var wi = 0; wi < weights.length; wi++) {
+      if (weights[wi] != null && String(weights[wi]).trim()) weightCount++;
+    }
+  }
+  if (getFigmaStyles(data).createAndUpdateStyles && weightCount === 0) {
+    results.push(createResult(
+      'Add font weights',
+      'Needed for text styles, e.g. 400, 600 or Regular, Semibold.',
+      'error'
+    ));
+  }
+
+  if (tokens.length > 0 && typographyViewportNames(data).length === 0) {
+    results.push(createResult(
+      'Add at least one mode',
+      'The chips under Collection modes are the mode list. Each needs a Base unit.',
+      'error'
+    ));
+  }
+
+  return results;
+}
+
 // Musical-interval ratios (same as typescale.com presets); phi ≈ golden ratio 1.618 — re-exported via @Math Helpers import.
 
 /** Range and piecewise scaling.type values for typography (modular types checked via getModularScaleRatio). */
@@ -333,6 +407,7 @@ var __codefigPanel = {
       showWhen: { collectionName: "*", fontScale: "*" },
       helper: "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight." },
     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+      copyToOthers: true,
       showWhen: { collectionName: "*", fontScale: "*" },
       columns: [
         { key: "name", type: "text", label: "Mode" },
@@ -734,6 +809,29 @@ function resolveTypographyGenerateOverview(config) {
   return false;
 }
 
+/** Style names Typography creates/updates — same pattern as createOrUpdateTextStyles. */
+function typographyExpectedStyleNames(data) {
+  if (!data || typeof data !== 'object') return [];
+  var naming = (getFigmaStyles(data).styleNaming || data.styleNaming || '{$fontScale}/{$fontWeight}');
+  if (typeof naming !== 'string' || !naming.trim()) naming = '{$fontScale}/{$fontWeight}';
+  var scaleNames = Array.isArray(data.fontScale) ? data.fontScale : [];
+  var weights = data.fontWeights;
+  var weightNames = weights && typeof weights === 'object' && !Array.isArray(weights)
+    ? Object.keys(weights)
+    : [];
+  var names = [];
+  for (var si = 0; si < scaleNames.length; si++) {
+    for (var wi = 0; wi < weightNames.length; wi++) {
+      names.push(
+        naming
+          .replace('{$fontScale}', scaleNames[si])
+          .replace('{$fontWeight}', weightNames[wi])
+      );
+    }
+  }
+  return names;
+}
+
 // ========================================
 // CORE FUNCTIONS
 // ========================================
@@ -805,6 +903,22 @@ async function createOrUpdateCollection(config) {
   ensureCompatTypographyConfig(data);
   materializeFontSizes(data);
   validateTypographyScalingTypeConfig(data);
+
+  var blocked = typographyPreflightResults(data);
+  if (blocked.length > 0) {
+    displayResults({
+      title: 'Typography',
+      results: blocked,
+      type: 'error',
+      showFilters: false
+    });
+    return {
+      aborted: true,
+      collection: null,
+      stats: { created: 0, updated: 0, skipped: 0 },
+      styleStats: { created: 0, updated: 0 }
+    };
+  }
 
   console.log('=== ADVANCED TYPOGRAPHY SYSTEM MANAGER ===');
   var collectionName = resolveCollectionName(config);
@@ -1045,15 +1159,20 @@ function getStyleDescription(config) {
 
 createOrUpdateCollection(typographyConfig)
   .then(async function (result) {
+    if (result && result.aborted) return;
+
     var data = typographyConfig.config || typographyConfigData;
     var showOverview = resolveTypographyGenerateOverview(typographyConfig);
     if (showOverview) {
-      await foundationCreateTypographyTextStylesOverview({
-        groupPrefix: resolveGroup(typographyConfigData),
-        styleNameNeedle:
-          typeof data.overviewStyleFilter === 'string' ? data.overviewStyleFilter : '',
+      var overviewOpts = {
+        styleNames: typographyExpectedStyleNames(data),
         previewText: typeof data.overviewPreviewText === 'string' ? data.overviewPreviewText : ''
-      });
+      };
+      if (typeof data.overviewStyleFilter === 'string' && data.overviewStyleFilter.trim()) {
+        overviewOpts.styleNameNeedle = data.overviewStyleFilter;
+        delete overviewOpts.styleNames;
+      }
+      await foundationCreateTypographyTextStylesOverview(overviewOpts);
     }
     var message =
       'Typography: ' + result.stats.created + ' vars created, ' + result.stats.updated + ' updated';
@@ -1080,6 +1199,16 @@ async function createTypographySystem(customConfig) {
     ensureCompatTypographyConfig(customConfig);
     materializeFontSizes(customConfig);
     validateTypographyScalingTypeConfig(customConfig);
+    var blocked = typographyPreflightResults(customConfig);
+    if (blocked.length > 0) {
+      displayResults({
+        title: 'Typography',
+        results: blocked,
+        type: 'error',
+        showFilters: false
+      });
+      return { aborted: true, created: 0, updated: 0, skipped: 0 };
+    }
     var typographyVariables = {};
     
     customConfig.fontScale.forEach(function(scaleName, index) {

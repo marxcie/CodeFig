@@ -47,6 +47,7 @@
 // | **Tokens**<br>`spacings` | Token names from smallest to largest. A series works: `spacing-{1,10}` expands to ten names. |
 // | **Generate overview**<br>`generateOverview` | When on, creates a spacing overview frame on the canvas: one row per token, one column per mode, with width bars bound to the variables. Off by default. |
 // | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
+// | **Copy these values to:** | On the open mode tab when there are two or more modes. Each other mode is a link; click one to copy this mode's scale settings onto it. Mode names stay. Asks before replacing settings that already differ. |
 // | **Scale type**<br>`modes[].scaleType` | Bezier, Metric, or Fibonacci for this mode. |
 // | **Scale**<br>`modes[].curve` | Bezier only. Curve that shapes the scale. Adding a token extends the range instead of squeezing it. |
 // | **Step**<br>`modes[].step` | Metric: how much each step adds before growth starts. Fibonacci: the first increment. |
@@ -105,6 +106,7 @@ var __codefigPanel = {
       showWhen: { collectionName: "*", spacings: "*" },
       helper: "Builds a Spacing overview on the canvas: one row per token, one column per mode, with variable-bound width bars." },
     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+      copyToOthers: true,
       showWhen: { collectionName: "*", spacings: "*" },
       columns: [
         { key: "name", type: "text", label: "Mode" },

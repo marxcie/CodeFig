@@ -50,6 +50,7 @@
 // | **Tokens**<br>`radii` | Token names from smallest to largest. A series works: `radius-{1,10}` expands to ten names and can mix with names you write, e.g. `none, xs, radius-{1,6}`. |
 // | **Generate overview**<br>`generateOverview` | When on, creates a corner radius overview frame: one row per token, one column per mode, with swatches bound to the variables. Off by default. |
 // | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
+// | **Copy these values to:** | On the open mode tab when there are two or more modes. Each other mode is a link; click one to copy this mode's scale settings onto it. Mode names stay. Asks before replacing settings that already differ. |
 // | **Scale type**<br>`modes[].scaleType` | Bezier, Metric, or Fibonacci for this mode. |
 // | **Scale**<br>`modes[].curve` | Bezier only. Curve that shapes the scale. |
 // | **Step**<br>`modes[].step` | Metric: how much each step adds before growth starts. Fibonacci: the first increment. |
@@ -108,6 +109,7 @@ var __codefigPanel = {
       showWhen: { collectionName: "*", radii: "*" },
       helper: "Builds a Corner radius overview on the canvas: one row per token, one column per mode, with variable-bound swatches." },
     { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+      copyToOthers: true,
       showWhen: { collectionName: "*", radii: "*" },
       columns: [
         { key: "name", type: "text", label: "Mode" },

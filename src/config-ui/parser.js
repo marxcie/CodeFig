@@ -1192,6 +1192,9 @@
       row.columns = expandColumnsList(block.columns);
       row.tabs = block.layout === "tabs";
       row.blocks = block.layout === "blocks";
+      // Opt-in: Spacing / Corner radius / Typography mode tabs. Copies the open mode's settings
+      // onto the others (names stay). Grid and Colors leave this off — their modes are meant to differ.
+      if (block.copyToOthers) row.copyToOthers = true;
     }
     // A top-level `@group:` field ("lightness": bright/dark) — the same nested-columns shape a
     // `@rows` group cell carries, read the same way (`block.fields`, not `block.columns`, so a
@@ -3406,6 +3409,8 @@
     applyFileConfig: applyFileConfig,
     fillConfigBlock: fillConfigBlock,
     applyChipOp: applyChipOp,
+    // Renderer "Copy these values to: Mode…" reuses the same seed shape as a new chip / file-aligned mode.
+    freshModeEntry: freshModeEntry,
     modeIntents: modeIntents,
     matchModeIds: matchModeIds,
     listToText: listToText,

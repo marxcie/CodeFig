@@ -2359,10 +2359,10 @@
     }
 
     /**
-     * **Hue channels walk the short arc**, matching `oklchLerpHue` (`@OKLCH`). Each sample is a
-     * wrapped degree in [0, 360). The *polyline* must not connect across the wrap — see the path
-     * sampler in `draw()` — or 100° → 290° (short way through 0) draws a vertical spike while the
-     * swatch strip stays smooth.
+     * **Hue channels walk the short arc**, matching `oklchLerpHue` (`@OKLCH`). Each *stored*
+     * sample is a wrapped degree in [0, 360). The *chart* plots them in continuous display space
+     * (`axisLerpDisplay` / `valueAlongRampDisplay`) so Linear is a straight line along that arc
+     * instead of leaping across a 0° seam on a 0…360 axis.
      */
     function axisIsHue() {
       return !!(field.range && Math.abs((field.range.hi - field.range.lo) - 360) < 1e-6);
@@ -2374,8 +2374,29 @@
       if (!axisIsHue()) return from + (to - from) * t;
       return axisWrapHue(from + axisHueDelta(from, to) * t);
     }
+    /** Same walk as `axisLerp`, left unwrapped — chart Y, not a stored degree. */
+    function axisLerpDisplay(from, to, t) {
+      if (!axisIsHue()) return from + (to - from) * t;
+      return from + axisHueDelta(from, to) * t;
+    }
     function axisWrapHue(v) {
       return ((v % 360) + 360) % 360;
+    }
+    /** Wrapped field → continuous chart coordinate, measured along the short arc from `from`. */
+    function axisDisplayOf(a, wrapped) {
+      if (!a || !axisIsHue()) return wrapped;
+      return a.from + axisHueDelta(a.from, wrapped);
+    }
+    /**
+     * Display coordinate at the dark end of the ramp. With a middle, that is two short arcs
+     * chained (`from → mid → to`), which is not always `axisDisplayOf(a, to)`.
+     */
+    function axisDisplayTo(a) {
+      if (!a) return null;
+      if (!axisIsHue() || !curveHasRealMiddle()) return axisDisplayOf(a, a.to);
+      var mid = endValue("mid");
+      if (mid === null || !isFinite(mid)) return axisDisplayOf(a, a.to);
+      return a.from + axisHueDelta(a.from, mid) + axisHueDelta(mid, a.to);
     }
 
     /**
@@ -2400,10 +2421,14 @@
       /**
        * **All three anchors, not just the two ends.** A channel whose ends match has its whole shape in the
        * middle, and a window derived from the ends alone is a line with nothing above or below it.
+       *
+       * **Hue: continuous short-arc space, not wrapped min/max.** Wrapped 60° and 280° open a 60…280
+       * window on the long chord, while Linear walks the short arc through 0° — off that window. Open on
+       * the unwrapped extents instead so the straight ramp fits the chart.
        */
-      var seen = [a.from, a.to];
+      var seen = [a.from, axisDisplayTo(a)];
       var mid = curveHasRealMiddle() ? endValue("mid") : null;
-      if (mid !== null && isFinite(mid)) seen.push(mid);
+      if (mid !== null && isFinite(mid)) seen.push(axisDisplayOf(a, mid));
       var low = Math.min.apply(null, seen), high = Math.max.apply(null, seen);
       /**
        * **Equal ends, no middle: the full declared channel, not a synthetic ±effectiveGap band.**
@@ -2415,11 +2440,17 @@
       var pinned = endsPinned(a);
       var flat = high - low <= 1e-9;
       var air = flat ? (Math.abs(effectiveGap(a)) || 1) : (high - low) * 0.1;
-      var opened = pinned
-        ? { lo: a.lo, hi: a.hi }
-        : flat
-          ? { lo: low - air, hi: high + air }
-          : { lo: Math.max(a.lo, low - air), hi: Math.min(a.hi, high + air) };
+      var opened;
+      if (pinned) {
+        opened = { lo: a.lo, hi: a.hi };
+      } else if (flat) {
+        opened = { lo: low - air, hi: high + air };
+      } else if (axisIsHue()) {
+        // Short-arc display may sit below 0 or above 360 — do not clamp to the wrapped channel.
+        opened = { lo: low - air, hi: high + air };
+      } else {
+        opened = { lo: Math.max(a.lo, low - air), hi: Math.min(a.hi, high + air) };
+      }
       if (!(opened.hi > opened.lo)) opened = { lo: low - 1, hi: high + 1 };
       // **Latched the first time it is asked for.** Derived every draw, it followed the ends — so dragging
       // one rescaled the axis under your finger. Written down once, it stays where the user left it.
@@ -2455,9 +2486,10 @@
         var pin = a.from;
         return pin > hi || pin < lo;
       }
-      var at = [0, 0.5, 1].map(function (x) { return valueAlongRamp(a, pts, x); });
+      // Window is in display space for hue — compare the same continuous samples the path uses.
+      var at = [0, 0.5, 1].map(function (x) { return valueAlongRampDisplay(a, pts, x); });
       var mid = curveHasRealMiddle() ? endValue("mid") : null;
-      if (mid !== null && isFinite(mid)) at.push(mid);
+      if (mid !== null && isFinite(mid)) at.push(axisDisplayOf(a, mid));
       return at.every(function (v) { return v > hi; }) || at.every(function (v) { return v < lo; });
     }
 
@@ -2512,6 +2544,17 @@
       if (axisIsHue()) return axisWrapHue(a.from + gap * u);
       return a.from + gap * u;
     }
+    /** Single-span map left unwrapped — chart Y for hue, identical to `unitToValue` otherwise. */
+    function unitToDisplay(a, u) {
+      var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
+      if (chartFlat(a, pts)) return a.from;
+      return a.from + effectiveGap(a) * u;
+    }
+    /**
+     * Inverse of `unitToDisplay` / channel read from the pointer.
+     * Hue windows are continuous display space, so divide the raw delta — `axisHueDelta` would
+     * re-wrap an overshoot past ±180° and put the handle on the wrong side of the arc.
+     */
     function valueToUnit(a, v) {
       if (endsPinned(a)) {
         var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
@@ -2519,7 +2562,7 @@
       }
       var gap = effectiveGap(a);
       if (Math.abs(gap) < 1e-9) return 0.5;
-      return axisIsHue() ? axisHueDelta(a.from, v) / gap : (v - a.from) / gap;
+      return (v - a.from) / gap;
     }
 
     /**
@@ -2532,8 +2575,8 @@
      * only the pacing height generation divides by. That split is what lets a Hue middle of 200°
      * sit above both ends on the chart instead of being clamped into `[bright, dark]`.
      *
-     * Hue returns a wrapped degree (same as `oklchLerpHue`); the path sampler in `draw()` breaks
-     * the polyline when adjacent samples jump across the 0° wrap so the chart does not spike.
+     * Hue returns a wrapped degree (same as `oklchLerpHue`). Chart placement uses
+     * `valueAlongRampDisplay` so the polyline stays continuous across the 0° seam.
      */
     function valueAlongRamp(a, pts, x, gOverride) {
       var g = typeof gOverride === "number" ? gOverride
@@ -2554,23 +2597,43 @@
       return axisLerp(mid, a.to, t);
     }
 
-    /** Inverse of `valueAlongRamp` for a known `x` — recovers the curve-space Y a pointer means. */
+    /** Continuous twin of `valueAlongRamp` — chart Y (and hue window extents). */
+    function valueAlongRampDisplay(a, pts, x, gOverride) {
+      var g = typeof gOverride === "number" ? gOverride
+        : (B ? B.bezierAt(pts, x) : x);
+      if (!curveHasRealMiddle()) return unitToDisplay(a, g);
+      var mid = endValue("mid");
+      if (mid === null || !isFinite(mid)) return unitToDisplay(a, g);
+      var mx = pts.length === 10 ? pts[4] : 0.5;
+      var my = pts.length === 10 ? pts[5] : 0.5;
+      var t;
+      if (x <= mx) {
+        t = my > 1e-9 ? g / my : 1;
+        if (!allowOvershoot) t = t < 0 ? 0 : t > 1 ? 1 : t;
+        return axisLerpDisplay(a.from, mid, t);
+      }
+      t = my < 1 - 1e-9 ? (g - my) / (1 - my) : 1;
+      if (!allowOvershoot) t = t < 0 ? 0 : t > 1 ? 1 : t;
+      var midDisplay = axisLerpDisplay(a.from, mid, 1);
+      return midDisplay + (axisIsHue() ? axisHueDelta(mid, a.to) : (a.to - mid)) * t;
+    }
+
+    /** Inverse of `valueAlongRampDisplay` for a known `x` — recovers the curve-space Y a pointer means. */
     function valueToCurveY(a, pts, x, value) {
       if (!curveHasRealMiddle()) return valueToUnit(a, value);
       var mid = endValue("mid");
       if (mid === null || !isFinite(mid)) return valueToUnit(a, value);
       var mx = pts.length === 10 ? pts[4] : 0.5;
       var my = pts.length === 10 ? pts[5] : 0.5;
+      var midDisplay = axisLerpDisplay(a.from, mid, 1);
       var t;
       if (x <= mx) {
-        var d0 = axisIsHue() ? axisHueDelta(a.from, mid) : (mid - a.from);
-        var dv0 = axisIsHue() ? axisHueDelta(a.from, value) : (value - a.from);
-        t = Math.abs(d0) < 1e-9 ? 1 : dv0 / d0;
+        var d0 = midDisplay - a.from;
+        t = Math.abs(d0) < 1e-9 ? 1 : (value - a.from) / d0;
         return t * my;
       }
       var d1 = axisIsHue() ? axisHueDelta(mid, a.to) : (a.to - mid);
-      var dv1 = axisIsHue() ? axisHueDelta(mid, value) : (value - mid);
-      t = Math.abs(d1) < 1e-9 ? 1 : dv1 / d1;
+      t = Math.abs(d1) < 1e-9 ? 1 : (value - midDisplay) / d1;
       return my + t * (1 - my);
     }
 
@@ -2580,12 +2643,18 @@
      */
     function ensureValueInView(value) {
       if (value === null || !isFinite(value)) return;
+      var a = axis();
+      // Hue fields are wrapped degrees; the window is continuous display space along the short arc.
+      var display = value;
+      if (a && axisIsHue()) {
+        display = Math.abs(value - a.to) < 1e-6 ? axisDisplayTo(a) : axisDisplayOf(a, value);
+      }
       var held = wrap.getAttribute("data-curve-view");
       if (!held) return;
       var pair = held.split(",");
       var lo = parseFloat(pair[0], 10), hi = parseFloat(pair[1], 10);
       if (!(isFinite(lo) && isFinite(hi))) return;
-      if (value < lo || value > hi) wrap.removeAttribute("data-curve-view");
+      if (display < lo || display > hi) wrap.removeAttribute("data-curve-view");
     }
     function ensureMidInView(mid) { ensureValueInView(mid); }
 
@@ -2594,17 +2663,18 @@
       if (!a) return { x: x * W, y: (1 - y) * H };
       var w = axisView(a);
       var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
-      var value = chartFlat(a, pts) ? a.from
-        : curveHasRealMiddle() ? valueAlongRamp(a, pts, x, y)
-        : unitToValue(a, y);
-      return { x: x * W, y: (1 - (value - w.lo) / (w.hi - w.lo)) * H };
+      var display = chartFlat(a, pts) ? a.from
+        : curveHasRealMiddle() ? valueAlongRampDisplay(a, pts, x, y)
+        : unitToDisplay(a, y);
+      return { x: x * W, y: (1 - (display - w.lo) / (w.hi - w.lo)) * H };
     }
     /** Place something at a known channel value (end grips — not a unit-square corner). */
     function plotAtValue(xUnit, value) {
       var a = axis();
       if (!a) return { x: xUnit * W, y: (1 - xUnit) * H };
       var w = axisView(a);
-      return { x: xUnit * W, y: (1 - (value - w.lo) / (w.hi - w.lo)) * H };
+      var display = axisIsHue() ? axisDisplayOf(a, value) : value;
+      return { x: xUnit * W, y: (1 - (display - w.lo) / (w.hi - w.lo)) * H };
     }
     function fromView(vx, vy) {
       var a = axis();
@@ -2760,11 +2830,14 @@
        * `(100 + 83) / 2` still loses the dip after one step of zoom-in; the middle field is the
        * only value that differs from the ends.
        */
-      if (Math.abs(a.to - a.from) <= 1e-9 && mid !== null && isFinite(mid)) return mid;
-      var lo = Math.min(a.from, a.to), hi = Math.max(a.from, a.to);
+      if (Math.abs(a.to - a.from) <= 1e-9 && mid !== null && isFinite(mid)) {
+        return axisIsHue() ? axisDisplayOf(a, mid) : mid;
+      }
+      var lo = Math.min(a.from, axisDisplayTo(a)), hi = Math.max(a.from, axisDisplayTo(a));
       if (curveHasRealMiddle() && mid !== null && isFinite(mid)) {
-        lo = Math.min(lo, mid);
-        hi = Math.max(hi, mid);
+        var midD = axisDisplayOf(a, mid);
+        lo = Math.min(lo, midD);
+        hi = Math.max(hi, midD);
       }
       return (lo + hi) / 2;
     }
@@ -2806,14 +2879,25 @@
       var f = Math.min(cap, Math.max(CURVE_ZOOM_MIN, z));
       var span = Math.min(a.hi - a.lo, axisBaseSpan(a) / f);
       var focus = zoomFocus(a);
-      var lo = Math.min(a.hi - span, Math.max(a.lo, focus - span / 2));
-      var hi = lo + span;
+      var lo, hi;
+      if (axisIsHue()) {
+        // Display space is not clamped to [0, 360] — the short arc may sit below 0 or above 360.
+        lo = focus - span / 2;
+        hi = lo + span;
+      } else {
+        lo = Math.min(a.hi - span, Math.max(a.lo, focus - span / 2));
+        hi = lo + span;
+      }
       if (allowOvershoot) {
         lo = Math.round(lo);
         hi = Math.round(hi);
         if (hi <= lo) hi = lo + 1;
-        hi = Math.min(a.hi, hi);
-        lo = Math.max(a.lo, hi - Math.max(1, Math.round(span)));
+        if (!axisIsHue()) {
+          hi = Math.min(a.hi, hi);
+          lo = Math.max(a.lo, hi - Math.max(1, Math.round(span)));
+        } else if (hi - lo < 1) {
+          hi = lo + 1;
+        }
       }
       wrap.setAttribute("data-curve-view", lo + "," + hi);
       draw();
@@ -2982,11 +3066,13 @@
         var at = i / 10;
         // Top of the bar is the window's high value, as it is on the plot beside it.
         var value = w.hi - at * span;
+        // Hue windows are continuous display space; the ramp template wants a wrapped degree.
+        var rampValue = axisIsHue() ? axisWrapHue(value) : value;
         var colour = field.ramp.replace(/~([A-Za-z0-9_$.]+)/g, function (all, key) {
           var cell = cellNamed(key);
           var held = cell ? parseFloat(cell.value, 10) : NaN;
           return isFinite(held) ? String(Math.round(held * 100) / 100) : "0";
-        }).replace(/\$/g, String(Math.round(value * 1000) / 1000));
+        }).replace(/\$/g, String(Math.round(rampValue * 1000) / 1000));
         out.push(colour + " " + Math.round(at * 1000) / 10 + "%");
       }
       return out;
@@ -3016,7 +3102,10 @@
       var last = hexes.length - 1;
       var points = [];
       for (var i = 0; i <= last; i++) {
-        points.push({ value: valueAlongRamp(a, pts, last ? i / last : 0), hex: hexes[i] });
+        points.push({
+          value: valueAlongRampDisplay(a, pts, last ? i / last : 0),
+          hex: hexes[i]
+        });
       }
       // Sorted by value, not token order — the boundary lookup below walks a straight line, whichever
       // direction the ramp itself runs.
@@ -3124,6 +3213,8 @@
           label.className = "config-ui-curve__tick";
           label.style.top = (vy / H) * 100 + "%";
           var shown = Math.abs(v) < tick * 1e-6 ? 0 : v;
+          // Hue windows are continuous; labels stay wrapped degrees (280, not −80).
+          if (axisIsHue()) shown = axisWrapHue(shown);
           label.textContent = allowOvershoot ? String(Math.round(shown))
             : shown.toFixed(decimals);
           tickLayer.appendChild(label);
@@ -3142,22 +3233,14 @@
       // The curve, sampled rather than emitted as a path of its own segments: `bezierAt` is what the
       // generator will call, so drawing anything else risks a picture that disagrees with the numbers.
       //
-      // **Hue: break the polyline at the 0° wrap.** Adjacent samples can jump from ~5° to ~355° on the
-      // short arc; connecting them draws the vertical spikes Márton saw while the swatch strip (one
-      // wrapped colour per step) stayed fine. A fresh `M` starts a new subpath instead.
+      // **Hue is placed in continuous display space** (`toView` → `valueAlongRampDisplay`), so adjacent
+      // samples stay neighbours across the 0° seam and Linear is a straight line — no path break.
       var d = "";
-      var prevValue = null;
       for (var i = 0; i <= 80; i++) {
         var x = i / 80;
         var gy = (B ? B.bezierAt(pts, x) : x) * lift;
         var pt = toView(x, gy);
-        var sampleValue = ax ? (curveHasRealMiddle()
-          ? valueAlongRamp(ax, pts, x, gy)
-          : unitToValue(ax, gy)) : null;
-        var jump = axisIsHue() && prevValue !== null && sampleValue !== null
-          && Math.abs(sampleValue - prevValue) > 180;
-        d += (i === 0 || jump ? "M" : "L") + pt.x.toFixed(2) + " " + pt.y.toFixed(2);
-        prevValue = sampleValue;
+        d += (i === 0 ? "M" : "L") + pt.x.toFixed(2) + " " + pt.y.toFixed(2);
       }
       /**
        * **Two groups on an axis, not one clipped path.** Clipping only the line left the tethers and the
@@ -3238,6 +3321,8 @@
       // **End grips sit on the field values**, not on `toView(0,0)` / `toView(1,1)`. Those corners go
       // through `unitToValue`/`effectiveGap`, which on equal ends invented 90 and 110 while the fields
       // said 100 — so the grips lied, dragging them felt broken, and on release one jumped off-screen.
+      // Hue: the dark end is the *path* end in display space (two short arcs when there is a middle),
+      // which is `valueAlongRampDisplay(…, 1)`, not always `axisDisplayOf(from, to)`.
       var originAt = ax ? plotAtValue(0, ax.from) : toView(0, 0);
       if (ax) {
         // **Square, not round — and they move the palette, not the curve.** The three round handles bend the
@@ -3249,7 +3334,17 @@
           "class": "config-ui-curve__end", cx: originAt.x, cy: originAt.y, r: 3
         }));
       }
-      var farAt = ax ? plotAtValue(1, ax.to) : toView(1, growthKey ? lift : 1);
+      var farAt;
+      if (ax) {
+        var farDisplay = valueAlongRampDisplay(ax, pts, 1);
+        var wFar = axisView(ax);
+        farAt = {
+          x: W,
+          y: (1 - (farDisplay - wFar.lo) / (wFar.hi - wFar.lo)) * H
+        };
+      } else {
+        farAt = toView(1, growthKey ? lift : 1);
+      }
       if (ax) {
         drawEnd(grips, "to", farAt, ax.to);
       } else if (growthKey) {
@@ -4250,6 +4345,25 @@
     });
   }
 
+  /**
+   * Settings of two mode entries match, ignoring `name`.
+   *
+   * Used by **Copy these values to: Mode…** to skip the confirm when the chosen target already
+   * matches the open tab. `JSON.stringify` is enough: mode values are numbers, strings, lists and
+   * plain objects — the same shape `freshModeEntry` clones.
+   */
+  function modeSettingsEqual(a, b) {
+    function withoutName(m) {
+      var out = {};
+      if (!m || typeof m !== "object") return out;
+      for (var key in m) {
+        if (Object.prototype.hasOwnProperty.call(m, key) && key !== "name") out[key] = m[key];
+      }
+      return out;
+    }
+    return JSON.stringify(withoutName(a)) === JSON.stringify(withoutName(b));
+  }
+
   function buildRowsControl(field, rows) {
     var wrap = document.createElement("div");
     // Three displays, one control. `--blocks` shows every row in full, one under the next, each titled —
@@ -4556,6 +4670,54 @@
           // *Lock seed* copy instead of the mockup carrying it.
           placeIn().appendChild(cell);
         });
+
+        // **Copy these values to: Mode…** — opt-in on `@tabs` (`copyToOthers: true`). One link per
+        // other mode; click copies this tab's settings onto that entry only (name stays). Hidden when
+        // there is only one mode. Confirms when the target already differs. Same deep-clone seed as
+        // adding a chip (`freshModeEntry`). Drawn as secondary text links, like group candidates.
+        if (field.tabs && field.copyToOthers && list.length > 1) {
+          var copyLine = document.createElement("div");
+          copyLine.className = "config-ui-rows-copy-others";
+          copyLine.setAttribute("data-rows-copy-others", String(index));
+          var copyLead = document.createElement("span");
+          copyLead.className = "config-ui-rows-copy-others-lead";
+          copyLead.textContent = "Copy these values to: ";
+          copyLine.appendChild(copyLead);
+          var copyTargets = 0;
+          list.forEach(function (other, otherIndex) {
+            if (otherIndex === index) return;
+            if (copyTargets > 0) {
+              copyLine.appendChild(document.createTextNode(", "));
+            }
+            var copyTo = document.createElement("button");
+            copyTo.type = "button";
+            copyTo.className = "config-ui-rows-copy-others-mode";
+            copyTo.textContent = rowLabel(other, otherIndex);
+            copyTo.setAttribute("data-rows-copy-to", String(otherIndex));
+            copyTo.setAttribute("aria-label",
+              "Copy these values to " + rowLabel(other, otherIndex));
+            copyTo.addEventListener("click", function () {
+              var next = collectRows(wrap, field);
+              var source = next[index];
+              var target = next[otherIndex];
+              if (!source || !target) return;
+              if (modeSettingsEqual(source, target)) return;
+              var sourceLabel = rowLabel(source, index);
+              var targetLabel = rowLabel(target, otherIndex);
+              var msg = "Replace settings on " + targetLabel + " with " + sourceLabel + "'s?";
+              var ask = (typeof globalThis !== "undefined" && globalThis.confirm)
+                || (typeof window !== "undefined" && window.confirm)
+                || null;
+              if (typeof ask === "function" && !ask(msg)) return;
+              next[otherIndex] = p.freshModeEntry(target.name, source);
+              draw(next, index);
+              wrap.dispatchEvent(new Event("change", { bubbles: true }));
+            });
+            copyLine.appendChild(copyTo);
+            copyTargets += 1;
+          });
+          rowEl.appendChild(copyLine);
+        }
 
         // No Remove under `@tabs`: the chips above manage the modes, and two places to remove one is one too
         // many. `@blocks` keeps it — the frames show Add and no Remove, but they also never draw the state
