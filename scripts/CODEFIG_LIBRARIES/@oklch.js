@@ -57,7 +57,14 @@ function oklchLinearToSrgb(c) {
 /** `#rrggbb` or `rrggbb`, case-insensitive → [r, g, b] in 0..1, or null. Three digits are not accepted:
  *  a config that says `#abc` is more likely a typo than shorthand, and guessing is worse than asking. */
 function oklchHexToRgb(hex) {
-  var match = /^#?([0-9a-f]{6})$/i.exec(String(hex == null ? '' : hex).trim());
+  var raw = String(hex == null ? '' : hex).trim();
+  // Accept `#rgb`, `rgb`, `#rrggbb`, `rrggbb` — seed fields get pasted both ways.
+  var short = /^#?([0-9a-f]{3})$/i.exec(raw);
+  if (short) {
+    var s = short[1];
+    raw = '#' + s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+  }
+  var match = /^#?([0-9a-f]{6})$/i.exec(raw);
   if (!match) return null;
   var n = parseInt(match[1], 16);
   return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];

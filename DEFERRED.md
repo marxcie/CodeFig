@@ -189,8 +189,9 @@ alias/alpha skips, and orphan reporting.
 
 **Still prototype-only**, drawn in `colors-target.html` and not in the panel:
 
-- ***Anchors edited since seeding*** and its Re-apply seed action. Needs the panel to remember what
-  the seed wrote, which is state the config does not hold today.
+- ***Anchors edited since seeding*** and its Re-apply seed action. Changing the seed hex already
+  re-applies the full scale (anchors + Linear curves). A banner that remembers “you edited anchors
+  since the last seed” still needs state the config does not hold today — left deferred.
 - **The read-only Lightness column in OKLCH.** The frame draws it and the brief is clear about what
   it is — *"Lightness never appears per mode. That is the whole design"* — a display of what the
   shared ladder gave that step. It is the one part of the panel that needs a mechanism the config UI
@@ -201,6 +202,10 @@ alias/alpha skips, and orphan reporting.
 - **Surfacing recognition notes** — `hueUnreliable`, a declined group, a skipped non-opaque variable
   — where a user can see them. They are computed and carried in `answer.recognition`; only the
   summary line reaches the panel.
+
+**Reference only (not vendored).** [tints.dev](https://github.com/SimeonGriggs/tints.dev) and
+[colorizr](https://github.com/gilbarbara/colorizr) informed seed→scale apply and N-step naming.
+CodeFig keeps its own OKLCH/HSL ladder; gamut-relative chroma stays rejected (below).
 
 ---
 

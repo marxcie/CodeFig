@@ -78,11 +78,13 @@ test('a colour that came out of sRGB is never reported as clamped', () => {
 });
 
 test('a hex the engine cannot read is null rather than a guess', () => {
-  for (const bad of ['', '#12345', '#GGGGGG', 'rebeccapurple', null, undefined, '#abc']) {
+  for (const bad of ['', '#12345', '#GGGGGG', 'rebeccapurple', null, undefined]) {
     assert.equal(E.oklchFromHex(bad), null, JSON.stringify(bad) + ' should not parse');
   }
   // And a hex it can read is normalised one way, so a message and a swatch label cannot disagree.
   assert.equal(E.oklchNormaliseHex('#717a71'), '#717A71');
+  assert.equal(E.oklchNormaliseHex('717a71'), '#717A71');
+  assert.equal(E.oklchNormaliseHex('#abc'), '#AABBCC');
   assert.equal(E.oklchNormaliseHex('nonsense'), 'nonsense');
 });
 

@@ -14,7 +14,8 @@
 //
 // | Area | Functions |
 // |---|---|
-// | Config reading | colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
+// | Config reading | colorsParseSteps, colorsMaterialiseStepNames, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
+// | Seed | colorsApplySeedScale, colorsSeedPlacementIndex |
 // | Generation | colorsGenerateMode, colorsBuildVariableMap, colorsManifestSlice |
 // | Alignment | colorsAlignment, colorsBestAnchor, colorsAnchorFits |
 // | Preview | colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip |
@@ -294,6 +295,149 @@ function colorsParseSteps(text) {
   return { steps: steps, dropped: dropped };
 }
 
+/**
+ * Token names for N stops on the Tailwind 50…950 rail.
+ *
+ * End intervals weigh half of mid intervals (50→100 and 900→950 vs 100→200). `N === 11` is the
+ * exact Tailwind list — no rounding drift. Names are labels only; lightness still comes from the ladder.
+ */
+function colorsMaterialiseStepNames(n) {
+  var count = Math.round(Number(n));
+  if (!(count >= 3) || !isFinite(count)) return [];
+  if (count === 11) return colorsPlaceholderSteps().slice();
+  var last = count - 1;
+  // Weights: ½, 1, 1, …, 1, ½  → total N−2
+  var total = count - 2;
+  var out = [];
+  var seen = {};
+  var cum = 0;
+  for (var i = 0; i < count; i++) {
+    if (i > 0) cum += (i === 1 || i === last) ? 0.5 : 1;
+    var raw = 50 + (900 * cum) / total;
+    var name = String(Math.round(raw));
+    while (seen[name]) {
+      raw += 1;
+      name = String(Math.round(raw));
+    }
+    seen[name] = true;
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * Which step the seed occupies: named token, else `500` if present, else list midpoint.
+ */
+function colorsSeedPlacementIndex(steps, placement) {
+  var list = steps || [];
+  var last = list.length - 1;
+  if (last < 0) return 0;
+  var wanted = placement != null ? String(placement).trim() : '';
+  if (wanted && wanted.toLowerCase() !== 'auto') {
+    var named = list.indexOf(wanted);
+    if (named >= 0) return named;
+  }
+  var five = list.indexOf('500');
+  if (five >= 0) return five;
+  return colorsMidIndex(list);
+}
+
+/**
+ * **Seed → full scale** (tints.dev-shaped): write bright/middle/dark H+C(+L) and Linear curves from one hex.
+ *
+ * Mutates `config` (shared OKLCH lightness ends) and `mode`. Does not generate swatches — the existing
+ * ladder + lock pin do that. Call when the seed hex or placement commits; changing the hex again
+ * overwrites (same as changing the base on tints.dev).
+ *
+ * → `{ ok, placementIndex, placement }` or `{ ok: false, reason }`.
+ */
+function colorsApplySeedScale(config, mode, steps) {
+  if (!config || !mode) return { ok: false, reason: 'missing' };
+  var list = steps && steps.length ? steps : colorsParseSteps(config.steps).steps;
+  if (!list.length) return { ok: false, reason: 'no-steps' };
+  var oklch = (config.colorModel || 'oklch') !== 'hsl';
+  var seedHex = (mode.seed && mode.seed.hex) ? String(mode.seed.hex).trim() : '';
+  var seed = seedHex ? colorsReadHex(seedHex, oklch) : null;
+  if (!seed) return { ok: false, reason: seedHex ? 'invalid-hex' : 'empty-hex' };
+
+  var placementIndex = colorsSeedPlacementIndex(list,
+    mode.seed && mode.seed.placement);
+  if (!mode.seed) mode.seed = { hex: seedHex, placement: '', lock: false };
+  // Store the normalised `#RRGGBB` so the field and the strip quote the same string.
+  mode.seed.hex = oklchNormaliseHex(seedHex);
+  // Prefer a stable token name when auto: 500, else the step at the index.
+  var placeNow = String(mode.seed.placement || '').trim();
+  if (!placeNow || placeNow.toLowerCase() === 'auto') {
+    mode.seed.placement = list[placementIndex] || '';
+  }
+
+  // Lightness ends: Tailwind-like near-white / near-black; seed L is enforced at the stop via lock pin
+  // and (when lock is on) oklchReanchor. Keep ends away from seed so the ladder has room.
+  var brightL = 0.985;
+  var darkL = 0.15;
+  if (seed.L >= brightL - 0.02) brightL = Math.min(0.995, seed.L + 0.04);
+  if (seed.L <= darkL + 0.02) darkL = Math.max(0.02, seed.L - 0.04);
+  if (oklch) {
+    if (!config.lightness || typeof config.lightness !== 'object') config.lightness = {};
+    config.lightness.bright = Math.round(brightL * 1000) / 10;
+    config.lightness.dark = Math.round(darkL * 1000) / 10;
+    // Shared ladder curve → Linear so ends alone define the spread until the user bends it.
+    config.curve = bezierFromEase('linear', 'none', 1);
+  }
+
+  if (!mode.bright || typeof mode.bright !== 'object') mode.bright = {};
+  if (!mode.middle || typeof mode.middle !== 'object') mode.middle = {};
+  if (!mode.dark || typeof mode.dark !== 'object') mode.dark = {};
+
+  var H = Math.round(seed.H * 10) / 10;
+  mode.bright.hue = H;
+  mode.middle.hue = H;
+  mode.dark.hue = H;
+  mode.bright.hslHue = H;
+  mode.middle.hslHue = H;
+  mode.dark.hslHue = H;
+
+  // Absolute chroma/sat taper toward the ends (not gamut-relative — see DEFERRED).
+  var midC = seed.C;
+  var endC = Math.max(oklch ? 0.002 : 0.02, midC * 0.28);
+  var darkC = Math.max(oklch ? 0.001 : 0.01, midC * 0.18);
+  if (oklch) {
+    mode.bright.chroma = Math.round(endC * 10000) / 10000;
+    mode.middle.chroma = Math.round(midC * 10000) / 10000;
+    mode.dark.chroma = Math.round(darkC * 10000) / 10000;
+  } else {
+    mode.bright.saturation = Math.round(endC * 1000) / 10;
+    mode.middle.saturation = Math.round(midC * 1000) / 10;
+    mode.dark.saturation = Math.round(darkC * 1000) / 10;
+  }
+
+  if (!oklch) {
+    mode.bright.lightness = Math.round(brightL * 1000) / 10;
+    mode.middle.lightness = Math.round(seed.L * 1000) / 10;
+    mode.dark.lightness = Math.round(darkL * 1000) / 10;
+    mode.curve = bezierFromEase('linear', 'none', 1);
+  }
+
+  // **Middle must sit on a 10-point channel curve.** Empty `[]` / 4-point Linear is treated as
+  // ends-only — generation strips `hasMiddle`, the panel leaves Saturation/Hue middle empty, and
+  // lock then pins a vibrant seed on a muted ramp. Linear-with-middle keeps the seed's H+C on the
+  // authored ladder so the strip and the charts agree.
+  var at = list.length > 1 ? placementIndex / (list.length - 1) : 0.5;
+  var linearMid = bezierWithMiddle(bezierFromEase('linear', 'none', 1), at);
+  mode.hueCurve = linearMid.slice();
+  mode.hslHueCurve = linearMid.slice();
+  mode.chromaCurve = linearMid.slice();
+  mode.saturationCurve = linearMid.slice();
+  // Pin the seed step by default — tints.dev keeps the base colour; user can unlock to let it drift.
+  mode.seed.lock = true;
+
+  return {
+    ok: true,
+    placementIndex: placementIndex,
+    placement: mode.seed.placement
+  };
+}
+
 /** 0..100 in the config, 0..1 in the maths. Converted at this boundary and nowhere else. */
 function colorsLightnessAnchors(config) {
   var l = config.lightness || {};
@@ -352,6 +496,7 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // at — is known. A named placement is readable without a ladder; only a seed's *nearest* step needs one,
   // and a seed re-anchors the curve anyway, which moves that anchor for a second time.
   var wanted = (mode.seed && mode.seed.placement != null) ? String(mode.seed.placement).trim() : '';
+  if (wanted.toLowerCase() === 'auto') wanted = '';
   var namedIndex = wanted ? steps.indexOf(wanted) : -1;
   var segments = colorsCurve(config, mode, oklch, steps, anchors,
     namedIndex >= 0 ? namedIndex : colorsMidIndex(steps));
@@ -365,11 +510,10 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   var curveId = segments.curve;
   var base = (oklch && sharedLadder) ? sharedLadder : oklchLadder(anchors, curveId, steps);
 
-  // Placement is where Middle lands. Auto is nearest-by-lightness; a named step no longer in the list is
-  // recovered to the nearest rather than silently reassigned, and the stored value is left alone so it comes
-  // back if the step does.
+  // Placement is where Middle lands. Auto prefers step `500` (Tailwind mid), else list midpoint;
+  // a named step no longer in the list is recovered to the nearest rather than silently reassigned.
   var placementIndex, placementAuto = true, recoveredFrom = null;
-  var turnsAt = colorsMidIndex(steps);
+  var turnsAt = colorsSeedPlacementIndex(steps, '');
   if (wanted) {
     var named = namedIndex;
     if (named >= 0) { placementIndex = named; placementAuto = false; }
@@ -551,6 +695,26 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
     if (Math.abs(seed.L - base[placementIndex].L) <= colorsTolerance()) seedState = 'exact';
     else if (lock) seedState = 'reanchored';
     else seedState = 'snapped';
+  }
+
+  // **Lock pins the exact seed hex** at the placement step — the tints.dev promise that the base
+  // colour keeps its value. Neighbours stay on the authored ladder; only this step is replaced.
+  if (seed && lock && seedHex && rows[placementIndex]) {
+    var pinned = colorsReadHex(seedHex, oklch);
+    if (pinned) {
+      var norm = oklchNormaliseHex(seedHex);
+      rows[placementIndex] = {
+        step: rows[placementIndex].step,
+        hex: norm,
+        L: pinned.L,
+        C: pinned.C,
+        H: pinned.H,
+        chroma: pinned.C,
+        clamped: false
+      };
+      seedRow = rows[placementIndex];
+      seedState = 'locked';
+    }
   }
 
   var clamped = [];

@@ -26,15 +26,24 @@
 //
 // ### Seed color
 //
-// A hex you already have. It fills the middle anchor's hue and chroma when you enter it under **Hex**.
+// Enter a hex under **Hex**. The panel rebuilds that mode's full scale from it: bright / middle / dark
+// hue and chroma (or saturation), lightness ends, and Linear curves — the same idea as tools like
+// tints.dev, using CodeFig's own anchors and curves rather than a separate palette generator.
 //
-// **Token** decides which step it occupies. That step becomes the middle anchor, so the two segments
-// need not be the same length.
+// Changing the hex again re-applies the whole scale. Bend curves or anchors afterwards to refine;
+// enter a new seed when you want a fresh family.
 //
-// **Lock seed color** re-anchors rather than offsets. With it on, the middle anchor becomes the seed's
-// own lightness and the ladder is recomputed through it; bright and dark stay fixed. Interior steps may
-// drift; the largest deviation is reported beside the field. With the seed on the first or last step
-// there is no endpoint left to keep, and the panel says so.
+// **Token** decides which step the seed occupies (default `500` when that name exists, otherwise the
+// middle of the list). That step is the middle anchor.
+//
+// **Lock seed color** keeps the seed's exact hex on that step. Neighbours stay on the ladder. With
+// lock off, the seed was a one-shot authoring tool and later edits can move that step.
+//
+// ### Color tokens and count
+//
+// **Color tokens** are the step names, lightest to darkest. **Token count** fills that field with N
+// names on the Tailwind 50…950 rail (end gaps half as wide as mid gaps). `11` is exactly Tailwind's
+// list. Edit the names freely after filling — names are labels; lightness still comes from the ladder.
 //
 // ### The curve
 //
@@ -78,13 +87,14 @@
 // | **Collection modes** | Chips for modes in the collection. Add, remove, or rename here. Each mode gets its own block below. |
 // | **Group within collection**<br>`group` | Folder for the colour variables, e.g. `Primitives/Neutrals`. |
 // | **Color tokens**<br>`steps` | Step names, lightest to darkest. Variables are created as `group/step`. |
+// | **Token count**<br>`tokenCount` | Fills Color tokens with N names on the 50…950 rail. `11` is Tailwind's list. |
 // | **Color model**<br>`colorModel` | **OKLCH** or **HSL**. OKLCH shares lightness steps across modes; HSL matches existing HSL palettes. |
 // | **Shared lightness**<br>`curve` | OKLCH only. One lightness curve for every mode, from bright to dark. |
 // | **Lightness → Bright / Dark**<br>`lightness.bright` / `lightness.dark` | OKLCH only. Lightness at the two ends (0–100). The shared curve fills everything between. |
 // | **Mode**<br>`modes[].name` | Name of this mode. |
-// | **Seed color → Hex**<br>`modes[].seed.hex` | Hex that fills the middle anchor's hue and chroma. |
+// | **Seed color → Hex**<br>`modes[].seed.hex` | Hex that rebuilds this mode's full scale (anchors + Linear curves). |
 // | **Seed color → Token**<br>`modes[].seed.placement` | Which step the seed occupies (middle of the ramp). Auto when empty. |
-// | **Lock seed color**<br>`modes[].seed.lock` | On: seed keeps its value and the ladder re-anchors through it. Off: seed moves to the nearest step. |
+// | **Lock seed color**<br>`modes[].seed.lock` | On: seed step keeps the exact hex. Off: later edits can move that step. |
 // | **Hue curve**<br>`modes[].hueCurve` / `hslHueCurve` | How hue shifts from the light end to the dark end. Separate curves for OKLCH and HSL. |
 // | **Hue start / middle / end** | Anchor hues at bright, middle, and dark. |
 // | **Chroma curve** / **Saturation curve**<br>`modes[].chromaCurve` / `saturationCurve` | How colourfulness builds between the ends (OKLCH chroma or HSL saturation). |
@@ -105,7 +115,7 @@
 @import { displayResults, createResult } from "@InfoPanel"
 @import { getOrCreateCollection, setupModes, processVariables, getVariable } from "@Variables"
 @import { namePrefix, resolveCollectionName, resolveGroup, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
-@import { colorsParseSteps, colorsPreviewHtml, colorsBuildVariableMap, colorsManifestSlice } from "@Color Ramp"
+@import { colorsParseSteps, colorsPreviewHtml, colorsBuildVariableMap, colorsManifestSlice, colorsApplySeedScale, colorsMaterialiseStepNames } from "@Color Ramp"
 
 // ========================================
 // CONFIG
@@ -118,6 +128,7 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   collectionName: "",
   group: "",
   steps: "",
+  tokenCount: "",
   colorModel: "hsl",
   curve: [0.333333, 0.333333, 0.666667, 0.666667],
   lightness: {},
@@ -149,6 +160,9 @@ var __codefigPanel = {
     { key: "steps", type: "string", label: "Color tokens",
       placeholder: "Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950",
       helper: "Names for each step, lightest to darkest. Variables are created as group/step." },
+    { key: "tokenCount", type: "number", label: "Token count",
+      placeholder: "eg. 11",
+      helper: "Fills Color tokens with names on the 50…950 rail. 11 is Tailwind's list. Edit the names after if you need to." },
     { key: "colorModel", type: "radio", label: "Color model",
       options: [{ hsl: "HSL" }, { oklch: "OKLCH" }],
       helper: "OKLCH when every mode should share the same lightness steps. HSL when you are matching a palette that already uses HSL. When to pick each: Documentation." },
@@ -177,10 +191,11 @@ var __codefigPanel = {
       columns: [
         { key: "name", type: "text", label: "Mode" },
         { key: "seed", type: "group", label: "Seed color", fields: [
-          { key: "hex", type: "text", label: "Hex", placeholder: "eg. #71717A" },
+          { key: "hex", type: "text", label: "Hex", placeholder: "eg. #71717A or 71717A",
+            helper: "Rebuilds this mode's scale from one colour. With or without #. Changing it again starts over." },
           { key: "placement", type: "text", label: "Token", placeholder: "Auto" },
           { key: "lock", type: "checkbox", label: "Lock seed color",
-            helper: "On. Seed keeps its value. The ladder re-anchors through it, endpoints unchanged.\nOff. Seed moves to the nearest step on the ladder." }
+            helper: "On. The seed step keeps this exact hex. Neighbours stay on the ladder.\nOff. The seed set the scale once; later edits can move that step." }
         ] },
         { type: "tab", names: [{ text: "Hue" }], columns: [
           { key: "hueCurve", type: "curve", label: "Hue curve", overshoot: true,

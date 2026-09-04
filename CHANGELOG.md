@@ -19,25 +19,15 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
-### Fixed
-
-- **Hue curve chart: Linear across 0° is a straight line again.** Short-arc ramps (e.g. 60°→280°,
-  or a middle at 290° between ends near 100°) were plotted as wrapped 0…360° samples, so the blue
-  path wrapped around the wheel while the dashed guide took the long chord — start and end did not
-  connect. Chart Y now follows the continuous short arc (same walk generation uses); tick labels
-  stay ordinary degrees.
-- **Typography Generate overview** now finds the text styles it just created. It used the
-  variable Group (`Typography/`) as a style-name filter, but Style naming defaults to
-  `{$fontScale}/{$fontWeight}` with no group folder — so the overview warned and drew nothing.
-  It now matches the style names from Style naming × tokens × weights.
-- **Typography** refuses to run when required fields are empty (Collection, Tokens, Font
-  family; Font weights when Create text styles is on; at least one mode with a Base unit).
-  Missing Font family used to write an empty `FONT_FAMILY` string, hit Figma's "unloaded
-  font" error, and could move stamped variables first. The Info panel lists what to fill;
-  nothing is written until the form is complete.
-
 ### Added
 
+- **Colors: seed rebuilds the full scale.** Entering a seed hex writes bright / middle / dark hue and
+  chroma (or saturation), lightness ends, and Linear curves for that mode — tints.dev-shaped UX on
+  CodeFig's own model. Changing the hex again re-applies. **Lock seed color** keeps the exact hex on
+  the seed step; unlock lets later edits move it. Shared OKLCH lightness ends follow the seed that
+  was applied (other modes' hue/chroma stay put).
+- **Colors: Token count.** A count control fills **Color tokens** with N names on the Tailwind
+  50…950 rail (half-weighted end gaps). `11` is the exact Tailwind list; edit names freely after.
 - **Copy these values to: Mode…** on Spacing, Corner radius, and Typography. On a mode tab when
   there are two or more modes, each other mode is a text link; click one to copy this mode's
   scale settings onto it (names stay). Asks before replacing settings that already differ. Grid
@@ -52,6 +42,34 @@ a plain statement of the new default.
   (`col-1+gap`, `col-1*2+gap`, `margin-gap`, …) using `col-N`, `gap`, `margin` (the Margins
   field), and numbers with `+ - * /`. Each entry becomes a FLOAT variable with that name, valued
   per mode. Separate from Extra columns.
+
+### Fixed
+
+- **Colors seed write-back.** Applying a seed rebuilt the strip in memory, then crashed writing
+  anchors into Source (`fillConfigBlock` returns `{ text }`, not a string). Fingerprints still
+  latched, so later previews stayed greyscale except a locked pin on one step. Write-back uses
+  `.text`, and fingerprints only latch after a successful write. Hex without `#` (and 3-digit) is
+  accepted and normalised to `#RRGGBB`.
+- **Colors seed middle on the curve.** Seed apply wrote middle hue/sat but left channel curves as
+  empty Linear, which generation treats as ends-only — so the strip stayed muted and lock only
+  pinned one vibrant step. Apply now writes Linear-with-middle channel curves so the scale peaks
+  at the seed.
+- **New-collection Group no longer clears on blur.** Address reset wiped Group whenever the
+  collection was not the last one read, including after typing a group name on a new collection.
+- **Hue curve chart: Linear across 0° is a straight line again.** Short-arc ramps (e.g. 60°→280°,
+  or a middle at 290° between ends near 100°) were plotted as wrapped 0…360° samples, so the blue
+  path wrapped around the wheel while the dashed guide took the long chord — start and end did not
+  connect. Chart Y now follows the continuous short arc (same walk generation uses); tick labels
+  stay ordinary degrees.
+- **Typography Generate overview** now finds the text styles it just created. It used the
+  variable Group (`Typography/`) as a style-name filter, but Style naming defaults to
+  `{$fontScale}/{$fontWeight}` with no group folder — so the overview warned and drew nothing.
+  It now matches the style names from Style naming × tokens × weights.
+- **Typography** refuses to run when required fields are empty (Collection, Tokens, Font
+  family; Font weights when Create text styles is on; at least one mode with a Base unit).
+  Missing Font family used to write an empty `FONT_FAMILY` string, hit Figma's "unloaded
+  font" error, and could move stamped variables first. The Info panel lists what to fill;
+  nothing is written until the form is complete.
 
 ## [2.0.0] - TBD
 

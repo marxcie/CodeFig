@@ -981,6 +981,16 @@
                 // the trigger would never fire at all.
                 var committed = !!(opts && opts.committed) && !(opts && opts.live);
                 var creatingNow = isFormCreatingCollection();
+                // Colors: Token count fills the freeform Color tokens field (Tailwind 50…950 rail).
+                // Must run before sync so Source and the next preview see the new names together.
+                if (committed && configPreviewDomain() === 'colors' &&
+                    maybeFillColorsStepsFromCount(values)) {
+                  // Form still shows the old steps string until we push values back into inputs.
+                  if (configUIInstance && typeof configUIInstance.setValues === 'function') {
+                    configUIInstance.setValues(values);
+                  }
+                }
+                var prevAddress = configLastAddress;
                 if (committed) {
                   // Settle the creating flag from the select itself — `collectionName` stays empty
                   // until a name is typed, so addressChanged alone never sees *New collection*.
@@ -1016,7 +1026,14 @@
                   }
                   var addrCollection = values.collectionName;
                   var addrGroup = values.group;
-                  if (addrCollection && addrCollection !== lastReadCollection) addrGroup = '';
+                  // Switching collection drops a stale group from the *previous* collection. Do not
+                  // clear when the user just typed Group on this commit (new collection + name), or
+                  // address-reset rewrites `group: ""` and the field empties on blur.
+                  var groupJustSet = !!(prevAddress &&
+                    String(values.group || '') !== String(prevAddress.group || ''));
+                  if (addrCollection && addrCollection !== lastReadCollection && !groupJustSet) {
+                    addrGroup = '';
+                  }
                   // **Claim before the reset reprojects.** `projectConfigIntoForm` →
                   // `scheduleGroupDetection`, which would otherwise claim this address and queue a
                   // competing `detectOnly` import 400ms later — stealing the seq from the fill below.
@@ -2662,9 +2679,41 @@
       // bleed Márton still sees: Grid diagram on Spacing, radius notes on Grid, colour hex dump
       // on Corner radius — for the quiet window until the next silent run returns empty.
       let _previewOwnerKey = '';
+      /**
+       * Colors seed→scale fingerprints per mode name. When a preview applies `colorsApplySeedScale`,
+       * the sandbox returns the mutated config and these fps so the next preview does not re-apply
+       * over curve edits until the seed/placement/steps/model change.
+       */
+      var _colorsSeedScaleFp = {};
 
       function previewOwnerKey() {
         return currentScript ? String(currentScript.id || currentScript.name || '') : '';
+      }
+
+      /**
+       * Write a seed-applied Colors config into Source + form (strip, charts, and fields stay one system).
+       * → true when Source was updated; false leaves fingerprints alone so the next preview can retry.
+       */
+      function applyColorsSeedScaleConfig(cfg) {
+        if (!cfg || typeof cfg !== 'object') return false;
+        var api = window.CodeFigConfigUI;
+        if (!api || typeof api.fillConfigBlock !== 'function') return false;
+        var pristine = currentConfigBlock();
+        if (!pristine) return false;
+        // Never persist the ephemeral fingerprint field if a caller left it on.
+        var clean = JSON.parse(JSON.stringify(cfg));
+        delete clean.__seedScaleFps;
+        (clean.modes || []).forEach(function (m) {
+          if (m && m.seed && m.seed._scaleFp) delete m.seed._scaleFp;
+        });
+        var filled = api.fillConfigBlock(pristine, clean);
+        // fillConfigBlock returns `{ text, … }`, not a string — passing the object made
+        // writeConfigBlockText throw (`text.replace is not a function`), so anchors never landed
+        // and the strip stayed grey except for a locked seed pin.
+        var text = filled && typeof filled.text === 'string' ? filled.text : null;
+        if (!text) return false;
+        writeConfigBlockText(text, 'seed-scale');
+        return true;
       }
 
       /** Empty every preview / suggestions slot and the panel-level region. */
@@ -2691,6 +2740,7 @@
         _previewOwnerKey = '';
         _previewWaitingSince = 0;
         _previewSeq++;
+        _colorsSeedScaleFp = {};
         if (_previewTimer) {
           clearTimeout(_previewTimer);
           _previewTimer = null;
@@ -2750,6 +2800,64 @@
         const suggestFn = scriptSuggestionsFunction(code);
         // Imports come from `resolvedImportsPreamble()` via `runSilentSnippet(..., { bodyOnly: true })`
         // — resolving them on every preview keystroke was a second copy of the collection-switch cost.
+        //
+        // **Colors: seed → full scale before the strip draws.** When a mode's seed hex/placement (and
+        // step list / model) fingerprint is new, `colorsApplySeedScale` rewrites that mode's anchors
+        // and Linear curves. The mutated config comes back as `seedScaleConfig` so the form/charts
+        // stay in step with the strip — generation alone would leave middle H/C at 0.
+        if (domain === 'colors' && fn === 'colorsPreviewHtml') {
+          var cfgForSeed = Object.assign({}, config, {
+            __seedScaleFps: _colorsSeedScaleFp || {}
+          });
+          return [
+            'var __cfg = ' + JSON.stringify(cfgForSeed) + ';',
+            'var __fps = __cfg.__seedScaleFps || {};',
+            'delete __cfg.__seedScaleFps;',
+            'var __steps = colorsParseSteps(__cfg.steps).steps;',
+            'var __seeded = false;',
+            'var __newFps = {};',
+            'Object.keys(__fps).forEach(function (k) { __newFps[k] = __fps[k]; });',
+            '(__cfg.modes || []).forEach(function (mode) {',
+            '  if (!mode || !mode.seed) return;',
+            '  var hex = String(mode.seed.hex || "").trim();',
+            '  var key = String(mode.name || "");',
+            '  if (!hex || !__steps.length) {',
+            '    // Empty seed: remember blank so the first valid hex is a change, not a silent init.',
+            '    if (__newFps[key] === undefined) __newFps[key] = "";',
+            '    return;',
+            '  }',
+            '  var place = String(mode.seed.placement || "");',
+            '  var fp = hex.toLowerCase() + "|" + place + "|" +',
+            '    String(__cfg.colorModel || "") + "|" + __steps.join(",");',
+            '  if (__newFps[key] === undefined) {',
+            '    // First sight of an already-authored seed — trust Source; do not overwrite curves.',
+            '    __newFps[key] = fp;',
+            '    return;',
+            '  }',
+            '  if (__newFps[key] === fp) return;',
+            '  var r = colorsApplySeedScale(__cfg, mode, __steps);',
+            '  if (r && r.ok) {',
+            '    // Apply may fill empty placement (e.g. 500); fingerprint the post-apply values.',
+            '    place = String(mode.seed.placement || "");',
+            '    __newFps[key] = hex.toLowerCase() + "|" + place + "|" +',
+            '      String(__cfg.colorModel || "") + "|" + __steps.join(",");',
+            '    __seeded = true;',
+            '  }',
+            '});',
+            'window.codefigConfigLoadResult({',
+            '  preview: colorsPreviewHtml(__cfg, ' + JSON.stringify(domain) + ', ' +
+              JSON.stringify(activeModeName()) + '),',
+            (suggestFn
+              ? '  suggestions: ' + suggestFn + '(__cfg, ' + JSON.stringify(domain) + ', ' +
+                JSON.stringify(activeModeName()) + '),'
+              : '  suggestions: null,'),
+            '  seedScaleConfig: __seeded ? __cfg : null,',
+            // Always return fps so the UI can latch first-sight without re-applying next tick.
+            '  seedScaleFps: __newFps,',
+            '  previewSeq: ' + seq,
+            '});'
+          ].join('\n');
+        }
         return [
           'window.codefigConfigLoadResult({',
           '  preview: ' + fn + '(' + JSON.stringify(config) + ', ' + JSON.stringify(domain) + ', ' +
@@ -2810,6 +2918,49 @@
         const path = configBlockFromFilePath(currentConfigBlock()) || '';
         const match = /^domains\.([A-Za-z0-9_$]+)/.exec(path);
         return match ? match[1] : null;
+      }
+
+      /**
+       * Same rail as `colorsMaterialiseStepNames` in `@color-ramp` — keep the two in lockstep.
+       * Lives in the iframe so Token count can fill Color tokens without a sandbox round-trip.
+       */
+      function materialiseColorsStepNames(n) {
+        var count = Math.round(Number(n));
+        if (!(count >= 3) || !isFinite(count)) return [];
+        if (count === 11) {
+          return ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+        }
+        var last = count - 1;
+        var total = count - 2;
+        var out = [];
+        var seen = {};
+        var cum = 0;
+        for (var i = 0; i < count; i++) {
+          if (i > 0) cum += (i === 1 || i === last) ? 0.5 : 1;
+          var raw = 50 + (900 * cum) / total;
+          var name = String(Math.round(raw));
+          while (seen[name]) {
+            raw += 1;
+            name = String(Math.round(raw));
+          }
+          seen[name] = true;
+          out.push(name);
+        }
+        return out;
+      }
+
+      /** → true when Color tokens were rewritten from Token count. */
+      function maybeFillColorsStepsFromCount(values) {
+        if (!values) return false;
+        var raw = values.tokenCount;
+        if (raw === '' || raw == null) return false;
+        var names = materialiseColorsStepNames(raw);
+        if (!names.length) return false;
+        var next = names.join(', ');
+        var prev = String(values.steps == null ? '' : values.steps);
+        if (prev.replace(/\s+/g, '') === next.replace(/\s+/g, '')) return false;
+        values.steps = next;
+        return true;
       }
 
       function updateConfigPreviewVisibility() {
@@ -7066,6 +7217,17 @@
                 window.codefigProbe('preview:result', { seq: data.previewSeq, current: _previewSeq,
                   accepted: data.previewSeq === _previewSeq, hexes: probeHexes });
                 if (data.previewSeq === _previewSeq) {
+                  if (data.seedScaleConfig) {
+                    // Only latch fingerprints after a successful write — otherwise a failed write-back
+                    // would block re-apply and leave greyscale anchors forever.
+                    if (applyColorsSeedScaleConfig(data.seedScaleConfig)) {
+                      if (data.seedScaleFps && typeof data.seedScaleFps === 'object') {
+                        _colorsSeedScaleFp = data.seedScaleFps;
+                      }
+                    }
+                  } else if (data.seedScaleFps && typeof data.seedScaleFps === 'object') {
+                    _colorsSeedScaleFp = data.seedScaleFps;
+                  }
                   renderConfigPreview(data.preview);
                   renderConfigSuggestions(data.suggestions);
                 }
