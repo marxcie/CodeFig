@@ -37,7 +37,9 @@
 // middle of the list). That step is the middle anchor.
 //
 // **Lock seed color** keeps the seed's exact hex on that step. Neighbours stay on the ladder. With
-// lock off, the seed was a one-shot authoring tool and later edits can move that step.
+// lock on, moving one end of Hue / Saturation / Chroma / Lightness mirrors the other end around the
+// seed so the range stays balanced. With lock off, the seed was a one-shot authoring tool and later
+// edits can move that step or either end on its own.
 //
 // ### Color tokens and count
 //
@@ -94,7 +96,7 @@
 // | **Mode**<br>`modes[].name` | Name of this mode. |
 // | **Seed color → Hex**<br>`modes[].seed.hex` | Hex that rebuilds this mode's full scale (anchors + Linear curves). |
 // | **Seed color → Token**<br>`modes[].seed.placement` | Which step the seed occupies (middle of the ramp). Auto when empty. |
-// | **Lock seed color**<br>`modes[].seed.lock` | On: seed step keeps the exact hex. Off: later edits can move that step. |
+// | **Lock seed color**<br>`modes[].seed.lock` | On: seed step keeps the exact hex; moving one end mirrors the other around the seed. Off: later edits can move that step. |
 // | **Hue curve**<br>`modes[].hueCurve` / `hslHueCurve` | How hue shifts from the light end to the dark end. Separate curves for OKLCH and HSL. |
 // | **Hue start / middle / end** | Anchor hues at bright, middle, and dark. |
 // | **Chroma curve** / **Saturation curve**<br>`modes[].chromaCurve` / `saturationCurve` | How colourfulness builds between the ends (OKLCH chroma or HSL saturation). |
@@ -115,7 +117,7 @@
 @import { displayResults, createResult } from "@InfoPanel"
 @import { getOrCreateCollection, setupModes, processVariables, getVariable } from "@Variables"
 @import { namePrefix, resolveCollectionName, resolveGroup, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
-@import { colorsParseSteps, colorsPreviewHtml, colorsBuildVariableMap, colorsManifestSlice, colorsApplySeedScale, colorsMaterialiseStepNames } from "@Color Ramp"
+@import { colorsParseSteps, colorsPreviewHtml, colorsBuildVariableMap, colorsManifestSlice, colorsApplySeedScale, colorsMaterialiseStepNames, colorsApplyLockedSeesaw, colorsSeesawSnapshot } from "@Color Ramp"
 
 // ========================================
 // CONFIG
@@ -195,7 +197,7 @@ var __codefigPanel = {
             helper: "Rebuilds this mode's scale from one colour. With or without #. Changing it again starts over." },
           { key: "placement", type: "text", label: "Token", placeholder: "Auto" },
           { key: "lock", type: "checkbox", label: "Lock seed color",
-            helper: "On. The seed step keeps this exact hex. Neighbours stay on the ladder.\nOff. The seed set the scale once; later edits can move that step." }
+            helper: "On. The seed step keeps this exact hex, and moving one end mirrors the other around the seed.\nOff. Later edits can move that step or either end on its own." }
         ] },
         { type: "tab", names: [{ text: "Hue" }], columns: [
           { key: "hueCurve", type: "curve", label: "Hue curve", overshoot: true,

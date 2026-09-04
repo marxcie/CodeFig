@@ -28,6 +28,8 @@ a plain statement of the new default.
   was applied (other modes' hue/chroma stay put).
 - **Colors: Token count.** A count control fills **Color tokens** with N names on the Tailwind
   50…950 rail (half-weighted end gaps). `11` is the exact Tailwind list; edit names freely after.
+- **Colors: locked-seed seesaw.** With **Lock seed** on, moving one Hue / Saturation / Chroma /
+  Lightness end mirrors the other around the seed so the range stays balanced (short-arc for hue).
 - **Copy these values to: Mode…** on Spacing, Corner radius, and Typography. On a mode tab when
   there are two or more modes, each other mode is a text link; click one to copy this mode's
   scale settings onto it (names stay). Asks before replacing settings that already differ. Grid

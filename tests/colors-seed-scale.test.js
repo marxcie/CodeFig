@@ -172,6 +172,37 @@ test('seed apply puts middle sat/chroma on a 10-point curve so the strip peaks a
   assert.ok(Math.abs(made.rows[mid].C * 100 - mode.middle.saturation) < 8);
 });
 
+test('locked seesaw: moving hue start mirrors end around the seed', () => {
+  const config = baseConfig({ colorModel: 'hsl' });
+  const mode = config.modes[0];
+  mode.seed.hex = '#0B84FF';
+  E.colorsApplySeedScale(config, mode, STEPS_11);
+  const pivot = mode.middle.hslHue;
+  assert.ok(pivot > 0);
+
+  const prev = E.colorsSeesawSnapshot(config);
+  mode.bright.hslHue = 298.5;
+  assert.equal(E.colorsApplyLockedSeesaw(config, prev), true);
+  assert.ok(Math.abs(mode.dark.hslHue - E.colorsSeesawHue(pivot, 298.5)) < 0.2);
+  assert.ok(Math.abs(mode.middle.hslHue - pivot) < 0.05);
+});
+
+test('locked seesaw: both ends changing (seed apply) does not fight', () => {
+  const config = baseConfig({ colorModel: 'hsl' });
+  const mode = config.modes[0];
+  const prev = E.colorsSeesawSnapshot(config);
+  mode.seed.hex = '#0B84FF';
+  E.colorsApplySeedScale(config, mode, STEPS_11);
+  assert.equal(E.colorsApplyLockedSeesaw(config, prev), false);
+});
+
+test('colorsSeesawHue matches the balanced examples', () => {
+  assert.ok(Math.abs(E.colorsSeesawHue(210.5, 298.5) - 122.5) < 0.01);
+  assert.ok(Math.abs(E.colorsSeesawHue(210.5, 122.5) - 298.5) < 0.01);
+  assert.ok(Math.abs(E.colorsSeesawLinear(50, 20) - 80) < 0.01);
+  assert.equal(E.colorsSeesawLinear(83, 23.2, 0, 100), 100); // clamped
+});
+
 test('seed hex without # (and 3-digit) applies the full scale', () => {
   const config = baseConfig({ colorModel: 'hsl' });
   const mode = config.modes[0];

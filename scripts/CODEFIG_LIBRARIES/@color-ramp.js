@@ -15,7 +15,7 @@
 // | Area | Functions |
 // |---|---|
 // | Config reading | colorsParseSteps, colorsMaterialiseStepNames, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
-// | Seed | colorsApplySeedScale, colorsSeedPlacementIndex |
+// | Seed | colorsApplySeedScale, colorsSeedPlacementIndex, colorsSeesawHue, colorsSeesawLinear, colorsApplyLockedSeesaw, colorsSeesawSnapshot |
 // | Generation | colorsGenerateMode, colorsBuildVariableMap, colorsManifestSlice |
 // | Alignment | colorsAlignment, colorsBestAnchor, colorsAnchorFits |
 // | Preview | colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip |
@@ -436,6 +436,163 @@ function colorsApplySeedScale(config, mode, steps) {
     placementIndex: placementIndex,
     placement: mode.seed.placement
   };
+}
+
+/**
+ * Mirror `moved` around `pivot` on the hue wheel (short-arc delta).
+ * Example: pivot 210.5, moved 298.5 → 122.5.
+ */
+function colorsSeesawHue(pivot, moved) {
+  var p = Number(pivot);
+  var m = Number(moved);
+  if (!isFinite(p) || !isFinite(m)) return m;
+  var d = ((m - p + 540) % 360) - 180;
+  return ((p - d) % 360 + 360) % 360;
+}
+
+/**
+ * Mirror `moved` around `pivot` on a linear channel. Optional `lo`/`hi` clamp.
+ */
+function colorsSeesawLinear(pivot, moved, lo, hi) {
+  var p = Number(pivot);
+  var m = Number(moved);
+  if (!isFinite(p) || !isFinite(m)) return m;
+  var other = 2 * p - m;
+  if (typeof lo === 'number' && isFinite(lo)) other = Math.max(lo, other);
+  if (typeof hi === 'number' && isFinite(hi)) other = Math.min(hi, other);
+  return other;
+}
+
+function colorsSeesawRound(n, places) {
+  var f = Math.pow(10, places == null ? 1 : places);
+  return Math.round(Number(n) * f) / f;
+}
+
+/** Compact end-anchor snapshot so the panel can tell which side moved under lock. */
+function colorsSeesawSnapshot(config) {
+  if (!config || typeof config !== 'object') return null;
+  var modes = (config.modes || []).map(function (mode) {
+    if (!mode) return null;
+    return {
+      name: mode.name,
+      lock: !!(mode.seed && mode.seed.lock),
+      hex: mode.seed && mode.seed.hex ? String(mode.seed.hex) : '',
+      bright: mode.bright ? {
+        hue: mode.bright.hue, hslHue: mode.bright.hslHue,
+        chroma: mode.bright.chroma, saturation: mode.bright.saturation,
+        lightness: mode.bright.lightness
+      } : null,
+      dark: mode.dark ? {
+        hue: mode.dark.hue, hslHue: mode.dark.hslHue,
+        chroma: mode.dark.chroma, saturation: mode.dark.saturation,
+        lightness: mode.dark.lightness
+      } : null
+    };
+  });
+  return {
+    colorModel: config.colorModel || 'oklch',
+    lightness: config.lightness ? {
+      bright: config.lightness.bright,
+      dark: config.lightness.dark
+    } : null,
+    modes: modes
+  };
+}
+
+/**
+ * With **Lock seed** on, the unedited end mirrors around the seed so the range stays balanced.
+ *
+ * Only one end may have moved since `prev` (from `colorsSeesawSnapshot`). Both ends changing
+ * (seed apply, paste) is left alone. Mutates `config` in place.
+ *
+ * → true when an opposite end was rewritten.
+ */
+function colorsApplyLockedSeesaw(config, prev) {
+  if (!config || !prev) return false;
+  var oklch = (config.colorModel || 'oklch') !== 'hsl';
+  var mutated = false;
+  var EPS = 1e-4;
+
+  function num(v) {
+    var n = typeof v === 'number' ? v : parseFloat(v);
+    return (typeof n === 'number' && isFinite(n)) ? n : NaN;
+  }
+
+  function pairMoved(curB, curD, prevB, prevD) {
+    var b = num(curB), d = num(curD), pb = num(prevB), pd = num(prevD);
+    if (!isFinite(b) || !isFinite(d)) return null;
+    var bCh = isFinite(pb) && Math.abs(b - pb) > EPS;
+    var dCh = isFinite(pd) && Math.abs(d - pd) > EPS;
+    if (bCh === dCh) return null; // neither, or both
+    return bCh ? 'bright' : 'dark';
+  }
+
+  // Shared OKLCH lightness ends — pivot is the first locked mode's seed L.
+  if (oklch && config.lightness && prev.lightness) {
+    var lockMode = null;
+    for (var mi = 0; mi < (config.modes || []).length; mi++) {
+      var cand = config.modes[mi];
+      if (cand && cand.seed && cand.seed.lock && cand.seed.hex) { lockMode = cand; break; }
+    }
+    if (lockMode) {
+      var seedL = colorsReadHex(lockMode.seed.hex, true);
+      if (seedL) {
+        var whichL = pairMoved(
+          config.lightness.bright, config.lightness.dark,
+          prev.lightness.bright, prev.lightness.dark
+        );
+        if (whichL === 'bright') {
+          config.lightness.dark = colorsSeesawRound(
+            colorsSeesawLinear(seedL.L * 100, num(config.lightness.bright), 0, 100), 1);
+          mutated = true;
+        } else if (whichL === 'dark') {
+          config.lightness.bright = colorsSeesawRound(
+            colorsSeesawLinear(seedL.L * 100, num(config.lightness.dark), 0, 100), 1);
+          mutated = true;
+        }
+      }
+    }
+  }
+
+  (config.modes || []).forEach(function (mode, i) {
+    if (!mode || !mode.seed || !mode.seed.lock) return;
+    var seed = colorsReadHex(mode.seed.hex, oklch);
+    if (!seed) return;
+    var prevMode = null;
+    for (var j = 0; j < (prev.modes || []).length; j++) {
+      if (prev.modes[j] && prev.modes[j].name === mode.name) { prevMode = prev.modes[j]; break; }
+    }
+    if (!prevMode) prevMode = (prev.modes || [])[i];
+    if (!prevMode || !prevMode.bright || !prevMode.dark) return;
+    if (!mode.bright) mode.bright = {};
+    if (!mode.dark) mode.dark = {};
+
+    function see(channel, pivot, isHue, lo, hi, places) {
+      var which = pairMoved(
+        mode.bright[channel], mode.dark[channel],
+        prevMode.bright[channel], prevMode.dark[channel]
+      );
+      if (!which) return;
+      var moved = num(mode[which][channel]);
+      var next = isHue
+        ? colorsSeesawHue(pivot, moved)
+        : colorsSeesawLinear(pivot, moved, lo, hi);
+      var other = which === 'bright' ? 'dark' : 'bright';
+      mode[other][channel] = colorsSeesawRound(next, places);
+      mutated = true;
+    }
+
+    if (oklch) {
+      see('hue', seed.H, true, 0, 360, 1);
+      see('chroma', seed.C, false, 0, 0.4, 4);
+    } else {
+      see('hslHue', seed.H, true, 0, 360, 1);
+      see('saturation', seed.C * 100, false, 0, 100, 1);
+      see('lightness', seed.L * 100, false, 0, 100, 1);
+    }
+  });
+
+  return mutated;
 }
 
 /** 0..100 in the config, 0..1 in the maths. Converted at this boundary and nowhere else. */
