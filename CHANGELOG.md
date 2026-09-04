@@ -19,6 +19,19 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Added
+
+- **DSF Group candidates as links.** When Collection holds more than one Grid / Spacing /
+  Radius / Typography / Colors set (or the current Group points at none of them), their names
+  appear as text links directly under the Group input. Click one to fill Group and load that
+  set; after a load, sibling sets stay listed so you can switch without clearing the field. One
+  candidate still auto-fills Group as before. Colors loads the scale unchanged (Original /
+  `skipFit`); curve fit stays on demand when a channel tab opens.
+- **Grid: Extra values.** Shared Mode-settings list for CSS-calc-style formulas
+  (`col-1+gap`, `col-1*2+gap`, `margin-gap`, …) using `col-N`, `gap`, `margin` (the Margins
+  field), and numbers with `+ - * /`. Each entry becomes a FLOAT variable with that name, valued
+  per mode. Separate from Extra columns.
+
 ## [2.0.0] - TBD
 
 **Foundations.** Generational config UX: `@PANEL_START` as live `var __codefigPanel = {…}` (values stay in `@CONFIG_*` / `@UI_CONFIG_*`); Configuration code tab removed. Script storage in Figma Variables with LocalStorage backup, settings gear, and canvas paste-share. Foundation maintain on open; copy/duplicate → new stamp identity. Design System Foundations open empty until a collection is chosen; ramp scripts scan for the group when none is recorded. Scoped preview CSS on DSF libraries (plans 29–32). Help rewritten as onboarding; utilities regrouped; Change case and nesting cleanup expanded.

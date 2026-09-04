@@ -1119,6 +1119,27 @@ async function findFoundationSetCached(collection, domain, group) {
  *                  its own step.
  *   `none`       — the defaults stand, and the panel says so.
  */
+/**
+ * Other groups in this collection that hold a set for `domain`, excluding the group already asked for.
+ * The panel lists these as links under Group so a person can switch without clearing the field first.
+ */
+async function foundationSiblingCandidates(collectionName, domain, group, knownGroups) {
+  var groupNorm = group == null ? '' : group;
+  var groups = knownGroups;
+  if (!groups) {
+    if (domain === 'grid') {
+      groups = (await gridGroupsIn(collectionName)).groups;
+    } else if (foundationTokensKey(domain)) {
+      groups = (await rampGroupsIn(collectionName, domain)).groups;
+    } else {
+      groups = [];
+    }
+  }
+  return (groups || []).filter(function (entry) {
+    return entry.group !== groupNorm;
+  });
+}
+
 async function foundationAutoImport(collectionName, group, domain) {
   var answer = {
     source: 'none', config: null, collection: collectionName || null,
@@ -1159,6 +1180,10 @@ async function foundationAutoImport(collectionName, group, domain) {
         answer.config = {};
         answer.config[tokensKey] = found;
         answer.modes = collection.modes.map(function (mode) { return mode.name; });
+        // Siblings so the panel can switch without clearing Group.
+        answer.candidates = await foundationSiblingCandidates(
+          collectionName, domain, group, rampScan.groups
+        );
       } else if (tokensKey) {
         // Nothing where the panel is pointing. Say where a ramp set *is*, the same way Grid does for
         // col-N — the default group and a real system's group rarely match.
@@ -1170,12 +1195,12 @@ async function foundationAutoImport(collectionName, group, domain) {
     }
     if (domain === 'grid') {
       var seen = await gridRecognise(collectionName, group == null ? '' : group);
+      var gridScan = await gridGroupsIn(collectionName);
       if (!seen.found) {
         // Nothing where the panel is pointing. Say where a grid *is*, so the panel can offer to go
         // there — the whole reason this is worth doing is that the default group and a real system's
         // group rarely match.
-        var candidates = await gridGroupsIn(collectionName);
-        answer.candidates = candidates.groups.filter(function (entry) {
+        answer.candidates = gridScan.groups.filter(function (entry) {
           return entry.group !== (group == null ? '' : group);
         });
       }
@@ -1190,6 +1215,9 @@ async function foundationAutoImport(collectionName, group, domain) {
           sources: seen.sources,
           extensionColumnsInferred: seen.extensionColumnsInferred
         };
+        answer.candidates = await foundationSiblingCandidates(
+          collectionName, domain, group, gridScan.groups
+        );
       }
     }
 
@@ -1216,6 +1244,7 @@ async function foundationAutoImport(collectionName, group, domain) {
   // Set when the record's group is behind the file's. Not a problem to report — the next run brings it
   // up to date — but the panel is entitled to know it loaded a set that has moved.
   answer.recordedGroup = read.recordedGroup;
+  answer.candidates = await foundationSiblingCandidates(collectionName, domain, group);
   return answer;
 }
 
@@ -2308,7 +2337,7 @@ function foundationSliceKeys(domain) {
     'tokens', 'nameTemplate', 'steps', 'scaling', 'perViewport', 'sets', 'viewportOrder',
     'modeNames', 'extra',
     'defaultBaseLevel', 'generateOverview', 'roundTo', 'roundLowerValuesTo',
-    'styles', 'fontWeights', 'extensionColumns'
+    'styles', 'fontWeights', 'extensionColumns', 'extraValues'
   ];
   // A field in a shipped default block is declared by definition. Leaving these to `extra` meant
   // an untouched config warned about itself the first time anyone ran the script it came with,
@@ -2340,7 +2369,7 @@ function foundationDomainKeys(domain) {
     return common.concat(['fontScale', 'fontWeights', 'styles', 'figmaStyles', 'createStyles',
       'styleNaming', 'textWrapStyle', 'overviewPreviewText']);
   }
-  if (domain === 'grid') return common.concat(['extensionColumns']);
+  if (domain === 'grid') return common.concat(['extensionColumns', 'extraValues']);
   if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
     'lower', 'upper', 'lightness', 'modes']);
   return common;
@@ -2859,6 +2888,8 @@ function buildDomainSlice(inner, domain, translations, warnings) {
   }
   if (domain === 'grid') {
     if (typeof inner.extensionColumns === 'number') slice.extensionColumns = inner.extensionColumns;
+    if (Array.isArray(inner.extraValues)) slice.extraValues = foundationClone(inner.extraValues);
+    else if (typeof inner.extraValues === 'string') slice.extraValues = inner.extraValues;
   }
 
   // Derived fields: dropped, and said out loud.
@@ -3062,6 +3093,7 @@ function toDomainConfig(v1, domain, options) {
     out.modes = foundationClone(config.modes);
   }
   if (config.extensionColumns !== undefined) out.extensionColumns = config.extensionColumns;
+  if (config.extraValues !== undefined) out.extraValues = foundationClone(config.extraValues);
   if (typeof v1.lineGrid === 'number') out.lineGrid = v1.lineGrid;
 
   // The author's order when we know it, the registry's otherwise.
@@ -4102,6 +4134,81 @@ function colorsStepNameOk(name) {
   return typeof name === 'string' && name.length > 0 && /^[A-Za-z0-9][A-Za-z0-9 _.-]*$/.test(name);
 }
 
+/**
+ * One COLOR step under a group prefix — the same shape `colorsRecognise` walks.
+ * The group is everything before the last `/`; a bare name lives at the collection root.
+ * Direct children only: a nested path is another group's problem.
+ */
+function colorsTokenGroup(name) {
+  var parts = String(name).split('/');
+  if (parts.length === 1) {
+    var lone = parts[0];
+    if (!colorsStepNameOk(lone)) return null;
+    return { group: '', token: lone };
+  }
+  var token = parts[parts.length - 1];
+  if (!colorsStepNameOk(token)) return null;
+  return { group: parts.slice(0, -1).join('/'), token: token };
+}
+
+/**
+ * Which groups in a list of COLOR variable names look like a lightness ramp.
+ *
+ * Names only — no values, no curve fit. Three steps minimum, matching `colorsRecognise`
+ * (`found` needs first, middle and last). Returns `[{ group, tokens }]`, most tokens first.
+ */
+function colorsGroupCandidates(names) {
+  var minTokens = 3;
+  var tokensByGroup = {};
+  var order = [];
+
+  (names || []).forEach(function (name) {
+    var parsed = colorsTokenGroup(name);
+    if (!parsed) return;
+    var g = parsed.group;
+    if (String(g).indexOf('__codefig-test__') === 0) return;
+    if (!tokensByGroup[g]) {
+      tokensByGroup[g] = {};
+      order.push(g);
+    }
+    tokensByGroup[g][parsed.token] = true;
+  });
+
+  return order.map(function (group) {
+    return { group: group, tokens: Object.keys(tokensByGroup[group]).length };
+  }).filter(function (entry) {
+    return entry.tokens >= minTokens;
+  }).sort(function (a, b) {
+    if (b.tokens !== a.tokens) return b.tokens - a.tokens;
+    return order.indexOf(a.group) - order.indexOf(b.group);
+  });
+}
+
+/**
+ * The groups in a collection that hold a plausible COLOR ramp, so the panel can list them
+ * under Group. Read-only — names and resolvedType only; no fit, no alpha probe.
+ *
+ * `index`, optional: `{ byId, collections }` from a caller that already walked the document
+ * (`foundationColorsAutoImport`), so this is not a second full read.
+ */
+async function colorsGroupsIn(collectionName, index) {
+  var answer = { collection: collectionName || null, groups: [] };
+  if (!collectionName) return answer;
+
+  var collections = index ? index.collections : await figma.variables.getLocalVariableCollectionsAsync();
+  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
+  if (!collection) return answer;
+
+  var names = [];
+  var ids = collection.variableIds || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = index ? index.byId[ids[i]] : await figma.variables.getVariableByIdAsync(ids[i]);
+    if (variable && variable.resolvedType === 'COLOR') names.push(variable.name);
+  }
+  answer.groups = colorsGroupCandidates(names);
+  return answer;
+}
+
 /** An alias, followed to a value. Cross-collection is the same walk as same-collection: the id is a
  *  document-wide handle, so `getVariableByIdAsync` does not care which collection it lands in — what differs
  *  is only which collection's *default mode* supplies the value. A chain is followed a few hops and then
@@ -4226,12 +4333,22 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     readIndex = { byId: byId, collections: collections };
   }
 
+  // Sibling / miss candidates — same shape Grid and ramp domains already return. Names only; the
+  // load path (`colorsRecognise` with `skipFit`) still decides what fills the block. Without this,
+  // Colors never populated `#groupCandidates` even when the collection held several ramps.
+  var colorScan = await colorsGroupsIn(collectionName, readIndex);
+  var groupNorm = group == null ? '' : group;
+  var colorSiblingCandidates = colorScan.groups.filter(function (entry) {
+    return entry.group !== groupNorm;
+  });
+
   var perMode = [], unread = [], leadAnchors = null, leadName = null;
   for (var w = 0; w < wanted.length; w++) {
     var seen = await colorsRecognise(collectionName, group == null ? '' : group, wanted[w], readIndex, skipFit);
     // A declined group is a fact about the group, not about one mode, so it stops the whole answer.
     if (seen.declined) {
       answer.recognition.declined = seen.declined;
+      answer.candidates = colorSiblingCandidates;
       return answer;
     }
     answer.recognition.modes[wanted[w]] = {
@@ -4331,7 +4448,10 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     perMode.push(entry);
   }
 
-  if (!perMode.length) return answer;
+  if (!perMode.length) {
+    answer.candidates = colorSiblingCandidates;
+    return answer;
+  }
   // **Every mode, not the first one.** The ladder is shared, so it is averaged across the modes that were
   // read rather than taken from whichever recognised first — see `colorsSharedLadder`.
   //
@@ -4409,5 +4529,6 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
       return entry;
     }).concat(unread)
   };
+  answer.candidates = colorSiblingCandidates;
   return answer;
 }

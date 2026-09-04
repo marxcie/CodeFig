@@ -816,6 +816,7 @@ test('a recorded Grid set comes back as the config that made it', () => {
     collectionName: 'Responsive System',
     group: 'Grid',
     extensionColumns: 4,
+    extraValues: ['col-1+gap', 'col-1*2+gap'],
     generateOverview: true,
     modes: [
       { name: 'desktop', containerWidth: 1920, columns: 12, gap: 40, padding: 80 },
@@ -832,6 +833,7 @@ test('a recorded Grid set comes back as the config that made it', () => {
   }, 'grid');
 
   assert.equal(back.extensionColumns, 4, 'a top-level grid key was dropped');
+  assert.deepEqual(back.extraValues, ['col-1+gap', 'col-1*2+gap'], 'extraValues must survive the slice');
   assert.equal(back.generateOverview, true);
   assert.deepEqual(back.modes.map((m) => m.name), ['desktop', 'mobile'], 'and in the order declared');
   assert.deepEqual(back.modes[0], {

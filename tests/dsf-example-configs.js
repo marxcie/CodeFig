@@ -69,6 +69,7 @@ module.exports = {
     collectionName: '',
     group: 'Grid',
     extensionColumns: 0,
+    extraValues: [],
     generateOverview: false,
     modes: [
       { name: 'Value', containerWidth: 1920, columns: 12, gap: 40, padding: 80 },

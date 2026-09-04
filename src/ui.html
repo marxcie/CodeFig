@@ -1681,6 +1681,8 @@
             note.style.display = 'none';
           }
         }
+        // Form rebuild empties the Group control; put candidate links back under the input.
+        remountGroupCandidates();
       }
 
       /**
@@ -3422,14 +3424,127 @@
       }
 
       /**
-       * **Recorded, not shown.** This used to render as a note under the Group field — Márton asked for it
-       * to go. `lastAutoImport.note` (set by every caller alongside this) still carries the same text for
-       * `npm run figma:ui -- readAutoImport`, so a stalled or empty read is still diagnosable from the
-       * terminal; it is only the on-screen copy under Group that is gone.
+       * **Recorded, not shown as prose.** Status text used to sit under Group; Márton asked for that
+       * note to go. `lastAutoImport.note` still carries the same text for `npm run figma:ui --
+       * readAutoImport`. Candidate *links* under Group are a separate slot (`#groupCandidates`).
        */
       function setAutoImportNote(text) {
         var existing = document.getElementById('autoImportNote');
         if (existing) existing.remove();
+      }
+
+      /** Last candidate list drawn under Group — remounted after every form rebuild. */
+      var lastGroupCandidates = null;
+
+      function clearGroupCandidates() {
+        lastGroupCandidates = null;
+        var el = document.getElementById('groupCandidates');
+        if (el) el.remove();
+      }
+
+      /**
+       * Find the Group text input and ensure it sits in a column stack (input, then links), so the
+       * links hug the field rather than sitting under the whole label+control row.
+       */
+      function groupFieldStack() {
+        if (!configUIContainer) return null;
+        var input = configUIContainer.querySelector('[data-field="group"]');
+        if (!input) return null;
+        var parent = input.parentNode;
+        if (parent && parent.classList && parent.classList.contains('config-ui-group-stack')) {
+          return parent;
+        }
+        var stack = document.createElement('div');
+        stack.className = 'config-ui-group-stack';
+        if (parent) {
+          parent.insertBefore(stack, input);
+          stack.appendChild(input);
+        }
+        return stack;
+      }
+
+      /**
+       * Text links under the Group input. Click fills Group and runs the ordinary auto-import.
+       * Remembers the list so a form rebuild (every programmatic write) can put them back.
+       */
+      function renderGroupCandidates(candidates) {
+        var list = (candidates || []).slice();
+        if (!list.length) {
+          clearGroupCandidates();
+          return;
+        }
+        lastGroupCandidates = list;
+        var stack = groupFieldStack();
+        if (!stack) return;
+
+        var slot = document.getElementById('groupCandidates');
+        if (slot) slot.remove();
+        slot = document.createElement('div');
+        slot.id = 'groupCandidates';
+        slot.className = 'config-ui-group-candidates';
+
+        var lead = document.createElement('span');
+        lead.className = 'config-ui-group-candidates-lead';
+        lead.textContent = 'In this collection: ';
+        slot.appendChild(lead);
+
+        list.forEach(function (candidate, i) {
+          if (i > 0) {
+            var sep = document.createElement('span');
+            sep.className = 'config-ui-group-candidates-sep';
+            sep.textContent = ', ';
+            slot.appendChild(sep);
+          }
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'config-ui-group-candidate';
+          var label = candidate.group || '(no group)';
+          btn.textContent = label;
+          btn.setAttribute('data-group-candidate', candidate.group == null ? '' : String(candidate.group));
+          var detail = foundationGroupDetail(candidate);
+          if (detail) btn.title = detail;
+          btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            adoptGroupCandidate(candidate.group == null ? '' : candidate.group);
+          });
+          slot.appendChild(btn);
+        });
+        stack.appendChild(slot);
+      }
+
+      function remountGroupCandidates() {
+        if (lastGroupCandidates && lastGroupCandidates.length) {
+          renderGroupCandidates(lastGroupCandidates);
+        }
+      }
+
+      /**
+       * User clicked a candidate: set Group and let the ordinary load run. Clears the adopt guard so
+       * switching back and forth is allowed — that guard only exists to stop the *automatic* one-candidate
+       * jump from looping.
+       */
+      function adoptGroupCandidate(target) {
+        var where = fileModes.collection || '';
+        var key = where + '\u0000' + target;
+        delete groupsAdopted[key];
+
+        var api = window.CodeFigConfigUI;
+        if (!api) return;
+        var schema;
+        try {
+          schema = api.parse(currentConfigBlock(), currentPanelSpecText());
+        } catch (e) {
+          return;
+        }
+        var groupRow = (schema.rows || []).filter(function (r) {
+          return r.type === 'field' && r.name === 'group';
+        })[0];
+        if (!groupRow) return;
+
+        groupsAdopted[key] = true;
+        clearGroupCandidates();
+        writeConfigBlockText(api.serialize(schema, { group: target }), 'group-detected');
+        scheduleAutoImport();
       }
 
       function scheduleAutoImport() {
@@ -4355,11 +4470,12 @@
       }
 
       /**
-       * Nothing where the panel is pointing, but a set is somewhere in this collection.
+       * Nothing where the panel is pointing, but a set is somewhere in this collection — or siblings
+       * after a successful load, so the person can switch.
        *
-       * Grid, spacing, radius, and typography all report `candidates` from `@Foundation` when the
-       * current group holds nothing. **One candidate: go there.** **More than one: say so and touch
-       * nothing.**
+       * Grid, spacing, radius, and typography all report `candidates` from `@Foundation`.
+       * **Already on a set, or more than one candidate: show links under Group.**
+       * **One candidate and nothing here: go there.**
        */
       function foundationGroupDetail(candidate) {
         if (!candidate) return '';
@@ -4369,22 +4485,31 @@
       }
 
       /**
-       * **One candidate: go there.** **More than one: say so and touch nothing.**
+       * **One candidate and nothing here: go there.** **Several, or already on a set: links under Group.**
        */
       function offerDetectedGroup(found) {
         var candidates = (found && found.candidates) || [];
-        if (!candidates.length) return false;
+        if (!candidates.length) {
+          clearGroupCandidates();
+          return false;
+        }
 
-        var where = fileModes.collection || '';
-        if (candidates.length > 1) {
-          setAutoImportNote('No ' + configPreviewDomainLabel() + ' set under this group. This ' +
-            'collection has one under ' +
-            nameList(candidates.map(function (c) { return c.group || '(no group)'; })) +
-            ' — set Group to the one you want.');
-          return true;
+        var hasSet = found && (found.source === 'recorded' || found.source === 'recognised');
+        // Pointing at a set already, or a real choice between groups: list them; never guess.
+        if (hasSet || candidates.length > 1) {
+          renderGroupCandidates(candidates);
+          if (!hasSet) {
+            lastAutoImport.note = 'No ' + configPreviewDomainLabel() +
+              ' set under this group. Choose one under Group.';
+            setAutoImportNote(lastAutoImport.note);
+          }
+          // On a miss with several candidates, short-circuit the miss wipe. On a hit, return false so
+          // the fill path (or detect-only mode ordering) continues as before.
+          return !hasSet;
         }
 
         var target = candidates[0].group;
+        var where = fileModes.collection || '';
         var key = where + '\u0000' + target;
         if (groupsAdopted[key]) return false;
         groupsAdopted[key] = true;
@@ -4402,11 +4527,13 @@
         })[0];
         if (!groupRow) return false;
 
-        var detail = foundationGroupDetail(candidates[0]);
+        clearGroupCandidates();
         writeConfigBlockText(api.serialize(schema, { group: target }), 'group-detected');
-        setAutoImportNote('No ' + configPreviewDomainLabel() + ' set under that group. This ' +
+        var detail = foundationGroupDetail(candidates[0]);
+        lastAutoImport.note = 'No ' + configPreviewDomainLabel() + ' set under that group. This ' +
           'collection has one under ' + (target || 'no group') +
-          (detail ? ' (' + detail + ')' : '') + ', so Group was set to it.');
+          (detail ? ' (' + detail + ')' : '') + ', so Group was set to it.';
+        setAutoImportNote(lastAutoImport.note);
         // The address changed, so ask again — the ordinary load, at the new address.
         scheduleAutoImport();
         return true;
@@ -4565,6 +4692,8 @@
           lastAutoImport.note = recognitionNote(found, where) + summary;
         }
         setAutoImportNote(lastAutoImport.note);
+        // Sibling groups in this collection, so switching is a click under Group rather than clearing it.
+        renderGroupCandidates(found.candidates || []);
 
         // **And say it out loud, once.** The note under Group is the full account — where it came from,
         // whether running would change anything, what could not be recovered — and it is easy to miss
@@ -8248,6 +8377,7 @@
         // Auto-import's answer, reported because it *is* the behaviour: "it was imported
         // automatically" is a claim, and a claim nothing can read is one nobody can check.
         var autoNote = document.getElementById('autoImportNote');
+        var groupCand = document.getElementById('groupCandidates');
         // The two edges that have to be the same line: the first tab's and the first row's.
         var firstTab = document.querySelector('.editor-tab');
         var firstRow = container ? container.querySelector('.config-ui-row') : null;
@@ -8266,6 +8396,12 @@
           edges: edges,
           hasUiConfig: !!scriptHasUIConfig,
           autoImportNote: autoNote ? autoNote.textContent : null,
+          groupCandidates: groupCand
+            ? Array.prototype.map.call(
+                groupCand.querySelectorAll('[data-group-candidate]'),
+                function (el) { return el.getAttribute('data-group-candidate'); }
+              )
+            : [],
           // Gone with the untouched rule: loading overwrites, and the safety lives entirely in the
           // trigger — only an address change asks.
           autoImportTriggers: ['collectionName', 'group'],

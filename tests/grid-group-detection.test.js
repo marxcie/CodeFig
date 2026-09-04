@@ -6,8 +6,9 @@
  * grid, so finding it is a search rather than a question.
  *
  * The name scan is pure and lives here. What the panel does with the answer — go there when there is
- * one, say so and touch nothing when there are several — is asserted against `src/ui.html`, because
- * the rule about when a panel may move a field you typed in is the part worth pinning.
+ * one, list clickable groups when there are several, and list siblings after a load so switching is
+ * a click — is asserted against `src/ui.html`, because the rule about when a panel may move a field
+ * you typed in is the part worth pinning.
  */
 const { test } = require('node:test');
 const assert = require('node:assert');
@@ -54,19 +55,34 @@ test('nothing that looks like a grid yields nothing', () => {
   assert.deepEqual(F.gridGroupCandidates(['X/col-', 'X/col-abc']), []);
 });
 
-test('the panel goes to one candidate and refuses to choose between two', () => {
+test('the panel goes to one candidate and lists links when there are several', () => {
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
   const fn = ui.slice(ui.indexOf('function offerDetectedGroup'), ui.indexOf('function applyAutoImport'));
 
-  // Several: a message, and no write. Picking the bigger one would be a guess dressed as help.
-  const many = fn.slice(fn.indexOf('candidates.length > 1'), fn.indexOf('var target'));
-  assert.match(many, /set Group to the one you want/);
+  // Several (or already on a set): links under Group, and no write until a click.
+  assert.match(fn, /renderGroupCandidates\(candidates\)/);
+  assert.match(fn, /hasSet \|\| candidates\.length > 1/);
+  const many = fn.slice(fn.indexOf('hasSet || candidates.length > 1'), fn.indexOf('var target'));
   assert.equal(many.indexOf('writeConfigBlockText'), -1, 'it must not write when the choice is real');
 
   // One: change the address and let the ordinary load happen, rather than a second loading path.
   assert.match(fn, /writeConfigBlockText\(api\.serialize\(schema, \{ group: target \}\), 'group-detected'\)/);
   assert.match(fn, /scheduleAutoImport\(\)/);
   assert.match(fn, /so Group was set to it/, 'and it says it moved the field');
+});
+
+test('candidate links sit under the Group input, not under the whole row', () => {
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.css'), 'utf8');
+  assert.match(ui, /function renderGroupCandidates/);
+  assert.match(ui, /function groupFieldStack/);
+  assert.match(ui, /config-ui-group-stack/);
+  assert.match(ui, /id = 'groupCandidates'/);
+  assert.match(ui, /In this collection:/);
+  assert.match(ui, /function adoptGroupCandidate/);
+  assert.match(ui, /remountGroupCandidates\(\)/);
+  assert.match(css, /\.config-ui-group-stack/);
+  assert.match(css, /\.config-ui-group-candidate/);
 });
 
 test('a group is never adopted twice, so this cannot loop', () => {
@@ -77,6 +93,10 @@ test('a group is never adopted twice, so this cannot loop', () => {
   assert.match(fn, /if \(groupsAdopted\[key\]\) return false;/);
   assert.match(fn, /groupsAdopted\[key\] = true;/);
   assert.match(ui, /var groupsAdopted = \{\};/);
+  // A click clears the guard for that target so switching back is allowed.
+  assert.match(ui, /function adoptGroupCandidate/);
+  const adopt = ui.slice(ui.indexOf('function adoptGroupCandidate'), ui.indexOf('function scheduleAutoImport'));
+  assert.match(adopt, /delete groupsAdopted\[key\]/);
 });
 
 test('detection only runs when the address came back empty', () => {
@@ -87,15 +107,17 @@ test('detection only runs when the address came back empty', () => {
   const guard = apply.indexOf("found.source !== 'recognised'");
   const offer = apply.indexOf('offerDetectedGroup(found)');
   assert.ok(guard > 0 && offer > guard, 'the offer sits inside the "nothing found" branch');
+  // A successful load still draws sibling links so the person can switch.
+  assert.match(apply, /renderGroupCandidates\(found\.candidates/);
 });
 
 test('the library only offers a group other than the one already asked for', () => {
   const foundation = fs.readFileSync(
     path.join(__dirname, '..', 'scripts', 'CODEFIG_LIBRARIES', '@foundation.js'), 'utf8'
   );
-  assert.match(foundation, /answer\.candidates = candidates\.groups\.filter/);
-  assert.match(foundation, /entry\.group !== \(group == null \? '' : group\)/,
-    'or it would offer to move you to where you already are');
+  assert.match(foundation, /function foundationSiblingCandidates/);
+  assert.match(foundation, /entry\.group !== groupNorm/);
+  assert.match(foundation, /gridScan\.groups\.filter/);
 });
 
 test('opening a panel asks where the grid is, and only fills an untouched block', () => {

@@ -34,6 +34,7 @@ const PRE_MIGRATION_GRID_CONFIG = [
   '',
   '  // # Mode settings @showWhen: collectionName=*',
   '  extensionColumns: 0, // @label: Extra columns @showWhen: collectionName=* @helper: Extra column variables past the main grid, for layouts that need to overshoot.',
+  '  extraValues: [], // @label: Extra values @showWhen: collectionName=* @placeholder="col-1+gap, col-1*2+gap" @helper: Formulas using col-N, gap, margin, and numbers with + - * /. margin is the Margins field. Each entry becomes a variable with that name, valued per mode. Leave empty for none.',
   '  generateOverview: false, // @label: Generate overview @showWhen: collectionName=* @helper: Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied.',
   '',
   '  modes: [], // @rows: name:text=Mode|containerWidth:number=Width|columns:number=Columns|gap:number=Gap|padding:number=Margins @tabs @label: Modes @showWhen: collectionName=*',

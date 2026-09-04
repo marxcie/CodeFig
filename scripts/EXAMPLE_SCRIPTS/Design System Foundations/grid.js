@@ -13,6 +13,9 @@
 // Column width variables (`col-1` … `col-N`) follow the mode with the most columns. **Extra columns**
 // adds variables past that maximum for layouts that need to overshoot.
 //
+// **Extra values** are CSS-calc-style formulas turned into variables — e.g. `col-1+gap` for wrapper
+// padding when children sit on a sub-grid. Figma has no `calc()`, so these are precomputed per mode.
+//
 // ## Configuration options
 //
 // Controls match the Configuration UI. The code key is shown under each label for Source edits.
@@ -23,6 +26,7 @@
 // | **Collection modes** | Chips for modes in the collection. Add, remove, or rename here. Each mode gets its own settings below. |
 // | **Group within collection**<br>`group` | Folder prefix for variable names, e.g. `Grid` → `Grid/columns`. When empty, variables sit at the collection root. |
 // | **Extra columns**<br>`extensionColumns` | Extra column variables past the grid maximum. Default `0`. Max 12 + `4` adds `col-13` through `col-16`. Same column unit as the grid; widths can extend past the content area. Does not change column count, layout guides, or the grid style. |
+// | **Extra values**<br>`extraValues` | Formulas using `col-N`, `gap`, `margin`, and numbers with `+ - * /` (e.g. `col-1+gap`, `col-1*2+gap`, `margin-gap`). `margin` is the Margins field. Each entry becomes a variable with that name, valued per mode. Empty by default. Not the same as Extra columns. |
 // | **Generate overview**<br>`generateOverview` | When on, creates a grid overview on the canvas: one preview frame per mode with the layout grid applied. Off by default. |
 // | **Mode**<br>`modes[].name` | Name of this mode (viewport). |
 // | **Width**<br>`modes[].containerWidth` | Viewport / container width in pixels. |
@@ -82,6 +86,186 @@ function resolveExtensionColumns(config) {
   return Math.floor(config.extensionColumns);
 }
 
+/** Space-stripped formula string — also the variable name. */
+function normalizeGridExtraValueName(raw) {
+  return String(raw == null ? '' : raw).replace(/\s+/g, '');
+}
+
+/**
+ * Unique formula entries from `extraValues` (array or comma list), names normalized.
+ * Order preserved; first spelling wins when two normalize to the same name.
+ */
+function resolveExtraValues(config) {
+  if (!config || config.extraValues == null) return [];
+  var raw = config.extraValues;
+  var list = [];
+  if (Array.isArray(raw)) {
+    for (var i = 0; i < raw.length; i++) {
+      if (raw[i] == null || raw[i] === '') continue;
+      list.push(String(raw[i]));
+    }
+  } else if (typeof raw === 'string') {
+    if (!raw.trim()) return [];
+    list = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  } else {
+    return [];
+  }
+  var seen = {};
+  var out = [];
+  for (var j = 0; j < list.length; j++) {
+    var name = normalizeGridExtraValueName(list[j]);
+    if (!name || seen[name]) continue;
+    seen[name] = true;
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * Tokenize a normalized formula. Atoms: col-N, gap, margin, number. Ops: + - * /.
+ * `margin` is the Margins field (`modes[].padding` in config).
+ * → { ok: true, tokens } | { ok: false, error }
+ */
+function tokenizeGridExtraValue(formula) {
+  var s = normalizeGridExtraValueName(formula);
+  if (!s) return { ok: false, error: 'empty formula' };
+  var tokens = [];
+  var i = 0;
+  while (i < s.length) {
+    var col = /^col-(\d+)/.exec(s.slice(i));
+    if (col) {
+      tokens.push({ type: 'col', n: parseInt(col[1], 10) });
+      i += col[0].length;
+      continue;
+    }
+    if (s.slice(i, i + 6) === 'margin') {
+      tokens.push({ type: 'margin' });
+      i += 6;
+      continue;
+    }
+    if (s.slice(i, i + 3) === 'gap') {
+      tokens.push({ type: 'gap' });
+      i += 3;
+      continue;
+    }
+    var num = /^(\d+(?:\.\d+)?)/.exec(s.slice(i));
+    if (num) {
+      tokens.push({ type: 'num', value: parseFloat(num[1]) });
+      i += num[0].length;
+      continue;
+    }
+    var ch = s.charAt(i);
+    if (ch === '+' || ch === '-' || ch === '*' || ch === '/') {
+      tokens.push({ type: 'op', op: ch });
+      i += 1;
+      continue;
+    }
+    return { ok: false, error: 'unexpected "' + ch + '" in ' + s };
+  }
+  return { ok: true, tokens: tokens };
+}
+
+/**
+ * Parse a formula into an AST. Precedence: * / before + -; left-associative within a level.
+ * No parentheses, no unary minus.
+ * → { ok: true, name, ast } | { ok: false, error, name? }
+ */
+function parseGridExtraValue(raw) {
+  var name = normalizeGridExtraValueName(raw);
+  var tok = tokenizeGridExtraValue(name);
+  if (!tok.ok) return { ok: false, error: tok.error, name: name || undefined };
+
+  var tokens = tok.tokens;
+  var pos = 0;
+
+  function peek() { return pos < tokens.length ? tokens[pos] : null; }
+  function next() { return tokens[pos++]; }
+
+  function parseFactor() {
+    var t = peek();
+    if (!t) return { ok: false, error: 'expected a value in ' + name };
+    if (t.type === 'op') return { ok: false, error: 'unexpected "' + t.op + '" in ' + name };
+    next();
+    if (t.type === 'col') return { ok: true, ast: { type: 'col', n: t.n } };
+    if (t.type === 'gap') return { ok: true, ast: { type: 'gap' } };
+    if (t.type === 'margin') return { ok: true, ast: { type: 'margin' } };
+    if (t.type === 'num') return { ok: true, ast: { type: 'num', value: t.value } };
+    return { ok: false, error: 'unknown token in ' + name };
+  }
+
+  function parseTerm() {
+    var left = parseFactor();
+    if (!left.ok) return left;
+    var ast = left.ast;
+    while (peek() && peek().type === 'op' && (peek().op === '*' || peek().op === '/')) {
+      var op = next().op;
+      var right = parseFactor();
+      if (!right.ok) return right;
+      ast = { type: 'op', op: op, left: ast, right: right.ast };
+    }
+    return { ok: true, ast: ast };
+  }
+
+  function parseExpr() {
+    var left = parseTerm();
+    if (!left.ok) return left;
+    var ast = left.ast;
+    while (peek() && peek().type === 'op' && (peek().op === '+' || peek().op === '-')) {
+      var op = next().op;
+      var right = parseTerm();
+      if (!right.ok) return right;
+      ast = { type: 'op', op: op, left: ast, right: right.ast };
+    }
+    return { ok: true, ast: ast };
+  }
+
+  var parsed = parseExpr();
+  if (!parsed.ok) return { ok: false, error: parsed.error, name: name };
+  if (pos < tokens.length) {
+    return { ok: false, error: 'unexpected trailing tokens in ' + name, name: name };
+  }
+  return { ok: true, name: name, ast: parsed.ast };
+}
+
+/**
+ * Evaluate a parsed AST against one viewport. `maxCols` is the grid-wide column variable count
+ * before Extra columns (same rule as `col-N` generation).
+ * → { ok: true, value } | { ok: false, error }
+ */
+function evalGridExtraValue(ast, viewportConfig, maxCols) {
+  if (!ast) return { ok: false, error: 'missing formula' };
+  if (ast.type === 'num') return { ok: true, value: ast.value };
+  if (ast.type === 'gap') {
+    return { ok: true, value: typeof viewportConfig.gap === 'number' ? viewportConfig.gap : 0 };
+  }
+  if (ast.type === 'margin') {
+    return { ok: true, value: typeof viewportConfig.padding === 'number' ? viewportConfig.padding : 0 };
+  }
+  if (ast.type === 'col') {
+    var n = ast.n;
+    var cap = typeof maxCols === 'number' ? maxCols : viewportConfig.columns;
+    if (n > cap) {
+      return { ok: true, value: calculateExtensionColumnVariable(n, viewportConfig) };
+    }
+    return { ok: true, value: calculateColumnVariable(n, viewportConfig) };
+  }
+  if (ast.type === 'op') {
+    var L = evalGridExtraValue(ast.left, viewportConfig, maxCols);
+    if (!L.ok) return L;
+    var R = evalGridExtraValue(ast.right, viewportConfig, maxCols);
+    if (!R.ok) return R;
+    if (ast.op === '+') return { ok: true, value: L.value + R.value };
+    if (ast.op === '-') return { ok: true, value: L.value - R.value };
+    if (ast.op === '*') return { ok: true, value: L.value * R.value };
+    if (ast.op === '/') {
+      if (R.value === 0) return { ok: false, error: 'division by zero' };
+      return { ok: true, value: L.value / R.value };
+    }
+    return { ok: false, error: 'unknown operator' };
+  }
+  return { ok: false, error: 'unknown formula node' };
+}
+
 // Viewport keys on inner config object; only objects with layout fields count as viewports
 function getViewportConfigKeys(innerConfig) {
   if (!innerConfig || typeof innerConfig !== 'object') return [];
@@ -113,13 +297,14 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
   collectionName: "",
   group: "",
   extensionColumns: 0,
+  extraValues: [],
   generateOverview: false,
   modes: []
 // @CONFIG_END
 
   ,
   // Variables to be created in Figma (function of config; max columns = viewport with most columns)
-  // Second arg is the full grid config (optional); used for extensionColumns
+  // Second arg is the full grid config (optional); used for extensionColumns and extraValues
   variables: function(innerConfig, gridConfig) {
     var extensionCols = resolveExtensionColumns(gridConfig);
     var viewportKeys = getViewportConfigKeys(innerConfig);
@@ -192,6 +377,36 @@ var gridSystemConfig = typeof gridSystemConfig !== 'undefined' ? gridSystemConfi
       })(colNum);
     }
 
+    var extras = resolveExtraValues(gridConfig);
+    for (var ei = 0; ei < extras.length; ei++) {
+      (function(formulaName) {
+        var parsed = parseGridExtraValue(formulaName);
+        if (!parsed.ok) {
+          console.warn('Extra value skipped ("' + formulaName + '"): ' + parsed.error);
+          return;
+        }
+        var formulaValues = {};
+        for (var vi = 0; vi < viewportKeys.length; vi++) {
+          (function(vk) {
+            var modeName = viewportLabel(vk);
+            formulaValues[modeName] = function(configCtx) {
+              var got = evalGridExtraValue(parsed.ast, configCtx[vk], maxCols);
+              if (!got.ok) {
+                console.warn('Extra value "' + formulaName + '" failed for ' + modeName + ': ' + got.error);
+                return 0;
+              }
+              return got.value;
+            };
+          })(viewportKeys[vi]);
+        }
+        basicVariables[parsed.name] = {
+          type: "FLOAT",
+          scopes: ["WIDTH_HEIGHT", "GAP"],
+          values: formulaValues
+        };
+      })(extras[ei]);
+    }
+
     return basicVariables;
   }
 };
@@ -209,6 +424,10 @@ var __codefigPanel = {
     { key: "extensionColumns", type: "number", label: "Extra columns",
       showWhen: { collectionName: "*" },
       helper: "Extra column variables past the main grid, for layouts that need to overshoot." },
+    { key: "extraValues", type: "list", label: "Extra values",
+      showWhen: { collectionName: "*" },
+      placeholder: "col-1+gap, col-1*2+gap",
+      helper: "Formulas using col-N, gap, margin, and numbers with + - * /. margin is the Margins field. Each entry becomes a variable with that name, valued per mode. Leave empty for none." },
     { key: "generateOverview", type: "boolean", label: "Generate overview",
       showWhen: { collectionName: "*" },
       helper: "Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied." },

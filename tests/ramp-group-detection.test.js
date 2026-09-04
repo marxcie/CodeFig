@@ -204,8 +204,24 @@ test('auto-import offers ramp candidates other than the group already asked for'
   );
   assert.match(foundation, /var rampScan = tokensKey \? await rampGroupsIn\(collectionName, domain\)/);
   assert.match(foundation, /answer\.candidates = rampScan\.groups\.filter/);
+  assert.match(foundation, /function foundationSiblingCandidates/);
   assert.match(foundation, /function rampVariableMatchesDomain/);
   assert.doesNotMatch(foundation, /function rampTokenMatchesDomain/);
+});
+
+test('a successful ramp read still lists sibling groups for switching', async () => {
+  const vars = [
+    mockVar('Spacing/px', { id: 'v0', scopes: ['GAP', 'WIDTH_HEIGHT'] }),
+    mockVar('Spacing/xs', { id: 'v1', scopes: ['GAP', 'WIDTH_HEIGHT'] }),
+    mockVar('Spacing/sm', { id: 'v2', scopes: ['GAP', 'WIDTH_HEIGHT'] }),
+    mockVar('Alt/a', { id: 'v3', scopes: ['GAP', 'WIDTH_HEIGHT'] }),
+    mockVar('Alt/b', { id: 'v4', scopes: ['GAP', 'WIDTH_HEIGHT'] }),
+  ];
+  await withCollection(vars, async (ctx) => {
+    const found = await ctx.foundationAutoImport('Responsive', 'Spacing', 'spacing');
+    assert.equal(found.source, 'recognised');
+    assert.deepEqual(found.candidates, [{ group: 'Alt', tokens: 2 }]);
+  });
 });
 
 test('extracted `@import` can run rampGroupCandidates', () => {
