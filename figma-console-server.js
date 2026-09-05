@@ -444,7 +444,7 @@ function readBody(req, done) {
 
 if (require.main === module) {
   const { server } = createBridgeServer();
-  server.listen(PORT, () => {
+  server.listen(PORT, '127.0.0.1', () => {
     console.log('CodeFig console bridge listening on http://localhost:' + PORT);
     console.log('Log file:', LOG_FILE);
     console.log('Job queue: POST /jobs to run a script in the open plugin (npm run test:figma)');

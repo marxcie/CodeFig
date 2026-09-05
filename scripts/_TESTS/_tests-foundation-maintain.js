@@ -24,13 +24,15 @@
 
 testBegin('foundation-maintain');
 
-it('namespace and registry key match the boot maintainer', function () {
+(async function () {
+try {
+await it('namespace and registry key match the boot maintainer', function () {
   // Guard against the src/ module and @Foundation drifting on the only strings that matter.
   expect(foundationNamespace()).toBe('codefig');
   expect(foundationRegistryKey()).toBe('registry');
 });
 
-itInTestFile('documents that apply runs on plugin open, not in this runner', async function () {
+await itInTestFile('documents that apply runs on plugin open, not in this runner', async function () {
   // Intentionally no mutation: applying maintain from a script would blur the boot-only
   // contract. Reload the plugin on a file with planted orphans and read figma-console.log.
   expect(typeof writeRegistry).toBe('function');
@@ -40,5 +42,8 @@ itInTestFile('documents that apply runs on plugin open, not in this runner', asy
   expect(typeof foundationMintSetId).toBe('function');
 });
 
-cleanupTestArtifacts();
+await cleanupTestArtifacts();
+} finally {
 testFinish();
+}
+})();

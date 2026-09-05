@@ -189,7 +189,7 @@ function collectAllNodes(nodes) {
   return result;
 }
 
-var SUPPORTED_BOUND_PROPERTIES = {
+function mergeBoundProperties() { return {
   height: 1, width: 1, minWidth: 1, maxWidth: 1, minHeight: 1, maxHeight: 1,
   itemSpacing: 1, paddingLeft: 1, paddingRight: 1, paddingTop: 1, paddingBottom: 1,
   counterAxisSpacing: 1, gridRowGap: 1, gridColumnGap: 1, paragraphSpacing: 1, paragraphIndent: 1,
@@ -197,7 +197,7 @@ var SUPPORTED_BOUND_PROPERTIES = {
   strokeWeight: 1, strokeTopWeight: 1, strokeBottomWeight: 1, strokeLeftWeight: 1, strokeRightWeight: 1,
   characters: 1, fontFamily: 1, fontSize: 1, fontStyle: 1, fontWeight: 1, letterSpacing: 1, lineHeight: 1,
   visible: 1, opacity: 1
-};
+}; }
 
 async function isVariableFromStyle(node, property, variableId, bindIndex) {
   try {
@@ -257,6 +257,7 @@ async function isVariableFromStyle(node, property, variableId, bindIndex) {
 async function rebindDocument(oldIdToNewVariable) {
   var replacementCount = 0;
   var skippedCount = 0;
+  var supported = mergeBoundProperties();
   if (typeof figma.loadAllPagesAsync === 'function') {
     await figma.loadAllPagesAsync();
   }
@@ -273,7 +274,7 @@ async function rebindDocument(oldIdToNewVariable) {
       var binding = node.boundVariables[property];
       if (!binding) continue;
       if (property !== 'fills' && property !== 'strokes' && property !== 'effects' &&
-          !SUPPORTED_BOUND_PROPERTIES[property]) {
+          !supported[property]) {
         continue;
       }
 
@@ -348,7 +349,14 @@ async function rebindDocument(oldIdToNewVariable) {
               node.strokes = strokes;
               replacementCount++;
             }
-          } else if (SUPPORTED_BOUND_PROPERTIES[property]) {
+          } else if (property === 'effects') {
+            var effects = JSON.parse(JSON.stringify(node.effects));
+            var changedEffects = replaceVariableIdsInObject(effects, oldIdToNewVariable);
+            if (changedEffects) {
+              node.effects = effects;
+              replacementCount += changedEffects;
+            }
+          } else if (supported[property]) {
             node.setBoundVariable(property, replacementVariable);
             replacementCount++;
           }
@@ -630,6 +638,59 @@ function applyFoundationIdentity(transfers, sourceCol, targetCol, isMove, partia
   return { setsHandled: setsHandled, sourceKeysToClear: sourceKeysToClear };
 }
 
+async function assertMoveSourceUnpublished(collection) {
+  var status = 'UNKNOWN';
+  if (typeof collection.getPublishStatusAsync === 'function') {
+    status = await collection.getPublishStatusAsync();
+  }
+  if (status !== 'UNPUBLISHED') {
+    throw new Error('Move stopped. The source collection is published or its publish status could not be checked. Use Copy to keep its existing bindings.');
+  }
+}
+
+/** Verify all local consumers before removing any source variable. Read failures abort Move. */
+async function assertMoveBindingsReplaced(oldIdToNew) {
+  if (typeof figma.loadAllPagesAsync === 'function') {
+    await figma.loadAllPagesAsync();
+  }
+  function check(value) {
+    if (!value || typeof value !== 'object') return;
+    if (value.type === 'VARIABLE_ALIAS' && oldIdToNew[value.id]) {
+      throw new Error('Move stopped. Some bindings still use the source variables. Source variables were kept; some values and bindings may already have moved.');
+    }
+    Object.keys(value).forEach(function (key) { check(value[key]); });
+  }
+  var nodes = collectAllNodes(Array.prototype.slice.call(figma.root.children));
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    check(node.boundVariables);
+    ['fills', 'strokes', 'effects', 'layoutGrids'].forEach(function (key) {
+      if (key in node) check(node[key]);
+    });
+    if (node.type === 'TEXT' && node.characters.length) {
+      check(node.getStyledTextSegments(['boundVariables']));
+    }
+  }
+  var groups = [await figma.getLocalPaintStylesAsync(), await figma.getLocalTextStylesAsync(),
+    await figma.getLocalEffectStylesAsync(), await figma.getLocalGridStylesAsync()];
+  for (var g = 0; g < groups.length; g++) {
+    for (var s = 0; s < groups[g].length; s++) {
+      var style = groups[g][s];
+      check(style.boundVariables);
+      ['paints', 'effects', 'layoutGrids'].forEach(function (key) {
+        if (key in style) check(style[key]);
+      });
+    }
+  }
+  var collections = await figma.variables.getLocalVariableCollectionsAsync();
+  for (var c = 0; c < collections.length; c++) {
+    for (var v = 0; v < collections[c].variableIds.length; v++) {
+      var variable = await figma.variables.getVariableByIdAsync(collections[c].variableIds[v]);
+      if (variable && !oldIdToNew[variable.id]) check(variable.valuesByMode);
+    }
+  }
+}
+
 /**
  * @param {{ sourceCol, targetCol, sourceGroup, targetGroup, sourceMode, targetMode, isMove }} opts
  */
@@ -639,6 +700,7 @@ async function copyOrMoveVariables(opts) {
   var sourceGroup = opts.sourceGroup;
   var targetGroup = opts.targetGroup;
   var isMove = opts.isMove === true;
+  if (isMove) await assertMoveSourceUnpublished(sourceCol);
   var modePairs = buildModePairs(sourceCol, targetCol, opts.sourceMode, opts.targetMode);
   var oldIdToNew = {};
   var created = 0;
@@ -693,6 +755,7 @@ async function copyOrMoveVariables(opts) {
       try {
         destVar.setValueForMode(pair.targetModeId, val);
       } catch (e) {
+        if (isMove) throw new Error('Move stopped. Source variables were kept because a value could not be copied: ' + newName);
         console.warn('setValueForMode', newName, e && e.message);
       }
     }
@@ -705,6 +768,7 @@ async function copyOrMoveVariables(opts) {
         try {
           destVar.setValueForMode(tModeId, fallbackVal);
         } catch (e) {
+          if (isMove) throw new Error('Move stopped. Source variables were kept because a value could not be copied: ' + newName);
           console.warn('setValueForMode (fill)', newName, e && e.message);
         }
       }
@@ -761,6 +825,17 @@ async function copyOrMoveVariables(opts) {
     }
   }
 
+  var rebindStats = { replaced: 0, skipped: 0 };
+  var styleBindings = 0;
+  var aliasBindings = 0;
+  if (isMove && Object.keys(oldIdToNew).length > 0) {
+    rebindStats = await rebindDocument(oldIdToNew);
+    styleBindings = await rebindMergeStyles(oldIdToNew);
+    aliasBindings = await rebindVariableTableAliases(oldIdToNew);
+    // Fail closed: a skipped or unsupported binding must never become a dangling alias.
+    await assertMoveBindingsReplaced(oldIdToNew);
+  }
+
   // Stamp + manifest before Move deletes sources (stamps were read above; manifests still on source).
   var identityResult = applyFoundationIdentity(
     identityTransfers,
@@ -770,15 +845,6 @@ async function copyOrMoveVariables(opts) {
     partialSetIds
   );
   var foundationSets = identityResult.setsHandled;
-
-  var rebindStats = { replaced: 0, skipped: 0 };
-  var styleBindings = 0;
-  var aliasBindings = 0;
-  if (isMove && Object.keys(oldIdToNew).length > 0) {
-    rebindStats = await rebindDocument(oldIdToNew);
-    styleBindings = await rebindMergeStyles(oldIdToNew);
-    aliasBindings = await rebindVariableTableAliases(oldIdToNew);
-  }
 
   var variablesRemoved = 0;
   if (isMove) {
@@ -890,6 +956,7 @@ async function copyOrMoveVariables(opts) {
       figma.notify('Source collection not found: ' + srcName);
       return;
     }
+    if (isMove) await assertMoveSourceUnpublished(sourceCol);
     if (!targetCol) {
       targetCol = figma.variables.createVariableCollection(tgtName);
     }

@@ -93,6 +93,15 @@ until Márton says so.
 
 ## Current state
 
+**2026-09-05 review fixes (uncommitted):** Move effect bindings + publication preflight + residual
+binding check; script-storage collision/chunk integrity; loopback-only dev bridge; live test
+expectations and async suite completion. Verification: 1,406 Node tests; 130 Figma tests using
+current source resolved on disk; six real-variable backend storage checks; production + dev builds.
+Dev bridge restarted and verified on 127.0.0.1. Scratch collections/pages cleaned up.
+Final plugin reload verification waits for the unlocked Mac. Multiple open plugin consumers still
+share the dev queue; every test snippet checked the file name before mutating.
+Colors curve/fitting work is unchanged.
+
 **Committed** through `94d2577` on `dsf-foundations` (Colors Mode 1 / Value load fix). Major
 landings: `5322d2e` (panels + Variables storage + foundation maintain), `266b811` (canvas
 paste-share + Copy or move / Replace variables).

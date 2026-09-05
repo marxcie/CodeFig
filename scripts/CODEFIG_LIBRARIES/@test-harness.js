@@ -13,17 +13,20 @@
 //
 // testBegin('my-suite');
 // (async function () {
-//   await it('adds up', function () { expect(1 + 1).toBe(2); });
-//   await itInTestFile('touches the document', async function () {
-//     await withScratchPage(async function (page) { expect(page.name).toContain('codefig-test'); });
-//   });
-//   testFinish();
+//   try {
+//     await it('adds up', function () { expect(1 + 1).toBe(2); });
+//     await itInTestFile('touches the document', async function () {
+//       await withScratchPage(async function (page) { expect(page.name).toContain('codefig-test'); });
+//     });
+//   } finally {
+//     testFinish();
+//   }
 // })();
 // ```
 //
 // ### Two rules
 //
-// 1. **Call `testFinish()`.** Completion is inferred from idleness; without it the suite times out. `testFinish()` calls `window.codefigRunComplete()`.
+// 1. **Call `testFinish()` in a `finally`.** Completion is inferred from idleness; without it the suite times out (and the run-op begun in `testBegin` never ends). Prefer `try { … } finally { testFinish(); }` so a thrown suite still releases the run. `testFinish()` is safe to call once; a second call is a no-op for the run-op counter. It also calls `window.codefigRunComplete()`.
 // 2. **Mutating cases go in `itInTestFile`.** Those only run in a file whose name contains `codefig-test`. Read-only cases use `it` anywhere.
 //
 // State lives on the mock `window` — `@import` extracts only top-level function declarations.
@@ -61,12 +64,18 @@ function isTestFile() {
 }
 
 function testBegin(suiteName) {
+  // Async Figma reads may be quiet longer than the runner's idle window.
+  // Keep this suite active until testFinish explicitly completes it.
+  if (typeof window._infoPanelHandler === 'function') {
+    window._infoPanelHandler({ type: 'CODEFIG_RUN_OP_BEGIN' });
+  }
   window.__codefigTests = {
     suite: suiteName || 'unnamed',
     cases: [],
     pass: 0,
     fail: 0,
-    skip: 0
+    skip: 0,
+    opOpen: true
   };
   console.log('=== ' + window.__codefigTests.suite + ' ===');
   if (!isTestFile()) {
@@ -120,6 +129,10 @@ async function itInTestFile(name, fn) {
  */
 function testFinish() {
   var state = testState();
+  if (state.opOpen && typeof window._infoPanelHandler === 'function') {
+    window._infoPanelHandler({ type: 'CODEFIG_RUN_OP_END' });
+  }
+  state.opOpen = false;
   var summary = {
     suite: state.suite,
     pass: state.pass,

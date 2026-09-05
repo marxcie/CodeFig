@@ -258,6 +258,7 @@
     var id = meta.id != null ? String(meta.id).trim() : '';
     if (!id) return '';
     var parts = ['codefig-id:' + id];
+    if (meta.name) parts.push('name:' + encodeURIComponent(String(meta.name)));
     if (meta.type === 'library' || meta.type === 'user') {
       parts.push('type:' + meta.type);
     }
@@ -284,6 +285,8 @@
       var val = piece.slice(colon + 1).trim();
       if (key === 'codefig-id' || key === DESCRIPTION_ID_KEY) {
         out.id = val || null;
+      } else if (key === 'name') {
+        try { out.name = decodeURIComponent(val); } catch (e) { /* use path */ }
       } else if (key === 'type' && (val === 'library' || val === 'user')) {
         out.type = val;
       } else if (key === 'parts') {
@@ -316,6 +319,9 @@
     var code = script.code == null ? '' : String(script.code);
     var type = inferType(name, script.type);
     var primary = displayNameToVariablePath(name);
+    if (primary === INDEX_VARIABLE || /^@(script|lib)\//.test(primary) || /\/~\d+(?:\/|$)/.test(primary)) {
+      throw new Error('Script name is reserved for storage. Choose a name without @index, @script/, @lib/, or /~number.');
+    }
     var limit = script.limit != null
       ? Math.floor(Number(script.limit))
       : CHUNK_CHAR_LIMIT;
@@ -332,6 +338,7 @@
         value: chunks[i],
         description: serializeScriptDescription({
           id: id,
+          name: name !== variablePathToDisplayName(primary) ? name : undefined,
           type: type,
           i: i,
           parts: chunks.length
@@ -368,10 +375,19 @@
       var meta = parseScriptDescription(descMap[primary]);
       parts = meta.parts >= 1 ? meta.parts : 1;
     }
+    if (!isFinite(parts) || parts > Object.keys(map).length) {
+      throw new Error('Script "' + variablePathToDisplayName(primary) + '" is incomplete. Restore its missing parts from a backup.');
+    }
     var chunks = [first.code];
     for (var i = 1; i < parts; i++) {
-      var env = parseEnvelope(map[continuationPath(primary, i)]);
-      chunks.push(env ? env.code : '');
+      var key = continuationPath(primary, i);
+      var env = parseEnvelope(map[key]);
+      var chunkMeta = env && env.v === ENVELOPE_VERSION ? env : parseScriptDescription(descMap[key]);
+      var firstMeta = first.v === ENVELOPE_VERSION ? first : parseScriptDescription(descMap[primary]);
+      if (!env || !env.code || (firstMeta.id && (chunkMeta.id !== firstMeta.id || chunkMeta.i !== i || chunkMeta.parts !== parts))) {
+        throw new Error('Script "' + variablePathToDisplayName(primary) + '" is incomplete. Restore its missing or mismatched parts from a backup.');
+      }
+      chunks.push(env.code);
     }
     return joinChunks(chunks);
   }
@@ -390,6 +406,9 @@
     for (var i = 0; i < e.chunkKeys.length; i++) {
       var key = e.chunkKeys[i];
       var raw = map[key];
+      if (raw == null || (e.chunkKeys.length > 1 && String(raw) === '')) {
+        throw new Error('Script "' + e.name + '" is incomplete. Restore its missing parts before migrating it.');
+      }
       // v1 stored raw code; v2 stores envelopes — accept both.
       var env = parseEnvelope(raw);
       if (env && env.v === ENVELOPE_VERSION) chunks.push(env.code);
@@ -410,6 +429,7 @@
       descriptionByKey && typeof descriptionByKey === 'object' ? descriptionByKey : {};
     var scripts = [];
     var listItems = [];
+    var errors = [];
     var keys = Object.keys(map);
     keys.sort();
     for (var i = 0; i < keys.length; i++) {
@@ -425,9 +445,12 @@
       // Continuations mis-filed as primaries (i > 0) — skip.
       if (env.v === ENVELOPE_VERSION && env.i > 0) continue;
       if (env.v !== ENVELOPE_VERSION && desc.i > 0) continue;
-      var name = variablePathToDisplayName(key);
+      var name = desc.name && displayNameToVariablePath(desc.name) === key
+        ? desc.name : variablePathToDisplayName(key);
       var type = inferType(name, (env.v === ENVELOPE_VERSION && env.type) || desc.type);
-      var code = readScriptBodyFromPath(key, map, descMap);
+      var code = null;
+      try { code = readScriptBodyFromPath(key, map, descMap); }
+      catch (e) { errors.push(e.message); }
       var id =
         (env.v === ENVELOPE_VERSION && env.id) || desc.id || null;
       var parts =
@@ -438,8 +461,10 @@
           : desc.parts >= 1
             ? desc.parts
             : 1;
-      var chunkKeys = [key];
-      for (var c = 1; c < parts; c++) chunkKeys.push(continuationPath(key, c));
+      // Inventory only actual paths. Corrupt part counts must not create an unbounded loop.
+      var chunkKeys = keys.filter(function (candidate) {
+        return candidate === key || (isContinuationPath(candidate) && primaryVariablePath(candidate) === key);
+      });
       scripts.push({
         id: id,
         name: name,
@@ -447,9 +472,32 @@
         path: key,
         chunkKeys: chunkKeys
       });
-      listItems.push({ name: name, code: code, type: type, id: id });
+      if (code !== null) listItems.push({ name: name, code: code, type: type, id: id });
     }
-    return { scripts: scripts, listItems: listItems };
+    return { scripts: scripts, listItems: listItems, errors: errors };
+  }
+
+  /** Check the complete batch before writing anything, including Sync and migration. */
+  function assertScriptWritesSafe(variables, values, descriptions) {
+    var pending = Object.create(null);
+    for (var i = 0; i < variables.length; i++) {
+      var pair = variables[i];
+      var next = parseScriptDescription(pair.description);
+      var previous = pending[pair.key];
+      if (!previous && values[pair.key]) {
+        var env = parseEnvelope(values[pair.key]);
+        previous = env && env.v === ENVELOPE_VERSION ? env : parseScriptDescription(descriptions[pair.key]);
+      }
+      if (previous) {
+        var nextName = next.name || variablePathToDisplayName(pair.key);
+        var previousName = previous.name || variablePathToDisplayName(pair.key);
+        if ((previous.id && previous.id !== next.id) || (!previous.id && previousName !== nextName) ||
+            (pending[pair.key] && previousName !== nextName)) {
+          throw new Error('Cannot save "' + nextName + '". Its variable name is already used by another script. Choose a different name.');
+        }
+      }
+      pending[pair.key] = next;
+    }
   }
 
   /**
@@ -626,7 +674,7 @@
         code: code,
         type: entry.type
       });
-      if (seenPath[planned.entry.path]) continue;
+      if (seenPath[planned.entry.path]) throw new Error('Script migration stopped: two names use the same variable path. Rename one script first.');
       seenPath[planned.entry.path] = true;
       writes.push(planned);
       scripts.push(planned.entry);
@@ -880,7 +928,7 @@
       var rawName = String(lv.name == null ? '' : lv.name);
       if (!rawName || rawName === INDEX_VARIABLE) continue;
       // Skip legacy v1 chunk keys (@script/…); path model only for remote list.
-      if (rawName.charAt(0) === '@') continue;
+      if (/^@(script|lib)\//.test(rawName)) continue;
       var path = primaryVariablePath(rawName);
       if (!byPath[path]) byPath[path] = [];
       byPath[path].push({
@@ -1007,6 +1055,7 @@
     parseIndex: parseIndex,
     serializeIndex: serializeIndex,
     planScriptWrite: planScriptWrite,
+    assertScriptWritesSafe: assertScriptWritesSafe,
     readScriptBody: readScriptBody,
     readScriptBodyFromPath: readScriptBodyFromPath,
     listScriptsFromValues: listScriptsFromValues,

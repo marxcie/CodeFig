@@ -21,9 +21,9 @@ testBegin('replace-scripts');
 (async function () {
   // --- replace-styles: which style name gets looked up ----------------------
 
-  await it('matchStyleNamePartial is substring, case-insensitive, with wildcards', function () {
+  await it('matchStyleNamePartial is substring, case-sensitive, with wildcards', function () {
     expect(matchStyleNamePartial('V5 / Text / 3xs / SemiBold', 'V5')).toBe(true);
-    expect(matchStyleNamePartial('V5 / Text / 3xs / SemiBold', 'v5')).toBe(true);
+    expect(matchStyleNamePartial('V5 / Text / 3xs / SemiBold', 'v5')).toBe(false);
     expect(matchStyleNamePartial('V4 / Text / 3xs / SemiBold', 'V5')).toBe(false);
     expect(matchStyleNamePartial('V5/Text/3xs/SemiBold', 'V5/*/SemiBold')).toBe(true);
     // A blank pattern matches nothing here on purpose: the callers treat "no filter"

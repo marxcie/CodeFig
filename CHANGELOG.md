@@ -21,8 +21,26 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Move preserves effect bindings and refuses published sources.** Direct blur/effect bindings
+  now follow the destination variables. A published or unreadable source is refused before copying.
+  Failed value writes or remaining local bindings stop removal and keep the source variables;
+  a stopped run may already have copied values or rebound some layers.
+- **Script storage refuses colliding and reserved names.** Distinct names such as `Theme.v1` and
+  `Theme-v1` can no longer overwrite each other in Variables. Authored names survive sanitization,
+  and a batch with a collision is refused before writing any script. Incomplete scripts are
+  reported and excluded from the variable inventory so an available LocalStorage backup can appear.
+  Remote multi-part scripts now read their chunk metadata as well as their values.
+- **The dev bridge binds to loopback only**, rather than every network interface.
+
 - **Colors `tokenCount` no longer warns as an unknown key** on an untouched default config
   (`foundationSliceKeys` / domain keys).
+
+### Developer
+
+- Updated live matching and Colors expectations to current behavior. Foundation-maintenance
+  smoke tests are awaited before reporting completion. Test suites hold the run open during async
+  Figma reads, preventing the idle timer from returning a partial result as a completed run.
+- Added Move and storage integrity regressions, including a real Figma effect-binding check.
 
 ### Added
 

@@ -211,6 +211,12 @@ CodeFig keeps its own OKLCH/HSL ladder; gamut-relative chroma stays rejected (be
 
 ## 9. `Copy or move variables` (file: `merge-variable-collections`) treats "unpublished" as "unused"
 
+**2026-09-05 update:** Move now checks publication before copying, rebinds direct effects, and
+verifies remaining local bindings before removing any sources. Failed value writes also abort
+removal. This closes the late publication check and known local dangling-binding paths. It does
+not make unpublished a proof that no external consumers exist. Partial progress is reported;
+the operation is not transactional.
+
 **What.** In **Move** mode the script copies source variables into a destination, rebinds this
 document, removes the source variables, and then removes the source collection when it is empty.
 It refuses to remove a collection whose `getPublishStatusAsync()` is anything but `UNPUBLISHED`,

@@ -56,7 +56,7 @@ testBegin('select-by');
         await applyFillStyle(rect, style);
 
         expect(await nodeUsesMatchingStyle(rect, 'Primary', false)).toBe(true);
-        expect(await nodeUsesMatchingStyle(rect, 'primary', false)).toBe(true);
+        expect(await nodeUsesMatchingStyle(rect, 'primary', false)).toBe(false);
         expect(await nodeUsesMatchingStyle(rect, testPrefix() + '/*/Primary/*', false)).toBe(true);
         expect(await nodeUsesMatchingStyle(rect, 'Secondary', false)).toBe(false);
         // Brackets stay literal: this is the plan-10 rule reaching a real node.
@@ -82,7 +82,7 @@ testBegin('select-by');
         rect.setBoundVariable('topLeftRadius', radius);
 
         expect(await nodeUsesMatchingVariable(rect, 'radius/lg')).toBe(true);
-        expect(await nodeUsesMatchingVariable(rect, 'RADIUS/LG')).toBe(true);
+        expect(await nodeUsesMatchingVariable(rect, 'RADIUS/LG')).toBe(false);
         expect(await nodeUsesMatchingVariable(rect, testPrefix() + '/radius/*')).toBe(true);
         expect(await nodeUsesMatchingVariable(rect, 'radius/sm')).toBe(false);
         expect(await nodeMatches(rect, 'radius/lg', false)).toBe(true);

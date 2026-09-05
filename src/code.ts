@@ -190,7 +190,12 @@ type ScriptStorageModule = {
   listScriptsFromValues: (
     valueByKey: Record<string, string>,
     descriptionByKey?: Record<string, string>
-  ) => { scripts: ScriptIndexEntry[]; listItems: ScriptListItem[] };
+  ) => { scripts: ScriptIndexEntry[]; listItems: ScriptListItem[]; errors?: string[] };
+  assertScriptWritesSafe: (
+    variables: Array<{ key: string; value: string; description?: string }>,
+    values: Record<string, string>,
+    descriptions: Record<string, string>
+  ) => void;
   planScriptWrite: (script: {
     id: string;
     name: string;
@@ -403,6 +408,7 @@ async function writeScriptVariables(
   orphanedKeys: string[]
 ): Promise<void> {
   const scopes = storage.SCRIPT_VARIABLE_SCOPES || [];
+  storage.assertScriptWritesSafe(variables, valueMapFromCollection(byName, modeId), descriptionMapFromCollection(byName));
   for (const pair of variables) {
     await setStringVariableValue(
       collection,
@@ -431,6 +437,10 @@ async function readScriptsFromCollection(
   let valueByKey = valueMapFromCollection(byName, modeId);
   let descriptionByKey = descriptionMapFromCollection(byName);
   let listed = storage.listScriptsFromValues(valueByKey, descriptionByKey);
+  for (const message of listed.errors || []) {
+    scriptStorageLog(message);
+    figma.notify(message, { error: true });
+  }
 
   const indexVar = byName.get(storage.INDEX_VARIABLE);
   const indexJson = indexVar ? readStringModeValue(indexVar, modeId) : '';
@@ -601,6 +611,7 @@ async function loadRemoteScriptBody(
   remote: NonNullable<ScriptListItem['remote']>
 ): Promise<string> {
   const valueByKey: Record<string, string> = Object.create(null);
+  const descriptionByKey: Record<string, string> = Object.create(null);
   for (const chunk of remote.variables || []) {
     if (!chunk || !chunk.key) continue;
     const imported = await figma.variables.importVariableByKeyAsync(chunk.key);
@@ -611,14 +622,16 @@ async function loadRemoteScriptBody(
     if (!coll) continue;
     const modeId = collectionModeId(coll);
     valueByKey[imported.name] = readStringModeValue(imported, modeId);
+    descriptionByKey[imported.name] = imported.description || '';
   }
-  const listed = storage.listScriptsFromValues(valueByKey);
+  const listed = storage.listScriptsFromValues(valueByKey, descriptionByKey);
+  if (listed.errors && listed.errors.length) throw new Error(listed.errors.join('\n'));
   if (listed.listItems.length === 1) return listed.listItems[0].code || '';
   // Prefer entry whose display name matches any chunk's primary path.
   if (listed.listItems.length > 0) {
     return listed.listItems[0].code || '';
   }
-  return '';
+  throw new Error('Library script could not be loaded. Restore its missing parts in the library and publish it again.');
 }
 
 /** Dual-write mirror: keep clientStorage in sync while the flag is on. */
@@ -2202,4 +2215,3 @@ figma.ui.onmessage = (msg) => {
     })();
   }
 };
-

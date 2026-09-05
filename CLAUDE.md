@@ -48,7 +48,7 @@ Keep it that way. If you find yourself wanting to reach for `|| true` on `build:
 
 Standard two-context Figma plugin, with a script-runner layered on top.
 
-**`src/code.ts` → `dist/code.js`** (sandbox / "backend", the only real TypeScript in the repo). Handles a message switch on `msg.type` (`RUN`, `SAVE`, `SAVE_BATCH`, `LIST`, `DELETE`, `GET_OPTIONS`, window/state persistence). User scripts are persisted in `figma.clientStorage` under `userScripts`; prebuilt scripts are baked into the bundle and read-only.
+**`src/code.ts` → `dist/code.js`** (sandbox / "backend", the only real TypeScript in the repo). Handles a message switch on `msg.type` (`RUN`, `SAVE`, `SAVE_BATCH`, `LIST`, `DELETE`, `GET_OPTIONS`, window/state persistence). User scripts use local STRING variables and/or `figma.clientStorage` under `userScripts`, according to storage preferences; prebuilt scripts are baked into the bundle and read-only. Variable writes preflight path collisions; incomplete chunked bodies are reported rather than loaded.
 
 **`src/ui.html` → `dist/ui.html`** (iframe UI, ~3.2k lines: a short head of stubs, ~110 lines of markup, and one monolithic app `<script>`). Contains the CodeMirror editor, script list/search, import/export, and — importantly — the `@import` resolver. All script *sources* are embedded here at build time as base64 JSON in `<script id="scripts-data">`.
 
@@ -71,7 +71,7 @@ Standard two-context Figma plugin, with a script-runner layered on top.
 
 **Extraction follows calls, not references.** A function *called* in the extracted text is pulled in with it; a function handed over as a value — `findByStamp(candidates, domain, token, foundationStampData)` — never is, because it is never called there. It resolves to `undefined` in the sandbox, and `validateResolvedCalls` cannot see it either, since that only looks at calls. So it validates clean and fails in Figma. Inline the callback rather than naming it.
 
-**Imports do not bring cross-script dependencies — outside a package.** Extraction follows the functions a target calls only *within the same source script*. So importing `nodeUsesMatchingStyle` from a script does **not** bring `nameMatches` from `@Pattern Matching` — you must import that too. This fails at run time with a `ReferenceError`, usually swallowed by a caller's `try/catch` and seen as "nothing happened". `validateResolvedCalls()` in `validate-scripts.js` makes it a build error instead, for runnable scripts (a library's calls resolve in its consumer's context, so libraries are exempt by design). **The qualification is real, not hypothetical**: `extractFunctions` in `src/import-resolver.js` takes an optional `siblingLookup`, and when a script's `packageId` matches another script's, a call that resolves in neither the target's own file nor the consumer's import list is tried against every other member of the same package before it is given up on (plan `.plans/32-packages.md`). Every existing script has no `packageId`, so this is inert for all of them today — the rule above is exactly as stated for anything that isn't a package member.
+**Imports do not bring cross-script dependencies — outside a package.** Extraction follows the functions a target calls only *within the same source script*. So importing `nodeUsesMatchingStyle` from a script does **not** bring `nameMatches` from `@Pattern Matching` — you must import that too. This fails at run time with a `ReferenceError`, usually swallowed by a caller's `try/catch` and seen as "nothing happened". `validateResolvedCalls()` in `validate-scripts.js` makes it a build error instead, for runnable scripts (a library's calls resolve in its consumer's context, so libraries are exempt by design). **The qualification is real, not hypothetical**: `extractFunctions` in `src/import-resolver.js` takes an optional `siblingLookup`, and when a script's `packageId` matches another script's, a call that resolves in neither the target's own file nor the consumer's import list is tried against every other member of the same package before it is given up on (plan `.plans/32-packages.md`). The Design System Foundations scripts and their libraries have package membership; utilities outside that package still need explicit companion imports.
 
 **`src/import-resolver.js` is the single implementation**, consumed by the UI at run time and by `validate-scripts.js` at build time — there is no second copy to keep in sync. `build-import-resolver.js` inlines it into the `<script id="import-resolver-js">` block of `dist/ui.html` (a one-line stub in `src/ui.html`, never written back to source, same pattern as config-ui) and it must stay ahead of the main app script; `processRuntimeImports` throws if the `CodeFigImports` global is missing rather than letting every import silently degrade. Behaviour is pinned by `tests/import-resolver.test.js`, including the extraction limits above and a per-script check that shipped imports resolve to real injected source.
 
@@ -169,9 +169,8 @@ Two rules that only bite when authoring one:
 - **`DEFERRED.md`** — known issues and work deliberately not done, each with how it was found and
   what fixing it involves. Add to it whenever you decide *not* to chase something.
 - **`.plans/`** — the numbered plan files (gitignored, local only). All of 01–12 are done (the
-  streamlining pass). 13–27 (DSF and panel UI/UX) are also done, with two tracked partials —
-  Colors has no write path yet and its anchor model isn't fully collapsed, both logged in
-  `DEFERRED.md`. 28–33 are queued, not started. See `.plans/00-INDEX.md` for the status table.
+  streamlining pass). Colors writes variables, and DSF package/style/panel wiring has landed.
+  Use `ROADMAP.md` for current status; `.plans/00-INDEX.md` is historical.
 
 ## Gotchas
 
