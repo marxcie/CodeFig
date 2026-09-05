@@ -33,8 +33,8 @@ function normaliseHelper(text) {
 }
 
 function normalize(rows) {
-  return rows
-    .filter((r) => r.type !== 'blank' && r.type !== 'lineBreak' && r.type !== 'directive')
+  return parser.flattenPanelRows(rows)
+    .filter((r) => r.type !== 'blank' && r.type !== 'lineBreak' && r.type !== 'directive' && r.type !== 'spacer')
     .map((r) => {
       const clone = Object.assign({}, r);
       delete clone.raw;
@@ -97,7 +97,8 @@ test('corner-radius.js: live @PANEL parse matches the pre-migration normalized r
 });
 
 test('spacing.js: modes wait on collection and tokens', () => {
-  const modes = liveParse('spacing.js').rows.find((r) => r.type === 'field' && r.name === 'modes');
+  const modes = parser.flattenPanelRows(liveParse('spacing.js').rows)
+    .find((r) => r.type === 'field' && r.name === 'modes');
   assert.ok(modes);
   assert.deepStrictEqual(modes.value, []);
   assert.deepStrictEqual(modes.showWhenRules, [
@@ -107,7 +108,8 @@ test('spacing.js: modes wait on collection and tokens', () => {
 });
 
 test('corner-radius.js: modes wait on collection and tokens', () => {
-  const modes = liveParse('corner-radius.js').rows.find((r) => r.type === 'field' && r.name === 'modes');
+  const modes = parser.flattenPanelRows(liveParse('corner-radius.js').rows)
+    .find((r) => r.type === 'field' && r.name === 'modes');
   assert.ok(modes);
   assert.deepStrictEqual(modes.value, []);
   assert.deepStrictEqual(modes.showWhenRules, [

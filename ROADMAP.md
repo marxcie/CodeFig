@@ -59,7 +59,7 @@ identity, and DSF panels that stay empty until a collection is chosen.
 
 | Pillar | What users get |
 |---|---|
-| Config format (37) | `@PANEL_START` as `var __codefigPanel = {…}`; form-only Configuration UI; one clear author model (cleanup locked before tag) |
+| Config format (37) | `@PANEL_START` as `var __codefigPanel = {…}`; sections + spacers; form-only Configuration UI |
 | Storage (38) | Variables + LocalStorage; settings; canvas paste-share; export/sync menus |
 | Foundation maintain (39) | Boot repair; config script removed; copy = new stamp; Move keeps |
 | DSF panels | Empty General until collection; group scan; modes fix; scoped preview CSS |
@@ -117,7 +117,7 @@ paste-share + Copy or move / Replace variables).
 
 | Initiative | Plan | Locked | Status / next |
 |---|---|---|---|
-| **Script language & config UX** | `.plans/37` | `@PANEL_START` = `var __codefigPanel`; drop Configuration code tab; **cleanup pre-2.0** | **Done for 2.0 gate:** object binding + Help-style print across utilities + script/library/builder clarity in Help. **Parallel / later OK:** visual UI polish. |
+| **Script language & config UX** | `.plans/37` | `@PANEL_START` = `var __codefigPanel`; drop Configuration code tab; **cleanup pre-2.0**; section containers + spacers (2026-09-05) | **Done for 2.0 gate:** object binding + Help-style print + sections/spacers on DSF/Help. **Parallel / later OK:** visual UI polish. |
 | **Script storage & sharing** | `.plans/38` | Variables + LocalStorage (both keep); settings; canvas paste-share | **Landed.** Library edit UX deferred (consistent model later). |
 | **Foundation metadata maintenance** | `.plans/39` | Auto-repair clear cases on open; no UI noise; config script gone | **Part A+B landed.** **§11 implemented 2026-08-31:** copy/duplicate → restamp new objects; originals keep stamps; boot forks clear `ambiguous-set-groups`. Move keeps identity. Tied collisions still skipped. |
 

@@ -74,8 +74,8 @@ function normaliseParagraph(text) {
 }
 
 function normalize(rows) {
-  return rows
-    .filter((r) => r.type !== 'blank' && r.type !== 'lineBreak' && r.type !== 'directive')
+  return parser.flattenPanelRows(rows)
+    .filter((r) => r.type !== 'blank' && r.type !== 'lineBreak' && r.type !== 'directive' && r.type !== 'spacer')
     .map((r) => {
       const clone = Object.assign({}, r);
       delete clone.raw;

@@ -91,43 +91,49 @@ var spacingConfigData = typeof spacingConfigData !== 'undefined' ? spacingConfig
 // @PANEL_START
 var __codefigPanel = {
   blocks: [
-    { type: "heading", text: "General" },
-    { key: "collectionName", type: "collection", label: "Collection" },
-    { type: "chips", label: "Collection modes", from: "modes" },
-    { key: "group", type: "string", label: "Group within collection",
-      placeholder: "eg.: Spacing" },
-    { key: "spacings", type: "list", label: "Tokens",
-      placeholder: "px, xs, sm, md, lg, xl",
-      helper: "Names from smallest to largest. spacing-{1,10} expands to ten names." },
-    { type: "divider", section: true },
-    { type: "heading", text: "Mode settings",
-      showWhen: { collectionName: "*", spacings: "*" } },
-    { key: "generateOverview", type: "boolean", label: "Generate overview",
+    { type: "section", id: "general", blocks: [
+      { type: "heading", text: "General" },
+      { key: "collectionName", type: "collection", label: "Collection" },
+      { type: "spacer-m" },
+      { type: "chips", label: "Collection modes", from: "modes" },
+      { key: "group", type: "string", label: "Group within collection",
+        placeholder: "eg.: Spacing" },
+      { key: "spacings", type: "list", label: "Tokens",
+        placeholder: "px, xs, sm, md, lg, xl",
+        helper: "Names from smallest to largest. spacing-{1,10} expands to ten names." }
+    ]},
+    { type: "divider" },
+    { type: "section", id: "mode-settings",
       showWhen: { collectionName: "*", spacings: "*" },
-      helper: "Builds a Spacing overview on the canvas: one row per token, one column per mode, with variable-bound width bars." },
-    { key: "modes", type: "rows", label: "Modes", layout: "tabs",
-      copyToOthers: true,
-      showWhen: { collectionName: "*", spacings: "*" },
-      columns: [
-        { key: "name", type: "text", label: "Mode" },
-        { key: "scaleType", type: "radio", label: "Scale type",
-          options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
-        { key: "curve", type: "curve", label: "Scale", growth: "ratio",
-          showWhen: { scaleType: "bezier" },
-          helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
-        { key: "step", type: "number", label: "Step",
-          showWhen: { scaleType: ["metric", "fibonacci"] },
-          helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
-        { key: "mod", type: "number", label: "Every N steps",
-          showWhen: { scaleType: "metric" },
-          helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
-        { key: "base", type: "number", label: "Base unit" },
-        { key: "roundTo", type: "number", label: "Round numbers to" },
-        { key: "extras", type: "list", label: "Extra spacings",
-          helper: "Off-scale values, merged by size (e.g. a 1px hairline under a base of 4). They take the smallest names; the scale continues above them. If you add a value without an extra token name, the largest generated value drops off the list." }
-      ] },
-    { type: "heading", text: "Preview" },
-    { type: "preview" }
+      blocks: [
+        { type: "heading", text: "Mode settings" },
+        { key: "generateOverview", type: "boolean", label: "Generate overview",
+          helper: "Builds a Spacing overview on the canvas: one row per token, one column per mode, with variable-bound width bars." },
+        { key: "modes", type: "rows", label: "Modes", layout: "tabs",
+          copyToOthers: true,
+          columns: [
+            { key: "name", type: "text", label: "Mode" },
+            { key: "scaleType", type: "radio", label: "Scale type",
+              options: [{ bezier: "Bezier scale" }, { metric: "Metric scale" }, { fibonacci: "Fibonacci" }] },
+            { key: "curve", type: "curve", label: "Scale", growth: "ratio",
+              showWhen: { scaleType: "bezier" },
+              helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
+            { key: "step", type: "number", label: "Step",
+              showWhen: { scaleType: ["metric", "fibonacci"] },
+              helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
+            { key: "mod", type: "number", label: "Every N steps",
+              showWhen: { scaleType: "metric" },
+              helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
+            { key: "base", type: "number", label: "Base unit" },
+            { key: "roundTo", type: "number", label: "Round numbers to" },
+            { key: "extras", type: "list", label: "Extra spacings",
+              helper: "Off-scale values, merged by size (e.g. a 1px hairline under a base of 4). They take the smallest names; the scale continues above them. If you add a value without an extra token name, the largest generated value drops off the list." }
+          ] }
+      ]},
+    { type: "section", id: "preview", blocks: [
+      { type: "heading", text: "Preview" },
+      { type: "preview" }
+    ]}
   ]
 };
 // @PANEL_END

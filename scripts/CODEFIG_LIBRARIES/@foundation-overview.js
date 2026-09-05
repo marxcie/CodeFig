@@ -1,15 +1,16 @@
 // @Foundation overview
 // @DOC_START
-// # Builds Design System Foundations overview frames for typography, grid, spacing, and corner radius
+// # Builds Design System Foundations overview frames for typography, grid, colors, spacing, and corner radius
 //
 // ## Overview
 //
-// Shared canvas overview used when a Foundations script has **Generate overview** on. One page-level frame **`Design System Foundations`** (vertical auto layout) holds up to four sections, in this order:
+// Shared canvas overview used when a Foundations script has **Generate overview** on. One page-level frame **`Design System Foundations`** (vertical auto layout) holds up to five sections, in this order:
 //
 // 1. **Render styles — overview** — local text styles (Regular vs Semibold-style columns)
 // 2. **Grid — overview** — viewport preview frames with the grid style applied
 // 3. **Spacing — overview** — variable-backed width bars per mode
 // 4. **Corner radius — overview** — variable-backed corner swatches per mode
+// 5. **Colors — overview** — variable-backed colour swatches per mode
 //
 // Variable sections set **explicit variable modes** on preview nodes. Text styles are modeless; grouping is by style name / font style.
 //
@@ -19,8 +20,8 @@
 //
 // | Category | Functions |
 // |----------|-----------|
-// | Create | foundationCreateCornerRadiusOverview, foundationCreateSpacingOverview, foundationCreateTypographyTextStylesOverview, foundationCreateGridOverview |
-// | One-step | foundationGenerateCornerRadiusOverview, foundationGenerateSpacingOverview |
+// | Create | foundationCreateCornerRadiusOverview, foundationCreateSpacingOverview, foundationCreateTypographyTextStylesOverview, foundationCreateGridOverview, foundationCreateColorsOverview |
+// | One-step | foundationGenerateCornerRadiusOverview, foundationGenerateSpacingOverview, foundationGenerateColorsOverview |
 // @DOC_END
 
 @import { getVariable, getOrCreateCollection } from "@Variables"
@@ -33,13 +34,15 @@ function foundationOverviewLayout() {
       "Render styles — overview",
       "Grid — overview",
       "Spacing — overview",
-      "Corner radius — overview"
+      "Corner radius — overview",
+      "Colors — overview"
     ],
     sections: {
       renderStyles: "Render styles — overview",
       grid: "Grid — overview",
       spacing: "Spacing — overview",
-      corner: "Corner radius — overview"
+      corner: "Corner radius — overview",
+      colors: "Colors — overview"
     },
     padOuter: 80,
     gapWrapper: 100,
@@ -113,7 +116,8 @@ function foundationRemoveStandaloneLegacyOverviews() {
     "Corner radius - overview",
     "Spacing - overview",
     "Typography - overview",
-    "Grid System Preview"
+    "Grid System Preview",
+    "Colors - overview"
   ];
   var ch = figma.currentPage.children;
   var i;
@@ -275,6 +279,15 @@ async function foundationGenerateSpacingOverview(innerConfig) {
   return foundationCreateSpacingOverview(collection, innerConfig);
 }
 
+async function foundationGenerateColorsOverview(innerConfig) {
+  if (!innerConfig || typeof innerConfig !== "object") {
+    console.warn("foundationGenerateColorsOverview: invalid config");
+    return { created: false };
+  }
+  var collection = await getOrCreateCollection(foundationResolveCollectionNameFromInnerData(innerConfig));
+  return foundationCreateColorsOverview(collection, innerConfig);
+}
+
 function foundationFoRadiusStyleCard() {
   return 12;
 }
@@ -306,6 +319,19 @@ async function foundationBindWidth(node, variable) {
     node.setBoundVariable("width", variable);
   } catch (e) {
     console.warn("Overview width bind: " + (e && e.message));
+  }
+}
+
+async function foundationBindFillColor(node, variable) {
+  if (!variable || !node) return;
+  try {
+    var paint = { type: "SOLID", color: { r: 0.7, g: 0.7, b: 0.75 } };
+    if (figma.variables && typeof figma.variables.setBoundVariableForPaint === "function") {
+      paint = figma.variables.setBoundVariableForPaint(paint, "color", variable);
+    }
+    node.fills = [paint];
+  } catch (e) {
+    console.warn("Overview fill bind: " + (e && e.message));
   }
 }
 
@@ -804,4 +830,147 @@ async function foundationCreateGridOverview(collection, config, gridStyle) {
   foundationFinalizeOverview(wrapper);
   console.log("Grid overview: " + stats.created + " viewport(s)");
   return stats;
+}
+
+/**
+ * Colour scale overview: one row per token, one column per mode, fill bound to the COLOR variable.
+ *
+ * Modes are the collection's mode names (`data.modes[].name` or a string list) — Colors does not use
+ * viewport keys the way Spacing / Radius do.
+ */
+async function foundationCreateColorsOverview(collection, data) {
+  var group = data && data.group != null ? data.group : "";
+  var prefix = namePrefix(group);
+  var steps = [];
+  if (Array.isArray(data && data.steps)) {
+    steps = data.steps.filter(function (s) { return s != null && String(s).trim() !== ""; })
+      .map(function (s) { return String(s).trim(); });
+  } else if (data && typeof data.steps === "string") {
+    var seen = {};
+    steps = data.steps.split(",").map(function (s) { return s.trim(); }).filter(function (s) {
+      if (!s || seen[s]) return false;
+      seen[s] = true;
+      return true;
+    });
+  }
+  var modeNames = [];
+  if (Array.isArray(data && data.modeNames)) {
+    modeNames = data.modeNames.filter(function (n) { return n != null && String(n).trim() !== ""; })
+      .map(function (n) { return String(n); });
+  } else if (Array.isArray(data && data.modes)) {
+    data.modes.forEach(function (m) {
+      if (!m) return;
+      var name = typeof m === "string" ? m : m.name;
+      if (name != null && String(name).trim() !== "") modeNames.push(String(name));
+    });
+  }
+  if (steps.length === 0 || modeNames.length === 0) {
+    console.warn("Colors overview: missing steps or modes");
+    return { removed: 0, created: false };
+  }
+
+  foundationRemoveStandaloneLegacyOverviews();
+  await foundationLoadUiFonts();
+  var L = foundationOverviewLayout();
+
+  var wrapper = foundationGetOrCreateOverviewWrapper();
+  var section = foundationAcquireSectionFrame(wrapper, L.sections.colors);
+
+  foundationAppendTitleLarge(section, "Colors");
+
+  var body = figma.createFrame();
+  body.name = "Colors";
+  body.layoutMode = "HORIZONTAL";
+  body.primaryAxisSizingMode = "AUTO";
+  body.counterAxisSizingMode = "AUTO";
+  body.itemSpacing = L.gapColumns;
+  body.fills = [];
+
+  var tokenCol = figma.createFrame();
+  tokenCol.name = "Variables";
+  tokenCol.layoutMode = "VERTICAL";
+  tokenCol.primaryAxisSizingMode = "AUTO";
+  tokenCol.counterAxisSizingMode = "AUTO";
+  tokenCol.itemSpacing = L.gapModeCol;
+  tokenCol.counterAxisAlignItems = "MIN";
+  tokenCol.fills = [];
+
+  var tokHead = figma.createText();
+  tokHead.fontName = foundationUiBold();
+  tokHead.fontSize = 10;
+  tokHead.fills = [{ type: "SOLID", color: L.colors.mutedHeader }];
+  tokHead.characters = "Token";
+  tokHead.textAutoResize = "WIDTH_AND_HEIGHT";
+  tokenCol.appendChild(tokHead);
+
+  var si;
+  for (si = 0; si < steps.length; si++) {
+    var tokenName = steps[si];
+    var rowH = figma.createFrame();
+    rowH.name = "Row label";
+    rowH.layoutMode = "HORIZONTAL";
+    rowH.primaryAxisSizingMode = "AUTO";
+    rowH.counterAxisSizingMode = "FIXED";
+    rowH.primaryAxisAlignItems = "MIN";
+    rowH.counterAxisAlignItems = "CENTER";
+    rowH.fills = [];
+    var nameT = figma.createText();
+    nameT.fontName = foundationUiReg();
+    nameT.fontSize = 11;
+    nameT.fills = [{ type: "SOLID", color: L.colors.tokenText }];
+    nameT.characters = prefix ? prefix + tokenName : tokenName;
+    nameT.textAutoResize = "WIDTH_AND_HEIGHT";
+    rowH.appendChild(nameT);
+    rowH.resize(Math.max(nameT.width, 1), L.swatchSize);
+    tokenCol.appendChild(rowH);
+  }
+  body.appendChild(tokenCol);
+
+  var mi;
+  for (mi = 0; mi < modeNames.length; mi++) {
+    var modeLabel = modeNames[mi];
+    var mode = collection.modes.find(function (m) {
+      return m.name === modeLabel;
+    });
+
+    var modeCol = figma.createFrame();
+    modeCol.name = modeLabel;
+    modeCol.layoutMode = "VERTICAL";
+    modeCol.primaryAxisSizingMode = "AUTO";
+    modeCol.counterAxisSizingMode = "AUTO";
+    modeCol.itemSpacing = L.gapModeCol;
+    modeCol.fills = [];
+
+    var mh = figma.createText();
+    mh.fontName = foundationUiBold();
+    mh.fontSize = 10;
+    mh.fills = [{ type: "SOLID", color: L.colors.mutedHeader }];
+    mh.characters = modeLabel;
+    modeCol.appendChild(mh);
+
+    var ti;
+    for (ti = 0; ti < steps.length; ti++) {
+      var tn = steps[ti];
+      var vname = prefix + tn;
+      var cell = figma.createRectangle();
+      cell.name = tn;
+      cell.resize(L.swatchSize, L.swatchSize);
+      cell.fills = [{ type: "SOLID", color: L.colors.swatch }];
+      cell.cornerRadius = 4;
+      if (mode && typeof cell.setExplicitVariableModeForCollection === "function") {
+        try {
+          cell.setExplicitVariableModeForCollection(collection, mode.modeId);
+        } catch (eM) {}
+      }
+      var variable = await getVariable(collection, vname);
+      await foundationBindFillColor(cell, variable);
+      modeCol.appendChild(cell);
+    }
+    body.appendChild(modeCol);
+  }
+
+  section.appendChild(body);
+  foundationFinalizeOverview(wrapper);
+  console.log("Colors overview: " + steps.length + " token(s), " + modeNames.length + " mode(s)");
+  return { removed: 1, created: true };
 }

@@ -785,6 +785,14 @@
           String(b == null ? '' : b).trim().toLowerCase();
       }
 
+      /** Field/marker leaves under optional `type: "section"` wrappers. */
+      function panelLeafRows(schema) {
+        var rows = schema && schema.rows ? schema.rows : [];
+        var api = window.CodeFigConfigUI;
+        if (api && typeof api.flattenPanelRows === 'function') return api.flattenPanelRows(rows);
+        return rows;
+      }
+
       /**
        * Apply one chip edit to the config, then let the form catch up.
        *
@@ -807,7 +815,7 @@
           debugError('A chip edit could not read the config block: ' + (e && e.message));
           return;
         }
-        const row = (schema.rows || []).filter(function (r) {
+        const row = panelLeafRows(schema).filter(function (r) {
           return r.type === 'field' && r.name === field;
         })[0];
         if (!row || !Array.isArray(row.value)) {
@@ -990,15 +998,6 @@
                     configUIInstance.setValues(values);
                   }
                 }
-                // Lock seed: one end moved → mirror the other around the seed (hue / sat / chroma / L).
-                if (configPreviewDomain() === 'colors') {
-                  if (applyColorsLockedSeesawInForm(values, _colorsSeesawPrev)) {
-                    if (configUIInstance && typeof configUIInstance.setValues === 'function') {
-                      configUIInstance.setValues(values);
-                    }
-                  }
-                  _colorsSeesawPrev = snapshotColorsSeesaw(values);
-                }
                 var prevAddress = configLastAddress;
                 if (committed) {
                   // Settle the creating flag from the select itself — `collectionName` stays empty
@@ -1023,54 +1022,37 @@
                 else { _configSyncPending = null; syncUIToCode(values); }
                 scheduleConfigPreview({ live: !!(opts && opts.live) });
                 if (addressChanged) {
-                  // **Reset the form now, load in the background.** Waiting for the silent run
-                  // (~1s RTT even on a miss) left the *previous* collection's modes and curves on
-                  // screen after a dropdown change — the 1–2s freeze when switching collections.
-                  // Pristine is cheap and local; the sandbox fill lands on top when it arrives.
-                  // `pristineConfigForAddress` returns null once we are already at defaults, so the
-                  // import path will not write the same reset a second time.
+                  // **Keep authored fields; load only when the new address has stored data.**
+                  // Wiping to pristine on every Collection / Group change threw away steps, curves and
+                  // seeds the user had just set — then a miss left an empty panel. The silent read still
+                  // runs; a hit fills the recorded set; a miss leaves what is on screen.
+                  //
+                  // **Exception: modes.** They are the collection's. Rematching by name across a
+                  // collection switch kept the previous file's mode settings; reset them here.
                   if (autoImportTimer) {
                     clearTimeout(autoImportTimer);
                     autoImportTimer = null;
                   }
                   var addrCollection = values.collectionName;
-                  var addrGroup = values.group;
-                  // Switching collection drops a stale group from the *previous* collection. Do not
-                  // clear when the user just typed Group on this commit (new collection + name), or
-                  // address-reset rewrites `group: ""` and the field empties on blur.
-                  var groupJustSet = !!(prevAddress &&
-                    String(values.group || '') !== String(prevAddress.group || ''));
-                  if (addrCollection && addrCollection !== lastReadCollection && !groupJustSet) {
-                    addrGroup = '';
-                  }
-                  // **Claim before the reset reprojects.** `projectConfigIntoForm` →
+                  var addrGroup = values.group == null ? '' : values.group;
+                  var collectionChanged = !prevAddress ||
+                    String(values.collectionName || '') !== String(prevAddress.collectionName || '');
+                  // **Claim before any form rebuild.** `projectConfigIntoForm` →
                   // `scheduleGroupDetection`, which would otherwise claim this address and queue a
                   // competing `detectOnly` import 400ms later — stealing the seq from the fill below.
                   if (addrCollection && String(addrCollection).trim()) {
-                    detectedFor[addrCollection + '\u0000' + (addrGroup == null ? '' : addrGroup)] = true;
+                    detectedFor[addrCollection + '\u0000' + addrGroup] = true;
                   }
-                  var resetText = (addrCollection && String(addrCollection).trim())
-                    ? pristineConfigForAddress(addrCollection, addrGroup)
-                    : null;
-                  // Mark before the miss lands: `applyAutoImport` must not re-apply the same
-                  // pristine defaults after Color tokens (etc.) have been typed during the read.
+                  // Miss must not apply prepared defaults over fields we are keeping.
                   addressAlreadyReset = true;
-                  if (resetText) {
-                    var r0 = (typeof performance !== 'undefined' && performance.now)
-                      ? performance.now() : Date.now();
-                    writeConfigBlockText(resetText, 'address-reset');
-                    window.codefigProbe('perf:address-reset', {
-                      ms: Math.round((((typeof performance !== 'undefined' && performance.now)
-                        ? performance.now() : Date.now()) - r0) * 10) / 10,
-                      collection: addrCollection,
-                      group: addrGroup == null ? '' : addrGroup
-                    });
+                  if (collectionChanged) {
+                    resetModesForNewCollection();
                   } else if (collectionCreating) {
                     ensureStarterModesInBlock();
                   }
-                  // Kick the sandbox off the click stack so the pristine form can paint first.
+                  // Kick the sandbox off the click stack so the form can paint first.
                   // Import resolution for Colors is ~1s the first time; caching makes later switches
-                  // cheap, but even the first resolve must not block the dropdown close / reset.
+                  // cheap, but even the first resolve must not block the dropdown close.
                   if (autoImportTimer) clearTimeout(autoImportTimer);
                   autoImportTimer = setTimeout(function () {
                     autoImportTimer = null;
@@ -1207,7 +1189,10 @@
             sections.hasPanelSpec ? sections.panelSpecContent : undefined
           );
           var fields = parsed && parsed.rows
-            ? parsed.rows.filter(function (r) { return r.type === 'field'; })
+            ? (window.CodeFigConfigUI.flattenPanelRows
+                ? window.CodeFigConfigUI.flattenPanelRows(parsed.rows)
+                : parsed.rows
+              ).filter(function (r) { return r.type === 'field'; })
             : [];
           return fields.length > 0;
         } catch (e) {
@@ -1617,7 +1602,10 @@
           parsedForForm = null;
         }
         var formFields = parsedForForm && parsedForForm.rows
-          ? parsedForForm.rows.filter(function (r) { return r.type === 'field'; })
+          ? (window.CodeFigConfigUI.flattenPanelRows
+              ? window.CodeFigConfigUI.flattenPanelRows(parsedForForm.rows)
+              : parsedForForm.rows
+            ).filter(function (r) { return r.type === 'field'; })
           : [];
 
         if (parsedForForm && formFields.length === 0) {
@@ -1693,7 +1681,7 @@
         // input or select dropdown between one lap and the next. Loading is a response to the address
         // changing, and nothing else.
 
-        const unsupported = (schema.rows || []).filter(function (r) {
+        const unsupported = panelLeafRows(schema).filter(function (r) {
           return r.type === 'field' && r.inputType === 'unsupported';
         });
         if (note) {
@@ -2694,191 +2682,9 @@
        * over curve edits until the seed/placement/steps/model change.
        */
       var _colorsSeedScaleFp = {};
-      /** Previous Colors end-anchor snapshot for locked-seed seesaw (bright↔dark around the seed). */
-      var _colorsSeesawPrev = null;
 
       function previewOwnerKey() {
         return currentScript ? String(currentScript.id || currentScript.name || '') : '';
-      }
-
-      function colorsSeesawHueUi(pivot, moved) {
-        var p = Number(pivot);
-        var m = Number(moved);
-        if (!isFinite(p) || !isFinite(m)) return m;
-        var d = ((m - p + 540) % 360) - 180;
-        return ((p - d) % 360 + 360) % 360;
-      }
-
-      function colorsSeesawLinearUi(pivot, moved, lo, hi) {
-        var p = Number(pivot);
-        var m = Number(moved);
-        if (!isFinite(p) || !isFinite(m)) return m;
-        var other = 2 * p - m;
-        if (typeof lo === 'number' && isFinite(lo)) other = Math.max(lo, other);
-        if (typeof hi === 'number' && isFinite(hi)) other = Math.min(hi, other);
-        return other;
-      }
-
-      function colorsSeesawRoundUi(n, places) {
-        var f = Math.pow(10, places == null ? 1 : places);
-        return Math.round(Number(n) * f) / f;
-      }
-
-      /** Same shape as `colorsSeesawSnapshot` in `@color-ramp` — keep in lockstep. */
-      function snapshotColorsSeesaw(values) {
-        if (!values || typeof values !== 'object') return null;
-        return {
-          colorModel: values.colorModel || 'oklch',
-          lightness: values.lightness ? {
-            bright: values.lightness.bright,
-            dark: values.lightness.dark
-          } : null,
-          modes: (values.modes || []).map(function (mode) {
-            if (!mode) return null;
-            return {
-              name: mode.name,
-              lock: !!(mode.seed && mode.seed.lock),
-              hex: mode.seed && mode.seed.hex ? String(mode.seed.hex) : '',
-              bright: mode.bright ? {
-                hue: mode.bright.hue, hslHue: mode.bright.hslHue,
-                chroma: mode.bright.chroma, saturation: mode.bright.saturation,
-                lightness: mode.bright.lightness
-              } : null,
-              dark: mode.dark ? {
-                hue: mode.dark.hue, hslHue: mode.dark.hslHue,
-                chroma: mode.dark.chroma, saturation: mode.dark.saturation,
-                lightness: mode.dark.lightness
-              } : null
-            };
-          })
-        };
-      }
-
-      /**
-       * Hex → { H, C, L } for seesaw pivots in the iframe (HSL path matches `@OKLCH`'s oklchHslFromHex;
-       * OKLCH L/H/C use a small Lab conversion enough for the fulcrum, not for generation).
-       */
-      function colorsSeesawPivotFromHex(hex, oklch) {
-        var raw = String(hex == null ? '' : hex).trim();
-        var short = /^#?([0-9a-f]{3})$/i.exec(raw);
-        if (short) {
-          var s = short[1];
-          raw = '#' + s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
-        }
-        var match = /^#?([0-9a-f]{6})$/i.exec(raw);
-        if (!match) return null;
-        var n = parseInt(match[1], 16);
-        var r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
-        if (!oklch) {
-          var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-          var L = (max + min) / 2;
-          var S = d === 0 ? 0 : d / (1 - Math.abs(2 * L - 1));
-          var H = 0;
-          if (d !== 0) {
-            if (max === r) H = ((g - b) / d) % 6;
-            else if (max === g) H = (b - r) / d + 2;
-            else H = (r - g) / d + 4;
-            H = (H * 60 + 360) % 360;
-          }
-          return { L: L, C: S, H: H };
-        }
-        function lin(c) {
-          return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-        }
-        var lr = lin(r), lg = lin(g), lb = lin(b);
-        var l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
-        var m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
-        var s2 = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
-        var LabL = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s2;
-        var a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s2;
-        var bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s2;
-        var C = Math.sqrt(a * a + bb * bb);
-        var Hue = C < 1e-7 ? 0 : (Math.atan2(bb, a) * 180 / Math.PI + 360) % 360;
-        return { L: LabL, C: C, H: Hue };
-      }
-
-      /**
-       * Lock on: one end moved → mirror the other around the seed. Mutates `values`.
-       * Keep in lockstep with `colorsApplyLockedSeesaw` in `@color-ramp`.
-       */
-      function applyColorsLockedSeesawInForm(values, prev) {
-        if (!values || !prev) return false;
-        var oklch = (values.colorModel || 'oklch') !== 'hsl';
-        var mutated = false;
-        var EPS = 1e-4;
-        function num(v) {
-          var n = typeof v === 'number' ? v : parseFloat(v);
-          return (typeof n === 'number' && isFinite(n)) ? n : NaN;
-        }
-        function pairMoved(curB, curD, prevB, prevD) {
-          var b = num(curB), d = num(curD), pb = num(prevB), pd = num(prevD);
-          if (!isFinite(b) || !isFinite(d)) return null;
-          var bCh = isFinite(pb) && Math.abs(b - pb) > EPS;
-          var dCh = isFinite(pd) && Math.abs(d - pd) > EPS;
-          if (bCh === dCh) return null;
-          return bCh ? 'bright' : 'dark';
-        }
-        if (oklch && values.lightness && prev.lightness) {
-          var lockMode = null;
-          for (var mi = 0; mi < (values.modes || []).length; mi++) {
-            var cand = values.modes[mi];
-            if (cand && cand.seed && cand.seed.lock && cand.seed.hex) { lockMode = cand; break; }
-          }
-          if (lockMode) {
-            var seedL = colorsSeesawPivotFromHex(lockMode.seed.hex, true);
-            if (seedL) {
-              var whichL = pairMoved(
-                values.lightness.bright, values.lightness.dark,
-                prev.lightness.bright, prev.lightness.dark
-              );
-              if (whichL === 'bright') {
-                values.lightness.dark = colorsSeesawRoundUi(
-                  colorsSeesawLinearUi(seedL.L * 100, num(values.lightness.bright), 0, 100), 1);
-                mutated = true;
-              } else if (whichL === 'dark') {
-                values.lightness.bright = colorsSeesawRoundUi(
-                  colorsSeesawLinearUi(seedL.L * 100, num(values.lightness.dark), 0, 100), 1);
-                mutated = true;
-              }
-            }
-          }
-        }
-        (values.modes || []).forEach(function (mode, i) {
-          if (!mode || !mode.seed || !mode.seed.lock) return;
-          var seed = colorsSeesawPivotFromHex(mode.seed.hex, oklch);
-          if (!seed) return;
-          var prevMode = null;
-          for (var j = 0; j < (prev.modes || []).length; j++) {
-            if (prev.modes[j] && prev.modes[j].name === mode.name) { prevMode = prev.modes[j]; break; }
-          }
-          if (!prevMode) prevMode = (prev.modes || [])[i];
-          if (!prevMode || !prevMode.bright || !prevMode.dark) return;
-          if (!mode.bright) mode.bright = {};
-          if (!mode.dark) mode.dark = {};
-          function see(channel, pivot, isHue, lo, hi, places) {
-            var which = pairMoved(
-              mode.bright[channel], mode.dark[channel],
-              prevMode.bright[channel], prevMode.dark[channel]
-            );
-            if (!which) return;
-            var moved = num(mode[which][channel]);
-            var next = isHue
-              ? colorsSeesawHueUi(pivot, moved)
-              : colorsSeesawLinearUi(pivot, moved, lo, hi);
-            mode[which === 'bright' ? 'dark' : 'bright'][channel] =
-              colorsSeesawRoundUi(next, places);
-            mutated = true;
-          }
-          if (oklch) {
-            see('hue', seed.H, true, 0, 360, 1);
-            see('chroma', seed.C, false, 0, 0.4, 4);
-          } else {
-            see('hslHue', seed.H, true, 0, 360, 1);
-            see('saturation', seed.C * 100, false, 0, 100, 1);
-            see('lightness', seed.L * 100, false, 0, 100, 1);
-          }
-        });
-        return mutated;
       }
 
       /**
@@ -2932,7 +2738,6 @@
         _previewWaitingSince = 0;
         _previewSeq++;
         _colorsSeedScaleFp = {};
-        _colorsSeesawPrev = null;
         if (_previewTimer) {
           clearTimeout(_previewTimer);
           _previewTimer = null;
@@ -3036,6 +2841,10 @@
             '    __seeded = true;',
             '  }',
             '});',
+            // Lock on: keep middle H/S/C on the seed and restore a middle point if a preset stripped it.
+            '(__cfg.modes || []).forEach(function (mode) {',
+            '  if (colorsSyncLockedSeedMiddles(__cfg, mode, __steps)) __seeded = true;',
+            '});',
             'window.codefigConfigLoadResult({',
             '  preview: colorsPreviewHtml(__cfg, ' + JSON.stringify(domain) + ', ' +
               JSON.stringify(activeModeName()) + '),',
@@ -3078,7 +2887,7 @@
         var schema;
         try { schema = api.parse(currentConfigBlock(), currentPanelSpecText()); } catch (e) { return []; }
         var out = [];
-        (schema && schema.rows ? schema.rows : []).forEach(function (row) {
+        panelLeafRows(schema).forEach(function (row) {
           if (row.type !== 'field' || row.inputType !== 'rows' || !Array.isArray(row.value)) return;
           row.value.forEach(function (entry) {
             if (entry && typeof entry.name === 'string' && entry.name.trim()) out.push(entry.name.trim());
@@ -3100,7 +2909,7 @@
         var schema;
         try { schema = api.parse(currentConfigBlock(), currentPanelSpecText()); } catch (e) { return 'oklch'; }
         var found = null;
-        (schema && schema.rows ? schema.rows : []).forEach(function (row) {
+        panelLeafRows(schema).forEach(function (row) {
           if (row.type === 'field' && row.name === 'colorModel') found = row.value;
         });
         return found === 'hsl' ? 'hsl' : 'oklch';
@@ -3300,7 +3109,7 @@
         } catch (e) {
           return;
         }
-        var row = (schema.rows || []).filter(function (r) {
+        var row = panelLeafRows(schema).filter(function (r) {
           return r.type === 'field' && r.inputType === 'rows' && Array.isArray(r.value);
         })[0];
         if (!row) return;
@@ -3879,7 +3688,7 @@
         } catch (e) {
           return;
         }
-        var groupRow = (schema.rows || []).filter(function (r) {
+        var groupRow = panelLeafRows(schema).filter(function (r) {
           return r.type === 'field' && r.name === 'group';
         })[0];
         if (!groupRow) return;
@@ -4059,7 +3868,7 @@
         if (!window.CodeFigConfigUI) return false;
         try {
           var schema = window.CodeFigConfigUI.parse(text, currentPanelSpecText());
-          var row = (schema.rows || []).filter(function (r) {
+          var row = panelLeafRows(schema).filter(function (r) {
             return r.type === 'field' && r.name === 'modes' && Array.isArray(r.value);
           })[0];
           if (!row) return false;
@@ -4088,6 +3897,37 @@
           var next = api.serialize(schema, { modes: starters });
           if (!next || next.trim() === cur.trim()) return;
           writeConfigBlockText(next, 'starter-modes');
+          if (addedModeNames.indexOf('Value') === -1) {
+            addedModeNames = addedModeNames.concat(['Value']);
+          }
+        } catch (e) { /* leave the block alone */ }
+      }
+
+      /**
+       * **Modes belong to the collection.** Keeping authored fields on address change is right for
+       * steps, curves and seeds — wrong for modes: `alignModesToFile` rematches by name and would
+       * carry Desktop / Pad settings into another collection that happens to use the same labels.
+       * Replace the mode list with domain starters; the silent read then expands to this file's
+       * modes (fresh templates) or loads a recorded set. Other fields stay put.
+       */
+      function resetModesForNewCollection() {
+        var api = window.CodeFigConfigUI;
+        if (!api || !scriptHasConfig) return;
+        var starters = starterModesForDomain(configPreviewDomain());
+        if (!starters) return;
+        // Drop the previous collection's mode table so alignment cannot rematch against it.
+        fileModes = {
+          document: currentDocumentId, collection: null, collectionId: null, modes: [], found: false
+        };
+        chipModeIds = [];
+        removedModeIds = [];
+        addedModeNames = [];
+        try {
+          var cur = currentConfigBlock();
+          var schema = api.parse(cur, currentPanelSpecText());
+          var next = api.serialize(schema, { modes: starters });
+          if (!next || next.trim() === cur.trim()) return;
+          writeConfigBlockText(next, 'collection-modes-reset');
           if (addedModeNames.indexOf('Value') === -1) {
             addedModeNames = addedModeNames.concat(['Value']);
           }
@@ -4123,18 +3963,15 @@
         }
       }
 
-      /** The collection the last real read was for, so a change of collection can drop a stale group. */
-      var lastReadCollection = null;
-      /** The pristine block for the address being read, applied when the answer lands. */
+      /**
+       * Pristine block for the address being read — fill base when a recorded/recognised set lands.
+       * A miss must not write this: Collection / Group changes keep authored fields unless the new
+       * address already has stored data.
+       */
       var pendingPristine = null;
       /**
-       * True when Collection / Group settle already wrote (or confirmed) defaults for this address.
-       *
-       * The miss path used to re-apply `pendingPristine` when the read found nothing. That was right
-       * when the only reset lived in `applyAutoImport`. Address settle now resets immediately so the
-       * previous collection does not linger — and a second wipe when the miss arrives races with
-       * tokens typed (or committed) while the sandbox read was in flight: empty `steps`, Mode settings
-       * and the ramp collapse. Skip the miss wipe when settle already did the job.
+       * True when Collection / Group settle already claimed this address so a miss must not wipe.
+       * Kept so older miss-wipe paths cannot race typed tokens while a silent read is in flight.
        */
       var addressAlreadyReset = false;
 
@@ -4143,7 +3980,7 @@
         // park a timer on this variable; assigning `null` without `clearTimeout` leaves that timer
         // armed. It then fires mid-flight, bumps `autoImportSeq`, and the *real* fill's answer is
         // discarded as stale — probes showed `detectOnly: true` winning after every collection
-        // select that had just written an address-reset.
+        // select that had just settled an address.
         if (autoImportTimer) clearTimeout(autoImportTimer);
         autoImportTimer = null;
         if (!scriptHasConfig || !configUIInstance) return;
@@ -4167,28 +4004,21 @@
           detectOnly: !!detectOnly
         });
 
-        // **A group belongs to the collection it was typed for.** Point the panel somewhere else and the
-        // old group name is a path into a collection that no longer applies: it reads nothing, and the panel
-        // reports a miss for an address nobody asked about.
-        //
-        // Cleared *here* rather than on the change itself, because this is already the one place that
-        // rewrites the block for a new address — doing it in `onChange` cost a second write and a second
-        // form rebuild, outside the debounce this function exists to sit inside.
-        if (!detectOnly && collection !== lastReadCollection) group = '';
-        if (!detectOnly) lastReadCollection = collection;
+        // Keep Group as typed. Clearing it on collection change wiped fields the user still wanted
+        // when pointing at a new collection with the same path, or when the new address had no set yet.
 
         // **A real read answers the group probe too, so it does not run a second one.**
         //
         // `scheduleGroupDetection` fires on every form render and, on a pristine block, asks for a *full*
-        // import — which for one collection selection is the whole cycle twice: reset, fill, rebuild, reset,
-        // fill, rebuild. It already dedupes by address, so the fix is for the ordinary load to claim the
+        // import — which for one collection selection is the whole cycle twice: fill, rebuild, fill,
+        // rebuild. It already dedupes by address, so the fix is for the ordinary load to claim the
         // address it is about to read. (Claiming it here rather than on the way out because the probe is
         // scheduled by the form rebuild this read causes, which happens before any result arrives.)
         if (!detectOnly) detectedFor[collection + '\u0000' + (group == null ? '' : group)] = true;
 
-        // Before the read, never after: a read that finds nothing has to leave an empty panel. `detectOnly`
-        // is the group-detection probe, which asks a question about an address the panel is already on and
-        // must not throw away what is there.
+        // Hit path fills onto these defaults so keys the payload omits do not leak from the previous
+        // address. Miss path must not write them — keep what is on screen. `detectOnly` is the
+        // group-detection probe and must not throw away what is there either.
         pendingPristine = detectOnly ? null : pristineConfigForAddress(collection, group);
 
         var seq = ++autoImportSeq;
@@ -4555,7 +4385,7 @@
           record({ skipped: 'block does not parse' });
           return answer;
         }
-        var row = (schema.rows || []).filter(function (r) {
+        var row = panelLeafRows(schema).filter(function (r) {
           return r.type === 'field' && r.name === field && Array.isArray(r.value);
         })[0];
         // Every exit records something. The bug above hid *because* the early exits recorded nothing,
@@ -4666,7 +4496,7 @@
         var field = (wrap && wrap.getAttribute('data-chips-field')) || 'modes';
         try {
           var schema = window.CodeFigConfigUI.parse(currentConfigBlock(), currentPanelSpecText());
-          var row = (schema.rows || []).filter(function (r) {
+          var row = panelLeafRows(schema).filter(function (r) {
             return r.type === 'field' && r.name === field;
           })[0];
           return row && Array.isArray(row.value) ? row.value : [];
@@ -4865,7 +4695,7 @@
         } catch (e) {
           return false;
         }
-        var groupRow = (schema.rows || []).filter(function (r) {
+        var groupRow = panelLeafRows(schema).filter(function (r) {
           return r.type === 'field' && r.name === 'group';
         })[0];
         if (!groupRow) return false;
@@ -4912,22 +4742,13 @@
           var offered = offerDetectedGroup(found);
           // **Modes follow the collection even when group detection short-circuits.** An offer returns
           // before a fill — several candidate groups, or one group written and a second import queued —
-          // but the chips must still leave placeholder state the moment `fileModes` arrives. Writing
-          // `pendingPristine` after alignment used to undo that (`modes: []` in the shipped defaults).
+          // but the chips must still leave placeholder state the moment `fileModes` arrives.
           //
-          // When the offer rewrote Group, the pristine block captured at request time is for the old
-          // address and must not be applied on top.
-          //
-          // When Collection / Group settle already reset this address, do not wipe again: that race
-          // cleared Color tokens typed while the miss was in flight (new collection → type steps →
-          // click away → ramp gone).
-          if (offered) pendingPristine = null;
-          else if (pendingPristine) {
-            if (!addressAlreadyReset) {
-              writeConfigBlockText(pendingPristine, 'address-reset');
-            }
-            pendingPristine = null;
-          }
+          // Miss: keep authored fields. Do not write `pendingPristine` — that wiped steps/curves/seeds
+          // whenever Collection or Group changed to an address with no stored set. `pendingPristine`
+          // remains only as the fill base for a successful load (cleared here so a later miss cannot
+          // apply a stale prep).
+          pendingPristine = null;
           addressAlreadyReset = false;
           var onMiss = orderConfigModesToFile();
           // No file modes yet (new collection, or read before anything exists): still unlock with Value.
@@ -6143,7 +5964,11 @@
             try {
               const panelSpec = sections.hasPanelSpec ? sections.panelSpecContent : undefined;
               const schema = window.CodeFigConfigUI.parse(sections.configContent || '', panelSpec);
-              panelRows = payloadApi.schemaRowsToPanelRows(schema && schema.rows) || [];
+              panelRows = payloadApi.schemaRowsToPanelRows(
+                window.CodeFigConfigUI.flattenPanelRows
+                  ? window.CodeFigConfigUI.flattenPanelRows(schema && schema.rows)
+                  : (schema && schema.rows)
+              ) || [];
             } catch (e) {
               console.warn('canvas panel mock parse failed', e);
             }
@@ -7416,8 +7241,6 @@
                       if (data.seedScaleFps && typeof data.seedScaleFps === 'object') {
                         _colorsSeedScaleFp = data.seedScaleFps;
                       }
-                      // Both ends just rewrote — latch snapshot so the next single-end edit seesaws cleanly.
-                      _colorsSeesawPrev = snapshotColorsSeesaw(data.seedScaleConfig);
                     }
                   } else if (data.seedScaleFps && typeof data.seedScaleFps === 'object') {
                     _colorsSeedScaleFp = data.seedScaleFps;

@@ -82,7 +82,7 @@ test('the block renders the panel the frames show', () => {
   R.buildForm(schema, container);
 
   const fields = {};
-  schema.rows.filter((r) => r.type === 'field').forEach((r) => { fields[r.name] = r.inputType; });
+  P.flattenPanelRows(schema.rows).filter((r) => r.type === 'field').forEach((r) => { fields[r.name] = r.inputType; });
   assert.equal(fields.collectionName, 'collection');
   assert.equal(fields.group, 'string');
   assert.equal(fields.spacings, 'list', 'Tokens is one input holding a comma list, not a read-only array');

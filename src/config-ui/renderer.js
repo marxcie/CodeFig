@@ -330,16 +330,35 @@
     return { prose: prose, folded: folded };
   }
 
-  // **A section's identity, derived rather than stored.** `parse()` returns a flat `rows` array with
-  // no section object of its own — a section is "whatever fields come after this heading" only at
-  // render time. `currentSectionSlug` is reset once per `buildForm` pass and updated by `buildRow`
-  // whenever it draws a heading, so a plain field can be stamped with the section it visually sits in
-  // without the parser needing to compute or store one. See `.plans/29-field-identity.md`.
+  // **A section's identity, derived rather than stored.** Headings still mint a slug for fields
+  // that sit under them. A `type: "section"` node also carries an optional `id` and becomes a real
+  // `<section class="config-ui-section">` in the DOM — same leaf rows as before, one structural
+  // wrapper. See `.plans/29-field-identity.md` and Plan 37 section containers.
   var currentSectionSlug = "";
 
   /** Lowercase, non-alphanumeric runs collapsed to one hyphen, no leading or trailing hyphen. */
   function sectionSlug(text) {
     return String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  /** Same walk as `parser.flattenPanelRows` — keep in step when either changes. */
+  function flattenPanelRows(rows) {
+    var out = [];
+    (rows || []).forEach(function (r) {
+      if (r && r.type === "section") {
+        Array.prototype.push.apply(out, flattenPanelRows(r.blocks));
+      } else if (r) {
+        out.push(r);
+      }
+    });
+    return out;
+  }
+
+  function firstHeadingSlug(rows) {
+    for (var i = 0; i < (rows || []).length; i++) {
+      if (rows[i].type === "heading") return sectionSlug(rows[i].text);
+    }
+    return "";
   }
 
   function buildField(field, idx, prose) {
@@ -584,7 +603,7 @@
    * rendered form, against the schema instead.
    */
   function seedCollectionValue(row, schema) {
-    var rows = (schema && schema.rows) || [];
+    var rows = flattenPanelRows((schema && schema.rows) || []);
     var candidates = rows.filter(function (other) {
       return other.type === "field" && other.inputType === "collection";
     });
@@ -651,6 +670,13 @@
       wr.className = "config-ui-row config-ui-row--line-break";
       wr.setAttribute("aria-hidden", "true");
       return wr;
+    }
+    if (r.type === "spacer") {
+      var sp = document.createElement("div");
+      var sz = r.size === "s" || r.size === "l" ? r.size : "m";
+      sp.className = "config-ui-spacer config-ui-spacer--" + sz;
+      sp.setAttribute("aria-hidden", "true");
+      return sp;
     }
     if (r.type === "divider") {
       var wr2 = document.createElement("div");
@@ -812,59 +838,83 @@
       // exists the array control must not offer its own Add — two controls for one action is the shape that
       // produced the mode-picker confusion. This used to be decided by `field.tabs`, which was only ever a
       // proxy for "there are chips above"; `@blocks` has chips now too.
-      var hasChips = schema.rows.some(function (r) { return r.type === "chips"; });
+      var flatRows = flattenPanelRows(schema.rows);
+      var hasChips = flatRows.some(function (r) { return r.type === "chips"; });
       if (hasChips) {
-        schema.rows.forEach(function (r) {
+        flatRows.forEach(function (r) {
           if (r.type === "field" && r.inputType === "rows") r.membershipFromChips = true;
         });
       }
       var fieldIdx = 0;
-      // Which paragraph explains which control, decided once for the whole block — a row cannot
-      // answer it alone, because the answer is about the rows on either side of it.
-      var fold = foldProse(schema.rows);
-      // **Pair Preview/Overview headings with the content-reveal slot that follows.** They start
-      // hidden with the slot; `fillContentReveal` opens them together when HTML arrives. Mode
-      // settings and other headings are not paired — they keep ordinary `@showWhen`.
-      var revealTrail = [];
-      function clearRevealTrail(keepHidden) {
-        revealTrail.forEach(function (el) {
-          el.removeAttribute("data-content-reveal-pair");
-          if (!keepHidden) el.style.display = "";
-        });
-        revealTrail = [];
-      }
-      schema.rows.forEach(function (r, i) {
-        // A folded paragraph is not dropped from the schema, only from the page: it is still in
-        // `schema.rows`, so `serialize` writes it back into the config block exactly as it was.
-        if (fold.folded[i]) return;
-        // The schema goes with the row: the chips control needs the mode names, which live in another
-        // row's value. Passing context beats either control reaching into the DOM for the other,
-        // which would depend on render order.
-        var el = buildRow(r, r.type === "field" ? fieldIdx++ : 0, schema, fold.prose[i]);
-        el.setAttribute("data-row-index", String(i));
-        container.appendChild(el);
-        if (r.type === "heading" && isContentRevealSectionHeading(r.text)) {
-          clearRevealTrail(true);
-          el.setAttribute("data-content-reveal-pair", "true");
-          el.style.display = "none";
-          revealTrail = [el];
-        } else if ((r.type === "field" || r.type === "paragraph") && revealTrail.length) {
-          el.setAttribute("data-content-reveal-pair", "true");
-          el.style.display = "none";
-          revealTrail.push(el);
-        } else if (r.type === "preview" || r.type === "suggestions") {
-          // Trail already marked as pairs; leave them hidden until fillContentReveal.
+
+      function appendPanelRows(rows, parent) {
+        // Which paragraph explains which control, decided once for this list — a row cannot
+        // answer it alone, because the answer is about the rows on either side of it.
+        var fold = foldProse(rows);
+        // **Pair Preview/Overview headings with the content-reveal slot that follows.** They start
+        // hidden with the slot; `fillContentReveal` opens them together when HTML arrives. Mode
+        // settings and other headings are not paired — they keep ordinary `@showWhen`.
+        var revealTrail = [];
+        function clearRevealTrail(keepHidden) {
+          revealTrail.forEach(function (el) {
+            el.removeAttribute("data-content-reveal-pair");
+            if (!keepHidden) el.style.display = "";
+          });
           revealTrail = [];
-        } else {
-          clearRevealTrail(false);
         }
-      });
+        (rows || []).forEach(function (r, i) {
+          // A folded paragraph is not dropped from the schema, only from the page: it is still in
+          // `schema.rows`, so `serialize` writes it back into the config block exactly as it was.
+          if (fold.folded[i]) return;
+
+          if (r.type === "section") {
+            clearRevealTrail(false);
+            var savedSlug = currentSectionSlug;
+            var sec = document.createElement("section");
+            var slug = r.id ? sectionSlug(r.id) : firstHeadingSlug(r.blocks);
+            sec.className = "config-ui-section" + (slug ? " config-ui-section--" + slug : "");
+            if (slug) sec.setAttribute("data-section", slug);
+            var srules = r.showWhenRules || (r.showWhen ? [r.showWhen] : []);
+            if (srules && srules.length) {
+              sec.setAttribute("data-show-when-rules", JSON.stringify(srules));
+            }
+            if (slug) currentSectionSlug = slug;
+            appendPanelRows(r.blocks, sec);
+            currentSectionSlug = savedSlug;
+            parent.appendChild(sec);
+            return;
+          }
+
+          // The schema goes with the row: the chips control needs the mode names, which live in another
+          // row's value. Passing context beats either control reaching into the DOM for the other,
+          // which would depend on render order.
+          var el = buildRow(r, r.type === "field" ? fieldIdx++ : 0, schema, fold.prose[i]);
+          el.setAttribute("data-row-index", String(i));
+          parent.appendChild(el);
+          if (r.type === "heading" && isContentRevealSectionHeading(r.text)) {
+            clearRevealTrail(true);
+            el.setAttribute("data-content-reveal-pair", "true");
+            el.style.display = "none";
+            revealTrail = [el];
+          } else if ((r.type === "field" || r.type === "paragraph") && revealTrail.length) {
+            el.setAttribute("data-content-reveal-pair", "true");
+            el.style.display = "none";
+            revealTrail.push(el);
+          } else if (r.type === "preview" || r.type === "suggestions") {
+            // Trail already marked as pairs; leave them hidden until fillContentReveal.
+            revealTrail = [];
+          } else {
+            clearRevealTrail(false);
+          }
+        });
+      }
+
+      appendPanelRows(schema.rows, container);
       return;
     }
-    // `parse()` returns `{ rows }` and nothing else, so there is one rendering. A second branch here
-    // built a `.config-ui-section` tree that no schema could reach, and it carried its own copy of the
-    // heading, divider and container styles — which is how "the config form" came to mean two
-    // different sets of CSS. Removed with those rules.
+    // `parse()` returns `{ rows }` (flat or section-nested). There is one rendering path — leaf
+    // rows reuse `.config-ui-row*`; sections only add `.config-ui-section` wrappers. Do not grow a
+    // second form language under a different class tree.
     container.innerHTML = '<div class="config-ui-empty">No configuration options.</div>';
   }
 
@@ -916,7 +966,7 @@
   }
 
   function chipNamesFromSchema(row, schema) {
-    var rows = schema && schema.rows ? schema.rows : [];
+    var rows = flattenPanelRows(schema && schema.rows ? schema.rows : []);
     var key = row.from || "modes";
     for (var i = 0; i < rows.length; i++) {
       if (rows[i].type !== "field" || rows[i].name !== key) continue;
@@ -927,6 +977,14 @@
         .filter(function (name) { return typeof name === "string" && name.trim() !== ""; });
     }
     return [];
+  }
+
+  function fieldRowByName(schema, name) {
+    var rows = flattenPanelRows(schema && schema.rows ? schema.rows : []);
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].type === "field" && rows[i].name === name) return rows[i];
+    }
+    return null;
   }
 
   /**
@@ -2700,6 +2758,8 @@
      * nothing else, which is the shape of a control that looks like it works.
      */
     function setEndValue(which, value) {
+      // Locked seed: middle H / S / C / L are the seed hex — refuse typed or dragged rewrites.
+      if (which === "mid" && seedLockedInRow()) return;
       var cell = endCell(which);
       if (!cell || value === null || !isFinite(value)) return;
       var limit = field.range;
@@ -2948,8 +3008,14 @@
       // the curve grows a middle point again.
       var midCell = field.ends.mid ? endCell("mid") : null;
       if (midCell) {
-        midCell.disabled = !curveHasMiddle;
+        var midLocked = seedLockedInRow();
+        midCell.disabled = !curveHasMiddle || midLocked;
         midCell.placeholder = curveHasMiddle ? "" : derivedMiddleText();
+        if (midLocked) {
+          midCell.title = "Locked to the seed color";
+        } else if (!midCell.title || midCell.title === "Locked to the seed color") {
+          midCell.title = "";
+        }
         if (!curveHasMiddle && (typeof document === "undefined" || document.activeElement !== midCell)) {
           midCell.value = "";
         }
@@ -2974,7 +3040,10 @@
       if (middleBox) {
         var held = stored;
         var hasMiddle = curveHasMiddle;
-        middleBox.disabled = !hasMiddle;
+        var midLockedBox = seedLockedInRow();
+        middleBox.disabled = !hasMiddle || midLockedBox;
+        if (midLockedBox) middleBox.title = "Locked to the seed color";
+        else if (middleBox.title === "Locked to the seed color") middleBox.title = "";
         // **Placeholder, not `.value`, for the derived reading** \u2014 the same reason the adopted case
         // above uses it: this box has no field behind it to be collected, but treating "no anchor" and
         // "measured, not set" the same way here keeps the two middle boxes behaving alike.
@@ -3366,15 +3435,26 @@
       if (showShape) {
         handles.forEach(function (h) {
           var at = toView(h.x, h.y * lift);
-          var dot = curveSvgEl("circle", {
-            "class": "config-ui-curve__handle" + (h.anchor ? " config-ui-curve__handle--anchor" : ""),
+          var midLocked = !!(h.anchor && seedMiddleGripLocked());
+          var cls = "config-ui-curve__handle" +
+            (h.anchor ? " config-ui-curve__handle--anchor" : "") +
+            (midLocked ? " config-ui-curve__handle--locked" : "");
+          var attrs = {
+            "class": cls,
             cx: at.x, cy: at.y, r: h.anchor ? 5 : 4.5,
             "data-curve-index": h.index,
-            tabindex: 0,
-            role: "slider",
+            role: midLocked ? "img" : "slider",
             "aria-label": (h.anchor ? "Middle anchor" : "Handle " + (h.index / 2 + 1)) +
-              " at " + h.x.toFixed(2) + ", " + h.y.toFixed(2)
-          });
+              (midLocked ? " (locked to seed color)" :
+                (" at " + h.x.toFixed(2) + ", " + h.y.toFixed(2)))
+          };
+          if (midLocked) {
+            attrs["aria-disabled"] = "true";
+            attrs["pointer-events"] = "none";
+          } else {
+            attrs.tabindex = 0;
+          }
+          var dot = curveSvgEl("circle", attrs);
           (ax ? grips : svg).appendChild(dot);
         });
       }
@@ -3437,7 +3517,14 @@
       // The middle-point button only means something once there is a shape to split.
       if (growthKey) toggle.style.display = shapeShowing() ? "" : "none";
       toggle.textContent = pts.length === 10 ? "Remove middle point" : "Add middle point";
-      toggle.disabled = !pts.length;
+      // Locked seed keeps the middle point — Remove would drop `middle.*` from generation.
+      toggle.disabled = !pts.length ||
+        (pts.length === 10 && seedMiddleGripLocked());
+      if (toggle.disabled && pts.length === 10) {
+        toggle.title = "Locked to the seed color";
+      } else if (toggle.title === "Locked to the seed color") {
+        toggle.title = "";
+      }
 
       if (!opts || !opts.keepText) {
         // **In growth mode the field reads the scale, not the curve.** Coordinates are the thing you paste
@@ -3523,6 +3610,48 @@
       if (estimateTimeout && typeof estimateTimeout.unref === "function") estimateTimeout.unref();
     }
 
+    /**
+     * **Lock seed** lives on a sibling checkbox in the same mode row. When it is on, middle H / S / C
+     * (and the Lightness curve's middle grip) belong to the seed hex — presets must not strip the
+     * middle point (`easeInOut` is four numbers on purpose for ordinary ramps), and the middle grip
+     * must not move.
+     */
+    function seedLockedInRow() {
+      var row = typeof wrap.closest === "function"
+        ? wrap.closest(".config-ui-rows-item") : null;
+      if (!row || typeof row.querySelector !== "function") return false;
+      var lock = row.querySelector('[data-row-field="seed.lock"]');
+      return !!(lock && lock.type === "checkbox" && lock.checked);
+    }
+
+    /** Middle grip (index 4) on any channel in a locked mode — including Lightness with no `middle.*` field. */
+    function seedMiddleGripLocked() {
+      return seedLockedInRow();
+    }
+
+    /** Fraction along the plot to keep (or restore) a middle at when applying a preset. */
+    function middleFractionToKeep(pts) {
+      if (pts && pts.length === 10 && typeof pts[4] === "number" && isFinite(pts[4])) {
+        return pts[4];
+      }
+      if (!(field.ends && field.ends.mid) || !seedLockedInRow()) return null;
+      var asked = { fraction: 0.5 };
+      var askEvt = new Event("config-ui-middle-point-position", { bubbles: true });
+      askEvt.detail = asked;
+      wrap.dispatchEvent(askEvt);
+      return typeof asked.fraction === "number" && isFinite(asked.fraction) &&
+        asked.fraction > 0 && asked.fraction < 1 ? asked.fraction : 0.5;
+    }
+
+    function applyPresetPoints(next) {
+      if (!B || !next) return setPoints(next || []);
+      var keep = middleFractionToKeep(curveValueOf(wrap.getAttribute("data-curve-value")));
+      // `easeInOut` presets are one cubic; a locked seed (or an existing middle) still needs ten
+      // numbers so generation consults `middle.*` at the seed step.
+      if (keep != null && next.length === 4) next = B.bezierWithMiddle(next, keep);
+      setPoints(next);
+    }
+
     preset.addEventListener("change", function () {
       var choice = preset.value;
       if (choice === "original") return setPoints([]);
@@ -3530,7 +3659,7 @@
         // Selecting it puts the estimate back. It is the file's own shape, so this is the way back after
         // an edit — the values survive because they are re-derived from the collection, not held by the
         // control.
-        if (estimate) return setPoints(estimate.slice());
+        if (estimate) return applyPresetPoints(estimate.slice());
         // No fit yet for this mode, and this cell can ask for one — the only case the option is shown
         // without an estimate already in hand (see `buildCurvePresetSelect`'s `awaitable`).
         if (isPerModeCurve) return requestEstimate();
@@ -3544,7 +3673,7 @@
       // In growth mode *Linear* is the no-shape state, so it clears rather than storing a straight curve.
       if (growthKey && choice === "linear|none") return setPoints([]);
       var bits = choice.split("|");
-      setPoints(B ? B.bezierFromEase(bits[0], bits[1], 1) : []);
+      applyPresetPoints(B ? B.bezierFromEase(bits[0], bits[1], 1) : []);
     });
 
     toggle.addEventListener("click", function () {
@@ -3552,6 +3681,8 @@
       var pts = curveValueOf(wrap.getAttribute("data-curve-value"));
       if (!pts.length) return;
       if (pts.length === 10) {
+        // Locked seed needs the middle point — generation only reads `middle.*` when the curve has one.
+        if (seedMiddleGripLocked()) return;
         setPoints(B.bezierWithoutMiddle(pts));
         return;
       }
@@ -3797,6 +3928,12 @@
           panning = { y: evt.clientY, lo: w0.lo, span: w0.hi - w0.lo };
         } else {
           dragging = parseInt(dot, 10);
+          // Locked seed: middle grip is display-only (Hue / Sat / Chroma / Lightness).
+          if (dragging === 4 && seedMiddleGripLocked()) {
+            dragging = null;
+            tipKind = null;
+            return;
+          }
         }
       }
       if (svg.setPointerCapture) svg.setPointerCapture(evt.pointerId);
@@ -3868,6 +4005,7 @@
        * the number box is the only way to change height (confirmed live on HSL and OKLCH).
        */
       if (dragging === 4 && pts.length === 10) {
+        if (seedMiddleGripLocked()) return;
         pts[4] = at.x;
         if (typeof window !== "undefined" && window.codefigProbe) {
           window.codefigProbe("curve:drag", {
@@ -4123,10 +4261,11 @@
 
       var index = el.getAttribute("data-curve-index");
       if (index === null) return;
+      var i = parseInt(index, 10);
+      if (i === 4 && seedMiddleGripLocked()) return;
       evt.preventDefault();
       var by = (evt.shiftKey ? 0.1 : 0.01);
       var pts = curveValueOf(wrap.getAttribute("data-curve-value")).slice();
-      var i = parseInt(index, 10);
       pts[i] += dx * by;
       pts[i + 1] += dy * by;
       setPoints(pts);
@@ -5289,11 +5428,7 @@
       container.querySelectorAll("[data-rows-field]").forEach(function (wrap) {
         var n = wrap.getAttribute("data-rows-field");
         if (!n) return;
-        var field = null;
-        var rows = schema && schema.rows ? schema.rows : [];
-        for (var i = 0; i < rows.length; i++) {
-          if (rows[i].type === "field" && rows[i].name === n) { field = rows[i]; break; }
-        }
+        var field = fieldRowByName(schema, n);
         if (field) vals[n] = collectRows(wrap, field, baseValueFor(n));
       });
       // A field-level `@group:` keeps its parts under `data-row-field` — the same attribute a `@rows` cell
@@ -5308,22 +5443,14 @@
       container.querySelectorAll("[data-curve-field]").forEach(function (wrap) {
         var n = wrap.getAttribute("data-curve-field");
         if (!n) return;
-        var owner = null;
-        var rows = (schema && schema.rows) || [];
-        for (var ci = 0; ci < rows.length; ci++) {
-          if (rows[ci].type === "field" && rows[ci].name === n) { owner = rows[ci]; break; }
-        }
+        var owner = fieldRowByName(schema, n);
         vals[n] = curveCollected(wrap.getAttribute("data-curve-value"), !!(owner && owner.overshoot));
       });
       container.querySelectorAll("[data-group-field]").forEach(function (wrap) {
         var groupName = wrap.getAttribute("data-group-field");
         if (!groupName) return;
         var held = {};
-        var field = null;
-        var rows = schema && schema.rows ? schema.rows : [];
-        for (var gi = 0; gi < rows.length; gi++) {
-          if (rows[gi].type === "field" && rows[gi].name === groupName) { field = rows[gi]; break; }
-        }
+        var field = fieldRowByName(schema, groupName);
         if (!field) return;
         if (field.value && typeof field.value === "object") {
           for (var was in field.value) held[was] = field.value[was];
@@ -5375,7 +5502,12 @@
       container.querySelectorAll("[data-fill-if-empty]").forEach(function (el) {
         var row = el.closest(".config-ui-row");
         if (!row) return;
-        var hidden = row.style.display === "none";
+        var hidden = false;
+        var walk = row;
+        while (walk && walk !== container) {
+          if (walk.style && walk.style.display === "none") { hidden = true; break; }
+          walk = walk.parentElement;
+        }
         var primed = row.getAttribute("data-fill-primed") === "true";
         if (hidden) {
           row.setAttribute("data-fill-hidden", "true");
@@ -5409,7 +5541,7 @@
       }
       function curveFieldNames() {
         var names = {};
-        var rows = (schema && schema.rows) || [];
+        var rows = flattenPanelRows((schema && schema.rows) || []);
         for (var i = 0; i < rows.length; i++) {
           if (rows[i].type === "field" && rows[i].inputType === "curve") names[rows[i].name] = true;
         }

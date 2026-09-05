@@ -166,20 +166,6 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "rows",
-    "showWhenRules": [
-      {
-        "field": "collectionName",
-        "values": [
-          "*"
-        ]
-      },
-      {
-        "field": "fontScale",
-        "values": [
-          "*"
-        ]
-      }
-    ],
     "columns": [
       {
         "key": "name",
@@ -281,8 +267,7 @@
             "labelSpelled": true,
             "unit": "%"
           }
-        ],
-        "group": "letterSpacing"
+        ]
       },
       {
         "key": "lineHeight",
@@ -305,8 +290,7 @@
             "labelSpelled": true,
             "unit": "%"
           }
-        ],
-        "group": "lineHeight"
+        ]
       },
       {
         "key": "roundTo",
@@ -316,7 +300,22 @@
       }
     ],
     "tabs": true,
-    "blocks": false
+    "blocks": false,
+    "copyToOthers": true,
+    "showWhenRules": [
+      {
+        "field": "collectionName",
+        "values": [
+          "*"
+        ]
+      },
+      {
+        "field": "fontScale",
+        "values": [
+          "*"
+        ]
+      }
+    ]
   },
   {
     "type": "heading",

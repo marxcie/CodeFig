@@ -131,8 +131,10 @@ Layout drives behavior: `EXAMPLE_SCRIPTS/` and `CODEFIG_LIBRARIES/` → type `pr
 - `// @DOC_START` … `// @DOC_END` — markdown docs tab.
 - `// @PANEL_START` … `// @PANEL_END` — the **form recipe** as `var __codefigPanel = { blocks: […] }`
   (live object so Source highlights it; bare keys like the Help specimen; comment-JSON still
-  accepted). Shipped scripts and anything with a real panel use this. Configuration UI is the
-  form; Source holds the recipe beside the values. There is no Configuration code tab.
+  accepted). Optional `{ type: "section", id?, showWhen?, blocks: […] }` wraps chunks (DOM
+  `.config-ui-section`); `spacer-s`/`m`/`l` for vertical gaps. Shipped scripts and anything with a
+  real panel use this. Configuration UI is the form; Source holds the recipe beside the values.
+  There is no Configuration code tab.
 - `// @UI_CONFIG_START` … `// @UI_CONFIG_END` — **values only** (`var` lines) when paired with
   `@PANEL_START`. Without a PANEL block, trailing annotations on each `var` line still drive the
   form (legacy / tiny scripts): `@options: a|b|c`, `@radio`, `@multi`, `@label:`, `@placeholder:`,

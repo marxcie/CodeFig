@@ -408,11 +408,14 @@
 //
 // | PANEL | Renders as |
 // |---|---|
+// | `{ type: "section", id?: "…", showWhen?: {…}, blocks: […] }` | a `<section class="config-ui-section">` wrapping its blocks. One readiness gate for the whole chunk. `id` becomes `config-ui-section--{id}` and `data-section` |
 // | `{ type: "heading", level: 1, text: "Title" }` | section heading |
 // | `level: 2` / `level: 3` | sub-headings |
 // | `{ type: "paragraph", text: "…" }` | a paragraph — **bold**, *italic* and `code` all work |
-// | `{ type: "divider" }` | a short rule |
-// | `{ type: "divider", section: true }` | a rule to both panel edges |
+// | `{ type: "divider" }` at the panel root | a rule to both panel edges (between sections) |
+// | `{ type: "divider" }` inside a section | a short rule |
+// | `{ type: "divider", section: true }` | legacy force of the edge-to-edge rule (prefer a root-level divider) |
+// | `{ type: "spacer-s" }` / `spacer-m` / `spacer-l` | vertical gap (8 / 12 / 24px). Not a field row |
 // | `{ type: "preview" }` | where the domain's live preview goes |
 // | `{ type: "suggestions" }` | where its suggestions list goes |
 // | `{ type: "directive", name: "fromFile", … }` / values `@fromFile: domains.x` | which slice of a file's config this block holds; renders as nothing |
@@ -425,10 +428,10 @@
 // - **`type: "preview"` and `type: "suggestions"`** render whatever the script's own `@PREVIEW:` /
 //   `@SUGGESTIONS:` function returns, so they are that panel's markup rather than a style primitive.
 //   Grid is the live example; critique them there, where the numbers are real.
-// - **`blank` / `lineBreak`** — spacer comment lines in the old one-line annotation format. A
-//   `@PANEL_START` recipe has no blank block; paragraph fold direction is `attachTo: "next"` or
-//   `"previous"` instead. Bare `//` gaps still work on non-migrated scripts; they are not something
-//   the specimen shelf can show once the panel is JSON.
+// - **`blank` / `lineBreak`** — spacer comment lines in the old one-line annotation format. Prefer
+//   `{ type: "spacer-s" }` / `spacer-m` / `spacer-l` in a `@PANEL_START` recipe. Paragraph fold
+//   direction is `attachTo: "next"` or `"previous"`. Bare `//` gaps still work on non-migrated
+//   scripts; they are not something the specimen shelf can show once the panel is an object.
 // - **InfoPanel and CodeFigUI** (`@InfoPanel`, `@codefig-ui`) style a script's *results*, which is a
 //   different surface with its own classes. Worth its own reference — ask and it gets one.
 // - **Sidebar, tab strip and footer** are panel chrome rather than anything a script can produce.
@@ -487,28 +490,38 @@ var nested = { outer: { inner: 1 } };
 var __codefigPanel = {
   blocks: [
     { type: "directive", name: "prose" },
-    { type: "heading", level: 1, text: "Configuration UI specimen" },
-    { type: "paragraph", attachTo: "previous",
-      text: "This tab shows every control a CodeFig Configuration UI can render. It is a specimen shelf, not a\nsettings form for a run. Running Help does nothing to your document." },
-    { type: "paragraph", attachTo: "previous",
-      text: "Build your own panels with a values block plus a `@PANEL_START` recipe in Source. Utilities use\n`@UI_CONFIG` (`var` lines); Foundations use `@CONFIG` inside an object. See **Two shapes for values**\nin this script's Documentation. Token sizes and the full recipe table are under **Style & UI\nreference**. Each ⓘ below quotes the recipe that made that control." },
-    { type: "heading", level: 1, text: "Heading level 1" },
-    { type: "paragraph", attachTo: "previous",
-      text: "The level every panel uses for its section titles: `{ type: \"heading\", level: 1, text: \"…\" }`. The Configuration UI renders it as `h2` (never `h1`), and it\ncarries the 48px gap that separates one section from the next." },
-    { type: "heading", level: 2, text: "Heading level 2" },
-    { type: "paragraph", attachTo: "previous",
-      text: "`level: 2`. A title *inside* a section. On the form this renders as `h3`." },
-    { type: "heading", level: 3, text: "Heading level 3" },
-    { type: "paragraph", attachTo: "previous",
-      text: "`level: 3`: also `h3` on the form — body size, told apart from a paragraph by its weight alone." },
-    { type: "paragraph", attachTo: "previous",
-      text: "This is a paragraph — `{ type: \"paragraph\", text: \"…\" }`. **Bold**, *italic* and `code` work." },
+    { type: "section", id: "specimen-intro", blocks: [
+      { type: "heading", level: 1, text: "Configuration UI specimen" },
+      { type: "paragraph", attachTo: "previous",
+        text: "This tab shows every control a CodeFig Configuration UI can render. It is a specimen shelf, not a\nsettings form for a run. Running Help does nothing to your document." },
+      { type: "paragraph", attachTo: "previous",
+        text: "Build your own panels with a values block plus a `@PANEL_START` recipe in Source. Utilities use\n`@UI_CONFIG` (`var` lines); Foundations use `@CONFIG` inside an object. See **Two shapes for values**\nin this script's Documentation. Token sizes and the full recipe table are under **Style & UI\nreference**. Each ⓘ below quotes the recipe that made that control. Shipped Foundations panels wrap\nchunks in `{ type: \"section\", blocks: […] }` so readiness `showWhen` applies once." }
+    ]},
+    { type: "divider" },
+    { type: "section", id: "markers", blocks: [
+      { type: "heading", level: 1, text: "Heading level 1" },
+      { type: "paragraph", attachTo: "previous",
+        text: "The level every panel uses for its section titles: `{ type: \"heading\", level: 1, text: \"…\" }`. The Configuration UI renders it as `h2` (never `h1`), and it\ncarries the 48px gap that separates one section from the next." },
+      { type: "heading", level: 2, text: "Heading level 2" },
+      { type: "paragraph", attachTo: "previous",
+        text: "`level: 2`. A title *inside* a section. On the form this renders as `h3`." },
+      { type: "heading", level: 3, text: "Heading level 3" },
+      { type: "paragraph", attachTo: "previous",
+        text: "`level: 3`: also `h3` on the form — body size, told apart from a paragraph by its weight alone." },
+      { type: "paragraph", attachTo: "previous",
+        text: "This is a paragraph — `{ type: \"paragraph\", text: \"…\" }`. **Bold**, *italic* and `code` work." },
+      { type: "divider" },
+      { type: "paragraph", attachTo: "previous",
+        text: "Above: a short rule, from `{ type: \"divider\" }` inside a section." },
+      { type: "spacer-s" },
+      { type: "paragraph", attachTo: "previous",
+        text: "`{ type: \"spacer-s\" }` (8px). Also `spacer-m` (12px) and `spacer-l` (24px)." },
+      { type: "spacer-m" },
+      { type: "spacer-l" }
+    ]},
     { type: "divider" },
     { type: "paragraph", attachTo: "previous",
-      text: "Above: a short rule, from `{ type: \"divider\" }`." },
-    { type: "divider", section: true },
-    { type: "paragraph", attachTo: "previous",
-      text: "Above: a rule reaching both panel edges, from `{ type: \"divider\", section: true }`." },
+      text: "Above: a rule to both panel edges — `{ type: \"divider\" }` between top-level sections (same look as the old `section: true`)." },
     { type: "heading", level: 1, text: "Text and numbers" },
     { key: "textField", type: "string", label: "Text", helper: "{ key: \"textField\", type: \"string\" }" },
     { key: "withPlaceholder", type: "string", label: "Text with a placeholder", helper: "placeholder: \"Shown while empty\"", placeholder: "Shown while empty" },
@@ -524,6 +537,7 @@ var __codefigPanel = {
     { key: "dependent", type: "string", label: "Only while Checkbox is on", helper: "showWhen: { toggle: true }", showWhen: { toggle: true } },
     { type: "heading", level: 1, text: "Collections and modes" },
     { key: "collectionName", type: "collection", label: "Collection", helper: "{ key: \"collectionName\", type: \"collection\" }" },
+    { type: "spacer-m" },
     { key: "collectionMode", type: "mode", label: "Mode", helper: "{ key: \"collectionMode\", type: \"mode\", collection: \"collectionName\" }", collection: "collectionName" },
     { type: "chips", label: "Collection modes", from: "modes" },
     { type: "paragraph", attachTo: "next",

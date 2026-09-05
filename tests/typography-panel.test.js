@@ -105,12 +105,12 @@ function render(overrides) {
 test('the block renders the four sections the frames show', () => {
   const { schema, container } = render();
   assert.deepEqual(
-    schema.rows.filter((r) => r.type === 'heading').map((r) => r.text),
+    P.flattenPanelRows(schema.rows).filter((r) => r.type === 'heading').map((r) => r.text),
     ['General', 'Mode settings', 'Overview', 'Preview']
   );
 
   const fields = {};
-  schema.rows.filter((r) => r.type === 'field').forEach((r) => { fields[r.name] = r.inputType; });
+  P.flattenPanelRows(schema.rows).filter((r) => r.type === 'field').forEach((r) => { fields[r.name] = r.inputType; });
   assert.equal(fields.collectionName, 'collection');
   assert.equal(fields.fontScale, 'list', 'Tokens is one input holding a comma list');
   assert.equal(fields.fontWeights, 'list', 'and so are the weights: "400, Semi Bold"');
@@ -446,7 +446,7 @@ test('the percentage fields carry their unit in the input', () => {
   // A placeholder disappears the moment you type; a unit has to stay, or `-1.5` is unreadable as either
   // pixels or percent. Márton asked for it drawn inside the field at the right edge.
   const schema = P.parse(BLOCK, PANEL);
-  const modes = schema.rows.filter((r) => r.type === 'field' && r.inputType === 'rows')[0];
+  const modes = P.flattenPanelRows(schema.rows).filter((r) => r.type === 'field' && r.inputType === 'rows')[0];
   const by = {};
   modes.columns.forEach((c) => { by[c.key] = c; });
   for (const key of ['letterSpacing', 'lineHeight']) {

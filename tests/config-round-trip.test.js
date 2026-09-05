@@ -291,7 +291,8 @@ test('a value edit rewrites its own line and nothing else', () => {
     // or the old annotation path sees a values-only block and skips the file.
     const panel = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(src);
     const schema = panel ? P.parse(block, panel[1]) : P.parse(block);
-    const fields = schema.rows.filter((r) => r.type === 'field');
+    const fields = (P.flattenPanelRows ? P.flattenPanelRows(schema.rows) : schema.rows)
+      .filter((r) => r.type === 'field');
 
     // A scalar, and a number nested inside a `@rows` array — the two shapes a panel edits.
     const scalar = fields.filter((r) => r.inputType === 'number')[0];

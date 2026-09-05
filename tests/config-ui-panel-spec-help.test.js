@@ -45,8 +45,8 @@ function normaliseParagraph(text) {
 }
 
 function normalize(rows) {
-  return rows
-    .filter((r) => r.type !== 'blank' && r.type !== 'lineBreak' && r.type !== 'directive')
+  return parser.flattenPanelRows(rows)
+    .filter((r) => r.type !== 'blank' && r.type !== 'lineBreak' && r.type !== 'directive' && r.type !== 'spacer')
     .map((r) => {
       const clone = Object.assign({}, r);
       delete clone.raw;
@@ -99,7 +99,7 @@ test('help specimen keeps the intentional unsupported nested object', () => {
     extract(src, '@UI_CONFIG_START', '@UI_CONFIG_END'),
     extract(src, '@PANEL_START', '@PANEL_END')
   );
-  const nested = parsed.rows.find((r) => r.type === 'field' && r.name === 'nested');
+  const nested = parser.flattenPanelRows(parsed.rows).find((r) => r.type === 'field' && r.name === 'nested');
   assert.ok(nested, 'nested field missing');
   assert.strictEqual(nested.inputType, 'unsupported');
 });

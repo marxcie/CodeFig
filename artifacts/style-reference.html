@@ -327,68 +327,75 @@
       <div class="ref-panel">
       <div class="config-ui-form config-ui-form--rows" data-package="">
         <div class="config-ui-row config-ui-row--directive" data-row-index="0" style="display: none"></div>
-        <div class="config-ui-row config-ui-row--heading" data-section="configuration-ui-specimen" data-row-index="1">
-          <h2 class="config-ui-heading">Configuration UI specimen</h2>
-        </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="2">
-          <div class="docs-rendered">
-            This tab shows every control a CodeFig Configuration UI can render. It is a specimen shelf, not a<br>settings form for a run. Running Help does nothing to your document.
+        <section class="config-ui-section config-ui-section--specimen-intro" data-section="specimen-intro">
+          <div class="config-ui-row config-ui-row--heading" data-section="configuration-ui-specimen" data-row-index="0">
+            <h2 class="config-ui-heading">
+              Configuration UI specimen
+              <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="This tab shows every control a CodeFig Configuration UI can render. It is a specimen shelf, not a
+settings form for a run. Running Help does nothing to your document.
+
+Build your own panels with a values block plus a `@PANEL_START` recipe in Source. Utilities use
+`@UI_CONFIG` (`var` lines); Foundations use `@CONFIG` inside an object. See **Two shapes for values**
+in this script's Documentation. Token sizes and the full recipe table are under **Style &amp; UI
+reference**. Each ⓘ below quotes the recipe that made that control. Shipped Foundations panels wrap
+chunks in `{ type: &quot;section&quot;, blocks: […] }` so readiness `showWhen` applies once.">i</button>
+            </h2>
           </div>
+        </section>
+        <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section" data-row-index="2">
+          <hr>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="3">
-          <div class="docs-rendered">
-            Build your own panels with a values block plus a <code>@PANEL_START</code> recipe in Source. Utilities use<br><code>@UI_CONFIG</code> (<code>var</code> lines); Foundations use <code>@CONFIG</code> inside an object. See <strong>Two shapes for values</strong><br>in this script's Documentation. Token sizes and the full recipe table are under <strong>Style &amp; UI<br>reference</strong>. Each ⓘ below quotes the recipe that made that control.
+        <section class="config-ui-section config-ui-section--markers" data-section="markers">
+          <div class="config-ui-row config-ui-row--heading" data-section="heading-level-1" data-row-index="0">
+            <h2 class="config-ui-heading">
+              Heading level 1
+              <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="The level every panel uses for its section titles: `{ type: &quot;heading&quot;, level: 1, text: &quot;…&quot; }`. The Configuration UI renders it as `h2` (never `h1`), and it
+carries the 48px gap that separates one section from the next.">i</button>
+            </h2>
           </div>
-        </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="heading-level-1" data-row-index="4">
-          <h2 class="config-ui-heading">Heading level 1</h2>
+          <div class="config-ui-row config-ui-row--heading" data-section="heading-level-2" data-row-index="2">
+            <h3 class="config-ui-heading">
+              Heading level 2
+              <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="`level: 2`. A title *inside* a section. On the form this renders as `h3`.">i</button>
+            </h3>
+          </div>
+          <div class="config-ui-row config-ui-row--heading" data-section="heading-level-3" data-row-index="4">
+            <h3 class="config-ui-heading">
+              Heading level 3
+              <button type="button" class="config-ui-info" aria-label="Explain this setting" aria-expanded="false" data-info="`level: 3`: also `h3` on the form — body size, told apart from a paragraph by its weight alone.
+
+This is a paragraph — `{ type: &quot;paragraph&quot;, text: &quot;…&quot; }`. **Bold**, *italic* and `code` work.">i</button>
+            </h3>
+          </div>
+          <div class="config-ui-row config-ui-row--divider" data-row-index="7">
+            <hr>
+          </div>
+          <div class="config-ui-row config-ui-row--paragraph" data-row-index="8">
+            <div class="docs-rendered">
+              Above: a short rule, from <code>{ type: "divider" }</code> inside a section.
+            </div>
+          </div>
+          <div class="config-ui-spacer config-ui-spacer--s" aria-hidden="true" data-row-index="9"></div>
+          <div class="config-ui-row config-ui-row--paragraph" data-row-index="10">
+            <div class="docs-rendered">
+              <code>{ type: "spacer-s" }</code> (8px). Also <code>spacer-m</code> (12px) and <code>spacer-l</code> (24px).
+            </div>
+          </div>
+          <div class="config-ui-spacer config-ui-spacer--m" aria-hidden="true" data-row-index="11"></div>
+          <div class="config-ui-spacer config-ui-spacer--l" aria-hidden="true" data-row-index="12"></div>
+        </section>
+        <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section" data-row-index="4">
+          <hr>
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="5">
           <div class="docs-rendered">
-            The level every panel uses for its section titles: <code>{ type: "heading", level: 1, text: "…" }</code>. The Configuration UI renders it as <code>h2</code> (never <code>h1</code>), and it<br>carries the 48px gap that separates one section from the next.
+            Above: a rule to both panel edges — <code>{ type: "divider" }</code> between top-level sections (same look as the old <code>section: true</code>).
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="heading-level-2" data-row-index="6">
-          <h3 class="config-ui-heading">Heading level 2</h3>
-        </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="7">
-          <div class="docs-rendered">
-            <code>level: 2</code>. A title <em>inside</em> a section. On the form this renders as <code>h3</code>.
-          </div>
-        </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="heading-level-3" data-row-index="8">
-          <h3 class="config-ui-heading">Heading level 3</h3>
-        </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="9">
-          <div class="docs-rendered">
-            <code>level: 3</code>: also <code>h3</code> on the form — body size, told apart from a paragraph by its weight alone.
-          </div>
-        </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="10">
-          <div class="docs-rendered">
-            This is a paragraph — <code>{ type: "paragraph", text: "…" }</code>. <strong>Bold</strong>, <em>italic</em> and <code>code</code> work.
-          </div>
-        </div>
-        <div class="config-ui-row config-ui-row--divider" data-row-index="11">
-          <hr>
-        </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="12">
-          <div class="docs-rendered">
-            Above: a short rule, from <code>{ type: "divider" }</code>.
-          </div>
-        </div>
-        <div class="config-ui-row config-ui-row--divider config-ui-row--divider-section" data-row-index="13">
-          <hr>
-        </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="14">
-          <div class="docs-rendered">
-            Above: a rule reaching both panel edges, from <code>{ type: "divider", section: true }</code>.
-          </div>
-        </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="text-and-numbers" data-row-index="15">
+        <div class="config-ui-row config-ui-row--heading" data-section="text-and-numbers" data-row-index="6">
           <h2 class="config-ui-heading">Text and numbers</h2>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="16">
+        <div class="config-ui-row config-ui-row--field" data-row-index="7">
           <div class="config-ui-field config-ui-field--string" data-key="textField" data-type="string" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-textField-0">
@@ -401,7 +408,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="17">
+        <div class="config-ui-row config-ui-row--field" data-row-index="8">
           <div class="config-ui-field config-ui-field--string" data-key="withPlaceholder" data-type="string" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-withPlaceholder-1">
@@ -414,7 +421,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="18">
+        <div class="config-ui-row config-ui-row--field" data-row-index="9">
           <div class="config-ui-field config-ui-field--number" data-key="numberField" data-type="number" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-numberField-2">
@@ -427,7 +434,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="19">
+        <div class="config-ui-row config-ui-row--field" data-row-index="10">
           <div class="config-ui-field config-ui-field--textarea" data-key="longText" data-type="textarea" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-longText-3">
@@ -440,7 +447,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="20">
+        <div class="config-ui-row config-ui-row--field" data-row-index="11">
           <div class="config-ui-field config-ui-field--list" data-key="nameList" data-type="list" data-section="text-and-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-nameList-4">
@@ -453,10 +460,10 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="choices" data-row-index="21">
+        <div class="config-ui-row config-ui-row--heading" data-section="choices" data-row-index="12">
           <h2 class="config-ui-heading">Choices</h2>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="22">
+        <div class="config-ui-row config-ui-row--field" data-row-index="13">
           <div class="config-ui-field config-ui-field--boolean" data-key="toggle" data-type="boolean" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-toggle-5">
@@ -471,7 +478,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="23">
+        <div class="config-ui-row config-ui-row--field" data-row-index="14">
           <div class="config-ui-field config-ui-field--select" data-key="dropdown" data-type="select" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-dropdown-6">
@@ -488,7 +495,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="24">
+        <div class="config-ui-row config-ui-row--field" data-row-index="15">
           <div class="config-ui-field config-ui-field--radio" data-key="radioChoice" data-type="radio" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-radioChoice-7">
@@ -510,7 +517,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="25">
+        <div class="config-ui-row config-ui-row--field" data-row-index="16">
           <div class="config-ui-field config-ui-field--multiselect" data-key="multiChoice" data-type="multiselect" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-multiChoice-8">
@@ -536,7 +543,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="26">
+        <div class="config-ui-row config-ui-row--field" data-row-index="17">
           <div class="config-ui-field config-ui-field--select" data-key="documentList" data-type="select" data-section="choices">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-documentList-9">
@@ -551,7 +558,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]" data-row-index="27">
+        <div class="config-ui-row config-ui-row--field" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]" data-row-index="18">
           <div class="config-ui-field config-ui-field--string" data-key="dependent" data-type="string" data-section="choices" data-show-when-rules="[{&quot;field&quot;:&quot;toggle&quot;,&quot;values&quot;:[&quot;true&quot;]}]">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-dependent-10">
@@ -564,10 +571,10 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="collections-and-modes" data-row-index="28">
+        <div class="config-ui-row config-ui-row--heading" data-section="collections-and-modes" data-row-index="19">
           <h2 class="config-ui-heading">Collections and modes</h2>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="29">
+        <div class="config-ui-row config-ui-row--field" data-row-index="20">
           <div class="config-ui-field config-ui-field--collection" data-key="collectionName" data-type="collection" data-section="collections-and-modes">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-collectionName-11">
@@ -591,7 +598,8 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="30">
+        <div class="config-ui-spacer config-ui-spacer--m" aria-hidden="true" data-row-index="21"></div>
+        <div class="config-ui-row config-ui-row--field" data-row-index="22">
           <div class="config-ui-field config-ui-field--mode" data-key="collectionMode" data-type="mode" data-section="collections-and-modes">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-collectionMode-12">
@@ -613,7 +621,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--chips" data-row-index="31">
+        <div class="config-ui-row config-ui-row--field config-ui-row--chips" data-row-index="23">
           <div class="config-ui-field config-ui-field--chips">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label">Collection modes</label>
@@ -637,12 +645,12 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="32">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="24">
           <div class="docs-rendered">
             The chips read their names from the modes field below, so the two cannot disagree. Click a chip to<br>rename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="33">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="25">
           <div class="config-ui-field config-ui-field--rows" data-key="modes" data-type="rows" data-section="collections-and-modes">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -689,20 +697,20 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="one-thing-set-by-several-numbers" data-row-index="34">
+        <div class="config-ui-row config-ui-row--heading" data-section="one-thing-set-by-several-numbers" data-row-index="26">
           <h2 class="config-ui-heading">One thing set by several numbers</h2>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="35">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="27">
           <div class="docs-rendered">
             <code>type: "group"</code> on an <strong>object</strong> — one labelled row, each part captioned at a number's own width. Use it when<br>the parts are one idea rather than a list: a lightness ladder is a bright, a middle and a dark, and three<br>separate fields make you assemble that in your head. <code>type: "rows"</code> cannot serve this, because that one needs an<br>array — it is a <em>repeatable</em> group.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="36">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="28">
           <div class="docs-rendered">
             The same control appears nested inside <code>type: "rows"</code>, written the same way, so an anchor in a mode block and a<br>shared ladder above it are the same shape rather than two lookalikes.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="37">
+        <div class="config-ui-row config-ui-row--field" data-row-index="29">
           <div class="config-ui-field config-ui-field--group" data-key="lightness" data-type="group" data-section="one-thing-set-by-several-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-lightness-14">
@@ -728,12 +736,12 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="38">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="30">
           <div class="docs-rendered">
             <code>unit: "%"</code> prints a unit inside the input, at its right edge. It is <strong>not</strong> a placeholder — a<br>placeholder disappears the moment you type, and the whole point of a unit is that a reader coming back<br>to <code>-1.5</code> can tell whether that is pixels or percent.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="39">
+        <div class="config-ui-row config-ui-row--field" data-row-index="31">
           <div class="config-ui-field config-ui-field--group" data-key="lineHeight" data-type="group" data-section="one-thing-set-by-several-numbers">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-lineHeight-15">Line height</label>
@@ -758,15 +766,15 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="a-column-that-depends-on-its-row" data-row-index="40">
+        <div class="config-ui-row config-ui-row--heading" data-section="a-column-that-depends-on-its-row" data-row-index="32">
           <h2 class="config-ui-heading">A column that depends on its row</h2>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="41">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="33">
           <div class="docs-rendered">
             Radio buttons, options that carry their names, and cells that appear only when they apply. Switch the<br>scale type and watch the fields change — each tab is judged on its own values, so two modes can be<br>using different scale types at once.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="42">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="34">
           <div class="config-ui-field config-ui-field--rows" data-key="scales" data-type="rows" data-section="a-column-that-depends-on-its-row">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -852,15 +860,15 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="table-rows" data-row-index="43">
+        <div class="config-ui-row config-ui-row--heading" data-section="table-rows" data-row-index="35">
           <h2 class="config-ui-heading">Table rows</h2>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="44">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="36">
           <div class="docs-rendered">
             The same <code>type: "rows"</code> without <code>layout: "tabs"</code>: one line per entry, with Add and Remove.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="45">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="37">
           <div class="config-ui-field config-ui-field--rows" data-key="breakpoints" data-type="rows" data-section="table-rows">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -892,15 +900,15 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="a-curve-you-can-drag" data-row-index="46">
+        <div class="config-ui-row config-ui-row--heading" data-section="a-curve-you-can-drag" data-row-index="38">
           <h2 class="config-ui-heading">A curve you can drag</h2>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="47">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="39">
           <div class="docs-rendered">
             <code>type: "curve"</code> on an <strong>array</strong> of four numbers — the two handles of one cubic, exactly what <code>cubic-bezier()</code><br>carries. Drag a handle, arrow-key it a percent at a time, pick a preset, or paste coordinates into the<br>field underneath. All four are the same edit: the numbers are the value and everything on screen is a<br>reading of them, which is why the dropdown says <em>Custom</em> the moment a curve stops being a preset.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="48">
+        <div class="config-ui-row config-ui-row--field" data-row-index="40">
           <div class="config-ui-field config-ui-field--curve" data-key="easing" data-type="curve" data-section="a-curve-you-can-drag">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-easing-18">
@@ -979,8 +987,8 @@
                       <line class="config-ui-curve__tether" x1="100" y1="0" x2="63" y2="0"></line>
                       <circle class="config-ui-curve__end" cx="0" cy="100" r="3"></circle>
                       <circle class="config-ui-curve__end" cx="100" cy="0" r="3"></circle>
-                      <circle class="config-ui-curve__handle" cx="37" cy="100" r="4.5" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.37, 0.00"></circle>
-                      <circle class="config-ui-curve__handle" cx="63" cy="0" r="4.5" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.63, 1.00"></circle>
+                      <circle class="config-ui-curve__handle" cx="37" cy="100" r="4.5" data-curve-index="0" role="slider" aria-label="Handle 1 at 0.37, 0.00" tabindex="0"></circle>
+                      <circle class="config-ui-curve__handle" cx="63" cy="0" r="4.5" data-curve-index="2" role="slider" aria-label="Handle 2 at 0.63, 1.00" tabindex="0"></circle>
                     </svg>
                     <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
                     <div class="config-ui-curve__ticks"></div>
@@ -991,12 +999,12 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="49">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="41">
           <div class="docs-rendered">
             <strong>Add middle point</strong> makes it a three-point curve: ten numbers, a middle anchor you can drag in both<br>directions, and a handle either side of it. The split is exact, so adding the point does not move the<br>curve. It is also what <code>easeInOut</code> has always been — the in-curve over the first half and the out-curve<br>over the second is a middle anchor at the centre, written as an <code>if</code>.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="50">
+        <div class="config-ui-row config-ui-row--field" data-row-index="42">
           <div class="config-ui-field config-ui-field--curve" data-key="twoSegment" data-type="curve" data-section="a-curve-you-can-drag">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-twoSegment-19">Two-segment curve</label>
@@ -1074,11 +1082,11 @@
                       <line class="config-ui-curve__tether" x1="100" y1="0" x2="83" y2="0"></line>
                       <circle class="config-ui-curve__end" cx="0" cy="100" r="3"></circle>
                       <circle class="config-ui-curve__end" cx="100" cy="0" r="3"></circle>
-                      <circle class="config-ui-curve__handle" cx="17" cy="100" r="4.5" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.17, 0.00"></circle>
-                      <circle class="config-ui-curve__handle" cx="33" cy="77" r="4.5" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.33, 0.23"></circle>
-                      <circle class="config-ui-curve__handle config-ui-curve__handle--anchor" cx="50" cy="50" r="5" data-curve-index="4" tabindex="0" role="slider" aria-label="Middle anchor at 0.50, 0.50"></circle>
-                      <circle class="config-ui-curve__handle" cx="67" cy="23" r="4.5" data-curve-index="6" tabindex="0" role="slider" aria-label="Handle 4 at 0.67, 0.77"></circle>
-                      <circle class="config-ui-curve__handle" cx="83" cy="0" r="4.5" data-curve-index="8" tabindex="0" role="slider" aria-label="Handle 5 at 0.83, 1.00"></circle>
+                      <circle class="config-ui-curve__handle" cx="17" cy="100" r="4.5" data-curve-index="0" role="slider" aria-label="Handle 1 at 0.17, 0.00" tabindex="0"></circle>
+                      <circle class="config-ui-curve__handle" cx="33" cy="77" r="4.5" data-curve-index="2" role="slider" aria-label="Handle 2 at 0.33, 0.23" tabindex="0"></circle>
+                      <circle class="config-ui-curve__handle config-ui-curve__handle--anchor" cx="50" cy="50" r="5" data-curve-index="4" role="slider" aria-label="Middle anchor at 0.50, 0.50" tabindex="0"></circle>
+                      <circle class="config-ui-curve__handle" cx="67" cy="23" r="4.5" data-curve-index="6" role="slider" aria-label="Handle 4 at 0.67, 0.77" tabindex="0"></circle>
+                      <circle class="config-ui-curve__handle" cx="83" cy="0" r="4.5" data-curve-index="8" role="slider" aria-label="Handle 5 at 0.83, 1.00" tabindex="0"></circle>
                     </svg>
                     <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
                     <div class="config-ui-curve__ticks"></div>
@@ -1089,12 +1097,12 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="51">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="43">
           <div class="docs-rendered">
             <code>allowOriginal: true</code> adds <em>Original</em> to the preset list — the empty curve, for a script that has something<br>to fall back on. Colors uses it to mean "leave the steps this file already has".
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="52">
+        <div class="config-ui-row config-ui-row--field" data-row-index="44">
           <div class="config-ui-field config-ui-field--curve" data-key="maybeCurve" data-type="curve" data-section="a-curve-you-can-drag">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-maybeCurve-20">
@@ -1179,25 +1187,25 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="a-curve-on-a-real-axis" data-row-index="53">
+        <div class="config-ui-row config-ui-row--heading" data-section="a-curve-on-a-real-axis" data-row-index="45">
           <h2 class="config-ui-heading">A curve on a real axis</h2>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="54">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="46">
           <div class="docs-rendered">
             <code>ends: "a..b"</code> names the two fields the curve runs <strong>between</strong>, and <code>range: [lo, hi]</code> the limits of the quantity<br>itself. Together they turn the y axis from a unit square into the thing being edited: the labels are<br>percentages of lightness, the dashed line joins the two ends rather than the corners of the box, and the<br>two <strong>square</strong> handles are those ends — drag one and it types into its own field, because that is where<br>the value lives. The round handles still only bend the shape between them.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="55">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="47">
           <div class="docs-rendered">
             The plot shows a <strong>window</strong> on the channel — the two ends with a little air — and two columns sit beside<br>it. The <strong>triangle</strong> is the zoom: drag it up to close in, down to pull back, or step it with the buttons<br>above and below. The bar to its right is the channel's own colours across that window, and it is a<br>picture: it takes no input at all. Neither column moves when you drag the curve, because where you are<br>looking is not a property of the ramp — and to follow a ramp that runs off the top or bottom, drag the<br>empty chart vertically.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="56">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="48">
           <div class="docs-rendered">
             The ramp is clipped to the plot; the grips are clipped to the plot <strong>plus their own radius</strong>, so one on<br>the boundary sits <em>on</em> the frame rather than being sliced in half by it. A drag stops at the edge of the<br>window rather than pushing the curve out of sight.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="57" style="display: none">
+        <div class="config-ui-row config-ui-row--field" data-row-index="49" style="display: none">
           <div class="config-ui-field config-ui-field--group" data-key="ladder" data-type="group" data-section="a-curve-on-a-real-axis">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladder-21">Ends</label>
@@ -1207,7 +1215,7 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--charted" data-row-index="58">
+        <div class="config-ui-row config-ui-row--field config-ui-row--charted" data-row-index="50">
           <div class="config-ui-field config-ui-field--curve" data-key="ladderCurve" data-type="curve" data-section="a-curve-on-a-real-axis">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-ladderCurve-22">
@@ -1298,8 +1306,8 @@
                         <g clip-path="url(#config-ui-curve-clip-4-grip)">
                           <circle class="config-ui-curve__axis-end" cx="0" cy="2.249718785151855" r="5" data-curve-end="from" tabindex="0" role="slider" aria-label="Bright end, 98"></circle>
                           <circle class="config-ui-curve__axis-end" cx="100" cy="91.11361079865017" r="5" data-curve-end="to" tabindex="0" role="slider" aria-label="Dark end, 19"></circle>
-                          <circle class="config-ui-curve__handle" cx="40" cy="2.249718785151855" r="4.5" data-curve-index="0" tabindex="0" role="slider" aria-label="Handle 1 at 0.40, 0.00"></circle>
-                          <circle class="config-ui-curve__handle" cx="70" cy="51.12485939257594" r="4.5" data-curve-index="2" tabindex="0" role="slider" aria-label="Handle 2 at 0.70, 0.55"></circle>
+                          <circle class="config-ui-curve__handle" cx="40" cy="2.249718785151855" r="4.5" data-curve-index="0" role="slider" aria-label="Handle 1 at 0.40, 0.00" tabindex="0"></circle>
+                          <circle class="config-ui-curve__handle" cx="70" cy="51.12485939257594" r="4.5" data-curve-index="2" role="slider" aria-label="Handle 2 at 0.70, 0.55" tabindex="0"></circle>
                         </g>
                       </svg>
                       <div class="config-ui-curve__empty-note" data-shown="false">Original</div>
@@ -1347,25 +1355,25 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="a-scale-with-no-far-end" data-row-index="59">
+        <div class="config-ui-row config-ui-row--heading" data-section="a-scale-with-no-far-end" data-row-index="51">
           <h2 class="config-ui-heading">A scale with no far end</h2>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="60">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="52">
           <div class="docs-rendered">
             <code>growth: "ratio"</code> on a curve inside <code>type: "rows"</code> — the <strong>open-ended</strong> editor, for a scale whose largest value nobody<br>knows in advance. The y axis is logarithmic, so a constant ratio is a straight line and its slope is the<br>growth: one handle drags it, continuously, into the sibling cell named after the colon. Past the last<br>token the line carries on faintly, because it does — adding a token extends the scale rather than<br>squeezing what is already generated into the same range.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="61">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="53">
           <div class="docs-rendered">
             <strong>The dropdown is the shape control.</strong> <em>Linear</em> means no shape and draws no handles; anything else<br>reveals them, for when the growth should vary across the scale — tighter at the small end, looser at the<br>top. The field underneath carries the whole scale, growth and shape together, so copying it out and<br>pasting it back reproduces it.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="62">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="54">
           <div class="docs-rendered">
             The growth has <strong>no field of its own</strong>: one idea, one control. It is still written to the config under<br>the name after the colon, so the block reads <code>ratio: 1.5</code> beside <code>curve: []</code>.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="63">
+        <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="55">
           <div class="config-ui-field config-ui-field--rows" data-key="openScale" data-type="rows" data-section="a-scale-with-no-far-end">
             <div class="config-ui-field__row">
               <div class="config-ui-field__control">
@@ -1460,15 +1468,15 @@
             </div>
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--heading" data-section="what-the-form-cannot-hold" data-row-index="64">
+        <div class="config-ui-row config-ui-row--heading" data-section="what-the-form-cannot-hold" data-row-index="56">
           <h2 class="config-ui-heading">What the form cannot hold</h2>
         </div>
-        <div class="config-ui-row config-ui-row--paragraph" data-row-index="65">
+        <div class="config-ui-row config-ui-row--paragraph" data-row-index="57">
           <div class="docs-rendered">
             An arbitrary nested object is not a control. The form cannot edit it. Source keeps the value; the<br>panel shows a note that it is only editable in Source. Use <code>type: "rows"</code> for a list of entries, or<br><code>type: "group"</code> for one object made of labelled parts.
           </div>
         </div>
-        <div class="config-ui-row config-ui-row--field" data-row-index="66">
+        <div class="config-ui-row config-ui-row--field" data-row-index="58">
           <div class="config-ui-field config-ui-field--unsupported" data-key="nested" data-type="unsupported" data-section="what-the-form-cannot-hold">
             <div class="config-ui-field__row">
               <label class="config-ui-field__label" for="config-ui-nested-24">
@@ -1499,6 +1507,20 @@
         hover or on focus, which a static page cannot do — so the text is listed here.
       </p>
       <table class="ref-table">
+        <tr><td>Configuration UI specimen</td><td class="ref-tip">This tab shows every control a CodeFig Configuration UI can render. It is a specimen shelf, not a
+settings form for a run. Running Help does nothing to your document.
+
+Build your own panels with a values block plus a `@PANEL_START` recipe in Source. Utilities use
+`@UI_CONFIG` (`var` lines); Foundations use `@CONFIG` inside an object. See **Two shapes for values**
+in this script's Documentation. Token sizes and the full recipe table are under **Style &amp; UI
+reference**. Each ⓘ below quotes the recipe that made that control. Shipped Foundations panels wrap
+chunks in `{ type: "section", blocks: […] }` so readiness `showWhen` applies once.</td></tr>
+        <tr><td>Heading level 1</td><td class="ref-tip">The level every panel uses for its section titles: `{ type: "heading", level: 1, text: "…" }`. The Configuration UI renders it as `h2` (never `h1`), and it
+carries the 48px gap that separates one section from the next.</td></tr>
+        <tr><td>Heading level 2</td><td class="ref-tip">`level: 2`. A title *inside* a section. On the form this renders as `h3`.</td></tr>
+        <tr><td>Heading level 3</td><td class="ref-tip">`level: 3`: also `h3` on the form — body size, told apart from a paragraph by its weight alone.
+
+This is a paragraph — `{ type: "paragraph", text: "…" }`. **Bold**, *italic* and `code` work.</td></tr>
         <tr><td>Text</td><td class="ref-tip">{ key: "textField", type: "string" }</td></tr>
         <tr><td>Text with a placeholder</td><td class="ref-tip">placeholder: "Shown while empty"</td></tr>
         <tr><td>Number</td><td class="ref-tip">{ key: "numberField", type: "number" }</td></tr>

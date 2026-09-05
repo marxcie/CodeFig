@@ -172,35 +172,37 @@ test('seed apply puts middle sat/chroma on a 10-point curve so the strip peaks a
   assert.ok(Math.abs(made.rows[mid].C * 100 - mode.middle.saturation) < 8);
 });
 
-test('locked seesaw: moving hue start mirrors end around the seed', () => {
+test('locked seed sync restores middle anchors and a middle point on four-number curves', () => {
+  const config = baseConfig({ colorModel: 'hsl' });
+  const mode = config.modes[0];
+  mode.seed.hex = '#0B84FF';
+  mode.seed.lock = true;
+  mode.seed.placement = '500';
+  mode.saturationCurve = E.bezierFromEase('sine', 'inout', 1);
+  assert.equal(mode.saturationCurve.length, 4, 'easeInOut is one cubic');
+  mode.middle.saturation = 10;
+  mode.middle.hslHue = 1;
+
+  assert.equal(E.colorsSyncLockedSeedMiddles(config, mode, STEPS_11), true);
+  assert.equal(mode.saturationCurve.length, 10, 'lock re-adds a middle point');
+  assert.ok(mode.middle.saturation > 40, 'middle sat matches the seed');
+  assert.ok(Math.abs(mode.middle.hslHue - 210) < 20, 'middle hue near seed');
+});
+
+test('HSL seed apply writes absolute middle.lightness and a 10-point lightness curve', () => {
   const config = baseConfig({ colorModel: 'hsl' });
   const mode = config.modes[0];
   mode.seed.hex = '#0B84FF';
   E.colorsApplySeedScale(config, mode, STEPS_11);
-  const pivot = mode.middle.hslHue;
-  assert.ok(pivot > 0);
-
-  const prev = E.colorsSeesawSnapshot(config);
-  mode.bright.hslHue = 298.5;
-  assert.equal(E.colorsApplyLockedSeesaw(config, prev), true);
-  assert.ok(Math.abs(mode.dark.hslHue - E.colorsSeesawHue(pivot, 298.5)) < 0.2);
-  assert.ok(Math.abs(mode.middle.hslHue - pivot) < 0.05);
-});
-
-test('locked seesaw: both ends changing (seed apply) does not fight', () => {
-  const config = baseConfig({ colorModel: 'hsl' });
-  const mode = config.modes[0];
-  const prev = E.colorsSeesawSnapshot(config);
-  mode.seed.hex = '#0B84FF';
-  E.colorsApplySeedScale(config, mode, STEPS_11);
-  assert.equal(E.colorsApplyLockedSeesaw(config, prev), false);
-});
-
-test('colorsSeesawHue matches the balanced examples', () => {
-  assert.ok(Math.abs(E.colorsSeesawHue(210.5, 298.5) - 122.5) < 0.01);
-  assert.ok(Math.abs(E.colorsSeesawHue(210.5, 122.5) - 298.5) < 0.01);
-  assert.ok(Math.abs(E.colorsSeesawLinear(50, 20) - 80) < 0.01);
-  assert.equal(E.colorsSeesawLinear(83, 23.2, 0, 100), 100); // clamped
+  assert.equal(mode.curve.length, 10, 'lightness chart needs a real middle like Hue/Sat');
+  assert.ok(mode.middle.lightness > 40 && mode.middle.lightness < 70,
+    'middle L is the seed, not a unit-space remap of the ends');
+  const seedL = mode.middle.lightness;
+  mode.bright.lightness = 48.4;
+  mode.dark.lightness = 15;
+  // Sync keeps middle on the seed when lock is on — ends may move freely.
+  assert.equal(E.colorsSyncLockedSeedMiddles(config, mode, STEPS_11), false);
+  assert.equal(mode.middle.lightness, seedL);
 });
 
 test('seed hex without # (and 3-digit) applies the full scale', () => {

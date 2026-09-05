@@ -105,7 +105,9 @@
         /* The columns beside a charted curve, and the gap before each. Anything that has to line
            up with the *plot* rather than with the row reserves `2 x (w + gap)` on its right. */
         --curve-col-w: 18px;
-        --curve-col-gap: 8px;
+        --curve-col-gap: 4px;
+        --curve-zoom-margin-left: 8px;
+        --curve-row-padding-right: calc(var(--curve-col-w) * 2 + var(--curve-col-gap) * 2 + var(--curve-zoom-margin-left));
         --radius-lg: 12px;
         --radius-full: 9999px;
 
@@ -1316,6 +1318,31 @@
       .config-ui-form--rows .config-ui-row:last-child {
         margin-bottom: 0;
       }
+
+      /* Panel `type: "section"` — structure in the DOM, not a second form language. Children keep
+         `.config-ui-row*`. Class + optional `config-ui-section--{slug}` from `id` or the first heading. */
+      .config-ui-section {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        min-width: 0;
+        flex-shrink: 0;
+      }
+      .config-ui-section > .config-ui-row:last-child,
+      .config-ui-section > .config-ui-spacer:last-child {
+        margin-bottom: 0;
+      }
+
+      /* `spacer-s` / `spacer-m` / `spacer-l` — vertical rhythm only. Not a `.config-ui-row` (shared
+         row margin must not apply). Heights are additive to the neighbouring row's margin-bottom. */
+      .config-ui-spacer {
+        width: 100%;
+        flex-shrink: 0;
+        pointer-events: none;
+      }
+      .config-ui-spacer--s { height: var(--space-sm); }
+      .config-ui-spacer--m { height: var(--space-md); }
+      .config-ui-spacer--l { height: var(--space-2xl); }
       /* Two lengths, because a divider between *sections* and a divider between *items* are not the
          same line. `// ---` separates items and stays inside the content; `// --- @section` separates
          sections and reaches the edges, which is only expressible because the padding is one variable.
@@ -3186,8 +3213,14 @@
         outline: none;
       }
 
-      .config-ui-curve__handle:active {
-        cursor: grabbing;
+      /* Locked to the seed: still drawn so you see where the seed sits, but not a grip. */
+      .config-ui-curve__handle--locked,
+      .config-ui-curve__handle--locked:hover,
+      .config-ui-curve__handle--locked:focus,
+      .config-ui-curve__handle--locked:active {
+        cursor: default;
+        pointer-events: none;
+        opacity: 0.55;
       }
 
       /* The middle anchor sits *on* the curve rather than off it, so it is filled by default —
@@ -3257,7 +3290,7 @@
          reserves the same width — the strip and the chart are the same steps seen two ways and have to
          share an edge. Scoped to a charted row: a `@rows` block with no chart has nothing to line up with. */
       .config-ui-rows-item[data-rows-charted="true"] .config-ui-rows-preview {
-        padding-right: calc(var(--curve-col-w) * 2 + var(--curve-col-gap) * 2);
+        padding-right: var(--curve-row-padding-right);
       }
 
       /* **A charted curve spans the block.** The label and the preset row keep the two-column layout
@@ -3346,6 +3379,7 @@
         align-items: center;
         flex: 0 0 var(--curve-col-w);
         width: var(--curve-col-w);
+        margin-left: var(--curve-zoom-margin-left);
       }
 
       /* `display: flex` above beats the UA `[hidden] { display: none }` (same specificity, later rule),
@@ -3425,8 +3459,7 @@
       .config-ui-curve__anchors {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
-        margin-top: 12px;
-        padding-right: calc(var(--curve-col-w) * 2 + var(--curve-col-gap) * 2);
+        padding-right: var(--curve-row-padding-right);
       }
 
       .config-ui-curve__anchors .config-ui-curve__anchor--middle { justify-self: center; }

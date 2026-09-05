@@ -162,6 +162,27 @@ test("choosing a preset writes its coordinates", () => {
   assert.equal(c.points().length, 10, "outin is still a three-point curve");
 });
 
+test("easeInOut on a curve that already has a middle keeps a middle point", () => {
+  // easeInOut is one cubic (four numbers) on purpose — see bezierEaseInOutTable. A seeded channel
+  // already has ten; picking the preset must not strip the corner generation reads as middle.*.
+  const withMid = B.bezierWithMiddle(B.bezierFromEase("linear", "none", 1), 0.5);
+  assert.equal(withMid.length, 10);
+  const c = build({}, withMid);
+  c.preset.value = "sine|inout";
+  c.preset.dispatch("change");
+  assert.equal(c.points().length, 10, "preset must not drop an existing middle");
+  assert.ok(Math.abs(c.points()[4] - 0.5) < 0.02, "middle stays near the previous fraction");
+});
+
+test("locked seed middle grip is inert, not a dead drag", () => {
+  // Symptom: lock refused the write but left the middle handle grabbable — drag felt broken.
+  const ui = fs.readFileSync(path.join(__dirname, "..", "src", "config-ui", "renderer.js"), "utf8");
+  assert.match(ui, /seedMiddleGripLocked/, "lock must name the middle-grip gate");
+  assert.match(ui, /config-ui-curve__handle--locked/, "locked middle must look non-interactive");
+  assert.match(ui, /if \(dragging === 4 && seedMiddleGripLocked\(\)\)/,
+    "pointerdown must refuse the middle grip on every locked channel, including Lightness");
+});
+
 test("the dropdown reads the curve back, and says Custom once it is not a preset", () => {
   const c = build({}, []);
   c.preset.value = "quad|in";

@@ -157,7 +157,7 @@ test('Spacing / Corner radius / Typography opt in; Grid and Colors do not', () =
   }
   function modesFlag(file) {
     const schema = P.parse('modes: [],', panelOf(file));
-    const modes = schema.rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];
+    const modes = P.flattenPanelRows(schema.rows).filter((r) => r.type === 'field' && r.name === 'modes')[0];
     return !!(modes && modes.copyToOthers);
   }
   assert.equal(modesFlag('spacing.js'), true);

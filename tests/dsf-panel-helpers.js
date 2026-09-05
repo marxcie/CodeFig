@@ -2,7 +2,11 @@
  * Helpers for DSF panel tests: apply address + modes so `@showWhen` gated sections render.
  */
 function applyConfigToSchema(schema, config) {
-  schema.rows.forEach(function (r) {
+  const parser = require('../src/config-ui/parser.js');
+  const rows = parser.flattenPanelRows
+    ? parser.flattenPanelRows(schema.rows)
+    : schema.rows;
+  rows.forEach(function (r) {
     if (r.type === 'field' && Object.prototype.hasOwnProperty.call(config, r.name)) {
       r.value = config[r.name];
     }

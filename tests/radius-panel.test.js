@@ -92,16 +92,17 @@ test('the block renders the panel the frame shows', () => {
   R.buildForm(schema, container);
 
   const fields = {};
-  schema.rows.filter((r) => r.type === 'field').forEach((r) => { fields[r.name] = r.inputType; });
+  P.flattenPanelRows(schema.rows).filter((r) => r.type === 'field').forEach((r) => { fields[r.name] = r.inputType; });
   assert.equal(fields.collectionName, 'collection');
   assert.equal(fields.group, 'string');
   assert.equal(fields.radii, 'list', 'Tokens is one input holding a comma list');
   assert.equal(fields.modes, 'rows');
 
   assert.deepEqual(
-    schema.rows.filter((r) => r.type === 'heading').map((r) => r.text),
+    P.flattenPanelRows(schema.rows).filter((r) => r.type === 'heading').map((r) => r.text),
     ['General', 'Mode settings', 'Preview']
   );
+  assert.ok(container.querySelector('section.config-ui-section--general'));
   assert.ok(container.querySelector('[data-chips-field]'), 'the collection modes chips');
   assert.ok(container.querySelector('[data-rows-field="modes"]'), 'a tab per mode');
   assert.ok(container.querySelector('[data-preview-slot]'), 'and the preview goes in the block');
@@ -112,7 +113,7 @@ test('the frame has three radios, which settles what the Spacing frames left ope
   // is the design's rather than mine. Modular has since become **Bezier** — a straight curve is a constant
   // ratio, so the model that was there is the new one's default shape rather than a fourth option.
   const schema = parsePanel();
-  const modes = schema.rows.filter((r) => r.type === 'field' && r.name === 'modes')[0];
+  const modes = P.flattenPanelRows(schema.rows).filter((r) => r.type === 'field' && r.name === 'modes')[0];
   const by = {};
   modes.columns.forEach((c) => { by[c.key] = c; });
   assert.equal(by.scaleType.type, 'radio');

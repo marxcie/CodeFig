@@ -94,20 +94,6 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "rows",
-    "showWhenRules": [
-      {
-        "field": "collectionName",
-        "values": [
-          "*"
-        ]
-      },
-      {
-        "field": "radii",
-        "values": [
-          "*"
-        ]
-      }
-    ],
     "columns": [
       {
         "key": "name",
@@ -203,7 +189,22 @@
       }
     ],
     "tabs": true,
-    "blocks": false
+    "blocks": false,
+    "copyToOthers": true,
+    "showWhenRules": [
+      {
+        "field": "collectionName",
+        "values": [
+          "*"
+        ]
+      },
+      {
+        "field": "radii",
+        "values": [
+          "*"
+        ]
+      }
+    ]
   },
   {
     "type": "heading",

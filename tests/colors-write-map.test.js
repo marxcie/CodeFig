@@ -84,6 +84,14 @@ test('colorsManifestSlice drops previewOnly and existing, keeps modes', () => {
   assert.equal(slice.modes[0].name, 'Lime');
 });
 
+test('colorsManifestSlice keeps generateOverview when set', () => {
+  const withFlag = Object.assign({}, sampleConfig(), { generateOverview: true });
+  assert.equal(E.colorsManifestSlice(withFlag).generateOverview, true);
+  const off = Object.assign({}, sampleConfig(), { generateOverview: false });
+  assert.equal(E.colorsManifestSlice(off).generateOverview, false);
+  assert.equal(E.colorsManifestSlice(sampleConfig()).generateOverview, undefined);
+});
+
 test('colorsGroupPrefix matches foundation namePrefix', () => {
   assert.equal(E.colorsGroupPrefix('lime'), 'lime/');
   assert.equal(E.colorsGroupPrefix('Primitives/Neutrals'), 'Primitives/Neutrals/');

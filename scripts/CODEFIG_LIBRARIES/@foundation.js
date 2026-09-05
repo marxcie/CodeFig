@@ -2353,7 +2353,7 @@ function foundationSliceKeys(domain) {
   // warns about its own untouched config the first time anyone runs it, which is how people learn that
   // warnings are noise.
   if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
-    'lower', 'upper', 'lightness', 'modes']);
+    'lower', 'upper', 'lightness', 'modes', 'tokenCount']);
   return keys;
 }
 
@@ -2371,7 +2371,7 @@ function foundationDomainKeys(domain) {
   }
   if (domain === 'grid') return common.concat(['extensionColumns', 'extraValues']);
   if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
-    'lower', 'upper', 'lightness', 'modes']);
+    'lower', 'upper', 'lightness', 'modes', 'tokenCount']);
   return common;
 }
 

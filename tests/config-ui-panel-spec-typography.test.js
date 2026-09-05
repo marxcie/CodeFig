@@ -90,7 +90,9 @@ function stripRowNoise(row) {
 
 test('typography.js: @PANEL_START matches the pre-migration rows dump, field by field', () => {
   const oldRows = expectedRows().map(stripRowNoise);
-  const newRows = liveTypography().rows.map(stripRowNoise);
+  const newRows = parser.flattenPanelRows(liveTypography().rows)
+    .filter((r) => r.type !== 'spacer')
+    .map(stripRowNoise);
 
   assert.ok(!liveTypography().error, 'panel parse error: ' + liveTypography().error);
   assert.strictEqual(newRows.length, oldRows.length, 'row count differs');
@@ -103,7 +105,7 @@ test('typography.js: @PANEL_START matches the pre-migration rows dump, field by 
 });
 
 test('typography.js: General fields start empty with placeholders until a collection is chosen', () => {
-  const rows = liveTypography().rows;
+  const rows = parser.flattenPanelRows(liveTypography().rows);
   const fontScale = rows.find((r) => r.type === 'field' && r.name === 'fontScale');
   assert.deepStrictEqual(fontScale.value, []);
   assert.strictEqual(fontScale.inputType, 'list');
@@ -146,7 +148,7 @@ test('typography.js: General fields start empty with placeholders until a collec
 });
 
 test('typography.js: suggestions and preview markers are present', () => {
-  const types = liveTypography().rows.map((r) => r.type);
+  const types = parser.flattenPanelRows(liveTypography().rows).map((r) => r.type);
   assert.ok(types.includes('suggestions'));
   assert.ok(types.includes('preview'));
 });

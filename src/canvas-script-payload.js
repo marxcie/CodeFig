@@ -306,6 +306,12 @@ function schemaRowsToPanelRows(rows) {
   for (var i = 0; i < list.length && out.length < MAX_PANEL_ROWS; i++) {
     var row = list[i];
     if (!row || !row.type) continue;
+    if (row.type === 'section') {
+      var nested = schemaRowsToPanelRows(row.blocks || []);
+      for (var n = 0; n < nested.length && out.length < MAX_PANEL_ROWS; n++) out.push(nested[n]);
+      continue;
+    }
+    if (row.type === 'spacer') continue;
     if (row.type === 'heading') {
       out.push({ type: 'heading', level: row.level || 1, text: String(row.text || '') });
       continue;

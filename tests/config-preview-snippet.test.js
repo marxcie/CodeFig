@@ -119,52 +119,60 @@ test('a form is only written back over the block it was projected from', () => {
     'the projection marker is recorded before the form is built from that text');
 });
 
-test('an address change leaves no trace of the previous one', () => {
-  // Symptom 3. Pointing the panel at a different collection fired a read, the read returned `source: "none"`,
-  // and the previous collection's modes, curves, anchors and steps stayed on screen — the difference between
-  // "this collection has no ramp" and "here is someone else's ramp", with the panel saying the second.
+test('preview render can name its owner script', () => {
+  // Symptom: removing seesaw helpers also deleted `previewOwnerKey`, so every Colors preview threw
+  // before painting the strip — "the colour chart is missing".
+  assert.match(ui, /function previewOwnerKey\s*\(/,
+    'renderConfigPreview needs previewOwnerKey to latch which script owns the strip');
+  assert.match(ui, /_previewOwnerKey = previewOwnerKey\(\)/,
+    'a successful paint must record the owner');
+});
+
+test('an address change keeps fields unless the address has stored data', () => {
+  // Pointing the panel at a different collection/group used to wipe to pristine (or miss-write the
+  // same), throwing away steps, curves and seeds. Keep authored fields on a miss; load only when
+  // recorded/recognised data exists for that address.
   const start = ui.indexOf('function requestAutoImport(');
   assert.notEqual(start, -1);
   const body = ui.slice(start, ui.indexOf('\n      function ', start + 10));
 
-  // **The defaults are prepared before the read and applied when it answers.** They used to be *written*
-  // before the read, which reached the same end state by two writes — and because pristine clears the token
-  // list, the first one collapsed every section gated on it and the second expanded them again. That was
-  // the layout jump. What has to hold is the end state, not the route.
+  // Defaults are still prepared before the read — as the fill base when a set is found — not written
+  // up front (that collapsed token-gated sections and raced typed fields).
   const prep = body.indexOf('pristineConfigForAddress(collection, group)');
-  assert.notEqual(prep, -1, 'an address change no longer prepares defaults for the new address');
+  assert.notEqual(prep, -1, 'a hit still needs prepared defaults for the new address');
   assert.match(body, /pendingPristine = detectOnly \? null : pristineConfigForAddress/,
-    'the group-detection probe must not reset — it asks about the address the panel is already on');
+    'the group-detection probe must not prepare a wipe — it asks about the address the panel is already on');
+  assert.doesNotMatch(body, /collection !== lastReadCollection/,
+    'changing collection must not clear Group before the read');
 
   const asks = body.indexOf('runSilentSnippet');
   assert.ok(prep < asks, 'the defaults must be prepared from the block as it stands before the read');
 
   // Defaults come from the script as opened, not from the block on screen — which by then holds the
-  // previous collection's values, so resetting to it would clear nothing.
+  // previous collection's values, so filling onto it would leave keys the payload omits.
   // End at `starterModesForDomain` — New-collection unlock helpers sit after pristine and must not
   // widen this slice (they call `writeConfigBlockText`; pristine itself must not).
   const fn = ui.slice(ui.indexOf('function pristineConfigForAddress('),
     ui.indexOf('\n      function starterModesForDomain('));
   assert.match(fn, /extractConfigSection\(originalCode/,
-    'the defaults no longer come from the script as it was opened');
-  assert.match(fn, /collectionName: collection/, 'the address is not carried through');
+    'the defaults come from the script as it was opened');
+  assert.match(fn, /collectionName: collection/, 'the address is carried through');
   assert.doesNotMatch(fn, /writeConfigBlockText/,
-    'preparing the defaults must not write — that is the second rebuild this removed');
-  // Starter Value is filled into the prepared text (not written here) so Mode settings can open.
+    'preparing the defaults must not write — that is the wipe this removed');
+  // Starter Value is filled into the prepared text (not written here) so Mode settings can open on hit.
   assert.match(fn, /starters = starterModesForDomain/,
-    'an empty modes array must get a starter Value for the new address');
+    'an empty modes array must get a starter Value for the fill base');
 
-  // And the rule itself: a read that finds nothing leaves an empty panel rather than the last one's values
-  // — but only when Collection / Group settle did *not* already reset. Re-applying after settle races with
-  // tokens typed during the miss (new collection → steps → blur → ramp gone).
   const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
-  assert.match(apply, /writeConfigBlockText\(pendingPristine/,
-    'a read that finds nothing no longer clears the panel when settle has not already');
-  assert.match(apply, /if \(!addressAlreadyReset\)/,
-    'miss must not wipe again after address settle already wrote defaults');
+  assert.doesNotMatch(apply, /writeConfigBlockText\(pendingPristine/,
+    'a miss must keep authored fields — do not write prepared defaults');
   assert.match(ui, /addressAlreadyReset = true/,
-    'address settle must claim the reset so the miss path can skip');
+    'address settle still claims so a miss cannot wipe');
   assert.match(apply, /var base = pendingPristine \|\| currentConfigBlock\(\)/,
     'a read that finds something must fill onto the defaults, or the previous address survives in every ' +
     'key the payload does not mention');
+  assert.match(ui, /function resetModesForNewCollection/,
+    'collection change must reset modes — they are not kept with other authored fields');
+  assert.match(ui, /collection-modes-reset/,
+    'the modes-only write is named so it is not mistaken for a full address wipe');
 });

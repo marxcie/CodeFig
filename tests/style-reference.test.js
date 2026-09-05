@@ -64,9 +64,11 @@ function docBlock() {
 
 const SCHEMA = parser.parse(configBlock(), panelBlock());
 assert.ok(!SCHEMA.error, 'help panel parse error: ' + SCHEMA.error);
-const ROW_TYPES = new Set(SCHEMA.rows.map((r) => r.type));
+const FLAT_ROWS = parser.flattenPanelRows(SCHEMA.rows);
+const ROW_TYPES = new Set(FLAT_ROWS.map((r) => r.type));
+if (SCHEMA.rows.some((r) => r.type === 'section')) ROW_TYPES.add('section');
 const INPUT_TYPES = new Set(
-  SCHEMA.rows.filter((r) => r.type === 'field').map((r) => r.inputType)
+  FLAT_ROWS.filter((r) => r.type === 'field').map((r) => r.inputType)
 );
 
 test('every control the renderer can build is shown in the reference', () => {
@@ -86,7 +88,7 @@ test('every marker row the parser emits is demonstrated, or exempt for a stated 
   const emitted = new Set(
     [...PARSER_SRC.matchAll(/rows\.push\(\{\s*\n?\s*type: "(\w+)"/g)].map((m) => m[1])
   );
-  [...PARSER_SRC.matchAll(/type: "(heading|divider|paragraph|chips|field)"/g)].forEach((m) =>
+  [...PARSER_SRC.matchAll(/type: "(heading|divider|paragraph|chips|field|section|spacer)"/g)].forEach((m) =>
     emitted.add(m[1])
   );
 
@@ -96,8 +98,7 @@ test('every marker row the parser emits is demonstrated, or exempt for a stated 
   //     says so.
   //   directive (`@fromFile:`) — renders as nothing by design; there is no appearance to check.
   //   unparsed — a line the parser could not read. An error state, not something to author.
-  //   blank / lineBreak — old-format spacer comments (`//` / wrap). `@PANEL_START` has no blank
-  //     block; paragraph fold direction is `attachTo` instead. Documented under Not in here.
+  //   blank / lineBreak — old-format spacer comments (`//` / wrap). Prefer `spacer-s`/`m`/`l` in PANEL.
   const exempt = new Set(['preview', 'suggestions', 'directive', 'unparsed', 'blank', 'lineBreak']);
 
   const missing = [...emitted].filter((t) => !ROW_TYPES.has(t) && !exempt.has(t));
@@ -132,7 +133,7 @@ test('the reference reaches the plugin: it ships and it parses', () => {
 test('every field in the reference names the syntax that produced it', () => {
   // The point of the thing: read the note, ask for the change. A field with no note is a control
   // nobody can name.
-  const unnamed = SCHEMA.rows
+  const unnamed = FLAT_ROWS
     .filter((r) => r.type === 'field' && !r.helper && !r.label)
     .map((r) => r.name);
   assert.deepEqual(unnamed, [], 'these fields carry neither a label nor a note: ' + unnamed.join(', '));
@@ -142,7 +143,7 @@ test('a note may quote PANEL JSON without being truncated', () => {
   // Specimen helpers name the PANEL property shape that produced the control. Truncation used to
   // cut annotation notes mid-sentence (`@helper:` stopped at the next `@word`); the same failure
   // mode for PANEL would leave a helper ending mid-object.
-  const helpers = SCHEMA.rows.filter((r) => r.type === 'field').map((r) => r.helper).filter(Boolean);
+  const helpers = FLAT_ROWS.filter((r) => r.type === 'field').map((r) => r.helper).filter(Boolean);
   const quoting = helpers.filter((h) => /type:\s*"/.test(h) || /\{ key:/.test(h));
   assert.ok(quoting.length >= 3,
     'the reference no longer quotes PANEL shapes in its notes, so this guards nothing');

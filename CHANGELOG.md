@@ -19,17 +19,33 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Colors `tokenCount` no longer warns as an unknown key** on an untouched default config
+  (`foundationSliceKeys` / domain keys).
+
 ### Added
 
+- **Panel `section` containers and spacers.** `@PANEL_START` recipes may nest
+  `{ type: "section", id?, showWhen?, blocks: […] }`. The form keeps a real
+  `<section class="config-ui-section">` (plus `config-ui-section--{id}` when set). Section-level
+  `showWhen` gates the whole chunk and is inherited onto children. `{ type: "spacer-s" }` /
+  `spacer-m` / `spacer-l` add 8 / 12 / 24px gaps. A `{ type: "divider" }` between top-level
+  sections is edge-to-edge; inside a section it stays short. Flat `blocks` still work. Design
+  System Foundations panels and the Help specimen use sections.
+- **Colors: Generate overview.** Same control as Spacing / Corner radius / Grid / Typography. When on,
+  Run builds a **Colors — overview** section under the shared Design System Foundations frame: one
+  row per token, one column per mode, fills bound to the colour variables. Off by default.
 - **Colors: seed rebuilds the full scale.** Entering a seed hex writes bright / middle / dark hue and
   chroma (or saturation), lightness ends, and Linear curves for that mode — tints.dev-shaped UX on
   CodeFig's own model. Changing the hex again re-applies. **Lock seed color** keeps the exact hex on
-  the seed step; unlock lets later edits move it. Shared OKLCH lightness ends follow the seed that
-  was applied (other modes' hue/chroma stay put).
+  the seed step and freezes middle Hue / Saturation (or Chroma) / Lightness (numbers and the middle
+  curve grip); ends and curve shape stay editable. Unlock lets later edits move the seed step.
+  Shared OKLCH lightness ends follow the seed that was applied (other modes' hue/chroma stay put).
+  Picking an `easeInOut` preset keeps (or restores) the middle point when the seed is locked or the
+  curve already had one — those presets are one cubic otherwise.
 - **Colors: Token count.** A count control fills **Color tokens** with N names on the Tailwind
   50…950 rail (half-weighted end gaps). `11` is the exact Tailwind list; edit names freely after.
-- **Colors: locked-seed seesaw.** With **Lock seed** on, moving one Hue / Saturation / Chroma /
-  Lightness end mirrors the other around the seed so the range stays balanced (short-arc for hue).
 - **Copy these values to: Mode…** on Spacing, Corner radius, and Typography. On a mode tab when
   there are two or more modes, each other mode is a text link; click one to copy this mode's
   scale settings onto it (names stay). Asks before replacing settings that already differ. Grid
@@ -47,6 +63,11 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Colors: HSL Lightness middle is absolute.** The Lightness chart now uses Bright / Middle / Dark
+  ends like Hue and Saturation, so moving an end no longer slides a locked seed's middle along with
+  it. Seed apply writes `middle.lightness` and a three-point lightness curve.
+- **Colors preview strip missing on new scales.** Removing locked-seed seesaw also deleted
+  `previewOwnerKey`, so every preview paint threw and left the chart blank. Restored.
 - **Colors seed write-back.** Applying a seed rebuilt the strip in memory, then crashed writing
   anchors into Source (`fillConfigBlock` returns `{ text }`, not a string). Fingerprints still
   latched, so later previews stayed greyscale except a locked pin on one step. Write-back uses
@@ -56,8 +77,8 @@ a plain statement of the new default.
   empty Linear, which generation treats as ends-only — so the strip stayed muted and lock only
   pinned one vibrant step. Apply now writes Linear-with-middle channel curves so the scale peaks
   at the seed.
-- **New-collection Group no longer clears on blur.** Address reset wiped Group whenever the
-  collection was not the last one read, including after typing a group name on a new collection.
+- **New-collection Group no longer clears on blur.** Collection change used to wipe Group (and
+  the rest of the form); Group is kept with the other authored fields unless the address loads.
 - **Hue curve chart: Linear across 0° is a straight line again.** Short-arc ramps (e.g. 60°→280°,
   or a middle at 290° between ends near 100°) were plotted as wrapped 0…360° samples, so the blue
   path wrapped around the wheel while the dashed guide took the long chord — start and end did not
@@ -248,20 +269,23 @@ a plain statement of the new default.
 
 ### Changed
 
+- **DSF: Collection / Group changes keep authored fields.** Switching collection, renaming, or
+  editing Group no longer wipes steps, curves or seeds. **Modes are the exception:** a collection
+  change resets the mode list (then aligns to that collection’s modes, or loads a recorded set).
+  Group-only edits keep modes. A miss leaves other fields on screen; Group is no longer cleared
+  when the collection changes.
 - **Colors / config typing: keystrokes no longer rewrite Source or force a preview.** `input`
   events hold the form values (same as a curve drag); Source merge and auto-import wait for
   `change` (blur / Enter / select). Preview’s 120ms “max wait” bypass applies only to live curve
   drags — typing keeps the 400ms quiet debounce. Collection select still runs a full auto-import
   (one-shot cost).
-- **Collection switch resets the form immediately.** Choosing a new collection (or committing a
-  new Group) writes pristine defaults for that address before the silent read returns (~0.9s),
-  so the previous collection’s modes/curves do not linger. Auto-import no longer waits an extra
-  350ms debounce after a settled select. Import resolution for silent runs (auto-import, preview,
-  quick-fit) is cached per open script so a collection switch does not re-expand Colors’ package
-  graph on the UI thread (~1s) every time; the first open still pays once. The import kick is
-  deferred with `setTimeout(0)` so the pristine reset can paint before that work.
-- **Collection load no longer loses to a stale detectOnly import.** Address reset claims the
-  address before reprojecting (so `scheduleGroupDetection` does not queue a rival), and
+- **Collection switch auto-import stays immediate.** Choosing a new collection (or committing a
+  Group) no longer waits an extra 350ms debounce after a settled select. Import resolution for
+  silent runs (auto-import, preview, quick-fit) is cached per open script so a collection switch
+  does not re-expand Colors’ package graph on the UI thread (~1s) every time; the first open still
+  pays once. The import kick is deferred with `setTimeout(0)` so the form can paint first.
+- **Collection load no longer loses to a stale detectOnly import.** Address settle claims the
+  address before any form rebuild (so `scheduleGroupDetection` does not queue a rival), and
   `requestAutoImport` clears its timer with `clearTimeout` instead of orphaning it.
 
 ### Fixed

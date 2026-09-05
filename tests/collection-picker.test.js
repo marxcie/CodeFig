@@ -156,7 +156,8 @@ test('a script ships no collection name, so the picker opens on the prompt', () 
       const configMatch = /@CONFIG_START\n([\s\S]*?)\/\/ @CONFIG_END/.exec(source);
       assert.ok(configMatch, file + ' has @PANEL_START but no @CONFIG_START');
       const schema = P.parse(configMatch[1], panelMatch[1]);
-      const pickers = schema.rows.filter((r) => r.type === 'field' && r.inputType === 'collection');
+      const pickers = P.flattenPanelRows(schema.rows)
+        .filter((r) => r.type === 'field' && r.inputType === 'collection');
       pickers.forEach((r) => {
         shipped.push(file);
         assert.equal(r.value, '', file + ' ships a collection name for "' + r.name + '": ' + JSON.stringify(r.value));

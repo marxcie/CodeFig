@@ -1223,26 +1223,104 @@
   }
 
   /**
-   * `@PANEL_START`'s parsed JSON (a flat `blocks` array — see the module comment) plus the values
-   * `parseConfigBlockObject` already reads from `@CONFIG_START` or `@UI_CONFIG_START`, merged into
-   * the exact `{ rows }` shape `parse()` builds today. `renderer.js` does not change: this is the
-   * object it already consumes, assembled from two sources instead of one.
+   * `@PANEL_START`'s parsed object (top-level `blocks`, optionally nested under `section`) plus the
+   * values `parseConfigBlockObject` already reads from `@CONFIG_START` or `@UI_CONFIG_START`, merged
+   * into the `{ rows }` shape `parse()` builds. Sections stay in the tree so the renderer can wrap
+   * them in the DOM; callers that need a flat field list use `flattenPanelRows`.
    */
-  /** Every block type `parsePanelSpec` knows how to draw something for, key-less blocks only. */
+  /** Leaf marker types (no nested `blocks`). Spacers and `section` are handled separately. */
   var PANEL_MARKER_TYPES = {
     heading: true, divider: true, chips: true, suggestions: true, preview: true,
     directive: true, paragraph: true
   };
 
-  function parsePanelSpec(panelSpecText, values) {
-    var spec;
-    try {
-      spec = JSON.parse(looseJsonToJson(normalizePanelSpecText(panelSpecText)));
-    } catch (e) {
-      return { rows: [], error: "unreadable @PANEL_START: " + e.message };
-    }
+  var PANEL_SPACER_TYPES = {
+    "spacer-s": "s", "spacer-m": "m", "spacer-l": "l"
+  };
+
+  /**
+   * Depth-first leaf list. Sections are containers, not fields — key parity, chips discovery and
+   * differential tests walk this rather than inventing a second scan each time.
+   */
+  function flattenPanelRows(rows) {
+    var out = [];
+    (rows || []).forEach(function (r) {
+      if (r && r.type === "section") {
+        Array.prototype.push.apply(out, flattenPanelRows(r.blocks));
+      } else if (r) {
+        out.push(r);
+      }
+    });
+    return out;
+  }
+
+  /** AND parent readiness onto children that do not already name those fields (Plan 37 readiness). */
+  function inheritShowWhen(rows, rules) {
+    if (!rules || !rules.length) return;
+    (rows || []).forEach(function (r) {
+      if (!r) return;
+      if (r.type === "section") {
+        inheritShowWhen(r.blocks, rules);
+        return;
+      }
+      var existing = r.showWhenRules || [];
+      var have = {};
+      existing.forEach(function (rule) { have[rule.field] = true; });
+      var extra = rules.filter(function (rule) { return !have[rule.field]; });
+      if (extra.length) r.showWhenRules = existing.concat(extra);
+    });
+  }
+
+  /**
+   * One level of `blocks` → row nodes. `depth === 0` is the panel root: a divider there is a
+   * section rule (edge to edge). Inside a `section`, a divider stays short unless `section: true`
+   * is still written (legacy; prefer moving the rule between sections).
+   */
+  function parsePanelBlocks(blocks, values, depth) {
     var rows = [];
-    try {
+    (blocks || []).forEach(function (block, idx) {
+      if (block.key != null) {
+        if (!block.type) {
+          throw new Error("block " + idx + " (\"" + block.key + "\") has no type");
+        }
+        rows.push(panelFieldRow(block, values, idx));
+        return;
+      }
+
+      var spacerSize = PANEL_SPACER_TYPES[block.type];
+      if (spacerSize) {
+        rows.push({ type: "spacer", size: spacerSize });
+        return;
+      }
+      if (block.type === "spacer") {
+        var size = String(block.size || "").toLowerCase();
+        if (size !== "s" && size !== "m" && size !== "l") {
+          throw new Error('block ' + idx + ' spacer size must be "s", "m", or "l"');
+        }
+        rows.push({ type: "spacer", size: size });
+        return;
+      }
+
+      if (block.type === "section") {
+        if (!Array.isArray(block.blocks)) {
+          throw new Error("block " + idx + " (section) needs a blocks array");
+        }
+        var section = {
+          type: "section",
+          blocks: parsePanelBlocks(block.blocks, values, depth + 1)
+        };
+        var sWhen = panelConditionRules(block.showWhen);
+        if (sWhen) {
+          section.showWhenRules = sWhen;
+          inheritShowWhen(section.blocks, sWhen);
+        }
+        if (block.id != null && String(block.id).trim()) {
+          section.id = String(block.id).trim();
+        }
+        rows.push(section);
+        return;
+      }
+
       // A field is recognised by carrying `key`, not by a `type` wrapper — `type` on a field block is
       // its *control* type ("collection", "number", "rows", …), the same word `heading`/`divider`/
       // `chips`/`suggestions`/`preview`/`directive`/`paragraph` use for their own kind. Two meanings
@@ -1253,65 +1331,77 @@
       // a real migration attempt disappeared silently: correct-looking JSON, an empty panel section,
       // and nothing to say why. Same principle as `src/style-scoper.js`'s `url()` rule: a hard error
       // the author sees is better than output that is quietly wrong.
-      (spec.blocks || []).forEach(function (block, idx) {
-        if (block.key != null) {
-          if (!block.type) {
-            throw new Error("block " + idx + " (\"" + block.key + "\") has no type");
-          }
-          rows.push(panelFieldRow(block, values, idx));
-          return;
+      if (!PANEL_MARKER_TYPES[block.type]) {
+        throw new Error("block " + idx + " has an unrecognised type: " +
+          (block.type == null ? "(none)" : JSON.stringify(block.type)));
+      }
+      if (block.type === "heading") {
+        var hWhen = panelConditionRules(block.showWhen);
+        var heading = { type: "heading", level: block.level || 1, text: block.text };
+        if (hWhen) heading.showWhenRules = hWhen;
+        rows.push(heading);
+      } else if (block.type === "divider") {
+        var dWhen = panelConditionRules(block.showWhen);
+        // Position decides weight when sections are in play: a divider *between* top-level
+        // sections is edge-to-edge; a divider *inside* a section is short. Flat recipes (no
+        // `section` siblings) keep the old rule — only `section: true` reaches the edges.
+        var asSection = !!block.section;
+        if (depth > 0) {
+          asSection = !!block.section;
+        } else if ((blocks || []).some(function (b) { return b && b.type === "section"; })) {
+          asSection = true;
         }
-        if (!PANEL_MARKER_TYPES[block.type]) {
-          throw new Error("block " + idx + " has an unrecognised type: " +
-            (block.type == null ? "(none)" : JSON.stringify(block.type)));
+        var divider = { type: "divider", section: asSection };
+        if (dWhen) divider.showWhenRules = dWhen;
+        rows.push(divider);
+      } else if (block.type === "chips") {
+        var cWhen = panelConditionRules(block.showWhen);
+        var chips = { type: "chips", label: block.label || "Collection modes", from: block.from || "modes" };
+        if (cWhen) chips.showWhenRules = cWhen;
+        rows.push(chips);
+      } else if (block.type === "suggestions") {
+        var sWhen = panelConditionRules(block.showWhen);
+        var suggestions = { type: "suggestions" };
+        if (sWhen) suggestions.showWhenRules = sWhen;
+        rows.push(suggestions);
+      } else if (block.type === "preview") {
+        var pvWhen = panelConditionRules(block.showWhen);
+        var preview = { type: "preview" };
+        if (pvWhen) preview.showWhenRules = pvWhen;
+        rows.push(preview);
+      } else if (block.type === "directive") {
+        rows.push({ type: "directive", directive: block.name });
+      } else if (block.type === "paragraph") {
+        // The one bit a blank `// ` line carries in the old format: does this explain what
+        // comes before it or what comes after? JSON has no blank-line equivalent, so the format
+        // asks for the bit directly rather than guessing a default that would be right for some
+        // paragraphs and silently wrong for others — see `foldProse` in renderer.js, which reads
+        // this instead of its own adjacency search whenever it is set.
+        if (block.attachTo !== "next" && block.attachTo !== "previous") {
+          throw new Error('block ' + idx + ' is a paragraph with no attachTo ' +
+            '("next" or "previous" — which row does it explain?)');
         }
-        if (block.type === "heading") {
-          var hWhen = panelConditionRules(block.showWhen);
-          var heading = { type: "heading", level: block.level || 1, text: block.text };
-          if (hWhen) heading.showWhenRules = hWhen;
-          rows.push(heading);
-        } else if (block.type === "divider") {
-          var dWhen = panelConditionRules(block.showWhen);
-          var divider = { type: "divider", section: !!block.section };
-          if (dWhen) divider.showWhenRules = dWhen;
-          rows.push(divider);
-        } else if (block.type === "chips") {
-          var cWhen = panelConditionRules(block.showWhen);
-          var chips = { type: "chips", label: block.label || "Collection modes", from: block.from || "modes" };
-          if (cWhen) chips.showWhenRules = cWhen;
-          rows.push(chips);
-        } else if (block.type === "suggestions") {
-          var sWhen = panelConditionRules(block.showWhen);
-          var suggestions = { type: "suggestions" };
-          if (sWhen) suggestions.showWhenRules = sWhen;
-          rows.push(suggestions);
-        } else if (block.type === "preview") {
-          var pvWhen = panelConditionRules(block.showWhen);
-          var preview = { type: "preview" };
-          if (pvWhen) preview.showWhenRules = pvWhen;
-          rows.push(preview);
-        } else if (block.type === "directive") {
-          rows.push({ type: "directive", directive: block.name });
-        } else if (block.type === "paragraph") {
-          // The one bit a blank `// ` line carries in the old format: does this explain what
-          // comes before it or what comes after? JSON has no blank-line equivalent, so the format
-          // asks for the bit directly rather than guessing a default that would be right for some
-          // paragraphs and silently wrong for others — see `foldProse` in renderer.js, which reads
-          // this instead of its own adjacency search whenever it is set.
-          if (block.attachTo !== "next" && block.attachTo !== "previous") {
-            throw new Error('block ' + idx + ' is a paragraph with no attachTo ' +
-              '("next" or "previous" — which row does it explain?)');
-          }
-          var pWhen = panelConditionRules(block.showWhen);
-          var paragraph = { type: "paragraph", text: block.text, attachTo: block.attachTo };
-          if (pWhen) paragraph.showWhenRules = pWhen;
-          rows.push(paragraph);
-        }
-      });
+        var pWhen = panelConditionRules(block.showWhen);
+        var paragraph = { type: "paragraph", text: block.text, attachTo: block.attachTo };
+        if (pWhen) paragraph.showWhenRules = pWhen;
+        rows.push(paragraph);
+      }
+    });
+    return rows;
+  }
+
+  function parsePanelSpec(panelSpecText, values) {
+    var spec;
+    try {
+      spec = JSON.parse(looseJsonToJson(normalizePanelSpecText(panelSpecText)));
+    } catch (e) {
+      return { rows: [], error: "unreadable @PANEL_START: " + e.message };
+    }
+    try {
+      return { rows: parsePanelBlocks(spec.blocks || [], values, 0) };
     } catch (e) {
       return { rows: [], error: "invalid @PANEL_START: " + e.message };
     }
-    return { rows: rows };
   }
 
   /**
@@ -1397,10 +1487,11 @@
    * → a status string, or `null` when the two agree.
    */
   function panelKeyDrift(rows, values) {
+    var leaves = flattenPanelRows(rows);
     var fieldKeys = {};
-    rows.forEach(function (r) { if (r.type === "field") fieldKeys[r.name] = true; });
+    leaves.forEach(function (r) { if (r.type === "field") fieldKeys[r.name] = true; });
     var valueKeys = Object.keys(values || {});
-    var missing = rows.filter(function (r) { return r.type === "field" && valueKeys.indexOf(r.name) === -1; })
+    var missing = leaves.filter(function (r) { return r.type === "field" && valueKeys.indexOf(r.name) === -1; })
       .map(function (r) { return r.name; });
     var extra = valueKeys.filter(function (k) { return !fieldKeys[k]; });
     if (!missing.length && !extra.length) return null;
@@ -2030,11 +2121,13 @@
     var index = indexConfigProperties(configText);
     var vm = values || {};
     var fieldsByName = {};
-    schema.rows.forEach(function (r) { if (r.type === "field") fieldsByName[r.name] = r; });
+    flattenPanelRows(schema.rows).forEach(function (r) {
+      if (r.type === "field") fieldsByName[r.name] = r;
+    });
 
-    schema.rows.forEach(function (r) {
-      if (r.type === "field" && !index.byKey[r.name]) {
-        throw new Error('serialize: field "' + r.name + '" has no value in the values block to write back into');
+    Object.keys(fieldsByName).forEach(function (name) {
+      if (!index.byKey[name]) {
+        throw new Error('serialize: field "' + name + '" has no value in the values block to write back into');
       }
     });
 
@@ -2721,8 +2814,8 @@
   // ---------------------------------------------------------------------------
 
   function rowsOf(schema) {
-    if (Array.isArray(schema)) return schema;
-    return (schema && Array.isArray(schema.rows)) ? schema.rows : [];
+    if (Array.isArray(schema)) return flattenPanelRows(schema);
+    return flattenPanelRows((schema && Array.isArray(schema.rows)) ? schema.rows : []);
   }
 
   /** `domains.spacing.tokens` against the payload, or undefined if any step is missing. */
@@ -3433,6 +3526,7 @@
     // to `parsePanelSpec` on its own; these are exported so the differential test can call the new
     // reader directly without needing a script on disk that uses it yet.
     parsePanelSpec: parsePanelSpec,
+    flattenPanelRows: flattenPanelRows,
     stripLinePrefixes: stripLinePrefixes,
     normalizePanelSpecText: normalizePanelSpecText
   };

@@ -788,7 +788,11 @@ function validatePanelKeyParity(scripts) {
       errors.push({ type: 'panel-key-parity', file: script.name, message: panel.error, line: 'unknown' });
       return;
     }
-    const panelKeys = new Set(panel.rows.filter((r) => r.type === 'field').map((r) => r.name));
+    const panelKeys = new Set(
+      configUIParser.flattenPanelRows(panel.rows)
+        .filter((r) => r.type === 'field')
+        .map((r) => r.name)
+    );
 
     const values = configUIParser.parseConfigBlockObject(valuesMatch[1]);
     if (!values) {

@@ -78,8 +78,8 @@ function stripUndefinedDeep(value) {
 }
 
 function normalize(rows) {
-  return rows
-    .filter((r) => r.type !== 'blank' && r.type !== 'lineBreak' && r.type !== 'directive')
+  return parser.flattenPanelRows(rows)
+    .filter((r) => r.type !== 'blank' && r.type !== 'lineBreak' && r.type !== 'directive' && r.type !== 'spacer')
     .map((r) => {
       const clone = Object.assign({}, r);
       delete clone.raw;
@@ -124,7 +124,8 @@ test('grid.js: live @PANEL matches the pre-migration annotation parse, field by 
 });
 
 test('grid.js: modes starts empty until a collection is chosen', () => {
-  const modesRow = newParseGrid().rows.find((r) => r.type === 'field' && r.name === 'modes');
+  const modesRow = parser.flattenPanelRows(newParseGrid().rows)
+    .find((r) => r.type === 'field' && r.name === 'modes');
   assert.ok(modesRow);
   assert.deepStrictEqual(modesRow.value, []);
   assert.deepStrictEqual(modesRow.showWhenRules, [{ field: 'collectionName', values: ['*'] }]);

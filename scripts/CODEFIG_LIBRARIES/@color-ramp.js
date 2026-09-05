@@ -15,7 +15,7 @@
 // | Area | Functions |
 // |---|---|
 // | Config reading | colorsParseSteps, colorsMaterialiseStepNames, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
-// | Seed | colorsApplySeedScale, colorsSeedPlacementIndex, colorsSeesawHue, colorsSeesawLinear, colorsApplyLockedSeesaw, colorsSeesawSnapshot |
+// | Seed | colorsApplySeedScale, colorsSeedPlacementIndex, colorsSyncLockedSeedMiddles |
 // | Generation | colorsGenerateMode, colorsBuildVariableMap, colorsManifestSlice |
 // | Alignment | colorsAlignment, colorsBestAnchor, colorsAnchorFits |
 // | Preview | colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip |
@@ -415,19 +415,20 @@ function colorsApplySeedScale(config, mode, steps) {
     mode.bright.lightness = Math.round(brightL * 1000) / 10;
     mode.middle.lightness = Math.round(seed.L * 1000) / 10;
     mode.dark.lightness = Math.round(darkL * 1000) / 10;
-    mode.curve = bezierFromEase('linear', 'none', 1);
   }
 
   // **Middle must sit on a 10-point channel curve.** Empty `[]` / 4-point Linear is treated as
   // ends-only — generation strips `hasMiddle`, the panel leaves Saturation/Hue middle empty, and
   // lock then pins a vibrant seed on a muted ramp. Linear-with-middle keeps the seed's H+C on the
-  // authored ladder so the strip and the charts agree.
+  // authored ladder so the strip and the charts agree. HSL lightness uses the same middle so the
+  // chart's Bright / Middle / Dark ends stay absolute (moving an end must not slide the seed).
   var at = list.length > 1 ? placementIndex / (list.length - 1) : 0.5;
   var linearMid = bezierWithMiddle(bezierFromEase('linear', 'none', 1), at);
   mode.hueCurve = linearMid.slice();
   mode.hslHueCurve = linearMid.slice();
   mode.chromaCurve = linearMid.slice();
   mode.saturationCurve = linearMid.slice();
+  if (!oklch) mode.curve = linearMid.slice();
   // Pin the seed step by default — tints.dev keeps the base colour; user can unlock to let it drift.
   mode.seed.lock = true;
 
@@ -439,158 +440,55 @@ function colorsApplySeedScale(config, mode, steps) {
 }
 
 /**
- * Mirror `moved` around `pivot` on the hue wheel (short-arc delta).
- * Example: pivot 210.5, moved 298.5 → 122.5.
- */
-function colorsSeesawHue(pivot, moved) {
-  var p = Number(pivot);
-  var m = Number(moved);
-  if (!isFinite(p) || !isFinite(m)) return m;
-  var d = ((m - p + 540) % 360) - 180;
-  return ((p - d) % 360 + 360) % 360;
-}
-
-/**
- * Mirror `moved` around `pivot` on a linear channel. Optional `lo`/`hi` clamp.
- */
-function colorsSeesawLinear(pivot, moved, lo, hi) {
-  var p = Number(pivot);
-  var m = Number(moved);
-  if (!isFinite(p) || !isFinite(m)) return m;
-  var other = 2 * p - m;
-  if (typeof lo === 'number' && isFinite(lo)) other = Math.max(lo, other);
-  if (typeof hi === 'number' && isFinite(hi)) other = Math.min(hi, other);
-  return other;
-}
-
-function colorsSeesawRound(n, places) {
-  var f = Math.pow(10, places == null ? 1 : places);
-  return Math.round(Number(n) * f) / f;
-}
-
-/** Compact end-anchor snapshot so the panel can tell which side moved under lock. */
-function colorsSeesawSnapshot(config) {
-  if (!config || typeof config !== 'object') return null;
-  var modes = (config.modes || []).map(function (mode) {
-    if (!mode) return null;
-    return {
-      name: mode.name,
-      lock: !!(mode.seed && mode.seed.lock),
-      hex: mode.seed && mode.seed.hex ? String(mode.seed.hex) : '',
-      bright: mode.bright ? {
-        hue: mode.bright.hue, hslHue: mode.bright.hslHue,
-        chroma: mode.bright.chroma, saturation: mode.bright.saturation,
-        lightness: mode.bright.lightness
-      } : null,
-      dark: mode.dark ? {
-        hue: mode.dark.hue, hslHue: mode.dark.hslHue,
-        chroma: mode.dark.chroma, saturation: mode.dark.saturation,
-        lightness: mode.dark.lightness
-      } : null
-    };
-  });
-  return {
-    colorModel: config.colorModel || 'oklch',
-    lightness: config.lightness ? {
-      bright: config.lightness.bright,
-      dark: config.lightness.dark
-    } : null,
-    modes: modes
-  };
-}
-
-/**
- * With **Lock seed** on, the unedited end mirrors around the seed so the range stays balanced.
+ * **Lock on: middle H / S (or C) / L match the seed, and every channel curve has a middle point.**
  *
- * Only one end may have moved since `prev` (from `colorsSeesawSnapshot`). Both ends changing
- * (seed apply, paste) is left alone. Mutates `config` in place.
+ * `easeInOut` presets are one cubic (four numbers) on purpose — a middle there used to invent a
+ * corner on ramps that did not want one. A locked seed *does* want that corner: generation reads
+ * `middle.*` only when the curve is ten numbers. Call after lock turns on, or after a preset that
+ * stripped the middle while lock is still on. Mutates `mode` in place.
  *
- * → true when an opposite end was rewritten.
+ * → true when anything was rewritten.
  */
-function colorsApplyLockedSeesaw(config, prev) {
-  if (!config || !prev) return false;
+function colorsSyncLockedSeedMiddles(config, mode, steps) {
+  if (!config || !mode || !mode.seed || !mode.seed.lock) return false;
   var oklch = (config.colorModel || 'oklch') !== 'hsl';
+  var seedHex = (mode.seed.hex) ? String(mode.seed.hex).trim() : '';
+  var seed = seedHex ? colorsReadHex(seedHex, oklch) : null;
+  if (!seed) return false;
+
+  var list = steps && steps.length ? steps : colorsParseSteps(config.steps).steps;
+  if (!list.length) return false;
+  var placementIndex = colorsSeedPlacementIndex(list, mode.seed.placement);
+  var at = list.length > 1 ? placementIndex / (list.length - 1) : 0.5;
   var mutated = false;
-  var EPS = 1e-4;
 
-  function num(v) {
-    var n = typeof v === 'number' ? v : parseFloat(v);
-    return (typeof n === 'number' && isFinite(n)) ? n : NaN;
+  if (!mode.middle || typeof mode.middle !== 'object') mode.middle = {};
+  var H = Math.round(seed.H * 10) / 10;
+  if (mode.middle.hue !== H) { mode.middle.hue = H; mutated = true; }
+  if (mode.middle.hslHue !== H) { mode.middle.hslHue = H; mutated = true; }
+  if (oklch) {
+    var midC = Math.round(seed.C * 10000) / 10000;
+    if (mode.middle.chroma !== midC) { mode.middle.chroma = midC; mutated = true; }
+  } else {
+    var midS = Math.round(seed.C * 1000) / 10;
+    var midL = Math.round(seed.L * 1000) / 10;
+    if (mode.middle.saturation !== midS) { mode.middle.saturation = midS; mutated = true; }
+    if (mode.middle.lightness !== midL) { mode.middle.lightness = midL; mutated = true; }
   }
 
-  function pairMoved(curB, curD, prevB, prevD) {
-    var b = num(curB), d = num(curD), pb = num(prevB), pd = num(prevD);
-    if (!isFinite(b) || !isFinite(d)) return null;
-    var bCh = isFinite(pb) && Math.abs(b - pb) > EPS;
-    var dCh = isFinite(pd) && Math.abs(d - pd) > EPS;
-    if (bCh === dCh) return null; // neither, or both
-    return bCh ? 'bright' : 'dark';
+  function ensureMidCurve(key) {
+    var c = mode[key];
+    if (!Array.isArray(c)) c = [];
+    if (c.length === 10) return;
+    var base = c.length === 4 ? c.slice() : bezierFromEase('linear', 'none', 1);
+    mode[key] = bezierWithMiddle(base, at);
+    mutated = true;
   }
-
-  // Shared OKLCH lightness ends — pivot is the first locked mode's seed L.
-  if (oklch && config.lightness && prev.lightness) {
-    var lockMode = null;
-    for (var mi = 0; mi < (config.modes || []).length; mi++) {
-      var cand = config.modes[mi];
-      if (cand && cand.seed && cand.seed.lock && cand.seed.hex) { lockMode = cand; break; }
-    }
-    if (lockMode) {
-      var seedL = colorsReadHex(lockMode.seed.hex, true);
-      if (seedL) {
-        var whichL = pairMoved(
-          config.lightness.bright, config.lightness.dark,
-          prev.lightness.bright, prev.lightness.dark
-        );
-        if (whichL === 'bright') {
-          config.lightness.dark = colorsSeesawRound(
-            colorsSeesawLinear(seedL.L * 100, num(config.lightness.bright), 0, 100), 1);
-          mutated = true;
-        } else if (whichL === 'dark') {
-          config.lightness.bright = colorsSeesawRound(
-            colorsSeesawLinear(seedL.L * 100, num(config.lightness.dark), 0, 100), 1);
-          mutated = true;
-        }
-      }
-    }
-  }
-
-  (config.modes || []).forEach(function (mode, i) {
-    if (!mode || !mode.seed || !mode.seed.lock) return;
-    var seed = colorsReadHex(mode.seed.hex, oklch);
-    if (!seed) return;
-    var prevMode = null;
-    for (var j = 0; j < (prev.modes || []).length; j++) {
-      if (prev.modes[j] && prev.modes[j].name === mode.name) { prevMode = prev.modes[j]; break; }
-    }
-    if (!prevMode) prevMode = (prev.modes || [])[i];
-    if (!prevMode || !prevMode.bright || !prevMode.dark) return;
-    if (!mode.bright) mode.bright = {};
-    if (!mode.dark) mode.dark = {};
-
-    function see(channel, pivot, isHue, lo, hi, places) {
-      var which = pairMoved(
-        mode.bright[channel], mode.dark[channel],
-        prevMode.bright[channel], prevMode.dark[channel]
-      );
-      if (!which) return;
-      var moved = num(mode[which][channel]);
-      var next = isHue
-        ? colorsSeesawHue(pivot, moved)
-        : colorsSeesawLinear(pivot, moved, lo, hi);
-      var other = which === 'bright' ? 'dark' : 'bright';
-      mode[other][channel] = colorsSeesawRound(next, places);
-      mutated = true;
-    }
-
-    if (oklch) {
-      see('hue', seed.H, true, 0, 360, 1);
-      see('chroma', seed.C, false, 0, 0.4, 4);
-    } else {
-      see('hslHue', seed.H, true, 0, 360, 1);
-      see('saturation', seed.C * 100, false, 0, 100, 1);
-      see('lightness', seed.L * 100, false, 0, 100, 1);
-    }
-  });
+  ensureMidCurve('hueCurve');
+  ensureMidCurve('hslHueCurve');
+  ensureMidCurve('chromaCurve');
+  ensureMidCurve('saturationCurve');
+  if (!oklch) ensureMidCurve('curve');
 
   return mutated;
 }
@@ -1954,6 +1852,7 @@ function colorsManifestSlice(config) {
       return copy;
     }) : []
   };
+  if (c.generateOverview !== undefined) slice.generateOverview = !!c.generateOverview;
   if (c.chromaCurve !== undefined) slice.chromaCurve = c.chromaCurve;
   if (c.saturationCurve !== undefined) slice.saturationCurve = c.saturationCurve;
   if (c.hueCurve !== undefined) slice.hueCurve = c.hueCurve;

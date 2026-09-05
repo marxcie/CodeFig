@@ -71,7 +71,7 @@ function panelColumns(source) {
   // annotation — same second argument `src/ui.html` passes at run time, not a second reader.
   const panelMatch = /@PANEL_START\n([\s\S]*?)\/\/ @PANEL_END/.exec(source);
   const schema = P.parse(block[1], panelMatch ? panelMatch[1] : undefined);
-  const rows = schema.rows.filter((r) => r.type === 'field' && r.inputType === 'rows');
+  const rows = P.flattenPanelRows(schema.rows).filter((r) => r.type === 'field' && r.inputType === 'rows');
   if (!rows.length) return null;
   const out = {};
   (rows[0].columns || []).forEach((c) => { out[c.label] = c.type; });
