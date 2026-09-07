@@ -163,6 +163,7 @@
 // |---|---|
 // | Change case | Renames canvas layers, components, variants, styles, and variables to a chosen case style |
 // | Comments to annotations | Converts file comments into Figma annotations and optional invisible anchor frames |
+// | Duplicate component | Duplicates selected components and component sets beside the originals |
 // | Frame or auto layout selected | Wraps the selection in a frame or auto layout, unwraps such frames, or removes auto layout |
 // | Relink local component instances | Relinks instances to the canonical local component when several definitions share the same name |
 // | Remove unnecessary nesting | Removes or merges redundant frames and auto layouts that do nothing for their children |
@@ -381,7 +382,7 @@
 // | `{ key: "x", type: "mode", collection: "field" }` | mode picker: the modes of the collection that `field` holds, plus **New mode**. Changing that collection resets it |
 // | `{ type: "chips", label: "…", from: "modes" }` | the mode chips — a marker row of its own, reading names from the `modes` field |
 // | `{ key: "x", type: "rows", columns: […] }` | a table, one line per array entry |
-// | `layout: "tabs"` on `type: "rows"` | the same array as one tab per entry, fields stacked and labelled |
+// | `layout: "tabs"` on `type: "rows"` | the same array as one tab per entry, fields stacked and labelled; chevron at the end of the tab bar collapses the open mode's settings (Preview stays) |
 // | `copyToOthers: true` on `type: "rows"` with `layout: "tabs"` | **Copy these values to:** on the open tab — a text link per other mode; click one to copy this entry's settings onto it (names stay). Hidden with one mode; confirms when that target already differs |
 // | `layout: "blocks"` on `type: "rows"` | every entry in full, one under the next, each titled from its `name` |
 // | `{ key: "x", type: "group", fields: […] }` | an **object** as one labelled row of captioned parts |

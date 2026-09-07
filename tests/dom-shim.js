@@ -195,6 +195,13 @@ class Element {
 
   // --- children
   get children() { return this.childNodes.filter((n) => n.nodeType === 1); }
+  // Browsers expose parentElement (Element | null); parentNode can be Document.
+  // The renderer walks hosts with parentElement — without this, fillContentReveal
+  // never finds a section host and dividers stay visible after the slot opens.
+  get parentElement() {
+    const p = this.parentNode;
+    return p && p.nodeType === 1 ? p : null;
+  }
   get previousElementSibling() {
     if (!this.parentNode) return null;
     const kids = this.parentNode.children;

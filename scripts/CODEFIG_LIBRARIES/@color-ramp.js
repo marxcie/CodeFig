@@ -14,7 +14,7 @@
 //
 // | Area | Functions |
 // |---|---|
-// | Config reading | colorsParseSteps, colorsMaterialiseStepNames, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
+// | Config reading | colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
 // | Seed | colorsApplySeedScale, colorsSeedPlacementIndex, colorsSyncLockedSeedMiddles |
 // | Generation | colorsGenerateMode, colorsBuildVariableMap, colorsManifestSlice |
 // | Alignment | colorsAlignment, colorsBestAnchor, colorsAnchorFits |
@@ -258,6 +258,7 @@
 
 @import { bezierAt, bezierNormalise, bezierFromEase } from "@Bezier"
 @import { oklchFromHex, oklchHslFromHex, oklchHslToHex, oklchToHex, oklchNormaliseHex, oklchClamp01, oklchLadder, oklchNearestStep, oklchReanchor, oklchRamp, oklchCompare } from "@OKLCH"
+@import { expandTokenList } from "@Foundation"
 
 // ========================================
 // GENERATION — pure, and shared by the preview and (later) the run
@@ -273,7 +274,7 @@ function colorsReadHex(hex, oklch) {
 }
 
 /**
- * What the Steps field suggests when it is empty, and what the preview draws from until it is filled.
+ * What Color tokens starts as, and what the preview draws from until the field is filled.
  *
  * A function rather than a constant because `@import` extracts function declarations and nothing else — a
  * top-level array here would be unimportable, and the failure is a `ReferenceError` swallowed by a caller.
@@ -282,47 +283,27 @@ function colorsPlaceholderSteps() {
   return ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
 }
 
-/** The step names, parsed from the one field that holds them. Blanks and repeats are dropped and counted. */
-function colorsParseSteps(text) {
-  var raw = String(text == null ? '' : text).split(',');
+/**
+ * The step names from the Color tokens field (string or array). Series like `shade-{1,12}` expand via
+ * `expandTokenList` when that helper is in scope. Blanks and repeats are dropped and counted.
+ */
+function colorsParseSteps(value) {
+  var raw;
+  if (typeof expandTokenList === 'function') {
+    raw = expandTokenList(value);
+  } else if (Array.isArray(value)) {
+    raw = value;
+  } else {
+    raw = String(value == null ? '' : value).split(',');
+  }
   var steps = [], dropped = 0, seen = {};
   for (var i = 0; i < raw.length; i++) {
-    var name = raw[i].trim();
+    var name = String(raw[i] == null ? '' : raw[i]).trim();
     if (!name || seen[name]) { dropped++; continue; }
     seen[name] = true;
     steps.push(name);
   }
   return { steps: steps, dropped: dropped };
-}
-
-/**
- * Token names for N stops on the Tailwind 50…950 rail.
- *
- * End intervals weigh half of mid intervals (50→100 and 900→950 vs 100→200). `N === 11` is the
- * exact Tailwind list — no rounding drift. Names are labels only; lightness still comes from the ladder.
- */
-function colorsMaterialiseStepNames(n) {
-  var count = Math.round(Number(n));
-  if (!(count >= 3) || !isFinite(count)) return [];
-  if (count === 11) return colorsPlaceholderSteps().slice();
-  var last = count - 1;
-  // Weights: ½, 1, 1, …, 1, ½  → total N−2
-  var total = count - 2;
-  var out = [];
-  var seen = {};
-  var cum = 0;
-  for (var i = 0; i < count; i++) {
-    if (i > 0) cum += (i === 1 || i === last) ? 0.5 : 1;
-    var raw = 50 + (900 * cum) / total;
-    var name = String(Math.round(raw));
-    while (seen[name]) {
-      raw += 1;
-      name = String(Math.round(raw));
-    }
-    seen[name] = true;
-    out.push(name);
-  }
-  return out;
 }
 
 /**

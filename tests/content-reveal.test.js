@@ -111,3 +111,65 @@ test('in-rows preview slots also start as content-reveal', () => {
   R.fillContentReveal(slot, '<div class="color-ramp-preview">x</div>');
   assert.equal(slot.style.display, '');
 });
+
+test('a section hosting preview hides dividers and spacers with the host', () => {
+  const container = mount({
+    rows: [
+      {
+        type: 'section',
+        id: 'preview',
+        blocks: [
+          { type: 'divider', section: false },
+          { type: 'spacer', size: 'l' },
+          { type: 'heading', text: 'Preview' },
+          { type: 'preview' },
+        ],
+      },
+    ],
+  });
+  const host = container.querySelector('section.config-ui-section--preview');
+  assert.ok(host);
+  assert.equal(host.getAttribute('data-content-reveal-host'), 'true');
+  assert.equal(host.style.display, 'none', 'empty preview section starts hidden');
+
+  const slot = host.querySelector('[data-preview-slot]');
+  R.fillContentReveal(slot, '<div class="ok">bars</div>');
+  assert.equal(host.style.display, '', 'filled section opens as a unit');
+  assert.equal(slot.style.display, '');
+
+  R.fillContentReveal(slot, '');
+  assert.equal(host.style.display, 'none', 'clearing HTML hides the whole section again');
+});
+
+test('section showWhen suppresses a filled preview host', () => {
+  const schema = {
+    rows: [
+      { type: 'field', name: 'collectionName', inputType: 'text', value: 'Grid' },
+      {
+        type: 'section',
+        id: 'preview',
+        showWhenRules: [{ field: 'collectionName', values: ['*'] }],
+        blocks: [
+          { type: 'divider', section: false },
+          { type: 'heading', text: 'Preview' },
+          { type: 'preview' },
+        ],
+      },
+    ],
+  };
+  const container = mount(schema);
+  const attached = R.attachListeners(container, schema, function () {});
+  const host = container.querySelector('[data-content-reveal-host]');
+  const slot = host.querySelector('[data-preview-slot]');
+
+  attached.applyVisibility();
+  assert.equal(host.style.display, 'none', 'empty host stays closed even when showWhen matches');
+
+  R.fillContentReveal(slot, '<b>ready</b>');
+  attached.applyVisibility();
+  assert.equal(host.style.display, '', 'filled host opens when showWhen matches');
+
+  container.querySelector('[data-field="collectionName"]').value = '';
+  attached.applyVisibility();
+  assert.equal(host.style.display, 'none', 'failed showWhen suppresses the filled host');
+});

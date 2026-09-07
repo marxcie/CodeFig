@@ -2353,7 +2353,7 @@ function foundationSliceKeys(domain) {
   // warns about its own untouched config the first time anyone runs it, which is how people learn that
   // warnings are noise.
   if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
-    'lower', 'upper', 'lightness', 'modes', 'tokenCount']);
+    'lower', 'upper', 'lightness', 'modes']);
   return keys;
 }
 
@@ -2371,7 +2371,7 @@ function foundationDomainKeys(domain) {
   }
   if (domain === 'grid') return common.concat(['extensionColumns', 'extraValues']);
   if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
-    'lower', 'upper', 'lightness', 'modes', 'tokenCount']);
+    'lower', 'upper', 'lightness', 'modes']);
   return common;
 }
 
@@ -4482,7 +4482,7 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   answer.modes = perMode.map(function (m) { return m.name; });
   answer.tokens = perMode[0].steps.slice();
   answer.config = {
-    steps: perMode[0].steps.join(', '),
+    steps: perMode[0].steps.slice(),
     // **OKLCH's ladder is the collection's, averaged across its modes.** A claim about its shape is one the
     // collection makes rather than one each mode makes separately, and a shared ladder matches no mode
     // exactly by definition — so the only question is which modes carry the error, and spreading it beats

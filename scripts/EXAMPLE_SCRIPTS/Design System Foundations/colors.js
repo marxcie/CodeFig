@@ -5,8 +5,9 @@
 // ## Overview
 //
 // Each mode is a ramp from bright to dark. Edit anchors and the curve in the panel, then **Run** to
-// write variables in place. Turn on **Generate overview** to add a Colors overview on the canvas:
-// one row per token, one column per mode, with fills bound to the variables.
+// write variables in place. Turn on **Generate overview** to add a Colors section on the canvas under
+// Design System Foundations: one horizontal ramp per collection + group. Regenerating the same
+// address updates that section only; a different collection or group adds another.
 //
 // In **OKLCH**, one shared **lightness curve** applies to every mode. Each mode sets its own hue and
 // chroma. Steps with the same name (e.g. 200 in two modes) stay at the same lightness with different colour.
@@ -42,11 +43,12 @@
 // the middle curve grip stay put; ends and curve shape remain free. With lock off, the seed was a
 // one-shot authoring tool and later edits can move that step.
 //
-// ### Color tokens and count
+// ### Color tokens
 //
-// **Color tokens** are the step names, lightest to darkest. **Token count** fills that field with N
-// names on the Tailwind 50…950 rail (end gaps half as wide as mid gaps). `11` is exactly Tailwind's
-// list. Edit the names freely after filling — names are labels; lightness still comes from the ladder.
+// **Color tokens** are the step names, lightest to darkest. The default list is Tailwind's
+// `50…950`. Add or remove names freely — insert `150` between `100` and `200` for an in-between.
+// A series expands the same way as Spacing: `shade-{1,12}` becomes twelve names. Names are labels;
+// lightness still comes from the ladder.
 //
 // ### The curve
 //
@@ -89,8 +91,7 @@
 // | **Collection**<br>`collectionName` | Variable collection to read from and write to. |
 // | **Collection modes** | Chips for modes in the collection. Add, remove, or rename here. Each mode gets its own block below. |
 // | **Group within collection**<br>`group` | Folder for the colour variables, e.g. `Primitives/Neutrals`. |
-// | **Color tokens**<br>`steps` | Step names, lightest to darkest. Variables are created as `group/step`. |
-// | **Token count**<br>`tokenCount` | Fills Color tokens with N names on the 50…950 rail. `11` is Tailwind's list. |
+// | **Color tokens**<br>`steps` | Step names, lightest to darkest (default Tailwind `50…950`). Variables are `group/step`. Insert names for in-betweens; `shade-{1,12}` expands to a series. |
 // | **Color model**<br>`colorModel` | **OKLCH** or **HSL**. OKLCH shares lightness steps across modes; HSL matches existing HSL palettes. |
 // | **Shared lightness**<br>`curve` | OKLCH only. One lightness curve for every mode, from bright to dark. |
 // | **Lightness → Bright / Dark**<br>`lightness.bright` / `lightness.dark` | OKLCH only. Lightness at the two ends (0–100). The shared curve fills everything between. |
@@ -104,7 +105,7 @@
 // | **Chroma / Saturation start / middle / end** | Anchor colourfulness at bright, middle, and dark. |
 // | **Lightness curve**<br>`modes[].curve` | HSL only. Per-mode lightness curve from bright to dark. |
 // | **Bright / Middle / Dark**<br>`modes[].bright.lightness` / `middle.lightness` / `dark.lightness` | HSL only. Lightness at the ends and at the seed step (middle). |
-// | **Generate overview**<br>`generateOverview` | When on, creates a Colors overview frame: one row per token, one column per mode, with swatches bound to the colour variables. Off by default. |
+// | **Generate overview**<br>`generateOverview` | When on, builds a horizontal colour ramp under Design System Foundations. One section per Collection + Group; overwrite only when both match. Off by default. |
 // @DOC_END
 
 // The Configuration tab redraws this as you type. Pure: it generates in memory and draws the same strips a
@@ -119,8 +120,8 @@
 @import { displayResults, createResult } from "@InfoPanel"
 @import { getOrCreateCollection, setupModes, processVariables, getVariable } from "@Variables"
 @import { foundationCreateColorsOverview } from "@Foundation overview"
-@import { namePrefix, resolveCollectionName, resolveGroup, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
-@import { colorsParseSteps, colorsPreviewHtml, colorsBuildVariableMap, colorsManifestSlice, colorsApplySeedScale, colorsMaterialiseStepNames, colorsSyncLockedSeedMiddles } from "@Color Ramp"
+@import { namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { colorsParseSteps, colorsPreviewHtml, colorsBuildVariableMap, colorsManifestSlice, colorsApplySeedScale, colorsSyncLockedSeedMiddles } from "@Color Ramp"
 
 // ========================================
 // CONFIG
@@ -132,8 +133,7 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
 
   collectionName: "",
   group: "",
-  steps: "",
-  tokenCount: "",
+  steps: ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"],
   colorModel: "hsl",
   curve: [0.333333, 0.333333, 0.666667, 0.666667],
   lightness: {},
@@ -164,12 +164,9 @@ var __codefigPanel = {
         showWhen: { collectionName: "*" } },
       { key: "group", type: "string", label: "Group within collection",
         placeholder: "eg.: Primitives/Neutrals" },
-      { key: "steps", type: "string", label: "Color tokens",
-        placeholder: "Eg. 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950",
-        helper: "Names for each step, lightest to darkest. Variables are created as group/step." },
-      { key: "tokenCount", type: "number", label: "Token count",
-        placeholder: "eg. 11",
-        helper: "Fills Color tokens with names on the 50…950 rail. 11 is Tailwind's list. Edit the names after if you need to." },
+      { key: "steps", type: "list", label: "Color tokens",
+        placeholder: "50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950",
+        helper: "Names from lightest to darkest. Starts as Tailwind's 50…950. Insert a name between two steps for an in-between. shade-{1,12} expands to a series." },
       { key: "colorModel", type: "radio", label: "Color model",
         options: [{ hsl: "HSL" }, { oklch: "OKLCH" }],
         helper: "OKLCH when every mode should share the same lightness steps. HSL when you are matching a palette that already uses HSL. When to pick each: Documentation." },
@@ -181,7 +178,7 @@ var __codefigPanel = {
       blocks: [
         { type: "heading", text: "OKLCH settings" },
         { type: "paragraph", attachTo: "previous", text: "One lightness curve for every mode. Each mode only sets its own hue and chroma." },
-        { type: "paragraph", attachTo: "previous", text: "Name Color tokens first. Mode settings and the ramp appear after that." },
+        { type: "paragraph", attachTo: "previous", text: "Choose a collection. Mode settings and the ramp appear after that." },
         { type: "paragraph", attachTo: "next", text: "New scales start on Linear. Original means the ramp already in the file, so it stays empty until a collection is read. A read replaces Linear with the fitted curve." },
         { key: "curve", type: "curve", label: "Shared lightness", allowOriginal: true,
           ramp: "oklch($% 0 0)", ends: "lightness.bright..lightness.dark", range: [0, 100],
@@ -199,7 +196,7 @@ var __codefigPanel = {
       blocks: [
         { type: "heading", text: "Mode settings" },
         { key: "generateOverview", type: "boolean", label: "Generate overview",
-          helper: "Builds a Colors overview on the canvas: one row per token, one column per mode, with variable-bound colour swatches." },
+          helper: "Builds a horizontal colour ramp under Design System Foundations. One section per Collection + Group; the same address overwrites, a different one adds a section." },
         { key: "modes", type: "rows", label: "Modes", layout: "blocks",
           columns: [
             { key: "name", type: "text", label: "Mode" },
@@ -409,6 +406,8 @@ function resolveColorsGenerateOverview(config) {
 
 async function runColors(config) {
   var data = config || {};
+  // Same as Spacing: expand `shade-{1,12}` (or a comma series) into concrete names before write.
+  if (tokenListHasSeries(data.steps)) data.steps = expandTokenList(data.steps);
   var parsed = colorsParseSteps(data.steps);
   var results = [];
 

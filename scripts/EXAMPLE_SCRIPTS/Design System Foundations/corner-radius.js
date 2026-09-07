@@ -97,7 +97,6 @@ var __codefigPanel = {
     { type: "section", id: "general", blocks: [
       { type: "heading", text: "General" },
       { key: "collectionName", type: "collection", label: "Collection" },
-      { type: "spacer-m" },
       { type: "chips", label: "Collection modes", from: "modes" },
       { key: "group", type: "string", label: "Group within collection",
         placeholder: "eg.: Corner radius" },
@@ -111,7 +110,7 @@ var __codefigPanel = {
       blocks: [
         { type: "heading", text: "Mode settings" },
         { key: "generateOverview", type: "boolean", label: "Generate overview",
-          helper: "Builds a Corner radius overview on the canvas: one row per token, one column per mode, with variable-bound swatches." },
+          helper: "Builds a Corner radius overview under Design System Foundations: one row per token, one column per mode. One section per Collection + Group; the same address overwrites." },
         { key: "modes", type: "rows", label: "Modes", layout: "tabs",
           copyToOthers: true,
           columns: [
@@ -134,6 +133,7 @@ var __codefigPanel = {
           ] }
       ]},
     { type: "section", id: "preview", blocks: [
+      { type: "spacer-l" },
       { type: "heading", text: "Preview" },
       { type: "preview" }
     ]}

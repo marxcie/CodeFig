@@ -1,8 +1,8 @@
 /**
- * Seed → full scale + N-step naming (tints.dev-shaped apply; CodeFig maths).
+ * Seed → full scale (tints.dev-shaped apply; CodeFig maths).
  *
  * Entering a seed hex must rewrite bright/middle/dark H+C(+L) and Linear curves, not only middle.
- * Lock pins the exact seed hex at the placement step. Step names on the 50…950 rail are labels only.
+ * Lock pins the exact seed hex at the placement step. Step names are labels only.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -19,7 +19,7 @@ function load() {
     Math, String, Number, Array, Object, JSON, isNaN, isFinite, parseInt, parseFloat, RegExp, Boolean,
   };
   vm.createContext(ctx);
-  for (const file of ['@math-helpers.js', '@bezier.js', '@oklch.js', '@color-ramp.js']) {
+  for (const file of ['@math-helpers.js', '@bezier.js', '@oklch.js', '@foundation.js', '@color-ramp.js']) {
     const source = fs.readFileSync(path.join(LIBS, file), 'utf8');
     for (const [, code] of resolver.extractFunctionMap(source)) {
       try { vm.runInContext(code, ctx); } catch (e) { /* not reached by this test */ }
@@ -46,23 +46,18 @@ function blankMode(name) {
 function baseConfig(extra) {
   return Object.assign({
     colorModel: 'oklch',
-    steps: STEPS_11.join(', '),
+    steps: STEPS_11.slice(),
     curve: [],
     lightness: { bright: 98.5, dark: 15 },
     modes: [blankMode('Blue'), blankMode('Green')],
   }, extra || {});
 }
 
-test('colorsMaterialiseStepNames: N=11 is the exact Tailwind list', () => {
-  assert.deepEqual(E.colorsMaterialiseStepNames(11), STEPS_11);
-  assert.deepEqual(E.colorsMaterialiseStepNames(11), E.colorsPlaceholderSteps());
-});
-
-test('colorsMaterialiseStepNames: half-weighted rail for other N', () => {
-  assert.deepEqual(E.colorsMaterialiseStepNames(3), ['50', '500', '950']);
-  assert.deepEqual(E.colorsMaterialiseStepNames(5), ['50', '200', '500', '800', '950']);
-  assert.equal(E.colorsMaterialiseStepNames(2).length, 0);
-  assert.equal(E.colorsMaterialiseStepNames('nope').length, 0);
+test('colorsParseSteps: array, string, and series expand', () => {
+  assert.deepEqual(E.colorsParseSteps(['50', '100', '200']).steps, ['50', '100', '200']);
+  assert.deepEqual(E.colorsParseSteps('50, 100, 100, 200').steps, ['50', '100', '200']);
+  assert.deepEqual(E.colorsParseSteps(['shade-{1,3}']).steps, ['shade-1', 'shade-2', 'shade-3']);
+  assert.deepEqual(E.colorsParseSteps(STEPS_11).steps, STEPS_11);
 });
 
 test('colorsSeedPlacementIndex: named, else 500, else mid', () => {

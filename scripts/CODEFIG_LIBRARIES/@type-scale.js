@@ -99,7 +99,7 @@
 //
 // .type-specimen-meta {
 //   font-size: var(--font-size-small);
-//   line-height: 1.6;
+//   line-height: 1.25;
 //   opacity: 0.6;
 // }
 //
@@ -431,7 +431,6 @@ function typographyPreviewHtml(config, domain, modeName) {
     // ever one candidate, so the line was carrying no information its position could not.
     var meta = [
       typeScaleEscape(row.token),
-      'Font weight: ' + weight,
       'Font size: ' + typeScaleNumber(row.size) +
         (row.rounded ? ' (' + typeScaleNumber(row.raw) + ')' : ''),
       'Line height: ' + typeScaleNumber(row.lineHeight),

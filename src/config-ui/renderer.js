@@ -640,8 +640,9 @@
   }
 
   /**
-   * Fill a preview/suggestions slot and reveal (or hide) it with its paired heading.
-   * The single write path the panel uses — never set innerHTML on these slots alone.
+   * Fill a preview/suggestions slot and reveal (or hide) it with its paired heading —
+   * and, when the slot lives in a `type: "section"`, the whole section host. Sections are the
+   * visibility unit; dividers/spacers inside the same section follow the host, not sibling pairing.
    */
   function fillContentReveal(slot, html) {
     if (!slot) return;
@@ -649,6 +650,18 @@
     slot.innerHTML = text;
     var has = !!(text && String(text).trim());
     var suppressed = slot.getAttribute("data-content-reveal-suppressed") === "true";
+    var host = null;
+    var walk = slot.parentElement;
+    while (walk) {
+      if (walk.getAttribute && walk.getAttribute("data-content-reveal-host") === "true") {
+        host = walk;
+        break;
+      }
+      walk = walk.parentElement;
+    }
+    if (host && host.getAttribute("data-content-reveal-suppressed") === "true") {
+      suppressed = true;
+    }
     var show = has && !suppressed;
     slot.style.display = show ? "" : "none";
     var el = slot.previousElementSibling;
@@ -656,6 +669,7 @@
       el.style.display = show ? "" : "none";
       el = el.previousElementSibling;
     }
+    if (host) host.style.display = show ? "" : "none";
   }
 
   /** Re-apply content+suppressed to one slot (after applyVisibility flips the flag). */
@@ -880,6 +894,13 @@
             }
             if (slug) currentSectionSlug = slug;
             appendPanelRows(r.blocks, sec);
+            // **Section is the reveal unit.** A Preview/Overview/Suggestions chunk hides as one
+            // block — dividers and spacers inside it included — until the slot has HTML. Flat
+            // recipes (no section) still use sibling pairing below.
+            if (sec.querySelector("[data-content-reveal]")) {
+              sec.setAttribute("data-content-reveal-host", "true");
+              sec.style.display = "none";
+            }
             currentSectionSlug = savedSlug;
             parent.appendChild(sec);
             return;
@@ -4528,6 +4549,20 @@
       return (typeof named === "string" && named.trim()) ? named : "Row " + (index + 1);
     }
 
+    /**
+     * Shared chevron paint for `@blocks` (per mode) and `@tabs` (whole settings body).
+     * Direction says where the content will go: down to open, up to close.
+     */
+    function paintCollapseChevron(btn, closed, label) {
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" ' +
+        'aria-hidden="true" focusable="false"' +
+        (closed ? "" : ' style="transform:scaleY(-1)"') + '>' +
+        '<path d="M6 8L10 12L14 8" stroke="currentColor" stroke-width="1.33333" ' +
+        'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      btn.setAttribute("aria-expanded", closed ? "false" : "true");
+      btn.setAttribute("aria-label", (closed ? "Expand " : "Collapse ") + label);
+    }
+
     function selectTab(index) {
       if (!field.tabs) return;
       body.querySelectorAll(".config-ui-rows-item").forEach(function (el, i) {
@@ -4598,23 +4633,14 @@
            * follows the hover the other functional icons have. Flipped for the open state the way the frame
            * flips it, and the *direction says where the block will go*: down to open, up to close.
            */
-          function setChevron(closed) {
-            chevron.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" ' +
-              'aria-hidden="true" focusable="false"' +
-              (closed ? "" : ' style="transform:scaleY(-1)"') + '>' +
-              '<path d="M6 8L10 12L14 8" stroke="currentColor" stroke-width="1.33333" ' +
-              'stroke-linecap="round" stroke-linejoin="round"/></svg>';
-            chevron.setAttribute("aria-expanded", closed ? "false" : "true");
-            chevron.setAttribute("aria-label", (closed ? "Expand " : "Collapse ") + rowLabel(row, index));
-          }
           chevron.addEventListener("click", function () {
-            setChevron(rowEl.classList.toggle("is-collapsed"));
+            paintCollapseChevron(chevron, rowEl.classList.toggle("is-collapsed"), rowLabel(row, index));
           });
           title.appendChild(chevron);
           var startsClosed = !!(row && typeof row === "object" &&
             typeof row.name === "string" && row.name.trim());
           if (startsClosed) rowEl.classList.add("is-collapsed");
-          setChevron(startsClosed);
+          paintCollapseChevron(chevron, startsClosed, rowLabel(row, index));
           rowEl.appendChild(title);
         }
 
@@ -4923,6 +4949,24 @@
           tabBar.appendChild(tab);
         }
       });
+
+      /**
+       * **Tabs collapse: settings away, Preview closer.** The mode tab bar stays; the body (fields for
+       * the open mode) hides. Chevron at the end of the tab row — same icon as `@blocks`, state on the
+       * wrap (`is-collapsed`), never written to the config. `draw()` rebuilds the bar, so the button is
+       * re-appended here and re-reads the wrap's class. Starts open: tabs already show one mode at a time.
+       */
+      if (tabBar) {
+        var tabsCollapse = document.createElement("button");
+        tabsCollapse.type = "button";
+        tabsCollapse.className = "config-ui-rows-collapse";
+        tabsCollapse.setAttribute("data-rows-tabs-collapse", "true");
+        tabsCollapse.addEventListener("click", function () {
+          paintCollapseChevron(tabsCollapse, wrap.classList.toggle("is-collapsed"), "mode settings");
+        });
+        paintCollapseChevron(tabsCollapse, wrap.classList.contains("is-collapsed"), "mode settings");
+        tabBar.appendChild(tabsCollapse);
+      }
 
       // The chips above are the mode list, so Add does not belong here — two places to add a mode is one too
       // many. `@tabs` has always had chips; `@blocks` has them now, and the test is the chips rather than the
@@ -5581,6 +5625,14 @@
           refreshContentReveal(row);
           return;
         }
+        // Section hosts: same rule — conditions suppress, content opens.
+        if (row.getAttribute("data-content-reveal-host") === "true") {
+          if (v) row.removeAttribute("data-content-reveal-suppressed");
+          else row.setAttribute("data-content-reveal-suppressed", "true");
+          var hostSlot = row.querySelector("[data-content-reveal]");
+          if (hostSlot) refreshContentReveal(hostSlot);
+          return;
+        }
         // Paired headings follow their slot — do not let showWhen alone open them.
         if (row.getAttribute("data-content-reveal-pair") === "true") {
           return;
@@ -5593,6 +5645,13 @@
         if (row.getAttribute("data-show-when-rules")) return;
         row.removeAttribute("data-content-reveal-suppressed");
         refreshContentReveal(row);
+      });
+      // Hosts whose showWhen lives only on children (or not at all) still need a pass.
+      container.querySelectorAll("[data-content-reveal-host]").forEach(function (host) {
+        if (host.getAttribute("data-show-when-rules")) return;
+        host.removeAttribute("data-content-reveal-suppressed");
+        var openSlot = host.querySelector("[data-content-reveal]");
+        if (openSlot) refreshContentReveal(openSlot);
       });
       // Row cells, judged inside their own row. `getValues` flattens the rows into one array per field,
       // which is the wrong shape for this — what a cell needs is the sibling cell beside it, so the

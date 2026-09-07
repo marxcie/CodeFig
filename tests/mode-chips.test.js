@@ -709,12 +709,15 @@ test('the fill and the ordering are one write, not two', () => {
   assert.equal((apply.match(/writeConfigBlockText\(ordered\.text/g) || []).length, 1,
     'and exactly one write on the found path, so nothing can land between them');
 
-  // **Miss keeps fields — no second write.** Prepared defaults are only the fill base when a set
-  // exists; counting writes must not require a wipe branch that throws away authored values.
+  // **Miss resets to prepared defaults** so a new Group name does not keep the previous ramp.
+  // Hit path: one fill write. Miss path: one miss-reset write.
+  assert.match(apply, /auto-import:miss-reset/);
   const writes = apply.match(/writeConfigBlockText\([^,]+,\s*'([^']+)'/g) || [];
-  assert.equal(writes.length, 1, 'expected only the fill write; miss must not wipe to pristine');
-  assert.doesNotMatch(apply, /writeConfigBlockText\(pendingPristine/,
-    'a miss must keep authored fields');
+  assert.ok(writes.some(function (w) { return /miss-reset/.test(w); }),
+    'miss must write prepared defaults for the new address');
+  assert.ok(writes.some(function (w) { return /auto-import:(recorded|recognised)/.test(w) || /ordered\.text/.test(w); }) ||
+    apply.indexOf("writeConfigBlockText(ordered.text") >= 0,
+    'hit path still writes the fill');
 
   // The load path that brings no config of its own still orders what is already there.
   assert.match(ui, /function orderConfigModesToFile\(\)[\s\S]{0,220}orderedModesInBlock\(currentConfigBlock\(\)\)/);

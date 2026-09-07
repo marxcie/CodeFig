@@ -418,7 +418,6 @@ var __codefigPanel = {
       { type: "heading", text: "General" },
       { key: "collectionName", type: "collection", label: "Collection",
         placeholder: "eg. Responsive System" },
-      { type: "spacer-m" },
       { type: "chips", label: "Collection modes", from: "modes" },
       { key: "group", type: "string", label: "Group within collection", placeholder: "eg. Grid" }
     ]},
@@ -433,7 +432,7 @@ var __codefigPanel = {
           placeholder: "col-1+gap, col-1*2+gap",
           helper: "Formulas using col-N, gap, margin, and numbers with + - * /. margin is the Margins field. Each entry becomes a variable with that name, valued per mode. Leave empty for none." },
         { key: "generateOverview", type: "boolean", label: "Generate overview",
-          helper: "Builds a Grid overview on the canvas: one preview frame per mode with the layout grid applied." },
+          helper: "Builds a Grid overview under Design System Foundations: one preview frame per mode. One section per Collection + Group; the same address overwrites." },
         { key: "modes", type: "rows", label: "Modes", layout: "tabs",
           columns: [
             { key: "name", type: "text", label: "Mode" },
@@ -446,12 +445,14 @@ var __codefigPanel = {
     { type: "section", id: "suggestions",
       showWhen: { collectionName: "*" },
       blocks: [
+        { type: "spacer-l" },
         { type: "heading", text: "Suggested whole number divisions" },
         { type: "suggestions" }
       ]},
     { type: "section", id: "preview",
       showWhen: { collectionName: "*" },
       blocks: [
+        { type: "spacer-l" },
         { type: "heading", text: "Preview" },
         { type: "preview" }
       ]}

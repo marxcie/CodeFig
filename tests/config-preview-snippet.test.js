@@ -128,10 +128,10 @@ test('preview render can name its owner script', () => {
     'a successful paint must record the owner');
 });
 
-test('an address change keeps fields unless the address has stored data', () => {
-  // Pointing the panel at a different collection/group used to wipe to pristine (or miss-write the
-  // same), throwing away steps, curves and seeds. Keep authored fields on a miss; load only when
-  // recorded/recognised data exists for that address.
+test('an address change loads a set on hit and resets on miss', () => {
+  // Choosing Collection / Group prepares defaults as the fill base; a hit fills from the file; a miss
+  // writes those defaults so a new Group name does not keep the previous set's strip. Load of another
+  // existing group is a candidate click under Group.
   const start = ui.indexOf('function requestAutoImport(');
   assert.notEqual(start, -1);
   const body = ui.slice(start, ui.indexOf('\n      function ', start + 10));
@@ -164,10 +164,12 @@ test('an address change keeps fields unless the address has stored data', () => 
     'an empty modes array must get a starter Value for the fill base');
 
   const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
-  assert.doesNotMatch(apply, /writeConfigBlockText\(pendingPristine/,
-    'a miss must keep authored fields — do not write prepared defaults');
+  assert.match(apply, /auto-import:miss-reset/,
+    'a miss after address change resets to defaults for the new Group');
+  assert.match(apply, /resetBase/,
+    'miss uses the prepared pristine text, not a second pristine call');
   assert.match(ui, /addressAlreadyReset = true/,
-    'address settle still claims so a miss cannot wipe');
+    'address settle still claims so a competing detectOnly cannot steal the fill');
   assert.match(apply, /var base = pendingPristine \|\| currentConfigBlock\(\)/,
     'a read that finds something must fill onto the defaults, or the previous address survives in every ' +
     'key the payload does not mention');

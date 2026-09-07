@@ -2174,6 +2174,7 @@
       .config-ui-rows-tabs {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         /* The same rule and the same measurement as the editor tabs. */
         gap: var(--space-2xl);
         border-bottom: 1px solid rgba(128, 128, 128, 0.25);
@@ -2197,6 +2198,19 @@
         font-weight: 600;
         /* The same blue as every other active thing in the plugin, not the text colour. */
         border-bottom-color: var(--active-bg);
+      }
+
+      /* Tabs collapse chevron: end of the tab row (`margin-left: auto` on `.config-ui-rows-collapse`).
+         Align with the tab baseline rather than floating above the hairline. */
+      .config-ui-rows-tabs > .config-ui-rows-collapse {
+        align-self: center;
+        margin-bottom: 0;
+        flex-shrink: 0;
+      }
+
+      /* Hide the open mode's fields; the tab bar (and Preview below the rows control) stay. */
+      .config-ui-rows--tabs.is-collapsed > .config-ui-rows-body {
+        display: none;
       }
 
       .config-ui-rows-body {

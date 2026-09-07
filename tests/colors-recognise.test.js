@@ -346,7 +346,7 @@ test('a shipped Value starter still loads a Mode 1 collection', async () => {
   assert.equal(found.source, 'recognised');
   assert.equal(found.modeSource, 'collection');
   assert.deepEqual(found.modes, ['Mode 1']);
-  assert.equal(found.config.steps, NEUTRAL.steps.join(', '));
+  assert.deepEqual(found.config.steps, NEUTRAL.steps);
   assert.deepEqual(Object.keys(found.existing), ['Mode 1']);
 });
 

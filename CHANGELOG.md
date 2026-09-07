@@ -19,8 +19,32 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+### Added
+
+- **Duplicate component** utility. Selects components or component sets and creates new
+  definitions beside the originals (no Configuration UI).
+
+### Changed
+
+- **DSF overview sections are per Collection + Group.** Generate overview writes one section under
+  Design System Foundations for each address. Regenerating overwrites only when both collection and
+  group match; a different collection or group adds a section. Applies to Colors, Spacing, Corner
+  radius, Grid, and Typography. Colors no longer stacks groups inside a single Colors — overview
+  frame (the old bare section is dropped on the next Colors overview run).
+
 ### Fixed
 
+- **Group candidates clear on every script switch.** Switching any DSF script (Colors, Spacing,
+  Typography, …) drops the previous "In this collection:" links and invalidates in-flight
+  auto-import replies so a late answer cannot remount the wrong domain's groups.
+- **Group no longer auto-loads.** Candidates always show as links under Group; clicking one loads
+  that set. Typing a new Group name that has no set resets the form to defaults for that address
+  (so the strip does not keep the previous ramp).
+- **Typography preview meta omits Font weight** (still on the specimen note above the steps) and
+  uses 1.25 line-height on the meta column.
+- **Preview sections hide as one block.** A `type: "section"` that contains Preview (or another
+  content-reveal slot) hides dividers, spacers, and the heading with the slot until there is
+  HTML to show — not only the slot itself.
 - **Move preserves effect bindings and refuses published sources.** Direct blur/effect bindings
   now follow the destination variables. A published or unreadable source is refused before copying.
   Failed value writes or remaining local bindings stop removal and keep the source variables;
@@ -32,9 +56,6 @@ a plain statement of the new default.
   Remote multi-part scripts now read their chunk metadata as well as their values.
 - **The dev bridge binds to loopback only**, rather than every network interface.
 
-- **Colors `tokenCount` no longer warns as an unknown key** on an untouched default config
-  (`foundationSliceKeys` / domain keys).
-
 ### Developer
 
 - Updated live matching and Colors expectations to current behavior. Foundation-maintenance
@@ -44,6 +65,10 @@ a plain statement of the new default.
 
 ### Added
 
+- **Mode tabs can collapse their settings.** On `layout: "tabs"` `@rows` controls (Spacing, Grid,
+  Corner radius, Typography), a chevron at the end of the mode tab bar hides the open mode's
+  fields so Preview sits closer. View-only — not written into the config. Colors blocks are
+  unchanged.
 - **Panel `section` containers and spacers.** `@PANEL_START` recipes may nest
   `{ type: "section", id?, showWhen?, blocks: […] }`. The form keeps a real
   `<section class="config-ui-section">` (plus `config-ui-section--{id}` when set). Section-level
@@ -62,8 +87,6 @@ a plain statement of the new default.
   Shared OKLCH lightness ends follow the seed that was applied (other modes' hue/chroma stay put).
   Picking an `easeInOut` preset keeps (or restores) the middle point when the seed is locked or the
   curve already had one — those presets are one cubic otherwise.
-- **Colors: Token count.** A count control fills **Color tokens** with N names on the Tailwind
-  50…950 rail (half-weighted end gaps). `11` is the exact Tailwind list; edit names freely after.
 - **Copy these values to: Mode…** on Spacing, Corner radius, and Typography. On a mode tab when
   there are two or more modes, each other mode is a text link; click one to copy this mode's
   scale settings onto it (names stay). Asks before replacing settings that already differ. Grid
@@ -78,6 +101,19 @@ a plain statement of the new default.
   (`col-1+gap`, `col-1*2+gap`, `margin-gap`, …) using `col-N`, `gap`, `margin` (the Margins
   field), and numbers with `+ - * /`. Each entry becomes a FLOAT variable with that name, valued
   per mode. Separate from Extra columns.
+
+### Changed
+
+- **Colors overview is horizontal, one section per Collection + Group.** Each colour set is a
+  left-to-right ramp (modes stacked) under Design System Foundations. Same address overwrites;
+  a different collection or group adds a section (see Unreleased note at top).
+- **Colors tokens are a list like Spacing.** Color tokens default to Tailwind's
+  `50…950` names (editable). Insert or remove steps for in-betweens; `shade-{1,12}` expands to a
+  series the same way Spacing does. Names stay labels — lightness still comes from the ladder.
+
+### Removed
+
+- **Colors Token count.** The N-on-a-rail control is gone; edit the token list directly instead.
 
 ### Fixed
 
@@ -287,11 +323,10 @@ a plain statement of the new default.
 
 ### Changed
 
-- **DSF: Collection / Group changes keep authored fields.** Switching collection, renaming, or
-  editing Group no longer wipes steps, curves or seeds. **Modes are the exception:** a collection
-  change resets the mode list (then aligns to that collection’s modes, or loads a recorded set).
-  Group-only edits keep modes. A miss leaves other fields on screen; Group is no longer cleared
-  when the collection changes.
+- **DSF: Group load is explicit; a miss resets.** Candidates always list under Group — click to load.
+  Nothing auto-fills Group. Pointing at a Collection/Group with no set resets the form to defaults
+  for that address (so the strip does not keep the previous ramp). A hit still fills from the file.
+  **Modes:** a collection change resets the mode list (then aligns to that collection’s modes).
 - **Colors / config typing: keystrokes no longer rewrite Source or force a preview.** `input`
   events hold the form values (same as a curve drag); Source merge and auto-import wait for
   `change` (blur / Enter / select). Preview’s 120ms “max wait” bypass applies only to live curve

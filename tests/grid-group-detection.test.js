@@ -55,20 +55,37 @@ test('nothing that looks like a grid yields nothing', () => {
   assert.deepEqual(F.gridGroupCandidates(['X/col-', 'X/col-abc']), []);
 });
 
-test('the panel goes to one candidate and lists links when there are several', () => {
+test('the panel lists candidate groups under Group; load is a click', () => {
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
   const fn = ui.slice(ui.indexOf('function offerDetectedGroup'), ui.indexOf('function applyAutoImport'));
 
-  // Several (or already on a set): links under Group, and no write until a click.
+  // Always links — never auto-write Group (one candidate or many).
   assert.match(fn, /renderGroupCandidates\(candidates\)/);
-  assert.match(fn, /hasSet \|\| candidates\.length > 1/);
-  const many = fn.slice(fn.indexOf('hasSet || candidates.length > 1'), fn.indexOf('var target'));
-  assert.equal(many.indexOf('writeConfigBlockText'), -1, 'it must not write when the choice is real');
+  assert.equal(fn.indexOf('writeConfigBlockText'), -1, 'offer must not write Group');
+  assert.equal(fn.indexOf('group-detected'), -1, 'no auto group-detected path');
+  assert.equal(fn.indexOf('canAutoFillGroup'), -1);
+  assert.match(fn, /Choose one under Group/);
+  assert.match(ui, /function adoptGroupCandidate/);
+});
 
-  // One: change the address and let the ordinary load happen, rather than a second loading path.
-  assert.match(fn, /writeConfigBlockText\(api\.serialize\(schema, \{ group: target \}\), 'group-detected'\)/);
-  assert.match(fn, /scheduleAutoImport\(\)/);
-  assert.match(fn, /so Group was set to it/, 'and it says it moved the field');
+test('a miss after address change resets to defaults for the new Group', () => {
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
+  assert.match(apply, /auto-import:miss-reset/);
+  assert.match(apply, /resetBase/);
+});
+
+test('script switch clears Group candidates and drops in-flight auto-import replies', () => {
+  // Applies to every DSF switch (Colors ↔ Spacing ↔ Typography …), not one pair: a stale
+  // detectOnly from the previous script must not remount its candidates under the next.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const start = ui.indexOf('function selectScriptDirectly');
+  const select = ui.slice(start, start + 3500);
+  assert.match(select, /clearGroupCandidates\(\)/);
+  assert.match(select, /autoImportSeq\+\+/);
+  assert.match(select, /fileModesSeq\+\+/);
+  assert.match(select, /detectedFor = \{\}/);
+  assert.match(select, /groupsAdopted = \{\}/);
 });
 
 test('candidate links sit under the Group input, not under the whole row', () => {
@@ -85,17 +102,14 @@ test('candidate links sit under the Group input, not under the whole row', () =>
   assert.match(css, /\.config-ui-group-candidate/);
 });
 
-test('a group is never adopted twice, so this cannot loop', () => {
-  // Adopting triggers a load at the new address; if that also came back empty, adopting again would be
-  // a loop with a document read in it.
+test('a group is never adopted twice from a click loop', () => {
+  // Clicking a candidate triggers a load; if that also came back empty, adopting again would be
+  // a loop with a document read in it. The guard lives on the click path, not on auto-offer.
   const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
-  const fn = ui.slice(ui.indexOf('function offerDetectedGroup'), ui.indexOf('function applyAutoImport'));
-  assert.match(fn, /if \(groupsAdopted\[key\]\) return false;/);
-  assert.match(fn, /groupsAdopted\[key\] = true;/);
   assert.match(ui, /var groupsAdopted = \{\};/);
-  // A click clears the guard for that target so switching back is allowed.
   assert.match(ui, /function adoptGroupCandidate/);
   const adopt = ui.slice(ui.indexOf('function adoptGroupCandidate'), ui.indexOf('function scheduleAutoImport'));
+  assert.match(adopt, /groupsAdopted\[key\] = true/);
   assert.match(adopt, /delete groupsAdopted\[key\]/);
 });
 

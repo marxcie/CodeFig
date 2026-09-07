@@ -4,13 +4,17 @@
 //
 // ## Overview
 //
-// Shared canvas overview used when a Foundations script has **Generate overview** on. One page-level frame **`Design System Foundations`** (vertical auto layout) holds up to five sections, in this order:
+// Shared canvas overview used when a Foundations script has **Generate overview** on. One page-level frame **`Design System Foundations`** (vertical auto layout) holds domain sections.
+//
+// Each generated chart is its **own section**, keyed by **collection + group**. Regenerating the same
+// address overwrites that section only; a different collection or group adds another section. Domains
+// still sort in this order (multiple sections per domain stay together):
 //
 // 1. **Render styles — overview** — local text styles (Regular vs Semibold-style columns)
 // 2. **Grid — overview** — viewport preview frames with the grid style applied
 // 3. **Spacing — overview** — variable-backed width bars per mode
 // 4. **Corner radius — overview** — variable-backed corner swatches per mode
-// 5. **Colors — overview** — variable-backed colour swatches per mode
+// 5. **Colors — overview** — one horizontal ramp per address (swatches left→right, modes stacked)
 //
 // Variable sections set **explicit variable modes** on preview nodes. Text styles are modeless; grouping is by style name / font style.
 //
@@ -56,6 +60,7 @@ function foundationOverviewLayout() {
     gridViewportGap: 40,
     gridLabelToFrame: 24,
     swatchSize: 120,
+    colorSwatchSize: 64,
     spacingRowH: 40,
     colors: {
       sectionBg: { r: 250 / 255, g: 251 / 255, b: 252 / 255 },
@@ -182,7 +187,49 @@ function foundationApplySectionShell(frame) {
   frame.clipsContent = true;
 }
 
-function foundationAcquireSectionFrame(wrapper, sectionName) {
+/** Empty group still needs a stable label so two blank groups in different collections do not collide. */
+function foundationOverviewGroupLabel(group) {
+  var g = String(group != null ? group : "").trim();
+  return g || "(no group)";
+}
+
+/**
+ * Frame name = identity. Overwrite only when this string matches (same domain + collection + group).
+ * Display titles use `foundationOverviewDisplayTitle` and can read friendlier.
+ */
+function foundationOverviewSectionName(domainBase, collectionName, group) {
+  var coll = String(collectionName != null ? collectionName : "").trim() || "(no collection)";
+  return domainBase + " · " + coll + " · " + foundationOverviewGroupLabel(group);
+}
+
+/** Visible section title: Domain · collection · group (omit empty collection/group). */
+function foundationOverviewDisplayTitle(domainLabel, collectionName, group) {
+  var parts = [domainLabel];
+  var coll = String(collectionName != null ? collectionName : "").trim();
+  var g = String(group != null ? group : "").trim();
+  if (coll) parts.push(coll);
+  if (g) parts.push(g);
+  return parts.join(" · ");
+}
+
+function foundationSectionMatchesDomain(name, domainBase) {
+  var n = String(name || "");
+  return n === domainBase || n.indexOf(domainBase + " · ") === 0;
+}
+
+/**
+ * Get or create the section for one (domain, collection, group). Wipes that section's children.
+ * Other addressed sections for the same domain are left alone.
+ *
+ * `migrateLegacy` (default true): a bare pre-address `Domain — overview` frame is renamed to this
+ * key once — Spacing / Grid / etc. had only one section. Colors passes false and drops the bare
+ * frame instead, because the old Colors section stacked many groups as children.
+ */
+function foundationAcquireAddressedSection(wrapper, domainBase, collectionName, group, opts) {
+  opts = opts || {};
+  var migrateLegacy = opts.migrateLegacy !== false;
+  var dropLegacyBare = !!opts.dropLegacyBare;
+  var sectionName = foundationOverviewSectionName(domainBase, collectionName, group);
   var found = null;
   var i;
   var n = wrapper.children.length;
@@ -192,10 +239,26 @@ function foundationAcquireSectionFrame(wrapper, sectionName) {
       break;
     }
   }
+  if (!found && migrateLegacy) {
+    for (i = 0; i < wrapper.children.length; i++) {
+      if (wrapper.children[i].name === domainBase) {
+        found = wrapper.children[i];
+        found.name = sectionName;
+        break;
+      }
+    }
+  }
   for (i = wrapper.children.length - 1; i >= 0; i--) {
     var dup = wrapper.children[i];
     if (dup.name === sectionName && dup !== found) {
       dup.remove();
+    }
+  }
+  if (dropLegacyBare) {
+    for (i = wrapper.children.length - 1; i >= 0; i--) {
+      if (wrapper.children[i].name === domainBase) {
+        wrapper.children[i].remove();
+      }
     }
   }
   if (!found) {
@@ -222,13 +285,19 @@ function foundationReorderSectionChildren(wrapper) {
   var oi;
   for (oi = 0; oi < ORDER.length; oi++) {
     var want = ORDER[oi];
+    var matches = [];
     var pi;
-    for (pi = 0; pi < pool.length; pi++) {
-      if (pool[pi].name === want) {
-        ordered.push(pool[pi]);
+    for (pi = pool.length - 1; pi >= 0; pi--) {
+      if (foundationSectionMatchesDomain(pool[pi].name, want)) {
+        matches.push(pool[pi]);
         pool.splice(pi, 1);
-        break;
       }
+    }
+    matches.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name));
+    });
+    for (pi = 0; pi < matches.length; pi++) {
+      ordered.push(matches[pi]);
     }
   }
   for (pi = 0; pi < pool.length; pi++) {
@@ -359,9 +428,10 @@ async function foundationCreateCornerRadiusOverview(collection, data) {
   var L = foundationOverviewLayout();
 
   var wrapper = foundationGetOrCreateOverviewWrapper();
-  var section = foundationAcquireSectionFrame(wrapper, L.sections.corner);
+  var collName = collection && collection.name ? collection.name : "";
+  var section = foundationAcquireAddressedSection(wrapper, L.sections.corner, collName, group);
 
-  foundationAppendTitleLarge(section, "Corner radius");
+  foundationAppendTitleLarge(section, foundationOverviewDisplayTitle("Corner radius", collName, group));
 
   var body = figma.createFrame();
   body.name = "Corner radius";
@@ -477,9 +547,10 @@ async function foundationCreateSpacingOverview(collection, data) {
   var L = foundationOverviewLayout();
 
   var wrapper = foundationGetOrCreateOverviewWrapper();
-  var section = foundationAcquireSectionFrame(wrapper, L.sections.spacing);
+  var collName = collection && collection.name ? collection.name : "";
+  var section = foundationAcquireAddressedSection(wrapper, L.sections.spacing, collName, group);
 
-  foundationAppendTitleLarge(section, "Spacing");
+  foundationAppendTitleLarge(section, foundationOverviewDisplayTitle("Spacing", collName, group));
 
   var body = figma.createFrame();
   body.name = "Spacing";
@@ -643,9 +714,14 @@ async function foundationCreateTypographyTextStylesOverview(options) {
 
   var L = foundationOverviewLayout();
   var wrapper = foundationGetOrCreateOverviewWrapper();
-  var section = foundationAcquireSectionFrame(wrapper, L.sections.renderStyles);
+  var collName = typeof opt.collectionName === "string" ? opt.collectionName : "";
+  var group = typeof opt.group === "string" ? opt.group : "";
+  var section = foundationAcquireAddressedSection(
+    wrapper, L.sections.renderStyles, collName, group
+  );
 
-  foundationAppendTitleLarge(section, "Text styles");
+  foundationAppendTitleLarge(section,
+    foundationOverviewDisplayTitle("Text styles", collName, group));
 
   var previewStr = foundationPreviewTextToFigma(opt.previewText);
 
@@ -757,9 +833,10 @@ async function foundationCreateGridOverview(collection, config, gridStyle) {
   var previewHeight = 480;
 
   var wrapper = foundationGetOrCreateOverviewWrapper();
-  var section = foundationAcquireSectionFrame(wrapper, L.sections.grid);
+  var collName = collection && collection.name ? collection.name : "";
+  var section = foundationAcquireAddressedSection(wrapper, L.sections.grid, collName, group);
 
-  foundationAppendTitleLarge(section, "Grid overview");
+  foundationAppendTitleLarge(section, foundationOverviewDisplayTitle("Grid", collName, group));
 
   var stack = figma.createFrame();
   stack.name = "Grid overview";
@@ -833,16 +910,28 @@ async function foundationCreateGridOverview(collection, config, gridStyle) {
 }
 
 /**
- * Colour scale overview: one row per token, one column per mode, fill bound to the COLOR variable.
+ * Colour scale overview: one horizontal ramp per mode (light → dark), stacked.
  *
- * Modes are the collection's mode names (`data.modes[].name` or a string list) — Colors does not use
- * viewport keys the way Spacing / Radius do.
+ * One **section per collection + group**. Regenerating Blue in `color - lime` updates that section
+ * only; Neutrals, or Blue in another collection, stays. Modes are collection mode names
+ * (`data.modes[].name`), not viewport keys.
  */
 async function foundationCreateColorsOverview(collection, data) {
-  var group = data && data.group != null ? data.group : "";
+  var group = data && data.group != null ? String(data.group).trim() : "";
   var prefix = namePrefix(group);
   var steps = [];
-  if (Array.isArray(data && data.steps)) {
+  if (typeof expandTokenList === "function") {
+    steps = expandTokenList(data && data.steps).map(function (s) { return String(s).trim(); })
+      .filter(function (s) { return !!s; });
+    var dedup = {};
+    var clean = [];
+    for (var di = 0; di < steps.length; di++) {
+      if (dedup[steps[di]]) continue;
+      dedup[steps[di]] = true;
+      clean.push(steps[di]);
+    }
+    steps = clean;
+  } else if (Array.isArray(data && data.steps)) {
     steps = data.steps.filter(function (s) { return s != null && String(s).trim() !== ""; })
       .map(function (s) { return String(s).trim(); });
   } else if (data && typeof data.steps === "string") {
@@ -872,59 +961,25 @@ async function foundationCreateColorsOverview(collection, data) {
   foundationRemoveStandaloneLegacyOverviews();
   await foundationLoadUiFonts();
   var L = foundationOverviewLayout();
+  var sw = L.colorSwatchSize;
+  var collName = collection && collection.name ? collection.name : "";
+  var addressLabel = foundationOverviewGroupLabel(group);
 
   var wrapper = foundationGetOrCreateOverviewWrapper();
-  var section = foundationAcquireSectionFrame(wrapper, L.sections.colors);
-
-  foundationAppendTitleLarge(section, "Colors");
+  // Do not rename the old multi-group Colors section — drop it and write one section per address.
+  var section = foundationAcquireAddressedSection(wrapper, L.sections.colors, collName, group, {
+    migrateLegacy: false,
+    dropLegacyBare: true
+  });
+  foundationAppendTitleLarge(section, foundationOverviewDisplayTitle("Colors", collName, group));
 
   var body = figma.createFrame();
-  body.name = "Colors";
-  body.layoutMode = "HORIZONTAL";
+  body.name = addressLabel;
+  body.layoutMode = "VERTICAL";
   body.primaryAxisSizingMode = "AUTO";
   body.counterAxisSizingMode = "AUTO";
-  body.itemSpacing = L.gapColumns;
+  body.itemSpacing = L.gapModeCol * 2;
   body.fills = [];
-
-  var tokenCol = figma.createFrame();
-  tokenCol.name = "Variables";
-  tokenCol.layoutMode = "VERTICAL";
-  tokenCol.primaryAxisSizingMode = "AUTO";
-  tokenCol.counterAxisSizingMode = "AUTO";
-  tokenCol.itemSpacing = L.gapModeCol;
-  tokenCol.counterAxisAlignItems = "MIN";
-  tokenCol.fills = [];
-
-  var tokHead = figma.createText();
-  tokHead.fontName = foundationUiBold();
-  tokHead.fontSize = 10;
-  tokHead.fills = [{ type: "SOLID", color: L.colors.mutedHeader }];
-  tokHead.characters = "Token";
-  tokHead.textAutoResize = "WIDTH_AND_HEIGHT";
-  tokenCol.appendChild(tokHead);
-
-  var si;
-  for (si = 0; si < steps.length; si++) {
-    var tokenName = steps[si];
-    var rowH = figma.createFrame();
-    rowH.name = "Row label";
-    rowH.layoutMode = "HORIZONTAL";
-    rowH.primaryAxisSizingMode = "AUTO";
-    rowH.counterAxisSizingMode = "FIXED";
-    rowH.primaryAxisAlignItems = "MIN";
-    rowH.counterAxisAlignItems = "CENTER";
-    rowH.fills = [];
-    var nameT = figma.createText();
-    nameT.fontName = foundationUiReg();
-    nameT.fontSize = 11;
-    nameT.fills = [{ type: "SOLID", color: L.colors.tokenText }];
-    nameT.characters = prefix ? prefix + tokenName : tokenName;
-    nameT.textAutoResize = "WIDTH_AND_HEIGHT";
-    rowH.appendChild(nameT);
-    rowH.resize(Math.max(nameT.width, 1), L.swatchSize);
-    tokenCol.appendChild(rowH);
-  }
-  body.appendChild(tokenCol);
 
   var mi;
   for (mi = 0; mi < modeNames.length; mi++) {
@@ -933,44 +988,76 @@ async function foundationCreateColorsOverview(collection, data) {
       return m.name === modeLabel;
     });
 
-    var modeCol = figma.createFrame();
-    modeCol.name = modeLabel;
-    modeCol.layoutMode = "VERTICAL";
-    modeCol.primaryAxisSizingMode = "AUTO";
-    modeCol.counterAxisSizingMode = "AUTO";
-    modeCol.itemSpacing = L.gapModeCol;
-    modeCol.fills = [];
+    var modeBlock = figma.createFrame();
+    modeBlock.name = modeLabel;
+    modeBlock.layoutMode = "VERTICAL";
+    modeBlock.primaryAxisSizingMode = "AUTO";
+    modeBlock.counterAxisSizingMode = "AUTO";
+    modeBlock.itemSpacing = 8;
+    modeBlock.fills = [];
 
     var mh = figma.createText();
     mh.fontName = foundationUiBold();
     mh.fontSize = 10;
     mh.fills = [{ type: "SOLID", color: L.colors.mutedHeader }];
     mh.characters = modeLabel;
-    modeCol.appendChild(mh);
+    mh.textAutoResize = "WIDTH_AND_HEIGHT";
+    modeBlock.appendChild(mh);
+
+    var strip = figma.createFrame();
+    strip.name = "Ramp";
+    strip.layoutMode = "HORIZONTAL";
+    strip.primaryAxisSizingMode = "AUTO";
+    strip.counterAxisSizingMode = "AUTO";
+    strip.itemSpacing = L.gapModeCol;
+    strip.fills = [];
 
     var ti;
     for (ti = 0; ti < steps.length; ti++) {
       var tn = steps[ti];
       var vname = prefix + tn;
-      var cell = figma.createRectangle();
+
+      var cell = figma.createFrame();
       cell.name = tn;
-      cell.resize(L.swatchSize, L.swatchSize);
-      cell.fills = [{ type: "SOLID", color: L.colors.swatch }];
-      cell.cornerRadius = 4;
-      if (mode && typeof cell.setExplicitVariableModeForCollection === "function") {
+      cell.layoutMode = "VERTICAL";
+      cell.primaryAxisSizingMode = "AUTO";
+      cell.counterAxisSizingMode = "AUTO";
+      cell.itemSpacing = 6;
+      cell.counterAxisAlignItems = "CENTER";
+      cell.fills = [];
+
+      var swatch = figma.createRectangle();
+      swatch.name = tn;
+      swatch.resize(sw, sw);
+      swatch.fills = [{ type: "SOLID", color: L.colors.swatch }];
+      swatch.cornerRadius = 4;
+      if (mode && typeof swatch.setExplicitVariableModeForCollection === "function") {
         try {
-          cell.setExplicitVariableModeForCollection(collection, mode.modeId);
+          swatch.setExplicitVariableModeForCollection(collection, mode.modeId);
         } catch (eM) {}
       }
       var variable = await getVariable(collection, vname);
-      await foundationBindFillColor(cell, variable);
-      modeCol.appendChild(cell);
+      await foundationBindFillColor(swatch, variable);
+      cell.appendChild(swatch);
+
+      var lab = figma.createText();
+      lab.fontName = foundationUiReg();
+      lab.fontSize = 10;
+      lab.fills = [{ type: "SOLID", color: L.colors.tokenText }];
+      lab.characters = tn;
+      lab.textAutoResize = "WIDTH_AND_HEIGHT";
+      cell.appendChild(lab);
+
+      strip.appendChild(cell);
     }
-    body.appendChild(modeCol);
+
+    modeBlock.appendChild(strip);
+    body.appendChild(modeBlock);
   }
 
   section.appendChild(body);
   foundationFinalizeOverview(wrapper);
-  console.log("Colors overview: " + steps.length + " token(s), " + modeNames.length + " mode(s)");
-  return { removed: 1, created: true };
+  console.log("Colors overview: " + collName + " · " + addressLabel + " — " +
+    steps.length + " token(s), " + modeNames.length + " mode(s)");
+  return { removed: 0, created: true, group: addressLabel, collection: collName };
 }

@@ -381,7 +381,6 @@ var __codefigPanel = {
     { type: "section", id: "general", blocks: [
       { type: "heading", text: "General" },
       { key: "collectionName", type: "collection", label: "Collection" },
-      { type: "spacer-m" },
       { type: "chips", label: "Collection modes", from: "modes" },
       { key: "group", type: "string", label: "Group within collection",
         placeholder: "eg.: Typography" },
@@ -409,7 +408,7 @@ var __codefigPanel = {
       blocks: [
         { type: "heading", text: "Mode settings" },
         { key: "generateOverview", type: "boolean", label: "Generate overview",
-          helper: "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight." },
+          helper: "Builds a Typography overview under Design System Foundations: one specimen tile per text style. One section per Collection + Group; the same address overwrites." },
         { key: "modes", type: "rows", label: "Modes", layout: "tabs",
           copyToOthers: true,
           columns: [
@@ -442,10 +441,12 @@ var __codefigPanel = {
           ] }
       ]},
     { type: "section", id: "overview", blocks: [
+      { type: "spacer-l" },
       { type: "heading", text: "Overview" },
       { type: "suggestions" }
     ]},
     { type: "section", id: "preview", blocks: [
+      { type: "spacer-l" },
       { type: "heading", text: "Preview" },
       { key: "overviewPreviewText", type: "textarea", label: "Preview text" },
       { type: "preview" }
@@ -1174,7 +1175,10 @@ createOrUpdateCollection(typographyConfig)
     if (showOverview) {
       var overviewOpts = {
         styleNames: typographyExpectedStyleNames(data),
-        previewText: typeof data.overviewPreviewText === 'string' ? data.overviewPreviewText : ''
+        previewText: typeof data.overviewPreviewText === 'string' ? data.overviewPreviewText : '',
+        collectionName: typeof data.collectionName === 'string' ? data.collectionName :
+          (result.collection && result.collection.name ? result.collection.name : ''),
+        group: typeof data.group === 'string' ? data.group : ''
       };
       if (typeof data.overviewStyleFilter === 'string' && data.overviewStyleFilter.trim()) {
         overviewOpts.styleNameNeedle = data.overviewStyleFilter;

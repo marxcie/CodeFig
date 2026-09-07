@@ -989,15 +989,6 @@
                 // the trigger would never fire at all.
                 var committed = !!(opts && opts.committed) && !(opts && opts.live);
                 var creatingNow = isFormCreatingCollection();
-                // Colors: Token count fills the freeform Color tokens field (Tailwind 50…950 rail).
-                // Must run before sync so Source and the next preview see the new names together.
-                if (committed && configPreviewDomain() === 'colors' &&
-                    maybeFillColorsStepsFromCount(values)) {
-                  // Form still shows the old steps string until we push values back into inputs.
-                  if (configUIInstance && typeof configUIInstance.setValues === 'function') {
-                    configUIInstance.setValues(values);
-                  }
-                }
                 var prevAddress = configLastAddress;
                 if (committed) {
                   // Settle the creating flag from the select itself — `collectionName` stays empty
@@ -2310,6 +2301,23 @@
         // per opening, and those are not the same thing.
         detectedFor = {};
         groupsAdopted = {};
+        // Group candidates and in-flight reads are per script/domain. Clearing the DOM alone is not
+        // enough: a Typography detectOnly reply that lands after switching to Spacing (or any other
+        // DSF script) would remount Heading/Text under the new Group field. Bump the seq so that
+        // reply is dropped — same idea as `clearConfigPreviewState` for preview.
+        clearGroupCandidates();
+        if (autoImportTimer) {
+          clearTimeout(autoImportTimer);
+          autoImportTimer = null;
+        }
+        autoImportSeq++;
+        autoImportStartedAt = 0;
+        if (fileModesTimer) {
+          clearTimeout(fileModesTimer);
+          fileModesTimer = null;
+        }
+        fileModesSeq++;
+        fileColorValues = { address: null, byMode: null };
         // Facts about the file are re-read, not carried over. Cheap — one read — and it is the only way
         // a panel opened in a different file cannot inherit the last one's modes.
         fileModes = { document: null, collection: null, collectionId: null, modes: [], found: false };
@@ -2919,49 +2927,6 @@
         const path = configBlockFromFilePath(currentConfigBlock()) || '';
         const match = /^domains\.([A-Za-z0-9_$]+)/.exec(path);
         return match ? match[1] : null;
-      }
-
-      /**
-       * Same rail as `colorsMaterialiseStepNames` in `@color-ramp` — keep the two in lockstep.
-       * Lives in the iframe so Token count can fill Color tokens without a sandbox round-trip.
-       */
-      function materialiseColorsStepNames(n) {
-        var count = Math.round(Number(n));
-        if (!(count >= 3) || !isFinite(count)) return [];
-        if (count === 11) {
-          return ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
-        }
-        var last = count - 1;
-        var total = count - 2;
-        var out = [];
-        var seen = {};
-        var cum = 0;
-        for (var i = 0; i < count; i++) {
-          if (i > 0) cum += (i === 1 || i === last) ? 0.5 : 1;
-          var raw = 50 + (900 * cum) / total;
-          var name = String(Math.round(raw));
-          while (seen[name]) {
-            raw += 1;
-            name = String(Math.round(raw));
-          }
-          seen[name] = true;
-          out.push(name);
-        }
-        return out;
-      }
-
-      /** → true when Color tokens were rewritten from Token count. */
-      function maybeFillColorsStepsFromCount(values) {
-        if (!values) return false;
-        var raw = values.tokenCount;
-        if (raw === '' || raw == null) return false;
-        var names = materialiseColorsStepNames(raw);
-        if (!names.length) return false;
-        var next = names.join(', ');
-        var prev = String(values.steps == null ? '' : values.steps);
-        if (prev.replace(/\s+/g, '') === next.replace(/\s+/g, '')) return false;
-        values.steps = next;
-        return true;
       }
 
       function updateConfigPreviewVisibility() {
@@ -4658,7 +4623,8 @@
       }
 
       /**
-       * **One candidate and nothing here: go there.** **Several, or already on a set: links under Group.**
+       * Sets under this collection that are not the current Group — links under the field.
+       * Load is a click (`adoptGroupCandidate`); nothing auto-writes Group.
        */
       function offerDetectedGroup(found) {
         var candidates = (found && found.candidates) || [];
@@ -4668,48 +4634,15 @@
         }
 
         var hasSet = found && (found.source === 'recorded' || found.source === 'recognised');
-        // Pointing at a set already, or a real choice between groups: list them; never guess.
-        if (hasSet || candidates.length > 1) {
-          renderGroupCandidates(candidates);
-          if (!hasSet) {
-            lastAutoImport.note = 'No ' + configPreviewDomainLabel() +
-              ' set under this group. Choose one under Group.';
-            setAutoImportNote(lastAutoImport.note);
-          }
-          // On a miss with several candidates, short-circuit the miss wipe. On a hit, return false so
-          // the fill path (or detect-only mode ordering) continues as before.
-          return !hasSet;
+        renderGroupCandidates(candidates);
+        if (!hasSet) {
+          lastAutoImport.note = 'No ' + configPreviewDomainLabel() +
+            ' set under this group. Choose one under Group, or keep this name to create a new one.';
+          setAutoImportNote(lastAutoImport.note);
         }
-
-        var target = candidates[0].group;
-        var where = fileModes.collection || '';
-        var key = where + '\u0000' + target;
-        if (groupsAdopted[key]) return false;
-        groupsAdopted[key] = true;
-
-        var api = window.CodeFigConfigUI;
-        if (!api) return false;
-        var schema;
-        try {
-          schema = api.parse(currentConfigBlock(), currentPanelSpecText());
-        } catch (e) {
-          return false;
-        }
-        var groupRow = panelLeafRows(schema).filter(function (r) {
-          return r.type === 'field' && r.name === 'group';
-        })[0];
-        if (!groupRow) return false;
-
-        clearGroupCandidates();
-        writeConfigBlockText(api.serialize(schema, { group: target }), 'group-detected');
-        var detail = foundationGroupDetail(candidates[0]);
-        lastAutoImport.note = 'No ' + configPreviewDomainLabel() + ' set under that group. This ' +
-          'collection has one under ' + (target || 'no group') +
-          (detail ? ' (' + detail + ')' : '') + ', so Group was set to it.';
-        setAutoImportNote(lastAutoImport.note);
-        // The address changed, so ask again — the ordinary load, at the new address.
-        scheduleAutoImport();
-        return true;
+        // Miss with candidates: short-circuit so the miss path can reset for a new group.
+        // Hit: return false so the fill path continues.
+        return !hasSet;
       }
 
       /**
@@ -4740,25 +4673,23 @@
         if (!found || !found.config ||
             (found.source !== 'recorded' && found.source !== 'recognised')) {
           var offered = offerDetectedGroup(found);
-          // **Modes follow the collection even when group detection short-circuits.** An offer returns
-          // before a fill — several candidate groups, or one group written and a second import queued —
-          // but the chips must still leave placeholder state the moment `fileModes` arrives.
+          // **Modes follow the collection even when group detection short-circuits.**
           //
-          // Miss: keep authored fields. Do not write `pendingPristine` — that wiped steps/curves/seeds
-          // whenever Collection or Group changed to an address with no stored set. `pendingPristine`
-          // remains only as the fill base for a successful load (cleared here so a later miss cannot
-          // apply a stale prep).
+          // Miss after an address change: reset to defaults for this Collection + Group so a new
+          // name (e.g. Neutral after Blue) does not keep the previous set's strip and curves.
+          // Load of an existing set is only via a candidate click (`adoptGroupCandidate`).
+          var resetBase = pendingPristine;
           pendingPristine = null;
           addressAlreadyReset = false;
+          if (resetBase) {
+            rememberCurveBaselines(null);
+            _modeFitted = {};
+            writeConfigBlockText(resetBase, 'auto-import:miss-reset');
+          }
           var onMiss = orderConfigModesToFile();
           // No file modes yet (new collection, or read before anything exists): still unlock with Value.
           if (!fileModes.found) ensureStarterModesInBlock();
           if (offered) return;
-          // **The modes are still read, because they were never the manifest's to give.** This branch used
-          // to return here, and choosing a collection from the dropdown is exactly what reaches it — so a
-          // five-mode collection with no recorded set left the panel on the script's three modes, and the
-          // only pass that aligned them was the probe that runs when a script opens. Two paths, one of
-          // which quietly did less than the other.
           var missNote = nothingReadNote(found);
           var addedNote = insertedModesNote(onMiss.added, onMiss.dropped);
           setAutoImportNote(
@@ -7198,9 +7129,7 @@
                     // (`fileColorValues`/`_curveRamps`) and reschedules the preview — the fill below it
                     // stays exactly what it was, so nothing here can overwrite what the person saved.
                     rememberReadResult(data.autoImport);
-                    // Read-only half: point the panel at a grid if this address holds none, and
-                    // otherwise leave everything exactly as the person left it — bar the modes, which
-                    // are a view of the collection rather than something the person set here.
+                    // Read-only half: list candidate groups under Group; load only on click.
                     var offered = offerDetectedGroup(data.autoImport);
                     var onProbe = orderConfigModesToFile();
                     if (!offered) {
