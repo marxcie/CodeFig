@@ -5,9 +5,10 @@
  * part of the panel nobody can judge. It uses `calculateColumnWidth` — the generator's own function — so
  * the preview and the run cannot disagree about a column width, which is the whole point of a preview.
  *
- * The frame is the fixture for the *shape*, not the numbers: at 1440/80/24/12 it draws 716 wide with
- * 40px margins, 12px gaps and 42px columns, which is 1440 at 49.7% — so the percentage the Total line
- * reports is the scale the diagram is drawn at.
+ * The drawing fits the preview column: the largest mode is 100% of that column, and every other mode is
+ * `width / maxWidth` of it. A non-interactive ruler marks every mode by name + width above the
+ * track; ticks show on the grey remainder and sit under the active grid. The Total/values column
+ * keeps a fixed min width across modes so the bar does not reflow when switching tabs.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -35,23 +36,23 @@ function load() {
 
 const lib = load();
 const DESKTOP = { name: 'desktop', containerWidth: 1440, columns: 12, gap: 24, padding: 80 };
+const MOBILE = { name: 'mobile', containerWidth: 375, columns: 4, gap: 16, padding: 20 };
 
-test('the drawing is locked at half size, in real pixels', () => {
-  // **Changed on Márton's report, and the old expectation was the bug.** The diagram was drawn in
-  // percentages of whatever width the panel happened to have, while the percentage it *printed* came
-  // from a hardcoded 716 — so the caption read 41% on his window, the drawing scaled when he dragged the
-  // panel, and neither number was the truth. This test asserted that 716, which is how it survived.
-  //
-  // One fixed scale now: half, in pixels. A ruler on the screen agrees with the number beside the bar.
-  const m = lib.gridPreviewModel(DESKTOP);
-  assert.equal(m.ok, true);
-  assert.equal(m.content, 1280);
-  assert.equal(Math.round(m.colWidth * 100) / 100, 84.67);
+test('the drawing scales to the largest mode, not a fixed half', () => {
+  // Largest alone fills the column (scale 1). An 80 margin is 80/1440 of the diagram — not 40px.
+  const alone = lib.gridPreviewModel(DESKTOP);
+  assert.equal(alone.ok, true);
+  assert.equal(alone.content, 1280);
+  assert.equal(Math.round(alone.colWidth * 100) / 100, 84.67);
+  assert.equal(alone.scale, 1);
+  assert.equal(alone.maxWidth, 1440);
 
-  assert.equal(m.scale, 0.5, 'and it does not depend on how wide the panel is');
-  assert.equal(m.margin * m.scale, 40, 'an 80 margin draws 40px');
-  assert.equal(m.gap * m.scale, 12, 'a 24 gap draws 12px');
-  assert.equal(Math.round(m.colWidth * m.scale * 100) / 100, 42.33);
+  // Beside a wider sibling, the same mode is still full; the smaller one is a fraction.
+  const desk = lib.gridPreviewModel(DESKTOP, 1440);
+  const mob = lib.gridPreviewModel(MOBILE, 1440);
+  assert.equal(desk.scale, 1);
+  assert.equal(Math.round(mob.scale * 1000) / 1000, Math.round((375 / 1440) * 1000) / 1000);
+  assert.equal(lib.gridPreviewMaxWidth([DESKTOP, MOBILE]), 1440);
 });
 
 test('the last span is the content width, for any input', () => {
@@ -63,7 +64,7 @@ test('the last span is the content width, for any input', () => {
     { containerWidth: 375, columns: 4, gap: 16, padding: 20 },
     { containerWidth: 1000, columns: 7, gap: 13, padding: 31 }
   ]) {
-    const m = lib.gridPreviewModel(mode, 716);
+    const m = lib.gridPreviewModel(mode);
     const last = m.spans[m.spans.length - 1].span;
     assert.equal(Math.round(last * 1000) / 1000, m.content,
       'span(N) must equal the content width for ' + JSON.stringify(mode));
@@ -76,7 +77,7 @@ test('a config that cannot be drawn says so rather than drawing zeros', () => {
     { containerWidth: 1440, columns: 0, gap: 24, padding: 80 },
     { containerWidth: 100, columns: 12, gap: 24, padding: 80 }
   ]) {
-    assert.equal(lib.gridPreviewModel(bad, 716).ok, false, JSON.stringify(bad) + ' should not draw');
+    assert.equal(lib.gridPreviewModel(bad).ok, false, JSON.stringify(bad) + ' should not draw');
   }
 });
 
@@ -84,14 +85,17 @@ test('the markup carries the proportions, and is grey until there is a collectio
   const config = { collectionName: 'Responsive System', group: 'Grid', modes: [DESKTOP] };
   const html = lib.gridPreviewHtml(config, 'grid', 'desktop');
 
-  assert.match(html, /Total: <b>1440<\/b> \(50%\)/);
+  assert.match(html, /Total: <b>1440<\/b>/);
+  assert.equal(html.indexOf('(100%)'), -1, 'no percentage beside Total');
+  assert.equal(html.indexOf('Scaled down'), -1);
   assert.match(html, /col-12: <b>1280<\/b>/);
-  // Pixels, at half. An 80 margin is 40px wide whatever the panel is doing.
-  assert.match(html, /class="grid-preview-margin" style="width:40px"/);
-  assert.match(html, /class="grid-preview-col" style="width:42\.33px"/);
-  assert.match(html, /class="grid-preview-bar" style="margin-left:40px;width:640px"/,
-    'and a col-6 span of 1280/2 sits inside the margin');
-  assert.equal(html.indexOf('%"'), -1, 'nothing in the drawing is relative any more');
+  // Largest (only) mode: active fill is 100% of the ruler; bands are % of the mode.
+  assert.match(html, /class="grid-preview-ruler-active" style="width:100%"/);
+  assert.match(html, /class="grid-preview-margin" style="width:5\.5556%"/);
+  assert.match(html, /class="grid-preview-col" style="width:5\.8796%"/);
+  // Full content (col-12) is 1280/1440 of the column, inset by the margin share.
+  assert.match(html, /class="grid-preview-bar" style="margin-left:5\.5556%;width:88\.8889%"/);
+  assert.equal(html.indexOf('px"'), -1, 'nothing in the drawing is absolute pixels');
   assert.equal((html.match(/grid-preview-col/g) || []).length, 12);
   assert.equal((html.match(/grid-preview-gap/g) || []).length, 11);
   assert.equal((html.match(/grid-preview-bar/g) || []).length, 12);
@@ -107,10 +111,42 @@ test('the markup carries the proportions, and is grey until there is a collectio
   assert.equal(incomplete, '', 'width and columns are required before a preview appears');
 });
 
+test('a smaller mode draws as a fraction of the largest, with named ruler marks', () => {
+  const config = {
+    collectionName: 'RS',
+    modes: [DESKTOP, MOBILE]
+  };
+  const mobile = lib.gridPreviewHtml(config, 'grid', 'mobile');
+  // 375/1440 ≈ 26.0417% of the column — always fits, and smaller than desktop beside it.
+  assert.match(mobile, /Total: <b>375<\/b>/);
+  assert.equal(mobile.indexOf('Scaled down'), -1);
+  assert.match(mobile, /class="grid-preview-ruler-active" style="width:26\.0417%"/);
+  assert.match(mobile, /grid-preview-ruler-tick is-active" style="left:26\.0417%"/);
+  assert.match(mobile, /grid-preview-ruler-tick" style="left:100%"/);
+  assert.match(mobile, /grid-preview-ruler-mark is-active" style="left:26\.0417%"/);
+  assert.match(mobile, /class="grid-preview-ruler-name">mobile</);
+  assert.match(mobile, /class="grid-preview-ruler-name">desktop</);
+  assert.match(mobile, /class="grid-preview-ruler-size">375</);
+  assert.match(mobile, /class="grid-preview-ruler-size">1440</);
+  // Meta column locked to the longest Total/col-N line across modes so the bar does not reflow.
+  assert.match(mobile, /--grid-preview-meta-ch:\d+/);
+  const mobileCh = Number(/--grid-preview-meta-ch:(\d+)/.exec(mobile)[1]);
+  const desktop = lib.gridPreviewHtml(config, 'grid', 'desktop');
+  const desktopCh = Number(/--grid-preview-meta-ch:(\d+)/.exec(desktop)[1]);
+  assert.equal(mobileCh, desktopCh, 'meta column width is stable across modes');
+  assert.equal((mobile.match(/grid-preview-col/g) || []).length, 4);
+
+  assert.match(desktop, /Total: <b>1440<\/b>/);
+  assert.match(desktop, /class="grid-preview-ruler-active" style="width:100%"/);
+  // Marker positions are the same percentages whether mobile or desktop is open.
+  assert.match(desktop, /style="left:26\.0417%"/);
+  assert.match(desktop, /style="left:100%"/);
+});
+
 test('the preview follows the mode it is asked for', () => {
   const config = {
     collectionName: 'RS',
-    modes: [DESKTOP, { name: 'mobile', containerWidth: 375, columns: 4, gap: 16, padding: 20 }]
+    modes: [DESKTOP, MOBILE]
   };
   assert.match(lib.gridPreviewHtml(config, 'grid', 'mobile'), /Total: <b>375<\/b>/);
   assert.equal((lib.gridPreviewHtml(config, 'grid', 'mobile').match(/grid-preview-col/g) || []).length, 4);

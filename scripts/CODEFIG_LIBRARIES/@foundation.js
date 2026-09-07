@@ -60,38 +60,60 @@
 //
 //    The diagram and the Total line are the first row; the twelve span rows follow.
 //
-//    8. Every width is a **proportion of the total**, read from the frame: at 1440/80/24/12 the
-//    frame draws 716 wide with 40px margins, 12px gaps and 42px columns — which is 1440 at 49.7%,
-//    exactly the "(50%)" the Total line reports. So the scale is not decoration, it is the
-//    diagram, and the inline widths the renderer writes come straight from the arithmetic. */
+//    8. Every width is a **proportion of the largest mode**, fitted to the preview column: the
+//    widest viewport is 100% of the content area, and every other mode is `width / maxWidth` of
+//    that. Name + width sit **above** the track; ticks continue through the grey remainder and
+//    sit under the active grid so they never paint over margins or columns. The right-hand
+//    Total/values column keeps a fixed min width across modes so the bar does not reflow. */
 // .grid-preview {
 //   display: grid;
-//   grid-template-columns: 1fr auto;
+//   grid-template-columns: minmax(0, 1fr) max-content;
 //   column-gap: var(--space-xl);
 //   row-gap: 6px;
 //   width: 100%;
 //   align-items: center;
 // }
 //
-// .grid-preview-diagram {
+// /* Viewport ruler: every mode as a named tick on the largest-mode scale. Not interactive. */
+// .grid-preview-ruler {
 //   grid-column: 1;
-//   display: flex;
-//   height: 44px;
+//   position: relative;
+//   /* Name + width + 4px under them, then the track. */
+//   padding-top: 30px;
 //   margin-bottom: 6px;
+//   pointer-events: none;
 // }
 //
-// /* **The drawing is in real pixels now, so it can be wider than the panel.** Half of a 1920 grid is
-//    960, and a panel narrower than that must scroll rather than squash — squashing is what made the
-//    old percentage drawing unmeasurable in the first place. */
-// .grid-preview {
-//   overflow-x: auto;
+// .grid-preview-ruler-track {
+//   position: relative;
+//   height: 28px;
+//   border-radius: var(--radius-sm);
+//   background: rgba(128, 128, 128, 0.18);
+//   overflow: hidden;
+// }
+//
+// /* Opaque so a through-tick never shows in gaps. */
+// .grid-preview-ruler-active {
+//   position: absolute;
+//   left: 0;
+//   top: 0;
+//   bottom: 0;
+//   z-index: 2;
+//   background: var(--bg-primary, #2c2c2e);
+// }
+//
+// .grid-preview-diagram {
+//   display: flex;
+//   width: 100%;
+//   height: 100%;
 // }
 //
 // /* A filled band, not a dashed edge. The dashed guides still run down the spans area at the
 //    content edges — the frame has both — but the band is the margin. */
 // /* `flex: 0 0 auto` because these widths *are* the drawing: a flex item that shrinks turns a
 //    proportional diagram into an approximate one, and at a narrow width the margin band rounds
-//    away to nothing — which is exactly how it went missing. */
+//    away to nothing — which is exactly how it went missing. Percentages are of the diagram (itself
+//    a % of the column), so they stay exact without scrolling. */
 // .grid-preview-margin,
 // .grid-preview-col,
 // .grid-preview-gap {
@@ -102,10 +124,65 @@
 // .grid-preview-col { background: #17976a; }
 // .grid-preview-gap { background: transparent; }
 //
+// /* Through the track only — under the active grid, so grey shows the line and green/purple do not. */
+// .grid-preview-ruler-tick {
+//   position: absolute;
+//   top: 0;
+//   bottom: 0;
+//   z-index: 1;
+//   width: 0;
+//   border-left: 1px solid rgba(80, 80, 85, 0.9);
+// }
+//
+// .grid-preview-ruler-tick.is-active {
+//   border-left-color: rgba(200, 200, 210, 0.95);
+// }
+//
+// /* Label band above the track: name + width, tick ending at the bar. */
+// .grid-preview-ruler-mark {
+//   position: absolute;
+//   top: 0;
+//   height: 30px;
+//   width: 0;
+//   border-left: 1px solid rgba(80, 80, 85, 0.9);
+// }
+//
+// .grid-preview-ruler-mark.is-active {
+//   border-left-color: rgba(200, 200, 210, 0.95);
+// }
+//
+// .grid-preview-ruler-label {
+//   position: absolute;
+//   right: 5px;
+//   bottom: 4px;
+//   display: flex;
+//   flex-direction: column;
+//   align-items: flex-end;
+//   gap: 0;
+//   white-space: nowrap;
+//   text-align: right;
+//   font-size: var(--font-size-small);
+//   line-height: 1.15;
+//   opacity: 0.4;
+// }
+//
+// .grid-preview-ruler-mark.is-active .grid-preview-ruler-label {
+//   opacity: 0.9;
+// }
+//
+// .grid-preview-ruler-size {
+//   opacity: 0.85;
+// }
+//
+// /* Fixed across modes — otherwise Total/col-N length changes squeeze the bar when switching tabs. */
+// .grid-preview-total,
+// .grid-preview-value {
+//   min-width: calc(var(--grid-preview-meta-ch, 14) * 1ch);
+// }
+//
 // .grid-preview-total {
 //   grid-column: 2;
-//   align-self: center;
-//   margin-bottom: 6px;
+//   align-self: flex-start;
 //   white-space: nowrap;
 // }
 //
@@ -3207,18 +3284,31 @@ function foundationEscapeHtml(text) {
 }
 
 /**
+ * Widest finite `containerWidth` among modes — the preview column is 100% of this, so every mode
+ * fits and smaller viewports stay proportionally smaller when you switch tabs.
+ */
+function gridPreviewMaxWidth(modes) {
+  var max = 0;
+  if (!Array.isArray(modes)) return max;
+  for (var i = 0; i < modes.length; i++) {
+    var w = Number(modes[i] && modes[i].containerWidth);
+    if (isFinite(w) && w > max) max = w;
+  }
+  return max;
+}
+
+/**
  * One mode's grid, as numbers.
  *
  * `calculateColumnWidth` is the generator's own function, so the preview and the run cannot disagree
  * about a column width — which is the whole point of a preview.
  *
- * → { ok, width, columns, gap, margin, content, colWidth, spans: [{ n, span }], scale }
+ * `maxWidth` is the largest mode in the config (defaults to this mode's width). `scale` is
+ * `width / maxWidth` — the fraction of the preview column this mode draws at.
+ *
+ * → { ok, width, columns, gap, margin, content, colWidth, spans: [{ n, span }], scale, maxWidth }
  */
-function gridPreviewScale() {
-  return 0.5;
-}
-
-function gridPreviewModel(mode) {
+function gridPreviewModel(mode, maxWidth) {
   var width = Number(mode && mode.containerWidth);
   var columns = Number(mode && mode.columns);
   var gap = Number(mode && mode.gap);
@@ -3235,15 +3325,15 @@ function gridPreviewModel(mode) {
   for (var n = 1; n <= columns; n++) {
     spans.push({ n: n, span: n * colWidth + (n - 1) * gap });
   }
+  var ref = Number(maxWidth);
+  if (!isFinite(ref) || ref < width) ref = width;
   return {
     ok: true,
     width: width, columns: columns, gap: gap, margin: margin,
     content: content, colWidth: colWidth, spans: spans,
-    // **Locked at half size, in real pixels.** It used to be drawn in percentages of whatever width
-    // the panel happened to have, while the percentage it *printed* came from a hardcoded 716 — so the
-    // caption said 41%, the drawing scaled with the window, and neither was the truth. A preview whose
-    // scale depends on how wide you dragged the panel cannot be measured against anything.
-    scale: gridPreviewScale()
+    maxWidth: ref,
+    // Fraction of the preview column — largest mode is 1, everything else is smaller.
+    scale: width / ref
   };
 }
 
@@ -3252,10 +3342,60 @@ function gridPreviewNumber(value) {
   return Math.abs(value - Math.round(value)) < 0.01 ? String(Math.round(value)) : String(Math.round(value * 10) / 10);
 }
 
+/** Percent of a reference width (4 dp) — enough that margin + columns + gaps still sum to ~100%. */
+function gridPreviewPct(value, ref) {
+  if (!isFinite(ref) || ref <= 0) return 0;
+  return Math.round((value / ref) * 1000000) / 10000;
+}
+
+/**
+ * Modes with a drawable width, sorted narrow → wide — the ruler's ticks.
+ * → [{ name, width }]
+ */
+function gridPreviewRulerModes(modes) {
+  var out = [];
+  if (!Array.isArray(modes)) return out;
+  for (var i = 0; i < modes.length; i++) {
+    var w = Number(modes[i] && modes[i].containerWidth);
+    if (!isFinite(w) || w <= 0) continue;
+    out.push({
+      name: modes[i] && typeof modes[i].name === 'string' ? modes[i].name : '',
+      width: w
+    });
+  }
+  out.sort(function (a, b) { return a.width - b.width; });
+  return out;
+}
+
+/**
+ * Longest Total / col-N line across every drawable mode — keeps the meta column from resizing
+ * when switching tabs (which would squeeze the ruler and move every marker).
+ */
+function gridPreviewMetaMinCh(modes) {
+  var longest = 10;
+  if (!Array.isArray(modes)) return longest;
+  for (var i = 0; i < modes.length; i++) {
+    var model = gridPreviewModel(modes[i]);
+    if (!model.ok) continue;
+    var total = 'Total: ' + gridPreviewNumber(model.width);
+    if (total.length > longest) longest = total.length;
+    for (var s = 0; s < model.spans.length; s++) {
+      var line = 'col-' + (s + 1) + ': ' + gridPreviewNumber(model.spans[s].span);
+      if (line.length > longest) longest = line.length;
+    }
+  }
+  return longest;
+}
+
 /**
  * The preview for one mode. Grey until there is somewhere to write — the Start and New frames are grey
  * even with modes set, so grey is about whether a collection has been chosen, not whether fields are
  * filled.
+ *
+ * Drawn in percentages of the largest mode's width, so the diagram always fits the preview column:
+ * the widest viewport is 100%, and every other mode is proportionally smaller. A non-interactive
+ * ruler marks every mode by name + width above the track; ticks cross the grey remainder and sit under
+ * the active grid so they never paint over margins or columns.
  */
 function gridPreviewHtml(config, domain, modeName) {
   var inner = (config && config.config) || config || {};
@@ -3271,37 +3411,69 @@ function gridPreviewHtml(config, domain, modeName) {
   }
   if (!mode) mode = modes[0] || null;
 
-  var model = gridPreviewModel(mode);
+  var maxWidth = gridPreviewMaxWidth(modes);
+  var model = gridPreviewModel(mode, maxWidth);
   // **Hide until width and columns are set** — a grey placeholder diagram reads as a result.
   if (!model.ok) return '';
 
-  var out = ['<div class="grid-preview">'];
+  var metaCh = gridPreviewMetaMinCh(modes);
+  var out = ['<div class="grid-preview" style="--grid-preview-meta-ch:' + metaCh + '">'];
   var columns = model.columns;
-  // Pixels, at exactly half. `col-1: 84` on a 1440 grid draws 42px wide, and a ruler on the screen
-  // agrees with the number beside it.
-  var px = function (value) { return Math.round(value * gridPreviewScale() * 100) / 100; };
+  // Of the mode (diagram children sum to 100% of the diagram).
+  var ofMode = function (value) { return gridPreviewPct(value, model.width); };
+  // Of the largest mode (bars, guides, and the ruler share the preview column).
+  var ofMax = function (value) { return gridPreviewPct(value, model.maxWidth); };
 
-  out.push('<div class="grid-preview-diagram">');
-  out.push('<div class="grid-preview-margin" style="width:' + px(model.margin) + 'px"></div>');
-  for (var c = 0; c < columns; c++) {
-    if (c) out.push('<div class="grid-preview-gap" style="width:' + px(model.gap) + 'px"></div>');
-    out.push('<div class="grid-preview-col" style="width:' + px(model.colWidth) + 'px"></div>');
+  // Ruler: name + width above the track; through-ticks in the track sit under the active grid
+  // so they show on grey only. The mark's own border is the line beside the label, ending at the bar.
+  out.push('<div class="grid-preview-ruler">');
+
+  var marks = gridPreviewRulerModes(modes);
+  var openName = mode && typeof mode.name === 'string' ? String(mode.name).toLowerCase() : '';
+  for (var n = 0; n < marks.length; n++) {
+    var labeled = marks[n];
+    var markClass = 'grid-preview-ruler-mark';
+    if (openName && String(labeled.name).toLowerCase() === openName) markClass += ' is-active';
+    out.push('<div class="' + markClass + '" style="left:' + ofMax(labeled.width) + '%">');
+    out.push('<span class="grid-preview-ruler-label">');
+    if (labeled.name) {
+      out.push('<span class="grid-preview-ruler-name">' +
+        foundationEscapeHtml(labeled.name) + '</span>');
+    }
+    out.push('<span class="grid-preview-ruler-size">' +
+      gridPreviewNumber(labeled.width) + '</span>');
+    out.push('</span></div>');
   }
-  out.push('<div class="grid-preview-margin" style="width:' + px(model.margin) + 'px"></div>');
-  out.push('</div>');
+
+  out.push('<div class="grid-preview-ruler-track">');
+  for (var m = 0; m < marks.length; m++) {
+    var mark = marks[m];
+    var isActive = openName && String(mark.name).toLowerCase() === openName;
+    var tickClass = 'grid-preview-ruler-tick' + (isActive ? ' is-active' : '');
+    out.push('<div class="' + tickClass + '" style="left:' + ofMax(mark.width) + '%"></div>');
+  }
+
+  out.push('<div class="grid-preview-ruler-active" style="width:' + ofMax(model.width) + '%">');
+  out.push('<div class="grid-preview-diagram">');
+  out.push('<div class="grid-preview-margin" style="width:' + ofMode(model.margin) + '%"></div>');
+  for (var c = 0; c < columns; c++) {
+    if (c) out.push('<div class="grid-preview-gap" style="width:' + ofMode(model.gap) + '%"></div>');
+    out.push('<div class="grid-preview-col" style="width:' + ofMode(model.colWidth) + '%"></div>');
+  }
+  out.push('<div class="grid-preview-margin" style="width:' + ofMode(model.margin) + '%"></div>');
+  out.push('</div></div></div></div>');
 
   out.push('<div class="grid-preview-total">Total: <b>' +
-    gridPreviewNumber(model.width) + '</b> (' +
-    Math.round(gridPreviewScale() * 100) + '%)</div>');
+    gridPreviewNumber(model.width) + '</b></div>');
 
-  var inset = px(model.margin);
-  out.push('<div class="grid-preview-guides" style="margin-left:' + inset + 'px;width:' +
-    px(model.content) + 'px"></div>');
+  var inset = ofMax(model.margin);
+  out.push('<div class="grid-preview-guides" style="margin-left:' + inset + '%;width:' +
+    ofMax(model.content) + '%"></div>');
 
   for (var r = 0; r < columns; r++) {
     var span = model.spans[r];
-    out.push('<div class="grid-preview-bar" style="margin-left:' + inset + 'px;width:' +
-      px(span.span) + 'px"></div>');
+    out.push('<div class="grid-preview-bar" style="margin-left:' + inset + '%;width:' +
+      ofMax(span.span) + '%"></div>');
     out.push('<div class="grid-preview-value">col-' + (r + 1) + ': <b>' +
       gridPreviewNumber(span.span) + '</b></div>');
   }
@@ -3310,1225 +3482,4 @@ function gridPreviewHtml(config, domain, modeName) {
   return out.join('');
 }
 
-/**
- * Is this margin and gap clean for a mode — does its column width come out whole?
- *
- * One condition. `colWidth` is the only derived value in a grid, so it is the only one that can come out
- * fractional; with a whole `colWidth` and a whole gap every span is whole automatically, so there is
- * nothing more to test. (An earlier version also checked halves, thirds and quarters. They inherit.)
- */
-function gridDivisionIsClean(mode, margin, gap) {
-  var width = Number(mode && mode.containerWidth);
-  var columns = Number(mode && mode.columns);
-  if (!isFinite(width) || !isFinite(columns) || columns <= 0) return false;
-  var content = width - 2 * margin;
-  if (content <= 0) return false;
-  var colWidth = (content - (columns - 1) * gap) / columns;
-  return colWidth > 0 && Math.abs(colWidth - Math.round(colWidth)) < 1e-9;
-}
-
-/** The spans a card displays: `col-1`, the halfway span, and the full span. Derived, never hardcoded. */
-function gridCardSpans(mode) {
-  var model = gridPreviewModel(mode);
-  if (!model.ok) return [];
-  var n = model.columns;
-  var wanted = [1, n % 2 === 0 ? n / 2 : Math.ceil(n / 2), n];
-  var seen = {};
-  var out = [];
-  for (var i = 0; i < wanted.length; i++) {
-    var k = wanted[i];
-    if (k < 1 || k > n || seen[k]) continue;
-    seen[k] = true;
-    out.push({ n: k, span: model.spans[k - 1].span });
-  }
-  return out;
-}
-
-/**
- * The suggestions section.
- *
- * **Only the search is missing.** The card for the *current* configuration is drawn from real numbers —
- * its spans by the same arithmetic the preview uses, its badges by the clean test above — so the layout
- * can be judged without inventing anything. Finding *alternative* margin and gap pairs is the pass-2
- * piece, and the section says so rather than showing plausible cards nobody computed.
- *
- * Selected means *currently applied*, and it is computed from the values rather than remembered.
- */
-/**
- * How round a number is: divisible by 8 beats 4 beats 2 beats anything.
- *
- * The third tie-break, and the least mathematical thing here on purpose. `margin 79 · gap 26` is
- * exactly as clean as `margin 80 · gap 24` — the arithmetic cannot tell them apart, and nobody wants
- * a 79px margin. Free numbers stay allowed, as Márton decided; they rank last among equals rather
- * than being excluded.
- */
-function gridRoundness(n) {
-  var v = Math.abs(Number(n));
-  if (!isFinite(v)) return 0;
-  if (v % 8 === 0) return 3;
-  if (v % 4 === 0) return 2;
-  if (v % 2 === 0) return 1;
-  return 0;
-}
-
-/** The range the search covers, stated so the empty result can name it. */
-function gridSearchRadius() {
-  return 24;
-}
-
-/**
- * Whole margin and gap pairs that divide cleanly, ranked.
- *
- * The search varies **whole** margins and **whole** gaps around the mode's current values, which is
- * why it can never emit the one case that would break the definition of clean: a fractional gap. See
- * `gridDivisionIsClean` — clean means `colWidth` is a whole number and nothing else, because every
- * span inherits from it.
- *
- * **One mode: the one you are looking at.** Márton removed the per-mode badges — *"showing values for
- * other viewports is confusing"* — and that removes the ranking's first level with them. A card that
- * claimed to be clean for Tablet while you stood in Desktop was answering a question nobody had asked,
- * and it outranked the pair actually in the fields.
- *
- * So two levels, each breaking ties in the one above:
- *   **a.** how little it moves, ascending — `|m - m₀| + |g - g₀|`, so a 1px change beats a 12px one;
- *   **b.** roundness, descending, as the tie-break.
- *
- * And the current pair needs no special case again: it moves zero pixels, so it lands first by (a).
- * That was plan 18's original claim, false while a mode-count level sat above it, and true now — which
- * is worth noticing, because the pin that was added to work around it is now dead weight and gone.
- * If the current pair is *not* clean, nothing is selected: a real state, and the list is what would be.
- *
- * Returns the whole answer including what it searched and how many it found, because a capped list
- * that does not say it was capped reads as "this is all there is".
- */
-function gridSuggestions(modes, modeName, cap) {
-  var list = Array.isArray(modes) ? modes : [];
-  var mode = null;
-  var i;
-  for (i = 0; i < list.length; i++) {
-    if (!modeName || String(list[i].name).toLowerCase() === String(modeName).toLowerCase()) {
-      mode = list[i];
-      break;
-    }
-  }
-  if (!mode) mode = list[0] || null;
-
-  var answer = {
-    mode: mode ? mode.name : null, ok: false, current: null, range: null,
-    found: 0, shown: [], cap: cap || 6
-  };
-  if (!mode) return answer;
-
-  var m0 = Number(mode.padding);
-  var g0 = Number(mode.gap);
-  var width = Number(mode.containerWidth);
-  var columns = Number(mode.columns);
-  if (!isFinite(m0) || !isFinite(g0) || !isFinite(width) || !isFinite(columns) || columns <= 0) {
-    return answer;
-  }
-  answer.ok = true;
-  answer.current = {
-    margin: m0, gap: g0, clean: gridDivisionIsClean(mode, m0, g0)
-  };
-
-  var radius = gridSearchRadius();
-  var mFrom = Math.max(0, Math.floor(m0) - radius);
-  var mTo = Math.floor(m0) + radius;
-  var gFrom = Math.max(0, Math.floor(g0) - radius);
-  var gTo = Math.floor(g0) + radius;
-  answer.range = { marginFrom: mFrom, marginTo: mTo, gapFrom: gFrom, gapTo: gTo };
-
-  var hits = [];
-  for (var m = mFrom; m <= mTo; m++) {
-    // A margin that leaves no content is not a grid, whatever it divides into.
-    if (width - 2 * m <= 0) continue;
-    for (var g = gFrom; g <= gTo; g++) {
-      if (!gridDivisionIsClean(mode, m, g)) continue;
-      hits.push({
-        margin: m,
-        gap: g,
-        moved: Math.abs(m - m0) + Math.abs(g - g0),
-        roundness: gridRoundness(m) + gridRoundness(g),
-        selected: m === m0 && g === g0
-      });
-    }
-  }
-
-  hits.sort(function (a, b) {
-    if (a.moved !== b.moved) return a.moved - b.moved;
-    if (b.roundness !== a.roundness) return b.roundness - a.roundness;
-    // Last resort so the order is stable rather than engine-dependent.
-    if (a.margin !== b.margin) return a.margin - b.margin;
-    return a.gap - b.gap;
-  });
-
-  answer.found = hits.length;
-  answer.shown = hits.slice(0, answer.cap).map(function (hit) {
-    // The spans a card shows are this mode's, with the *candidate* values applied — otherwise a card
-    // would advertise numbers belonging to the configuration it is offering to replace.
-    var candidate = {
-      name: mode.name, containerWidth: width, columns: columns, gap: hit.gap, padding: hit.margin
-    };
-    hit.spans = gridCardSpans(candidate);
-    return hit;
-  });
-  return answer;
-}
-
-function gridSuggestionsHtml(config, domain, modeName) {
-  var inner = (config && config.config) || config || {};
-  var modes = Array.isArray(inner.modes) ? inner.modes : [];
-  var answer = gridSuggestions(modes, modeName, 6);
-  if (!answer.ok) return '';
-
-  var out = ['<div class="grid-suggestions">'];
-
-  // **An empty section is indistinguishable from a broken one**, so it says what it searched. The
-  // range is real numbers rather than a shrug: someone who reads "between margin 56 and 104" knows
-  // whether widening it is worth trying, and someone who reads nothing does not know the search ran.
-  if (!answer.shown.length) {
-    var r = answer.range;
-    out.push('<p class="grid-suggestions-empty">No whole-number combination between margin ' +
-      r.marginFrom + '\u2013' + r.marginTo + ' and gap ' + r.gapFrom + '\u2013' + r.gapTo +
-      '. Widen the range by changing the width, or change the column count.</p>');
-    out.push('</div>');
-    return out.join('');
-  }
-
-  answer.shown.forEach(function (hit) {
-    // Every card is clickable, the selected one included: re-applying the same values is a no-op and
-    // cheaper than reasoning about whether to disable it. `data-` carries what a click applies —
-    // margin and gap, to the mode being shown, which is now the only mode a card speaks for.
-    out.push('<button class="grid-suggestion' + (hit.selected ? ' is-selected' : '') +
-      '" type="button" data-suggestion-margin="' + hit.margin +
-      '" data-suggestion-gap="' + hit.gap + '">');
-    out.push('<span class="grid-suggestion-title">margin ' + gridPreviewNumber(hit.margin) +
-      ' \u00b7 gap ' + gridPreviewNumber(hit.gap) + '</span>');
-    out.push('<span class="grid-suggestion-spans">' + hit.spans.map(function (span) {
-      return 'col-' + span.n + ' ' + gridPreviewNumber(span.span);
-    }).join(' \u00b7 ') + '</span>');
-    out.push('</button>');
-  });
-
-  // **Say when the list was cut.** The standing rule about silent truncation: a capped list that does
-  // not mention the cap reads as "this is all there is", and here that would be wrong by hundreds.
-  if (answer.found > answer.shown.length) {
-    out.push('<p class="grid-suggestions-more">Showing ' + answer.shown.length + ' of ' +
-      answer.found + ' whole-number combinations, closest to your values first.</p>');
-  }
-  out.push('</div>');
-  return out.join('');
-}
-
-/** Can this key be written without quotes in a JS object literal? */
-function isPlainConfigKey(key) {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(String(key));
-}
-
-function formatConfigString(value) {
-  return JSON.stringify(String(value));
-}
-
-/** One value, indented for its depth. Arrays of primitives stay on one line. */
-function formatConfigLiteral(value, indent) {
-  var pad = new Array(indent + 1).join('  ');
-  var innerPad = new Array(indent + 2).join('  ');
-  var i;
-
-  if (value === null || value === undefined) return 'null';
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (typeof value === 'string') return formatConfigString(value);
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) return '[]';
-    var allPrimitive = true;
-    for (i = 0; i < value.length; i++) {
-      if (value[i] !== null && typeof value[i] === 'object') allPrimitive = false;
-    }
-    if (allPrimitive) {
-      var inline = [];
-      for (i = 0; i < value.length; i++) inline.push(formatConfigLiteral(value[i], 0));
-      return '[' + inline.join(', ') + ']';
-    }
-    var items = [];
-    for (i = 0; i < value.length; i++) {
-      items.push(innerPad + formatConfigLiteral(value[i], indent + 1));
-    }
-    return '[\n' + items.join(',\n') + '\n' + pad + ']';
-  }
-
-  var keys = Object.keys(value);
-  if (keys.length === 0) return '{}';
-  var lines = [];
-  for (i = 0; i < keys.length; i++) {
-    var key = isPlainConfigKey(keys[i]) ? keys[i] : formatConfigString(keys[i]);
-    lines.push(innerPad + key + ': ' + formatConfigLiteral(value[keys[i]], indent + 1));
-  }
-  return '{\n' + lines.join(',\n') + '\n' + pad + '}';
-}
-
-/**
- * A config as the property list that goes between `// @CONFIG_START` and `// @CONFIG_END` —
- * no outer braces, indented to sit where the shipped block sits.
- *
- * Comments are not regenerated: a pasted block carries the values, not the explanations the
- * shipped script ships with. That is the one thing this loses against copying the block by hand.
- */
-function formatConfigBlock(config) {
-  if (!config || typeof config !== 'object') return '';
-  var keys = Object.keys(config);
-  var lines = [];
-  for (var i = 0; i < keys.length; i++) {
-    var key = isPlainConfigKey(keys[i]) ? keys[i] : formatConfigString(keys[i]);
-    lines.push('  ' + key + ': ' + formatConfigLiteral(config[keys[i]], 1));
-  }
-  return lines.join(',\n');
-}
-
-/** Which script's config block a domain's config belongs in. */
-function foundationDomainScriptName(domain) {
-  if (domain === 'grid') return 'Grid';
-  if (domain === 'spacing') return 'Spacing';
-  if (domain === 'radius') return 'Corner radius';
-  if (domain === 'typography') return 'Typography';
-  return domain;
-}
-
-/**
- * Build a v1 config from what `readFoundation` found: the registry's viewports, and one entry
- * per recorded set. `domains` is the convenience view, one entry per domain; when a file holds
- * two sets of the same domain — "Spacing A" and "Spacing B" — every set is also listed under
- * `sets`, so nothing is lost to the shape.
- */
-function toPortableConfig(foundation, options) {
-  var opts = options || {};
-  var out = emptyPortableConfig();
-  var f = foundation || {};
-  var sets = Array.isArray(f.sets) ? f.sets : [];
-  var i;
-
-  var viewports = Array.isArray(f.viewports) ? f.viewports : [];
-  for (i = 0; i < viewports.length; i++) {
-    out.viewports.push({ key: viewports[i].key, label: viewports[i].label, width: viewports[i].width });
-  }
-  if (typeof f.lineGrid === 'number') out.lineGrid = f.lineGrid;
-
-  if (sets.length > 0) {
-    out.collection = opts.collection != null ? opts.collection : sets[0].collection;
-    out.group = opts.group != null ? opts.group : sets[0].group;
-  }
-
-  // Each slice carries its own collection and group, so two domains written to two different
-  // collections do not need a second shape to describe them.
-  var overflow = false;
-  for (i = 0; i < sets.length; i++) {
-    var set = sets[i];
-    var slice = normaliseDomainSlice(set.config, set.domain);
-    slice.collection = set.collection;
-    slice.group = set.group;
-    if (!out.domains[set.domain]) {
-      out.domains[set.domain] = slice;
-    } else {
-      overflow = true;
-    }
-  }
-
-  // Only a genuine collision needs the set list: two sets of the *same* domain, which is what
-  // "Spacing A" and "Spacing B" in two collections looks like. Nothing is lost to the shape.
-  if (overflow) {
-    out.sets = [];
-    for (i = 0; i < sets.length; i++) {
-      out.sets.push({
-        collection: sets[i].collection,
-        group: sets[i].group,
-        domain: sets[i].domain,
-        config: normaliseDomainSlice(sets[i].config, sets[i].domain)
-      });
-    }
-    out.note = 'This file holds more than one set of the same kind. `domains` shows the first; `sets` lists them all.';
-  }
-
-  return out;
-}
-
-/**
- * v1 as JSON, for the machine-readable routes: a manifest, a canvas text layer, the CLI.
- * Keys that are null carry no information — a reader restores them — so they are left out
- * rather than filling the file with `"lineGrid": null`.
- */
-function serialisePortableConfig(config) {
-  return JSON.stringify(config, function (key, value) {
-    return value === null ? undefined : value;
-  }, 2);
-}
-
-/**
- * Parse a config someone may have hand-edited — in a text layer, or pasted. Never throws, and
- * locates a syntax error by line, because "Unexpected token } at position 412" is not usable.
- */
-function parsePortableConfig(text) {
-  var raw = typeof text === 'string' ? text.trim() : '';
-  if (!raw) {
-    return { config: null, translations: [], warnings: [foundationWarning('config-empty', 'There is nothing to read.')] };
-  }
-
-  var parsed = null;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    var message = (e && e.message) ? e.message : String(e);
-    var match = /position (\d+)/.exec(message);
-    var where = '';
-    if (match) {
-      var position = parseInt(match[1], 10);
-      var before = raw.slice(0, position);
-      var line = before.split('\n').length;
-      var column = position - before.lastIndexOf('\n');
-      var fragment = raw.split('\n')[line - 1] || '';
-      where = ' at line ' + line + ', column ' + column + ': ' + fragment.trim().slice(0, 60);
-    } else {
-      where = ' at line 1';
-    }
-    return {
-      config: null,
-      translations: [],
-      warnings: [foundationWarning('config-unparseable', 'This is not valid JSON' + where + '. Nothing was applied.')]
-    };
-  }
-
-  return normaliseConfig(parsed);
-}
-
-/** One line per translation, for a run's output. */
-function describeConfigTranslations(translations) {
-  var lines = [];
-  for (var i = 0; i < (translations || []).length; i++) {
-    var t = translations[i];
-    lines.push('  ' + t.from + ' → ' + t.to + (t.note ? ' (' + t.note + ')' : ''));
-  }
-  return lines.join('\n');
-}
-
-// ============================================================================
-// CONFIG ON CANVAS, AND ON THE CLIPBOARD
-// ============================================================================
-
-function foundationConfigLayerName(collection) {
-  return 'CodeFig config' + (collection ? ' — ' + collection : '');
-}
-
-/**
- * A font that can actually be loaded. `createText` then `.characters` throws without one, and
- * Inter is only the default until it is not — there is no loadFontAsync anywhere in the DSF
- * scripts today, and this is where that omission would have bitten.
- */
-async function loadConfigFont() {
-  var candidates = [
-    { family: 'Roboto Mono', style: 'Regular' },
-    { family: 'Inter', style: 'Regular' }
-  ];
-  for (var i = 0; i < candidates.length; i++) {
-    try {
-      await figma.loadFontAsync(candidates[i]);
-      return candidates[i];
-    } catch (e) {}
-  }
-  var available = await figma.listAvailableFontsAsync();
-  for (var j = 0; j < available.length; j++) {
-    try {
-      await figma.loadFontAsync(available[j].fontName);
-      return available[j].fontName;
-    } catch (e) {}
-  }
-  return null;
-}
-
-/** Every text node on this page that is one of ours, by stamp first and name second. */
-async function findConfigTextLayers(options) {
-  var opts = options || {};
-  var page = opts.page || figma.currentPage;
-  var found = [];
-  var texts = page.findAllWithCriteria ? page.findAllWithCriteria({ types: ['TEXT'] }) : [];
-  for (var i = 0; i < texts.length; i++) {
-    var node = texts[i];
-    var stamp = '';
-    try {
-      stamp = node.getSharedPluginData(foundationNamespace(), 'config-kind');
-    } catch (e) {}
-    if (stamp === foundationConfigKind() || String(node.name || '').indexOf('CodeFig config') === 0) {
-      found.push(node);
-    }
-  }
-  return found;
-}
-
-/**
- * Park a config on canvas, in a form the reader can take straight back.
- * Updates the existing layer for this collection rather than adding a second one.
- */
-async function writeConfigToTextLayer(config, options) {
-  var opts = options || {};
-  var text = serialisePortableConfig(config);
-  var name = opts.name || foundationConfigLayerName(config && config.collection);
-
-  var font = await loadConfigFont();
-  if (!font) {
-    return { ok: false, node: null, warnings: [foundationWarning('config-no-font', 'No font could be loaded, so the config could not be written to canvas. Copy it to the clipboard instead.')] };
-  }
-
-  var node = null;
-  var existing = await findConfigTextLayers(opts);
-  for (var i = 0; i < existing.length; i++) {
-    if (existing[i].name === name) { node = existing[i]; break; }
-  }
-
-  if (!node) {
-    node = figma.createText();
-    node.name = name;
-    var bounds = figma.viewport.bounds;
-    node.x = Math.round(bounds.x + 40);
-    node.y = Math.round(bounds.y + 40);
-    figma.currentPage.appendChild(node);
-  }
-
-  node.fontName = font;
-  node.characters = text;
-  node.setSharedPluginData(foundationNamespace(), 'config-kind', foundationConfigKind());
-
-  return { ok: true, node: node, warnings: [], bytes: text.length };
-}
-
-/**
- * Read a config back off canvas: the selection if it is a text node, otherwise the page's
- * stamped layers. Two candidates is an ambiguity to report, not a coin to toss.
- */
-async function readConfigFromTextLayer(options) {
-  var opts = options || {};
-  var node = opts.node || null;
-
-  if (!node) {
-    var selection = figma.currentPage.selection || [];
-    for (var i = 0; i < selection.length; i++) {
-      if (selection[i].type === 'TEXT') { node = selection[i]; break; }
-    }
-  }
-  if (!node) {
-    var candidates = await findConfigTextLayers(opts);
-    if (candidates.length === 1) {
-      node = candidates[0];
-    } else if (candidates.length > 1) {
-      var names = candidates.map(function (n) { return n.name; });
-      return {
-        config: null, translations: [], node: null,
-        warnings: [foundationWarning('config-ambiguous', 'This page has ' + candidates.length + ' config layers: ' + names.join(', ') + '. Select the one you mean and run again.', { names: names })]
-      };
-    }
-  }
-  if (!node) {
-    return {
-      config: null, translations: [], node: null,
-      warnings: [foundationWarning('config-not-found', 'No config layer on this page, and nothing selected. Write one first, or select a text layer holding a config.')]
-    };
-  }
-
-  var read = parsePortableConfig(node.characters);
-  return { config: read.config, translations: read.translations, warnings: read.warnings, node: node };
-}
-
-// ============================================================================
-// LOADING A CONFIG FROM THE FILE
-//
-// The one implementation of "read this file's config", shared by the sync button, a run and the
-// CLI. It lives here rather than in src/code.ts because the backend cannot reach a script
-// library: @foundation.js is embedded in ui.html and resolved at run time, and dist/code.js is a
-// separate bundle. A second copy in TypeScript is exactly the duplication 16a removed.
-// ============================================================================
-
-/**
- * Everything a form or a CLI needs to fill a config from the file: the v1 config, and — when a
- * domain is named — that domain in the shape today's scripts read.
- *
- * Reads only. Nothing here writes a variable, a mode, a manifest or the registry.
- */
-async function foundationConfigPayload(domain, options) {
-  var foundation = await readFoundation(options || {});
-  var v1 = toPortableConfig(foundation);
-  var payload = {
-    v1: v1,
-    domain: domain || null,
-    config: domain ? toDomainConfig(v1, domain) : null,
-    warnings: foundation.warnings || []
-  };
-  return payload;
-}
-
-/**
- * What a Collection + Group already holds, in colour — the second `recognised` domain beside Grid's.
- *
- * → `{ found, collection, group, modeName, steps, existing, anchors, hue, chroma, config,
- *      skipped, aliased, declined, notes, missing }`
- *
- * **Reads one mode at a time.** A COLOR variable has a value per mode and a mode is what a panel block is
- * about, so the caller names the mode. Modes that exist in the collection but have no block are not read,
- * not written and not reported as missing — the cross-collection alignment report is where they get looked at.
- *
- * Read-only. Nothing here writes, which is what lets it run on every edit to Collection or Group.
- *
- * ## The rules, and where each came from
- *
- * **An alias is read through and never written.** An alias is a deliberate indirection, and replacing it with
- * a raw value breaks a link silently — so its resolved value is used for the comparison strip and its name
- * goes in `aliased`, for the dry run to list under its own heading. *Unverified against a real file*: the
- * test file has **zero** aliases in 194 COLOR variables, so this path has never run on real data. Kept
- * because it is cheap and correct if one appears; a fixture invented to exercise it would validate nothing.
- *
- * **A non-opaque variable is reported and skipped.** Never composited over an assumed background to get a
- * lightness — that would invent the background — and never overwritten with an opaque value.
- *
- * **A group where more than half the variables are non-opaque is declined outright.** `colors / other` in the
- * test file is `black/1 … black/100` and `white/1 … white/100`: 31 of 33 non-opaque, deliberately, because
- * they are alpha ramps over a fixed hue. Itemising 31 skips is correct and useless, so the group gets one
- * line and no anchors are derived from it.
- *
- * **A name that is not a step is not ours.** Ignored silently: a group may hold anything, and reporting
- * every unrelated variable would make the panel look like it had found problems.
- *
- * **Fewer than three steps is not recognisable.** First, middle and last have to exist for the anchors to
- * come from anywhere. Below that the answer is `found: false`, which is the same path as nothing selected.
- *
- * Stored RGB is treated as **sRGB**. Scoping and hidden-from-publishing are ignored on read.
- */
-async function colorsRecognise(collectionName, group, modeName, index, skipFit) {
-  var answer = {
-    found: false, collection: collectionName || null, group: group == null ? '' : group,
-    modeName: modeName || null, steps: [], existing: [], anchors: null, hue: null, chroma: null,
-    config: null, skipped: [], aliased: [], duplicates: [], declined: null, notes: [],
-    // Nothing is missing from a read any more. The curve used to be — an existing ramp carries no record of
-    // how it was made — but `colorsFitCurve` recovers one to within a lightness point, which is a shape you
-    // can bend rather than a claim about the file.
-    missing: []
-  };
-  if (!collectionName) return answer;
-
-  // **`index`, optional: `{ byId, collections }` built once by a caller reading several modes.** Falls
-  // back to the API-walking path below when absent, so every existing caller keeps working — this
-  // parameter exists for `foundationColorsAutoImport`, which reads the same collection once per mode.
-  var collections = index ? index.collections : await figma.variables.getLocalVariableCollectionsAsync();
-  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
-  if (!collection) return answer;
-
-  // **A named mode that is not in the collection reads nothing.** The fallback to the default mode is only
-  // for a caller that named none.
-  //
-  // This was the other way round, and it was wrong in the way that matters. `foundationColorsAutoImport` asks
-  // for the modes the panel's *blocks* name; against `color - neutral` the blocks were Granite and Moss, and
-  // the collection has Ash, Granite, Bark. Moss fell back to Ash — so `found: true`, and **Ash's hue anchors
-  // were filled into Moss's block** with nothing anywhere saying so. A block for a mode the file does not
-  // have must come back empty, not full of a neighbour's colours.
-  // **The mode is resolved, and a missing one is not reported yet.** A group being an alpha ramp is true of
-  // the *group*, whichever mode you ask about, and it is the more useful thing to say — but the mode check
-  // used to run first, so `colors / other` / `black` came back "the collection has no mode called Granite"
-  // and the decline was unreachable for any collection whose mode names differ from the panel's blocks, which
-  // for a single-mode collection is almost always. So the answer about the group comes first, tested against
-  // whichever mode there is to read.
-  var named = modeName
-    ? (collection.modes.filter(function (m) { return m.name === modeName; })[0] || null)
-    : null;
-  var fallback = collection.modes.filter(function (m) { return m.modeId === collection.defaultModeId; })[0] ||
-    collection.modes[0] || null;
-  var probe = named || fallback;
-  if (!probe) return answer;
-  var mode = named || (modeName ? null : fallback);
-  answer.modeName = (mode || probe).name;
-
-  var prefix = namePrefix(answer.group);
-  var members = [];
-  var ids = collection.variableIds || [];
-  for (var i = 0; i < ids.length; i++) {
-    var variable = index ? index.byId[ids[i]] : await figma.variables.getVariableByIdAsync(ids[i]);
-    if (!variable || variable.resolvedType !== 'COLOR') continue;
-    if (variable.name.indexOf(prefix) !== 0) continue;
-    var tail = variable.name.slice(prefix.length);
-    // Direct children only. A nested name belongs to something else, and a set assembled out of two
-    // depths is not one ramp.
-    if (tail.indexOf('/') !== -1) continue;
-    if (!colorsStepNameOk(tail)) continue;
-    members.push({ step: tail, variable: variable });
-  }
-
-  if (!members.length) return answer;
-
-  // Declined before anything is derived: a group that is mostly alpha is not a lightness ramp, and the
-  // panel says so once rather than skipping its way through it.
-  var nonOpaque = 0;
-  for (var n = 0; n < members.length; n++) {
-    var cell = members[n].variable.valuesByMode[probe.modeId];
-    if (cell && cell.type !== 'VARIABLE_ALIAS' && typeof cell.a === 'number' && cell.a < 1) nonOpaque++;
-  }
-  if (nonOpaque * 2 > members.length) {
-    answer.declined = (answer.group || collectionName) + ' is an alpha ramp (' + nonOpaque + ' of ' +
-      members.length + ' non-opaque). This panel generates lightness ramps and can\'t work on it.';
-    return answer;
-  }
-
-  // Only now: the group is a plausible ramp, and this mode is not in the collection.
-  if (!mode) {
-    answer.notes.push('The collection has no mode called ' + modeName + ', so there is nothing to read for ' +
-      'it. Its values were left alone.');
-    return answer;
-  }
-
-  var seenStep = {};
-  var usable = [];
-  for (var m2 = 0; m2 < members.length; m2++) {
-    var entry = members[m2];
-    if (seenStep[entry.step]) {
-      // Reported, first one kept. Guessing which duplicate was meant is worse than saying there are two.
-      answer.duplicates.push(entry.variable.name);
-      continue;
-    }
-    seenStep[entry.step] = true;
-
-    var raw = entry.variable.valuesByMode[mode.modeId];
-    if (raw && raw.type === 'VARIABLE_ALIAS') {
-      var resolved = await colorsResolveAlias(raw.id, collections, index);
-      answer.aliased.push(entry.variable.name);
-      if (!resolved || (typeof resolved.a === 'number' && resolved.a < 1)) {
-        answer.skipped.push({ name: entry.variable.name, why: resolved ? 'not opaque' : 'alias did not resolve' });
-        continue;
-      }
-      usable.push({ step: entry.step, rgb: resolved, aliased: true, variable: entry.variable });
-      continue;
-    }
-    if (!raw || typeof raw.r !== 'number') {
-      answer.skipped.push({ name: entry.variable.name, why: 'no value in ' + mode.name });
-      continue;
-    }
-    if (typeof raw.a === 'number' && raw.a < 1) {
-      answer.skipped.push({ name: entry.variable.name, why: 'not opaque (alpha ' + colorsTrim(raw.a) + ')' });
-      continue;
-    }
-    usable.push({ step: entry.step, rgb: raw, aliased: false, variable: entry.variable });
-  }
-
-  // First, middle and last have to exist for the anchors to come from anywhere. Below three this is the
-  // same answer as nothing selected, and deliberately the same code path.
-  if (usable.length < 3) {
-    answer.notes.push('Fewer than three usable steps in ' + mode.name + ', so there is no ramp to read.');
-    return answer;
-  }
-
-  answer.found = true;
-  answer.steps = usable.map(function (u) { return u.step; });
-  answer.existing = usable.map(function (u) { return oklchRgbToHex([u.rgb.r, u.rgb.g, u.rgb.b]); });
-
-  var readings = usable.map(function (u) { return oklchFromRgb([u.rgb.r, u.rgb.g, u.rgb.b]); });
-  var last = readings.length - 1;
-
-  /**
-   * **The index midpoint, not the most colourful step.**
-   *
-   * Anchoring on the chroma peak was tried and reverted. It read better in isolation — a palette rises to a
-   * peak and falls, so anchoring there let two segments describe that shape — but recognition does not get
-   * to choose where the *ramp* turns. That is `placementIndex`, which comes from the seed's placement or
-   * from this same midpoint, and nothing told it the anchors had moved. So the middle anchor was read at one
-   * step and applied at another: in HSL, catastrophically, because HSL saturation peaks on near-blacks —
-   * `#113300` reads as more saturated than a vivid lime, so the anchors came off step 800 and were applied
-   * at step 300.
-   *
-   * The lesson is not "the midpoint is better". It is that *where the ramp turns* is one fact, and it cannot
-   * be decided in two places. Moving it is worth revisiting only alongside the placement it has to agree
-   * with — see colorizr's "lock step", which is the single named place its input colour is preserved.
-   */
-  // **`skipFit`, optional: defer the anchor search entirely.** `.plans/36-lazy-fit-on-demand.md` — a read
-  // that never opens a curve tab does not need to know where the ramp turns, only what its own ends already
-  // are. `mid`, `midStep`, `midIndex`, `fits` and every `middle` anchor are simply absent; the on-demand fit
-  // (triggered from `src/ui.html` when a tab opens) calls `colorsAnchorFits` directly for the one mode in
-  // question. Bright and dark never needed a fit either way, so this changes nothing about them.
-  var mid = null;
-  if (!skipFit) {
-    // **Found by measuring, and written down** — see `colorsBestAnchor`. Generation cannot search for it
-    // (it would be searching for the answer to the question it is answering), so the read that *can* does it
-    // once and records it as the placement below. That is what stops the anchors being read at one step and
-    // applied at another.
-    // **The fits come back with the anchor.** The search fits all four channel curves for each finalist and
-    // both lightness curves once; the caller used to refit the same six for the anchor it was handed, which
-    // was about a third of the cost of a read. `answer.fits` carries them to the mode loop below.
-    var found = colorsAnchorFits(answer.existing, answer.steps);
-    mid = found.index;
-    answer.fits = found;
-    answer.midStep = usable[mid].step;
-    // The index too, not just the name: the chroma fit joins its halves at this step and cannot look a name up.
-    answer.midIndex = mid;
-  }
-
-  // **`middle` in the pre-`skipFit` key order when it exists** (`bright, middle, dark`) — a golden
-  // test in `scripts/_TESTS/` compares this as JSON text, not structurally, so assigning `middle`
-  // after the object literal (`obj.middle = ...`) inserts it *after* `dark` instead of between the
-  // other two, which reads as a changed answer even though every value is identical.
-  if (mid !== null) {
-    answer.anchors = { bright: readings[0].L, middle: readings[mid].L, dark: readings[last].L };
-    answer.hue = { bright: readings[0].H, middle: readings[mid].H, dark: readings[last].H };
-    answer.chroma = { bright: readings[0].C, middle: readings[mid].C, dark: readings[last].C };
-  } else {
-    answer.anchors = { bright: readings[0].L, dark: readings[last].L };
-    answer.hue = { bright: readings[0].H, dark: readings[last].H };
-    answer.chroma = { bright: readings[0].C, dark: readings[last].C };
-  }
-
-  // **The same three colours, read again in HSL.** A hue is not a hue across models: OKLCH's is a perceptual
-  // angle and HSL's is where the maximum channel sits, and the two disagree by tens of degrees on the very
-  // ramps this reads. Filling an HSL panel with OKLCH numbers would put a plausible-looking wrong value in
-  // every field, which is worse than an empty one. Read here rather than converted later, because the file's
-  // own hex is the only thing both readings can honestly come from.
-  var asHsl = answer.existing.map(function (hex) { return oklchHslFromHex(hex); });
-  if (asHsl[0] && asHsl[last] && (mid === null || asHsl[mid])) {
-    answer.hsl = mid !== null
-      ? {
-          hue: { bright: asHsl[0].H, middle: asHsl[mid].H, dark: asHsl[last].H },
-          saturation: { bright: asHsl[0].C, middle: asHsl[mid].C, dark: asHsl[last].C },
-          lightness: { bright: asHsl[0].L, middle: asHsl[mid].L, dark: asHsl[last].L }
-        }
-      : {
-          hue: { bright: asHsl[0].H, dark: asHsl[last].H },
-          saturation: { bright: asHsl[0].C, dark: asHsl[last].C },
-          lightness: { bright: asHsl[0].L, dark: asHsl[last].L }
-        };
-  }
-
-  // **A hue read off a near-grey is rounding, not a value.** Measured on this file's own neutrals: at the
-  // chroma they actually have, moving one channel by a single 8-bit step swings the *measured* hue by 11° at
-  // C=0.0074 and 52° at C=0.0017. `color - neutral`'s three modes come back with hue anchors of
-  // 165/174/229, 146/146/146 and 56/107/85 — the second is a coherent ramp and the other two are noise, and
-  // nothing about the numbers says which is which.
-  //
-  // Reported rather than corrected. Taking the hue from the most chromatic step instead would be inventing a
-  // value the file does not contain, and the panel filling three fields with noise is at least visible.
-  // 0.01 is the threshold because below it one byte moves hue by more than the hue *difference* a designed
-  // ramp puts between its anchors.
-  //
-  // **Bright and dark only, not middle — checked, not assumed** (`.plans/36-lazy-fit-on-demand.md`).
-  // `chroma.middle` used to be part of this `Math.min`, but across every real collection in the test file it
-  // was never the smallest of the three: a ramp's chroma rises from an end, peaks somewhere past it, and
-  // falls to the other, so the minimum is structurally always at bright or dark — where the sRGB gamut is
-  // narrowest anyway. Dropping it is not a behaviour change on any collection checked, and it means this
-  // check needs no fit at all, ever, regardless of `skipFit`.
-  var weakest = Math.min(answer.chroma.bright, answer.chroma.dark);
-  if (weakest < 0.01) {
-    answer.hueUnreliable = true;
-    answer.notes.push('Hue read from a near-grey: the lowest chroma here is ' +
-      colorsTrim4(weakest) + ', where one 8-bit step moves hue by tens of degrees. The Hue anchors are ' +
-      'rounding rather than a value — set them yourself if this ramp is meant to have a hue.');
-  }
-
-  return answer;
-}
-
-/** Four decimal places, for a chroma in a message. */
-function colorsTrim4(value) {
-  return String(Math.round(value * 10000) / 10000);
-}
-
-/** A step name is a word or a number, and nothing else. Anything stranger is not ours and is ignored. */
-function colorsStepNameOk(name) {
-  return typeof name === 'string' && name.length > 0 && /^[A-Za-z0-9][A-Za-z0-9 _.-]*$/.test(name);
-}
-
-/**
- * One COLOR step under a group prefix — the same shape `colorsRecognise` walks.
- * The group is everything before the last `/`; a bare name lives at the collection root.
- * Direct children only: a nested path is another group's problem.
- */
-function colorsTokenGroup(name) {
-  var parts = String(name).split('/');
-  if (parts.length === 1) {
-    var lone = parts[0];
-    if (!colorsStepNameOk(lone)) return null;
-    return { group: '', token: lone };
-  }
-  var token = parts[parts.length - 1];
-  if (!colorsStepNameOk(token)) return null;
-  return { group: parts.slice(0, -1).join('/'), token: token };
-}
-
-/**
- * Which groups in a list of COLOR variable names look like a lightness ramp.
- *
- * Names only — no values, no curve fit. Three steps minimum, matching `colorsRecognise`
- * (`found` needs first, middle and last). Returns `[{ group, tokens }]`, most tokens first.
- */
-function colorsGroupCandidates(names) {
-  var minTokens = 3;
-  var tokensByGroup = {};
-  var order = [];
-
-  (names || []).forEach(function (name) {
-    var parsed = colorsTokenGroup(name);
-    if (!parsed) return;
-    var g = parsed.group;
-    if (String(g).indexOf('__codefig-test__') === 0) return;
-    if (!tokensByGroup[g]) {
-      tokensByGroup[g] = {};
-      order.push(g);
-    }
-    tokensByGroup[g][parsed.token] = true;
-  });
-
-  return order.map(function (group) {
-    return { group: group, tokens: Object.keys(tokensByGroup[group]).length };
-  }).filter(function (entry) {
-    return entry.tokens >= minTokens;
-  }).sort(function (a, b) {
-    if (b.tokens !== a.tokens) return b.tokens - a.tokens;
-    return order.indexOf(a.group) - order.indexOf(b.group);
-  });
-}
-
-/**
- * The groups in a collection that hold a plausible COLOR ramp, so the panel can list them
- * under Group. Read-only — names and resolvedType only; no fit, no alpha probe.
- *
- * `index`, optional: `{ byId, collections }` from a caller that already walked the document
- * (`foundationColorsAutoImport`), so this is not a second full read.
- */
-async function colorsGroupsIn(collectionName, index) {
-  var answer = { collection: collectionName || null, groups: [] };
-  if (!collectionName) return answer;
-
-  var collections = index ? index.collections : await figma.variables.getLocalVariableCollectionsAsync();
-  var collection = collections.filter(function (c) { return c.name === collectionName; })[0];
-  if (!collection) return answer;
-
-  var names = [];
-  var ids = collection.variableIds || [];
-  for (var i = 0; i < ids.length; i++) {
-    var variable = index ? index.byId[ids[i]] : await figma.variables.getVariableByIdAsync(ids[i]);
-    if (variable && variable.resolvedType === 'COLOR') names.push(variable.name);
-  }
-  answer.groups = colorsGroupCandidates(names);
-  return answer;
-}
-
-/** An alias, followed to a value. Cross-collection is the same walk as same-collection: the id is a
- *  document-wide handle, so `getVariableByIdAsync` does not care which collection it lands in — what differs
- *  is only which collection's *default mode* supplies the value. A chain is followed a few hops and then
- *  given up on rather than looped forever. */
-async function colorsResolveAlias(id, collections, index) {
-  var byId = {};
-  collections.forEach(function (c) { byId[c.id] = c; });
-  var currentId = id;
-  for (var hop = 0; hop < 8; hop++) {
-    // Most hops land on a variable this file already indexed — a remote (library) variable never will,
-    // since `getLocalVariablesAsync` is local-only, and falls through to the API exactly as before.
-    var variable = (index && index.byId[currentId]) || await figma.variables.getVariableByIdAsync(currentId);
-    if (!variable) return null;
-    var owner = byId[variable.variableCollectionId];
-    // A remote (library) variable has no local collection here, so its own default mode is unreachable;
-    // that is a `null` rather than a guess.
-    if (!owner) return null;
-    var value = variable.valuesByMode[owner.defaultModeId];
-    if (value && value.type === 'VARIABLE_ALIAS') { currentId = value.id; continue; }
-    if (value && typeof value.r === 'number') return value;
-    return null;
-  }
-  return null;
-}
-
-/** Two decimal places, without a trailing zero — for an alpha in a message. */
-function colorsTrim(value) {
-  return String(Math.round(value * 100) / 100);
-}
-
-/** A hue or a percentage, at the precision a panel field shows. */
-function colorsRound1(value) {
-  return Math.round(value * 10) / 10;
-}
-
-/** A chroma. Four places, because 0.002 and 0.006 are different neutrals and 0.00 is neither. */
-function colorsRound4(value) {
-  return Math.round(value * 10000) / 10000;
-}
-
-/**
- * The colours half of auto-import: what a Collection + Group already holds, per mode.
- *
- * → `{ source, config, existing, modes, tokens, recognition, missing }` — the same shape
- * `foundationAutoImport` answers in, so the UI handles one payload either way.
- *
- * **Its own function, not a branch inside `foundationAutoImport`.** Extraction follows the calls a function
- * makes *within its own source file*, so a colours branch in there dragged `colorsRecognise` — and through it
- * `@OKLCH` — into every consumer, including Grid's spec, which has no reason to know what a chroma is. The
- * validator caught it as an unresolvable call; at run time it would have been a `ReferenceError` waiting
- * behind an `if` nobody had taken yet.
- *
- * **One mode at a time**, driven by the modes the panel's own blocks name. A COLOR variable has a value per
- * mode, and a mode the panel has no block for is not the panel's business — it is the alignment report's. So
- * a collection mode with no block is neither read nor reported as missing.
- *
- * Read-only, like the rest of the import path.
- */
-async function foundationColorsAutoImport(collectionName, group, modeNames, colorModel, index, skipFit) {
-  var answer = {
-    source: 'none', config: null, collection: collectionName || null,
-    group: group == null ? null : group, tokens: [], modes: [], existing: {},
-    // Nothing is missing: the curve is fitted to the ramp the file holds rather than declared unrecoverable.
-    recognition: { modes: {}, declined: null }, missing: []
-  };
-  if (!collectionName) return answer;
-
-  // **`index`, optional: `{ byId, collections }`.** A caller reading several panel blocks (`src/ui.html`'s
-  // `requestAutoImport`) builds one and hands it in, so this and the `foundationCollectionModes` call
-  // beside it share a single document-wide read instead of each walking the collection again. Absent —
-  // any other caller, including a bare `@import` — one is built here so behaviour is unchanged.
-  var collections = index ? index.collections : await figma.variables.getLocalVariableCollectionsAsync();
-  var owner = collections.filter(function (c) { return c.name === collectionName; })[0];
-  if (!owner) return answer;
-
-  // **When the panel's modes are not in the collection, read the collection's own.**
-  //
-  // "The modes come from the panel, not the collection" is right about which modes get *written* — a mode
-  // with no block is not the panel's business. As the only source for what to *read* it was a
-  // chicken-and-egg: the shipped block opens with one starter mode named `Value`, and many collections
-  // still carry Figma's other default (`Mode 1`). Asking for `Value` found nothing, so nothing
-  // populated, so there was no way to name a mode. Selecting a collection read none of its modes and said
-  // nothing — the same miss an empty name used to trigger, reintroduced the moment the starter was named
-  // so a fresh collection could run.
-  //
-  // So: named blocks that exist in the collection win; when none of them do, adopt what is there.
-  // `modeSource` says which happened, so the note can tell the difference between "your blocks" and
-  // "what the file had".
-  var asked = (Array.isArray(modeNames) ? modeNames : []).filter(function (name) {
-    return typeof name === 'string' && name.trim();
-  });
-  var collectionModeNames = owner.modes.map(function (m) { return m.name; });
-  var askedPresent = asked.filter(function (name) {
-    return collectionModeNames.indexOf(name) !== -1;
-  });
-  var wanted;
-  if (askedPresent.length) {
-    // Keep the full asked list so a block the file does not have still arrives as a name-only entry
-    // rather than being dropped — `fillConfigBlock` removes anything the payload never mentions.
-    wanted = asked;
-    answer.modeSource = 'panel';
-  } else if (collectionModeNames.length) {
-    wanted = collectionModeNames;
-    answer.modeSource = 'collection';
-  } else {
-    wanted = asked;
-    answer.modeSource = asked.length ? 'panel' : 'collection';
-  }
-  if (!wanted.length) return answer;
-
-  // **One indexed read for every mode this loop is about to ask about**, replacing the (M+1)×V
-  // sequential `getVariableByIdAsync` calls `colorsRecognise` used to make per mode. Untyped — not
-  // `getLocalVariablesAsync('COLOR')` — because this same index is handed to `foundationCollectionModes`
-  // in the same snippet, which counts every variable's mode differences regardless of type; a
-  // COLOR-only index would silently drop every non-colour variable from that count. See
-  // `.plans/28-read-path-performance.md`.
-  var readIndex = index;
-  if (!readIndex) {
-    var allVariables = await figma.variables.getLocalVariablesAsync();
-    var byId = {};
-    allVariables.forEach(function (v) { byId[v.id] = v; });
-    readIndex = { byId: byId, collections: collections };
-  }
-
-  // Sibling / miss candidates — same shape Grid and ramp domains already return. Names only; the
-  // load path (`colorsRecognise` with `skipFit`) still decides what fills the block. Without this,
-  // Colors never populated `#groupCandidates` even when the collection held several ramps.
-  var colorScan = await colorsGroupsIn(collectionName, readIndex);
-  var groupNorm = group == null ? '' : group;
-  var colorSiblingCandidates = colorScan.groups.filter(function (entry) {
-    return entry.group !== groupNorm;
-  });
-
-  var perMode = [], unread = [], leadAnchors = null, leadName = null;
-  for (var w = 0; w < wanted.length; w++) {
-    var seen = await colorsRecognise(collectionName, group == null ? '' : group, wanted[w], readIndex, skipFit);
-    // A declined group is a fact about the group, not about one mode, so it stops the whole answer.
-    if (seen.declined) {
-      answer.recognition.declined = seen.declined;
-      answer.candidates = colorSiblingCandidates;
-      return answer;
-    }
-    answer.recognition.modes[wanted[w]] = {
-      found: seen.found, skipped: seen.skipped, aliased: seen.aliased, duplicates: seen.duplicates,
-      notes: seen.notes, hueUnreliable: !!seen.hueUnreliable, midStep: seen.midStep,
-      midIndex: seen.midIndex
-    };
-    if (!seen.found) {
-      // **Present, and carrying nothing.** `fillConfigBlock` removes a block entry the payload does not
-      // mention, so leaving this out deleted the whole mode block — the same fault as filling it with a
-      // neighbour's colours, in the other direction. A user who wrote a `Moss` block is naming a mode they
-      // intend to create; reading a collection that has no Moss is not permission to throw that away. An
-      // entry with only its name matches, refills the name it already had, and leaves every other key alone.
-      unread.push({ name: wanted[w] });
-      continue;
-    }
-    answer.existing[wanted[w]] = seen.existing;
-    // The lightness ladder is **shared**, so one mode has to supply it and the panel says which. The first
-    // that recognised — there is no better rule, and an arbitrary one stated beats one hidden.
-    if (!leadAnchors) { leadAnchors = seen.anchors; leadName = wanted[w]; }
-    // **Which model the panel is on decides which numbers go in.** The fields differ — Chroma in OKLCH,
-    // Saturation and Lightness in HSL — and so does Hue, which is a different quantity in each. Recognition
-    // reads the file once and answers in both; choosing between them belongs here, where the panel's own
-    // setting is known. An unrecognised value means OKLCH, which is what every existing caller meant.
-    // **Both models' channels, every read.** The panel can be switched between HSL and OKLCH at any time and
-    // the switch has to be lossless in either direction, which it cannot be if a read fills only the model
-    // that happened to be selected. The file's colours answer both questions at once — they are the same
-    // three colours read twice — so both are written and the generator takes the pair its model uses.
-    // **A read HSL mode arrives on *Original*.** Its three anchors are the file's, but the steps between
-    // them were made by a person and sit on no curve this panel offers — so naming any of them would be a
-    // claim about the file that is not true, and would open by proposing to rewrite every interior step.
-    // *Original* says what is actually the case: these are the colours, and picking a curve replaces them.
-    // Not set in OKLCH, where the ladder is shared and *"OKLCH scale not applied"* is the honest answer.
-    var hsl = seen.hsl || null;
-    function anchorAt(which) {
-      var both = {
-        hue: colorsRound1(seen.hue[which]),
-        chroma: colorsRound4(seen.chroma[which])
-      };
-      if (hsl) {
-        both.hslHue = colorsRound1(hsl.hue[which]);
-        both.saturation = colorsRound1(hsl.saturation[which] * 100);
-        both.lightness = colorsRound1(hsl.lightness[which] * 100);
-      }
-      return both;
-    }
-    var entry;
-    if (skipFit) {
-      // **Nothing here needed a fit, so nothing here has one.** `.plans/36-lazy-fit-on-demand.md`: every
-      // curve is `[]`, which `colorsCurve` reads as *Original* — the file's own steps, not an estimate of
-      // them — and `colorsGenerateMode` regenerates them exactly from `answer.existing` below, unfitted.
-      // No `middle`: there is no anchor to show one from yet, and the curve editor's own em-dash already
-      // covers the missing-middle display without a placeholder value to invent here. No `seed.placement`,
-      // for the same reason `colorsBestAnchor` had nothing to place it at.
-      entry = {
-        name: wanted[w], steps: seen.steps,
-        bright: anchorAt('bright'), dark: anchorAt('dark'),
-        chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [], curve: []
-      };
-    } else {
-      // **Key order matches the pre-`skipFit` shape exactly** (`bright, middle, dark, ...curves...,
-      // seed`, `curve` assigned last) — a golden test in `scripts/_TESTS/` compares the read's answer as
-      // JSON text, not structurally, so an insertion-order change reads as a value change even when
-      // nothing about the data did. Built as one object rather than assigned field by field for that
-      // reason: whichever order the branch that ships wins is the one worth keeping stable.
-      entry = {
-        name: wanted[w], steps: seen.steps,
-        bright: anchorAt('bright'), middle: anchorAt('middle'), dark: anchorAt('dark'),
-        // **Chroma's schedule, fitted per mode in both models.** The lightness ladder is shared in OKLCH;
-        // the colour anchors never are, so neither is the curve that paces them. `[]` when the ramp is
-        // too flat to have a shape worth recovering, which is every neutral.
-        // **Both models' curves, every read** — the rule the hue and chroma anchors above already follow,
-        // and the one the curves were breaking. A read that fits only the selected model makes switching
-        // lossy: measured across this file's sixteen sets, reading in HSL and switching to OKLCH landed a
-        // mean of 59 8-bit levels from the file against 10 for a read in OKLCH, because the OKLCH ladder
-        // was still the block's Linear default. Nothing about a read is model-specific except which
-        // numbers get looked at.
-        chromaCurve: seen.fits.chromaCurve, saturationCurve: seen.fits.saturationCurve,
-        hueCurve: seen.fits.hueCurve, hslHueCurve: seen.fits.hslHueCurve,
-        // **The step the ramp turns at, written down.** Everything else about the anchors is recovered
-        // from the file, and so is this — `colorsBestAnchor` found it by measuring. Generation cannot
-        // search for it without searching for its own answer, so the read records it and generation reads
-        // it back.
-        //
-        // Only `placement`. `fillConfigBlock` merges a payload key by key, so a seed hex or a lock the
-        // user typed survives being read over — which they must, because a file holds no record of either.
-        seed: { placement: seen.steps[seen.midIndex] }
-      };
-      // Only HSL gets a curve, and only *Original*: it means "the ramp already in the file", which OKLCH has
-      // no equivalent of because its ladder is shared. Left off the payload in OKLCH so `fillConfigBlock`
-      // keeps whatever curve the block already had.
-      // **HSL's ladder is the mode's, so the fit is too** — and it is filled whichever model is selected,
-      // because `curve` is the HSL field and switching to HSL must not find it empty. OKLCH's ladder is the
-      // collection's and is set once below, outside this loop.
-      entry.curve = seen.fits.lightnessHsl;
-    }
-    perMode.push(entry);
-  }
-
-  if (!perMode.length) {
-    answer.candidates = colorSiblingCandidates;
-    return answer;
-  }
-  // **Every mode, not the first one.** The ladder is shared, so it is averaged across the modes that were
-  // read rather than taken from whichever recognised first — see `colorsSharedLadder`.
-  //
-  // **Skipped entirely under `skipFit`.** `colorsSharedLadder` does its own `bezierFitRamp` call — a real
-  // fit, on the collection's averaged ladder, separate from anything `colorsAnchorFits` does per mode. A
-  // lazy read that ran every mode unfitted and then fit the shared ladder anyway would still pay a search
-  // on every single selection, just a smaller one — so this is `[]` (Original) too, for the same reason
-  // the per-mode curves are.
-  //
-  // **Not also skipped under HSL — tried, reverted, `.plans/36-lazy-fit-on-demand.md`.** Nothing reads
-  // `config.curve` *while* the model is HSL (`colorsCurve`/`colorsGenerateMode` both branch to the
-  // mode's own curve instead) — but `tests/colors-recognise.test.js`'s "a read fills both models, so
-  // switching between them is lossless" test exists precisely because computing it anyway is what makes
-  // switching *to* OKLCH afterward correct rather than lossy, and that switch is a synchronous radio
-  // click with no read of its own to compute it at. Measured, not hypothetical, the first time this was
-  // wrong: reading in HSL and switching to OKLCH landed a mean of 59 8-bit levels from the file against
-  // 10 for a native OKLCH read. Skipping this for `requestQuickFit`'s on-demand call (the thing actually
-  // costing 291-306ms) would reintroduce exactly that regression the moment someone reads in HSL and
-  // switches models, since nothing currently triggers a recompute on switch. Fixing the switch itself —
-  // a real trigger, a real new cost to measure at that moment instead — is bigger than "skip a wasted
-  // computation" and not done in this pass.
-  var sharedNames = perMode.map(function (m) { return m.name; });
-  var shared = skipFit ? null : colorsSharedLadder(answer.existing, sharedNames);
-  // **The modes it was averaged from**, not the one that happened to be read first — a list, because with
-  // more than one mode there is no single answer and a name would be a plausible-looking wrong one.
-  answer.recognition.lightnessFrom = shared ? sharedNames.slice() : [leadName];
-  answer.source = 'recognised';
-  answer.modes = perMode.map(function (m) { return m.name; });
-  answer.tokens = perMode[0].steps.slice();
-  answer.config = {
-    steps: perMode[0].steps.slice(),
-    // **OKLCH's ladder is the collection's, averaged across its modes.** A claim about its shape is one the
-    // collection makes rather than one each mode makes separately, and a shared ladder matches no mode
-    // exactly by definition — so the only question is which modes carry the error, and spreading it beats
-    // giving all of it to whichever mode was read first.
-    //
-    // Fitted whichever model is selected: a panel switched into OKLCH must not find the shipped Linear
-    // default where the file's own shape belongs — see the note above `shared` for why this still runs
-    // under HSL. `skipFit`: `[]`, Original, no fit at all.
-    curve: skipFit ? [] : (shared ? shared.curve : colorsFitCurve(answer.existing[leadName], true)),
-    // **No middle.** The ladder's bend is the curve's own anchor now, so a middle lightness here would be a
-    // second answer to a question the curve already answers — and the block has no field to show it in.
-    lightness: {
-      bright: colorsRound1((shared ? shared.bright : leadAnchors.bright) * 100),
-      dark: colorsRound1((shared ? shared.dark : leadAnchors.dark) * 100)
-    },
-    // No `seed`: a file holds no record of one, and `fillConfigBlock` only touches the keys a payload
-    // carries — so whatever seed the user typed survives being read over.
-    // The modes that were read, then the ones the file does not have, in the order they were asked for so the
-    // block's own order survives the fill.
-    // Passed through as built, rather than re-listed key by key. Naming the keys again here is what made
-    // this the second place that had to know which model was in play — and the place that would silently
-    // drop Saturation and Lightness the moment the first one learned to produce them.
-    modes: perMode.map(function (m) {
-      // **Omitted, not `undefined`, and in the pre-`skipFit` key order when present.**
-      // `fillConfigBlock` decides whether to touch a key with `hasOwnProperty`, which is true even for
-      // an explicit `undefined` — so `middle`/`seed` have to be left off the object entirely under
-      // `skipFit`, not set to a missing value, or the block would still get one written into it with
-      // nothing real to write. And a golden test in `scripts/_TESTS/` compares this as JSON text, not
-      // structurally, so `middle` has to land *between* `bright` and `dark`, not merely present
-      // somewhere — the same fact `entry`'s own construction above already has to honour.
-      var entry = m.middle
-        ? { name: m.name, bright: m.bright, middle: m.middle, dark: m.dark,
-            chromaCurve: m.chromaCurve, saturationCurve: m.saturationCurve,
-            hueCurve: m.hueCurve, hslHueCurve: m.hslHueCurve }
-        : { name: m.name, bright: m.bright, dark: m.dark,
-            chromaCurve: m.chromaCurve, saturationCurve: m.saturationCurve,
-            hueCurve: m.hueCurve, hslHueCurve: m.hslHueCurve };
-      if (m.seed) entry.seed = m.seed;
-      // Only when it was read in HSL: `fillConfigBlock` touches the keys a payload carries and leaves the
-      // rest, so omitting this keeps whatever curve an OKLCH block already had. Unchanged by `skipFit`:
-      // `m.curve` is `[]` either way (fit-found-nothing or fit-skipped-entirely) and both are real answers
-      // — Original — not an absence to omit.
-      if (m.curve) entry.curve = m.curve;
-      return entry;
-    }).concat(unread)
-  };
-  answer.candidates = colorSiblingCandidates;
-  return answer;
-}
+/

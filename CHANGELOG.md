@@ -26,6 +26,10 @@ a plain statement of the new default.
 
 ### Changed
 
+- **Grid preview fits the panel.** The largest mode draws at 100% of the preview column; smaller
+  modes are proportionally narrower. A non-interactive ruler marks every mode by name + width above
+  the bar (ticks cross the grey remainder, not the active grid). Total/values keep a fixed column
+  width across modes so the bar does not shift when switching tabs.
 - **DSF overview sections are per Collection + Group.** Generate overview writes one section under
   Design System Foundations for each address. Regenerating overwrites only when both collection and
   group match; a different collection or group adds a section. Applies to Colors, Spacing, Corner
