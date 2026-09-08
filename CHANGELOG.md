@@ -30,6 +30,11 @@ a plain statement of the new default.
   modes are proportionally narrower. A non-interactive ruler marks every mode by name + width above
   the bar (ticks cross the grey remainder, not the active grid). Total/values keep a fixed column
   width across modes so the bar does not shift when switching tabs.
+- **Configuration UI keeps its scroll on rebuild.** Applying a Grid suggestion (or any other write
+  that re-projects the form) no longer jumps the panel back to the top.
+- **Grid suggestion clicks keep their cards.** Applying a whole-number division updates Margins/Gap
+  and the selected state in place, and reuses existing suggestion buttons by margin|gap instead of
+  wiping and rebuilding the list under the click.
 - **DSF overview sections are per Collection + Group.** Generate overview writes one section under
   Design System Foundations for each address. Regenerating overwrites only when both collection and
   group match; a different collection or group adds a section. Applies to Colors, Spacing, Corner

@@ -877,7 +877,12 @@
         configUIContainer.addEventListener('click', function (e) {
           var target = e.target;
           var card = target && target.closest ? target.closest('.grid-suggestion') : null;
-          if (card) applySuggestion(card);
+          if (!card) return;
+          // The card is about to be destroyed by the form rebuild — blur first so the browser does
+          // not try to keep a doomed focus target in view (that reads as a jump to the top).
+          e.preventDefault();
+          if (typeof card.blur === 'function') card.blur();
+          applySuggestion(card);
         });
         configUIContainer.addEventListener('change', function (e) {
           const target = e.target;
@@ -1580,6 +1585,10 @@
         const wasShowing = activeModeName();
         // The same idea, for whichever field had the caret — see `captureFieldFocus`.
         const hadFocus = captureFieldFocus();
+        // And for how far down the form you had scrolled. Emptying the container collapses its
+        // content height and the browser zeros `scrollTop`; without this, clicking a suggestion
+        // (or any other write that re-projects the form) jumps the panel back to the top.
+        const hadScroll = captureFormScroll();
 
         // **Whether a form exists is decided by whether the block parses to fields**, not by which
         // marker the script uses. The parser reads property lists now, so a `@CONFIG_START` block
@@ -1663,6 +1672,8 @@
         }
         restoreActiveMode(wasShowing);
         restoreFieldFocus(hadFocus);
+        // After focus: `focus()` can scroll the field into view and would undo a restore done first.
+        restoreFormScroll(hadScroll);
         restoreCollectionCreating();
         syncChipsToPanelState();
         scheduleFileModes(0);
@@ -1728,6 +1739,22 @@
        * lives in names a mode's own cells. Anything else — a button, a chip, a curve handle — has no
        * stable name across a rebuild and is left alone rather than guessed at.
        */
+/**
+       * How far the Configuration UI form was scrolled — same survival problem as the mode tab and
+       * the caret. The form *is* `configUIContainer` (render stamps `.config-ui-form` on it), and
+       * emptying it for a rebuild drops `scrollTop` to 0. Capture before the wipe; restore after.
+       */
+      function captureFormScroll() {
+        if (!configUIContainer) return null;
+        return { top: configUIContainer.scrollTop, left: configUIContainer.scrollLeft };
+      }
+
+      function restoreFormScroll(pos) {
+        if (!pos || !configUIContainer) return;
+        configUIContainer.scrollTop = pos.top;
+        configUIContainer.scrollLeft = pos.left;
+      }
+
       function captureFieldFocus() {
         var active = document.activeElement;
         if (!active || !configUIContainer || !configUIContainer.contains(active)) return null;
@@ -3043,8 +3070,71 @@
       function renderConfigSuggestions(html) {
         const slot = document.querySelector('[data-suggestions-slot]');
         if (!slot) return;
+        // Prefer patching existing cards (same margin|gap keys) over wiping the slot — destroying and
+        // recreating the buttons is what made a suggestion click jump even after scroll restore.
+        if (html && patchGridSuggestions(slot, html)) {
+          syncPreviewRowVisibility();
+          return;
+        }
         fillRevealSlot(slot, html || '');
         syncPreviewRowVisibility();
+      }
+
+      /**
+       * Reuse `.grid-suggestion` nodes by margin|gap instead of replacing the slot HTML.
+       *
+       * The ghost idea for this section: identity is the pair, not the DOM index. Matched cards keep
+       * their element (class and copy update in place); only truly new pairs mint a node. Returns
+       * false when the slot is empty or the incoming markup is not a card list, so the caller falls
+       * back to a full fill.
+       */
+      function patchGridSuggestions(slot, html) {
+        var current = slot.querySelector('.grid-suggestions');
+        if (!current) return false;
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        var nextRoot = tmp.querySelector('.grid-suggestions');
+        if (!nextRoot) return false;
+        var nextCards = nextRoot.querySelectorAll('.grid-suggestion');
+        if (!nextCards.length) return false;
+
+        var pool = {};
+        Array.prototype.forEach.call(current.querySelectorAll('.grid-suggestion'), function (card) {
+          var key = card.getAttribute('data-suggestion-margin') + '|' +
+            card.getAttribute('data-suggestion-gap');
+          pool[key] = card;
+        });
+
+        Array.prototype.forEach.call(nextCards, function (proto) {
+          var key = proto.getAttribute('data-suggestion-margin') + '|' +
+            proto.getAttribute('data-suggestion-gap');
+          var card = pool[key];
+          if (card) {
+            delete pool[key];
+            card.className = proto.className;
+            if (card.innerHTML !== proto.innerHTML) card.innerHTML = proto.innerHTML;
+          } else {
+            card = document.importNode(proto, true);
+          }
+          // appendChild moves an existing child — order updates without destroying the node.
+          current.appendChild(card);
+        });
+        Object.keys(pool).forEach(function (key) {
+          if (pool[key].parentNode) pool[key].parentNode.removeChild(pool[key]);
+        });
+
+        var oldNote = current.querySelector('.grid-suggestions-more, .grid-suggestions-empty');
+        var newNote = nextRoot.querySelector('.grid-suggestions-more, .grid-suggestions-empty');
+        if (oldNote && newNote) {
+          oldNote.className = newNote.className;
+          oldNote.textContent = newNote.textContent;
+          current.appendChild(oldNote);
+        } else if (oldNote && !newNote) {
+          oldNote.parentNode.removeChild(oldNote);
+        } else if (!oldNote && newNote) {
+          current.appendChild(document.importNode(newNote, true));
+        }
+        return true;
       }
 
       /**
@@ -3060,6 +3150,11 @@
        * promise to write them. Applying while standing in Desktop changes Desktop and nothing else;
        * getting it onto Tablet means going to Tablet. One gesture writing three modes is the kind of
        * thing you only notice afterwards.
+       *
+       * **No form rebuild.** The open mode's Margins/Gap fields and the suggestion cards update in
+       * place; wiping the form to re-project was rebuilding the buttons under the click and jumping
+       * the panel. Full ghost components for every control can wait — this section only needs the
+       * cards to keep their identity across the write.
        */
       function applySuggestion(card) {
         var margin = Number(card.getAttribute('data-suggestion-margin'));
@@ -3092,13 +3187,50 @@
           return next;
         });
 
+        paintActiveModeMargins(margin, gap, wanted, api);
+        paintSuggestionSelection(margin, gap);
+
         var values = {};
         values[row.name] = entries;
-        // `writeConfigBlockText` re-projects the form, so the fields, the preview and the cards all
-        // catch up from the one text — the same path a chip edit takes.
-        writeConfigBlockText(api.serialize(schema, values), 'suggestion');
-        scheduleConfigPreview();
+        writeConfigBlockText(api.serialize(schema, values), 'suggestion', { skipFormProject: true });
       }
+
+      /** Set Margins / Gap on the open mode's fields without rebuilding the rows control. */
+      function paintActiveModeMargins(margin, gap, wanted, api) {
+        if (!configUIContainer) return;
+        var items = configUIContainer.querySelectorAll('.config-ui-rows-item');
+        var target = null;
+        Array.prototype.forEach.call(items, function (item) {
+          if (target) return;
+          var nameEl = item.querySelector('[data-row-field="name"]');
+          var name = nameEl ? String(nameEl.value || '') : '';
+          if (wanted && api && typeof api.sameModeName === 'function') {
+            if (api.sameModeName(name, wanted)) target = item;
+          } else if (item.style.display !== 'none') {
+            target = item;
+          }
+        });
+        if (!target && items.length) target = items[0];
+        if (!target) return;
+        var paddingEl = target.querySelector('[data-row-field="padding"]');
+        var gapEl = target.querySelector('[data-row-field="gap"]');
+        if (paddingEl) paddingEl.value = String(margin);
+        if (gapEl) gapEl.value = String(gap);
+      }
+
+      /** Instant selected state on the existing cards — before the preview round-trip patches them. */
+      function paintSuggestionSelection(margin, gap) {
+        if (!configUIContainer) return;
+        Array.prototype.forEach.call(
+          configUIContainer.querySelectorAll('.grid-suggestion'),
+          function (el) {
+            var on = Number(el.getAttribute('data-suggestion-margin')) === margin &&
+              Number(el.getAttribute('data-suggestion-gap')) === gap;
+            el.classList.toggle('is-selected', on);
+          }
+        );
+      }
+
 
       /** Debounced: long enough that typing `12` never renders `1`. */
       /**
@@ -3459,7 +3591,7 @@
        */
       var blockWrites = [];
 
-      function writeConfigBlockText(text, by) {
+      function writeConfigBlockText(text, by, opts) {
         if (!scriptHasConfig || !parsedSections || !code) return;
         var mainCode = code.getValue();
         var startMarker = parsedSections.configStartMarker || '// @CONFIG_START';
@@ -3492,7 +3624,13 @@
         });
         if (blockWrites.length > 8) blockWrites.shift();
 
-        if (isConfigTab(currentTab) && configUIInstance) projectConfigIntoForm();
+        // **`skipFormProject`:** a Grid suggestion click already patches the open mode's fields and
+        // the suggestion cards in place. Re-projecting would wipe those nodes and rebuild them —
+        // the jump Márton saw — for no gain.
+        if (!(opts && opts.skipFormProject) &&
+            isConfigTab(currentTab) && configUIInstance) {
+          projectConfigIntoForm();
+        }
 
         // **And the preview with it.** The form was brought along; the strip was not, and it is the third
         // thing that has to agree with this text. Every *other* caller happens to pair its write with

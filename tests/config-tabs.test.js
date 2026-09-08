@@ -94,6 +94,29 @@ test('unsupported fields point at Source, not Configuration code', () => {
   assert.equal(/only editable in Configuration code/.test(fn), false);
 });
 
+test('form scroll survives a rebuild the same way the mode tab and caret do', () => {
+  // Clicking a Grid suggestion (or any programmatic write) re-projects the form; emptying the
+  // scroll container zeros scrollTop. Without capture/restore, the panel jumps to the top.
+  assert.match(UI, /function captureFormScroll\(\)/);
+  assert.match(UI, /function restoreFormScroll\(pos\)/);
+  const fn = UI.match(/function projectConfigIntoForm\(\)[\s\S]*?\n      \}/)[0];
+  assert.match(fn, /captureFormScroll\(\)/);
+  assert.match(fn, /restoreFormScroll\(hadScroll\)/);
+});
+
+test('a Grid suggestion click reuses cards and skips the form wipe', () => {
+  // Rebuilding the buttons under the click was the other half of the jump. Identity is margin|gap;
+  // matched nodes stay, and the write does not re-project the form.
+  assert.match(UI, /function patchGridSuggestions\(slot, html\)/);
+  assert.match(UI, /paintActiveModeMargins/);
+  assert.match(UI, /paintSuggestionSelection/);
+  const apply = UI.match(/function applySuggestion\(card\)[\s\S]*?\n      \}/)[0];
+  assert.match(apply, /skipFormProject:\s*true/);
+  assert.equal(/projectConfigIntoForm\(\)/.test(apply), false);
+  const write = UI.match(/function writeConfigBlockText\(text, by, opts\)[\s\S]*?\n      \}/)[0];
+  assert.match(write, /opts\.skipFormProject/);
+});
+
 test('section markers must be alone on a // line', () => {
   assert.match(UI, /function sectionMarkerRe\(marker\)/);
   assert.match(UI, /function hasSection\(code, startMarker\) \{[\s\S]*?sectionMarkerRe\(startMarker\)\.test\(code\)/);
