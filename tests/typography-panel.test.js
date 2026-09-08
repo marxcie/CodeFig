@@ -458,3 +458,26 @@ test('the percentage fields carry their unit in the input', () => {
     });
   }
 });
+
+test('file existing font sizes show was/now when the curve would change a step', () => {
+  const data = starterConfig();
+  const sizes = T.typeScaleTable({ config: data }, 'Value').rows.map((r) => r.size);
+  const existing = sizes.slice();
+  existing[3] = existing[3] + 4;
+  const html = T.typographyPreviewHtml(
+    { config: data, existing: { Value: existing } },
+    'typography',
+    'Value'
+  );
+  assert.match(html, /type-specimen-size--was/);
+  assert.match(html, /type-specimen-size--now/);
+  assert.match(html, new RegExp('type-specimen-size--was">' + existing[3]));
+  assert.match(html, /data-curve-tip-scale-was="/);
+  const quiet = T.typographyPreviewHtml(
+    { config: data, existing: { Value: sizes } },
+    'typography',
+    'Value'
+  );
+  assert.equal(quiet.indexOf('type-specimen-size--was'), -1);
+  assert.equal(quiet.indexOf('data-curve-tip-scale-was'), -1);
+});

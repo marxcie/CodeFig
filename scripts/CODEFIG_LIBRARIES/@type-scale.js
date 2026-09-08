@@ -103,6 +103,16 @@
 //   opacity: 0.6;
 // }
 //
+// /* File vs generated font size — Colors hex--was / hex--now for the specimen meta. */
+// .type-specimen-size--was {
+//   text-decoration: line-through;
+//   color: var(--text-secondary);
+// }
+//
+// .type-specimen-size--now {
+//   color: var(--text-primary);
+// }
+//
 // .type-specimen-sample {
 //   white-space: nowrap;
 //   /* **The clip belongs here, on the box that overflows.** A grid item's `min-width` is `auto`,
@@ -425,14 +435,46 @@ function typographyPreviewHtml(config, domain, modeName) {
   var lineCount = Math.max(1, previewLines.length);
   var lines = previewLines.map(typeScaleEscape).join('<br>');
 
-  var steps = table.rows.map(function (row) {
+  // File font sizes for was/now — session-held, never in the saved block.
+  var mode = table.mode;
+  var modeNameKey = mode && mode.name ? mode.name : '';
+  var fileExisting = (config && config.existing) || null;
+  var modeExisting = null;
+  if (fileExisting && typeof fileExisting === 'object') {
+    if (modeNameKey && Array.isArray(fileExisting[modeNameKey])) modeExisting = fileExisting[modeNameKey];
+    else if (Array.isArray(fileExisting[modeName])) modeExisting = fileExisting[modeName];
+  }
+
+  var tipNow = [];
+  var tipWas = [];
+  var anyDiff = false;
+
+  var steps = table.rows.map(function (row, index) {
+    var was = (modeExisting && typeof modeExisting[index] === 'number' && isFinite(modeExisting[index]))
+      ? modeExisting[index] : null;
+    var sizeDiffers = typeof was === 'number' && typeof row.size === 'number' &&
+      Math.abs(was - row.size) > 0.01;
+    var sizeLabel;
+    if (sizeDiffers) {
+      sizeLabel = 'Font size: <span class="type-specimen-size--was">' +
+        typeScaleEscape(typeScaleNumber(was)) + '</span> <span class="type-specimen-size--now">' +
+        typeScaleEscape(typeScaleNumber(row.size)) + '</span>' +
+        (row.rounded ? ' (' + typeScaleNumber(row.raw) + ')' : '');
+      tipWas.push(typeScaleNumber(was));
+      anyDiff = true;
+    } else {
+      sizeLabel = 'Font size: ' + typeScaleNumber(row.size) +
+        (row.rounded ? ' (' + typeScaleNumber(row.raw) + ')' : '');
+      tipWas.push(typeScaleNumber(row.size));
+    }
+    tipNow.push(typeScaleNumber(row.size));
+
     // **The rounding sits beside the number it moved**, not on a line of its own at the bottom. A separate
     // *Rounded from 218.37* left you matching it back to whichever value it belonged to — and there is only
     // ever one candidate, so the line was carrying no information its position could not.
     var meta = [
       typeScaleEscape(row.token),
-      'Font size: ' + typeScaleNumber(row.size) +
-        (row.rounded ? ' (' + typeScaleNumber(row.raw) + ')' : ''),
+      sizeLabel,
       'Line height: ' + typeScaleNumber(row.lineHeight),
       'Letter spacing: ' + typeScaleNumber(row.tracking)
     ];
@@ -454,14 +496,15 @@ function typographyPreviewHtml(config, domain, modeName) {
       '</div>';
   }).join('');
 
-  var mode = table.mode && table.mode.name ? table.mode.name : '';
-  var tipScale = table.rows.map(function (row) {
-    return typeScaleNumber(row.size);
-  }).join(', ');
-  return '<div class="type-specimen"' +
-    (tipScale ? ' data-curve-tip-scale="' + typeScaleEscape(tipScale) + '"' : '') + '>' +
+  var modeLabel = modeNameKey || '';
+  var tipScale = tipNow.join(', ');
+  var tipAttrs = tipScale ? ' data-curve-tip-scale="' + typeScaleEscape(tipScale) + '"' : '';
+  if (anyDiff) {
+    tipAttrs += ' data-curve-tip-scale-was="' + typeScaleEscape(tipWas.join(', ')) + '"';
+  }
+  return '<div class="type-specimen"' + tipAttrs + '>' +
     '<div class="type-specimen-family">' + typeScaleEscape(family) + '</div>' +
     '<div class="type-specimen-note">' +
-      typeScaleEscape(mode ? mode + ' · font weight ' + weight : 'Font weight ' + weight) +
+      typeScaleEscape(modeLabel ? modeLabel + ' · font weight ' + weight : 'Font weight ' + weight) +
     '</div>' + steps + '</div>';
 }

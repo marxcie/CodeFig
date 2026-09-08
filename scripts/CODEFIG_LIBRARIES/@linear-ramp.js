@@ -97,6 +97,20 @@
 //   font-variant-numeric: tabular-nums;
 // }
 //
+// /* File vs generated — same idea as Colors' hex--was / hex--now. Stacked so the track's
+//    fixed value column still fits. Modifiers share the value class so color/decoration win. */
+// .spacing-preview-value.spacing-preview-value--was {
+//   display: block;
+//   text-decoration: line-through;
+//   color: var(--text-secondary);
+//   font-size: var(--font-size-small);
+// }
+//
+// .spacing-preview-value.spacing-preview-value--now {
+//   display: block;
+//   color: var(--text-primary);
+// }
+//
 // .spacing-preview-note {
 //   font-size: var(--font-size-small);
 //   opacity: 0.6;
@@ -154,6 +168,18 @@
 // .radius-preview-value {
 //   font-size: var(--font-size-body);
 //   font-variant-numeric: tabular-nums;
+// }
+//
+// .radius-preview-value.radius-preview-value--was {
+//   display: block;
+//   text-decoration: line-through;
+//   color: var(--text-secondary);
+//   font-size: var(--font-size-small);
+// }
+//
+// .radius-preview-value.radius-preview-value--now {
+//   display: block;
+//   color: var(--text-primary);
 // }
 //
 // .radius-preview-note {
@@ -1524,8 +1550,8 @@ function rampPreviewHtml(config, domain) {
  * "generate in memory the way a run does", which is the property every preview in this project has to
  * keep — a preview computed a second way is the one nobody can judge.
  *
- * Returns `{ error }`, or `{ unset, mode, rows }` where a row is `{ token, value, note }` and the note is
- * already worded.
+ * Returns `{ error }`, or `{ unset, mode, rows }` where a row is `{ token, value, note, was }` and the note
+ * is already worded. `was` is the file's FLOAT for that step when `config.existing` carries it.
  */
 function rampPreviewRows(config, domain, modeName) {
   var spec = domain === 'radius' ? radiusRampSpec() : spacingRampSpec();
@@ -1589,6 +1615,14 @@ function rampPreviewRows(config, domain, modeName) {
   var raw = spacingRawSequenceFor(wanted, data, spec);
   var grid = spacingModeGrid(wanted, data, spec);
 
+  // File values for was/now — session-held, never in the saved block. Same shape as Colors.
+  var fileExisting = (config && config.existing) || null;
+  var modeExisting = null;
+  if (fileExisting && typeof fileExisting === 'object') {
+    if (Array.isArray(fileExisting[wanted])) modeExisting = fileExisting[wanted];
+    else if (Array.isArray(fileExisting[active.name])) modeExisting = fileExisting[active.name];
+  }
+
   var rows = table.rows.map(function (row, index) {
     var cell = null;
     for (var c = 0; c < row.cells.length; c++) if (row.cells[c].mode === wanted) cell = row.cells[c];
@@ -1604,7 +1638,11 @@ function rampPreviewRows(config, domain, modeName) {
         ? 'Nudged from ' + rampPreviewNumber(onGrid) + ' \u2014 it landed on the token below'
         : 'Rounded from ' + rampPreviewNumber(before);
     }
-    return { token: row.token, value: value, note: note };
+    var was = null;
+    if (modeExisting && typeof modeExisting[index] === 'number' && isFinite(modeExisting[index])) {
+      was = modeExisting[index];
+    }
+    return { token: row.token, value: value, note: note, was: was };
   });
 
   return {
@@ -1614,12 +1652,58 @@ function rampPreviewRows(config, domain, modeName) {
   };
 }
 
+/** Same tolerance as the "Rounded from" note — above float noise, below a visible step. */
+function rampPreviewDiffers(was, now) {
+  return typeof was === 'number' && typeof now === 'number' && Math.abs(was - now) > 0.01;
+}
+
+/**
+ * Value cell HTML: one number, or struck-through file value above the generated one.
+ * `kind` is `spacing` or `radius` so each preview keeps its own class namespace.
+ */
+function rampPreviewValueHtml(kind, value, was) {
+  if (typeof value !== 'number') return '\u2014';
+  var nowText = rampPreviewNumber(value);
+  var base = kind === 'radius' ? 'radius-preview-value' : 'spacing-preview-value';
+  if (rampPreviewDiffers(was, value)) {
+    return '<span class="' + base + ' ' + base + '--was">' + rampEscapeHtml(rampPreviewNumber(was)) +
+      '</span><span class="' + base + ' ' + base + '--now">' + rampEscapeHtml(nowText) + '</span>';
+  }
+  return '<span class="' + base + '">' + rampEscapeHtml(nowText) + '</span>';
+}
+
+/** Tip attributes for the growth-curve hover: new scale, and file scale when any step differs. */
+function rampPreviewTipAttrs(rows) {
+  var tipNow = [];
+  var tipWas = [];
+  var anyDiff = false;
+  (rows || []).forEach(function (row) {
+    var nowText = typeof row.value === 'number' ? rampPreviewNumber(row.value) : '';
+    tipNow.push(nowText);
+    if (rampPreviewDiffers(row.was, row.value)) {
+      tipWas.push(rampPreviewNumber(row.was));
+      anyDiff = true;
+    } else {
+      tipWas.push(nowText);
+    }
+  });
+  var attrs = '';
+  var nowJoined = tipNow.filter(Boolean).join(', ');
+  if (nowJoined) attrs += ' data-curve-tip-scale="' + rampEscapeHtml(nowJoined) + '"';
+  if (anyDiff) {
+    var wasJoined = tipWas.filter(Boolean).join(', ');
+    if (wasJoined) attrs += ' data-curve-tip-scale-was="' + rampEscapeHtml(wasJoined) + '"';
+  }
+  return attrs;
+}
+
 function spacingPreviewHtml(config, domain, modeName) {
   var drawn = rampPreviewRows(config, domain, modeName);
   if (drawn.hide) return '';
   if (drawn.error) return rampPreviewNote(drawn.error);
 
-  var out = ['<div class="spacing-preview' + (drawn.unset ? ' is-unset' : '') + '">'];
+  var out = ['<div class="spacing-preview' + (drawn.unset ? ' is-unset' : '') + '"' +
+    rampPreviewTipAttrs(drawn.rows) + '>'];
   drawn.rows.forEach(function (row) {
     var height = typeof row.value === 'number' ? Math.max(0, row.value * 0.5) : 0;
     out.push('<div class="spacing-preview-row">');
@@ -1627,8 +1711,7 @@ function spacingPreviewHtml(config, domain, modeName) {
     out.push('<span class="spacing-preview-track">');
     out.push('<span class="spacing-preview-bar" style="height:' +
       (Math.round(height * 100) / 100) + 'px"></span>');
-    out.push('<span class="spacing-preview-value">' +
-      (typeof row.value === 'number' ? rampPreviewNumber(row.value) : '\u2014') + '</span>');
+    out.push(rampPreviewValueHtml('spacing', row.value, row.was));
     if (row.note) out.push('<span class="spacing-preview-note">' + rampEscapeHtml(row.note) + '</span>');
     out.push('</span>');
     out.push('</div>');
@@ -1658,9 +1741,9 @@ function radiusPreviewCap() {
 /**
  * Corner radius, drawn at its real size on the box the frame draws.
  *
- * Real px rather than a scale, because a radius is judged against the corner it will sit on \u2014 and
- * Márton settled the general question on Grid: *"it should be real 50% of the viewport width, in pixels"*.
- * Here the box is a fixed size, so nothing is scaled at all.
+ * Real px rather than a scale, because a radius is judged against the corner it will sit on.
+ * (Grid fits the pane by proportion of the largest mode; a radius box is a fixed specimen, so it
+ * stays unscaled.)
  */
 function radiusPreviewHtml(config, domain, modeName) {
   var drawn = rampPreviewRows(config, domain || 'radius', modeName);
@@ -1669,7 +1752,8 @@ function radiusPreviewHtml(config, domain, modeName) {
 
   var box = radiusPreviewBox();
   var cap = radiusPreviewCap();
-  var out = ['<div class="radius-preview' + (drawn.unset ? ' is-unset' : '') + '">'];
+  var out = ['<div class="radius-preview' + (drawn.unset ? ' is-unset' : '') + '"' +
+    rampPreviewTipAttrs(drawn.rows) + '>'];
   drawn.rows.forEach(function (row) {
     var radius = typeof row.value === 'number' ? Math.max(0, row.value) : 0;
     out.push('<div class="radius-preview-row">');
@@ -1677,8 +1761,7 @@ function radiusPreviewHtml(config, domain, modeName) {
     out.push('<span class="radius-preview-track">');
     out.push('<span class="radius-preview-box" style="width:' + box.width + 'px;height:' + box.height +
       'px;border-radius:' + (Math.round(radius * 100) / 100) + 'px"></span>');
-    out.push('<span class="radius-preview-value">' +
-      (typeof row.value === 'number' ? rampPreviewNumber(row.value) : '\u2014') + '</span>');
+    out.push(rampPreviewValueHtml('radius', row.value, row.was));
     var notes = [];
     if (row.note) notes.push(row.note);
     if (radius > cap) {

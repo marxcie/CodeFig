@@ -79,10 +79,13 @@ function starterConfig() {
 function readout(html) {
   return {
     names: [...html.matchAll(/radius-preview-name">([^<]*)</g)].map((m) => m[1]),
-    values: [...html.matchAll(/radius-preview-value">([^<]*)</g)].map((m) => m[1]),
+    values: [...html.matchAll(/radius-preview-value(?:--now)?">([^<]*)</g)].map((m) => m[1]),
+    was: [...html.matchAll(/radius-preview-value--was">([^<]*)</g)].map((m) => m[1]),
     notes: [...html.matchAll(/radius-preview-note">([^<]*)</g)].map((m) => m[1]),
     radii: [...html.matchAll(/border-radius:([\d.]+)px/g)].map((m) => Number(m[1])),
     boxes: [...html.matchAll(/width:(\d+)px;height:(\d+)px/g)].map((m) => [Number(m[1]), Number(m[2])]),
+    tipScale: (html.match(/data-curve-tip-scale="([^"]*)"/) || [])[1] || '',
+    tipWas: (html.match(/data-curve-tip-scale-was="([^"]*)"/) || [])[1] || '',
   };
 }
 
@@ -236,4 +239,15 @@ test('the two previews are one set of numbers in two shapes', () => {
 test('an incomplete config hides the preview rather than drawing a placeholder', () => {
   assert.equal(L.radiusPreviewHtml(null, 'radius', null), '');
   assert.equal(L.radiusPreviewHtml({ radii: [], modes: [] }, 'radius', null), '');
+});
+
+test('file existing values show was/now when the curve would change a step', () => {
+  const config = starterConfig();
+  config.existing = { Value: [0, 4, 6, 12, 14, 20] };
+  const out = readout(L.radiusPreviewHtml(config, 'radius', 'Value'));
+  assert.deepEqual(out.values.map(Number), [0, 4, 6, 10, 14, 20]);
+  assert.equal(out.was.length, 1);
+  assert.equal(Number(out.was[0]), 12);
+  assert.ok(out.tipWas);
+  assert.match(out.tipWas, /12/);
 });

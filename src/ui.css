@@ -3093,6 +3093,17 @@
         word-break: break-word;
       }
 
+      .config-ui-curve-tip__scale--was {
+        text-decoration: line-through;
+        color: var(--text-secondary);
+        opacity: 1;
+      }
+
+      .config-ui-curve-tip__scale--now {
+        opacity: 1;
+        color: var(--text-primary);
+      }
+
       /* ============================================================
          THE CURVE EDITOR — `.config-ui-curve`
 

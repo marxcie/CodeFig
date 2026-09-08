@@ -58,7 +58,7 @@
 //    7px against 5px, and matching the numbers would only have hidden the fact that nothing tied
 //    them together.
 //
-//    The diagram and the Total line are the first row; the twelve span rows follow.
+//    The ruler and the Total line are the first row; the twelve span rows follow.
 //
 //    8. Every width is a **proportion of the largest mode**, fitted to the preview column: the
 //    widest viewport is 100% of the content area, and every other mode is `width / maxWidth` of
@@ -141,20 +141,25 @@
 // /* Label band above the track: name + width, tick ending at the bar. */
 // .grid-preview-ruler-mark {
 //   position: absolute;
-//   top: 0;
+//   top: -2px;
 //   height: 30px;
 //   width: 0;
 //   border-left: 1px solid rgba(80, 80, 85, 0.9);
+//   opacity: 0.3;
 // }
 //
 // .grid-preview-ruler-mark.is-active {
-//   border-left-color: rgba(200, 200, 210, 0.95);
+//   opacity: 1;
+// }
+//
+// .grid-preview-ruler-mark:nth-last-child(2) {
+//   margin-left: -2px;
 // }
 //
 // .grid-preview-ruler-label {
 //   position: absolute;
-//   right: 5px;
-//   bottom: 4px;
+//   right: 4px;
+//   top: 0px;
 //   display: flex;
 //   flex-direction: column;
 //   align-items: flex-end;
@@ -163,11 +168,6 @@
 //   text-align: right;
 //   font-size: var(--font-size-small);
 //   line-height: 1.15;
-//   opacity: 0.4;
-// }
-//
-// .grid-preview-ruler-mark.is-active .grid-preview-ruler-label {
-//   opacity: 0.9;
 // }
 //
 // .grid-preview-ruler-size {
@@ -1217,6 +1217,75 @@ async function foundationSiblingCandidates(collectionName, domain, group, knownG
   });
 }
 
+/**
+ * Live FLOAT values under the group, keyed by mode and aligned to `tokenOrder`.
+ *
+ * Same job Colors' `found.existing` hex map does for the comparison strip: the preview can show what
+ * the file holds beside what the edited curve would write. Session-only — never written into the
+ * config text. Holes are `null` so `0` stays a real value. Aliases and non-FLOATs are skipped.
+ *
+ * → `{ modeName: (number|null)[] }` or `{}` when nothing usable.
+ */
+async function foundationRampExisting(collection, group, domain, tokenOrder) {
+  var empty = {};
+  if (!collection || !Array.isArray(tokenOrder) || tokenOrder.length === 0) return empty;
+  if (domain !== 'spacing' && domain !== 'radius' && domain !== 'typography') return empty;
+
+  var prefix = namePrefix(group == null ? '' : group);
+  var leaf = foundationTokenLeaf(domain);
+  var byToken = {};
+
+  for (var i = 0; i < collection.variableIds.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+    if (!variable || variable.resolvedType !== 'FLOAT') continue;
+    if (prefix && variable.name.indexOf(prefix) !== 0) continue;
+    var rest = prefix ? variable.name.slice(prefix.length) : variable.name;
+    var parts = rest.split('/');
+    var token = null;
+    if (leaf) {
+      if (parts.length === 2 && parts[1] === leaf) token = parts[0];
+    } else if (parts.length === 1) {
+      token = parts[0];
+      if (!isRampTokenLeaf(token)) continue;
+      if ((domain === 'spacing' || domain === 'radius') &&
+          !rampVariableMatchesDomain(variable, domain)) continue;
+    }
+    if (!token || byToken[token]) continue;
+
+    var byMode = {};
+    var aliased = false;
+    var valuesByMode = variable.valuesByMode || {};
+    for (var m = 0; m < collection.modes.length; m++) {
+      var value = valuesByMode[collection.modes[m].modeId];
+      if (value && typeof value === 'object') { aliased = true; break; }
+      if (typeof value === 'number' && isFinite(value)) {
+        byMode[collection.modes[m].name] = value;
+      }
+    }
+    if (aliased) continue;
+    byToken[token] = byMode;
+  }
+
+  var existing = {};
+  for (var mi = 0; mi < collection.modes.length; mi++) {
+    var modeName = collection.modes[mi].name;
+    var row = [];
+    var any = false;
+    for (var t = 0; t < tokenOrder.length; t++) {
+      var cell = byToken[tokenOrder[t]];
+      var n = cell ? cell[modeName] : undefined;
+      if (typeof n === 'number' && isFinite(n)) {
+        row.push(n);
+        any = true;
+      } else {
+        row.push(null);
+      }
+    }
+    if (any) existing[modeName] = row;
+  }
+  return existing;
+}
+
 async function foundationAutoImport(collectionName, group, domain) {
   var answer = {
     source: 'none', config: null, collection: collectionName || null,
@@ -1257,6 +1326,8 @@ async function foundationAutoImport(collectionName, group, domain) {
         answer.config = {};
         answer.config[tokensKey] = found;
         answer.modes = collection.modes.map(function (mode) { return mode.name; });
+        // File FLOATs for the was/now preview — not a scale fit.
+        answer.existing = await foundationRampExisting(collection, group, domain, found);
         // Siblings so the panel can switch without clearing Group.
         answer.candidates = await foundationSiblingCandidates(
           collectionName, domain, group, rampScan.groups
@@ -1322,6 +1393,8 @@ async function foundationAutoImport(collectionName, group, domain) {
   // up to date — but the panel is entitled to know it loaded a set that has moved.
   answer.recordedGroup = read.recordedGroup;
   answer.candidates = await foundationSiblingCandidates(collectionName, domain, group);
+  // File FLOATs for was/now — re-derived every read, never part of the saved slice.
+  answer.existing = await foundationRampExisting(collection, group, domain, answer.tokens);
   return answer;
 }
 

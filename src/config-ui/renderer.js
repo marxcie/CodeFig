@@ -95,7 +95,7 @@
     if (curveTipEl) curveTipEl.hidden = true;
   }
 
-  function showCurveTip(anchor, primary, scaleText) {
+  function showCurveTip(anchor, primary, scaleText, scaleWasText) {
     var el = curveTipHost();
     if (!el || !anchor || primary == null || primary === "") {
       hideCurveTip();
@@ -106,10 +106,18 @@
     valueEl.className = "config-ui-curve-tip__value";
     valueEl.textContent = String(primary);
     el.appendChild(valueEl);
+    var scaleWas = scaleWasText == null ? "" : String(scaleWasText).trim();
     var scale = scaleText == null ? "" : String(scaleText).trim();
+    if (scaleWas && scaleWas !== scale) {
+      var wasEl = document.createElement("div");
+      wasEl.className = "config-ui-curve-tip__scale config-ui-curve-tip__scale--was";
+      wasEl.textContent = scaleWas;
+      el.appendChild(wasEl);
+    }
     if (scale) {
       var scaleEl = document.createElement("div");
-      scaleEl.className = "config-ui-curve-tip__scale";
+      scaleEl.className = "config-ui-curve-tip__scale" +
+        (scaleWas && scaleWas !== scale ? " config-ui-curve-tip__scale--now" : "");
       scaleEl.textContent = scale;
       el.appendChild(scaleEl);
     }
@@ -3865,14 +3873,26 @@
       var stamped = wrap.getAttribute("data-curve-tip-scale");
       if (stamped != null && String(stamped).trim() !== "") return String(stamped).trim();
       // Fallback: the live Preview for this script, when the host has not stamped yet.
+      // Prefer `--now` cells; otherwise plain value cells, skipping `--was` by class name check
+      // (the test DOM shim does not parse `:not([class*='…'])`).
       var root = (typeof wrap.closest === "function" && wrap.closest(".config-ui-form")) ||
         (typeof document !== "undefined" ? document : null);
       if (!root || !root.querySelectorAll) return "";
       var nums = [];
-      root.querySelectorAll(".spacing-preview-value, .radius-preview-value").forEach(function (node) {
-        var t = String(node.textContent || "").trim();
-        if (t && t !== "\u2014") nums.push(t);
-      });
+      var nowNodes = root.querySelectorAll(".spacing-preview-value--now, .radius-preview-value--now");
+      if (nowNodes.length) {
+        nowNodes.forEach(function (node) {
+          var t = String(node.textContent || "").trim();
+          if (t && t !== "\u2014") nums.push(t);
+        });
+      } else {
+        root.querySelectorAll(".spacing-preview-value, .radius-preview-value").forEach(function (node) {
+          var cls = " " + String(node.className || "") + " ";
+          if (cls.indexOf("--was") !== -1 || cls.indexOf("--now") !== -1) return;
+          var t = String(node.textContent || "").trim();
+          if (t && t !== "\u2014") nums.push(t);
+        });
+      }
       if (nums.length) return nums.join(", ");
       var specimen = root.querySelector(".type-specimen[data-curve-tip-scale]");
       if (specimen) {
@@ -3880,6 +3900,21 @@
         if (fromType != null && String(fromType).trim() !== "") return String(fromType).trim();
       }
       return "";
+    }
+
+    function curveTipScaleWasText() {
+      var stamped = wrap.getAttribute("data-curve-tip-scale-was");
+      if (stamped != null && String(stamped).trim() !== "") return String(stamped).trim();
+      var root = (typeof wrap.closest === "function" && wrap.closest(".config-ui-form")) ||
+        (typeof document !== "undefined" ? document : null);
+      if (!root || !root.querySelector) return "";
+      var preview = root.querySelector(
+        ".spacing-preview[data-curve-tip-scale-was], .radius-preview[data-curve-tip-scale-was], " +
+        ".type-specimen[data-curve-tip-scale-was]"
+      );
+      if (!preview) return "";
+      var from = preview.getAttribute("data-curve-tip-scale-was");
+      return from != null ? String(from).trim() : "";
     }
 
     function tipAnchor() {
@@ -3900,7 +3935,7 @@
         hideCurveTip();
         return;
       }
-      showCurveTip(tipAnchor(), String(ratio), curveTipScaleText());
+      showCurveTip(tipAnchor(), String(ratio), curveTipScaleText(), curveTipScaleWasText());
     }
 
     function tipKindFromTarget(target) {

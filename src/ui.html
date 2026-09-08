@@ -1587,7 +1587,7 @@
         const hadFocus = captureFieldFocus();
         // And for how far down the form you had scrolled. Emptying the container collapses its
         // content height and the browser zeros `scrollTop`; without this, clicking a suggestion
-        // (or any other write that re-projects the form) jumps the panel back to the top.
+        // (or any other write that re-projects) jumps you back to the top of the panel.
         const hadScroll = captureFormScroll();
 
         // **Whether a form exists is decided by whether the block parses to fields**, not by which
@@ -1739,22 +1739,6 @@
        * lives in names a mode's own cells. Anything else — a button, a chip, a curve handle — has no
        * stable name across a rebuild and is left alone rather than guessed at.
        */
-/**
-       * How far the Configuration UI form was scrolled — same survival problem as the mode tab and
-       * the caret. The form *is* `configUIContainer` (render stamps `.config-ui-form` on it), and
-       * emptying it for a rebuild drops `scrollTop` to 0. Capture before the wipe; restore after.
-       */
-      function captureFormScroll() {
-        if (!configUIContainer) return null;
-        return { top: configUIContainer.scrollTop, left: configUIContainer.scrollLeft };
-      }
-
-      function restoreFormScroll(pos) {
-        if (!pos || !configUIContainer) return;
-        configUIContainer.scrollTop = pos.top;
-        configUIContainer.scrollLeft = pos.left;
-      }
-
       function captureFieldFocus() {
         var active = document.activeElement;
         if (!active || !configUIContainer || !configUIContainer.contains(active)) return null;
@@ -1789,6 +1773,22 @@
         if (caret.start !== null && typeof el.setSelectionRange === 'function') {
           try { el.setSelectionRange(caret.start, caret.end); } catch (e) { /* not a text selection */ }
         }
+      }
+
+      /**
+       * How far the Configuration UI form was scrolled — same survival problem as the mode tab and
+       * the caret. The form *is* `configUIContainer` (render stamps `.config-ui-form` on it), and
+       * emptying it for a rebuild drops `scrollTop` to 0. Capture before the wipe; restore after.
+       */
+      function captureFormScroll() {
+        if (!configUIContainer) return null;
+        return { top: configUIContainer.scrollTop, left: configUIContainer.scrollLeft };
+      }
+
+      function restoreFormScroll(pos) {
+        if (!pos || !configUIContainer) return;
+        configUIContainer.scrollTop = pos.top;
+        configUIContainer.scrollLeft = pos.left;
       }
 
       let structureSyncTimeout = null;
@@ -2344,7 +2344,7 @@
           fileModesTimer = null;
         }
         fileModesSeq++;
-        fileColorValues = { address: null, byMode: null };
+        fileExistingValues = { address: null, byMode: null };
         // Facts about the file are re-read, not carried over. Cheap — one read — and it is the only way
         // a panel opened in a different file cannot inherit the last one's modes.
         fileModes = { document: null, collection: null, collectionId: null, modes: [], found: false };
@@ -3043,27 +3043,47 @@
       /**
        * Put the open mode's generated token numbers on the growth curve, so the handle tip can show
        * them without scraping Preview markup mid-drag (and so a test can set the same attribute).
-       * Spacing / radius: value cells. Typography: sizes on the specimen root.
+       * Prefer attributes the preview stamped (`data-curve-tip-scale` / `-was`); fall back to scraping
+       * the **now** value cells only so a was/now pair does not concatenate into one tip string.
        */
       function stampCurveTipScales() {
-        var nums = [];
-        document.querySelectorAll('.spacing-preview-value, .radius-preview-value').forEach(function (node) {
-          var t = String(node.textContent || '').trim();
-          if (t && t !== '\u2014') nums.push(t);
-        });
-        var text = nums.join(', ');
+        var text = '';
+        var was = '';
+        var preview = document.querySelector(
+          '.spacing-preview[data-curve-tip-scale], .radius-preview[data-curve-tip-scale], ' +
+          '.type-specimen[data-curve-tip-scale]'
+        );
+        if (preview) {
+          text = String(preview.getAttribute('data-curve-tip-scale') || '').trim();
+          was = String(preview.getAttribute('data-curve-tip-scale-was') || '').trim();
+        }
         if (!text) {
-          var specimen = document.querySelector('.type-specimen[data-curve-tip-scale]');
-          if (specimen) {
-            var fromType = specimen.getAttribute('data-curve-tip-scale');
-            if (fromType != null && String(fromType).trim() !== '') text = String(fromType).trim();
+          var nums = [];
+          var nowNodes = document.querySelectorAll(
+            '.spacing-preview-value--now, .radius-preview-value--now'
+          );
+          if (nowNodes.length) {
+            nowNodes.forEach(function (node) {
+              var t = String(node.textContent || '').trim();
+              if (t && t !== '\u2014') nums.push(t);
+            });
+          } else {
+            document.querySelectorAll('.spacing-preview-value, .radius-preview-value').forEach(function (node) {
+              var cls = ' ' + String(node.className || '') + ' ';
+              if (cls.indexOf('--was') !== -1 || cls.indexOf('--now') !== -1) return;
+              var t = String(node.textContent || '').trim();
+              if (t && t !== '\u2014') nums.push(t);
+            });
           }
+          text = nums.join(', ');
         }
         // Preview is the active mode only; stamp every growth chart — only the visible tab's
         // handle can be hovered, so inactive tabs holding the same string is harmless.
         document.querySelectorAll('.config-ui-curve--growth').forEach(function (wrap) {
           if (text) wrap.setAttribute('data-curve-tip-scale', text);
           else wrap.removeAttribute('data-curve-tip-scale');
+          if (was) wrap.setAttribute('data-curve-tip-scale-was', was);
+          else wrap.removeAttribute('data-curve-tip-scale-was');
         });
       }
 
@@ -3231,7 +3251,6 @@
         );
       }
 
-
       /** Debounced: long enough that typing `12` never renders `1`. */
       /**
        * How long the strip may go without redrawing while edits keep arriving.
@@ -3275,26 +3294,33 @@
       }
 
       /**
-       * The file's own values for the set the panel is pointing at, `{ modeName: [hex, …] }`.
+       * The file's own values for the set the panel is pointing at — Colors hexes or ramp FLOATs —
+       * `{ modeName: […, …] }`.
        *
        * **Session state, not a re-read.** A `@PREVIEW:` function is pure and runs in the UI, so the only way
-       * the comparison strip can be live while anchors are being adjusted is for the values to already be
-       * here. They ride the auto-import payload — the read that already happens on a Collection or Group
-       * change — rather than costing a second round trip.
+       * the comparison strip can be live while anchors (or a growth curve) are being adjusted is for the
+       * values to already be here. They ride the auto-import payload — the read that already happens on a
+       * Collection or Group change — rather than costing a second round trip.
        *
-       * Keyed by collection and group, so pointing the panel somewhere else cannot leave the previous set's
-       * colours underneath the new one's ramp. Cleared rather than kept when the address changes and the new
-       * address holds nothing.
+       * Keyed by **domain + collection + group**, so Colors hexes cannot land under a Spacing preview (or
+       * the other way around) when the address string matches. Cleared rather than kept when the address
+       * changes and the new address holds nothing.
        */
-      var fileColorValues = { address: null, byMode: null };
+      var fileExistingValues = { address: null, byMode: null };
 
-      function fileColorsAddress(collection, group) {
-        return String(collection || '') + '\u0000' + String(group == null ? '' : group);
+      function fileExistingAddress(domain, collection, group) {
+        return String(domain || '') + '\u0000' + String(collection || '') + '\u0000' +
+          String(group == null ? '' : group);
       }
 
+      function fileExistingFor(domain, collection, group) {
+        return (fileExistingValues.address === fileExistingAddress(domain, collection, group))
+          ? fileExistingValues.byMode : null;
+      }
+
+      /** Colors-only alias: mode-chip rename helpers still speak hexes. */
       function fileColorsFor(collection, group) {
-        return (fileColorValues.address === fileColorsAddress(collection, group))
-          ? fileColorValues.byMode : null;
+        return fileExistingFor('colors', collection, group);
       }
 
       /**
@@ -3353,11 +3379,15 @@
         });
       }
 
-      function rememberFileColors(collection, group, byMode) {
-        fileColorValues = {
-          address: fileColorsAddress(collection, group),
+      function rememberFileExisting(domain, collection, group, byMode) {
+        fileExistingValues = {
+          address: fileExistingAddress(domain, collection, group),
           byMode: (byMode && Object.keys(byMode).length) ? byMode : null
         };
+      }
+
+      function rememberFileColors(collection, group, byMode) {
+        rememberFileExisting('colors', collection, group, byMode);
       }
 
       /**
@@ -3369,10 +3399,12 @@
        * definition; these only write the panel's held copy.
        */
       function rewriteHeldFileColors(mutator) {
-        if (!fileColorValues.byMode || typeof mutator !== 'function') return;
-        var next = mutator(fileColorValues.byMode);
-        if (next === fileColorValues.byMode) return;
-        fileColorValues = { address: fileColorValues.address, byMode: next };
+        if (!fileExistingValues.byMode || typeof mutator !== 'function') return;
+        // Only mutate when the held map is Colors — ramp FLOATs share the same bag.
+        if ((fileExistingValues.address || '').indexOf('colors\u0000') !== 0) return;
+        var next = mutator(fileExistingValues.byMode);
+        if (next === fileExistingValues.byMode) return;
+        fileExistingValues = { address: fileExistingValues.address, byMode: next };
       }
 
       function copyHeldFileColors(fromName, toName) {
@@ -3505,8 +3537,9 @@
 
         // The file's values travel *in the config*, so the preview function stays pure: it receives
         // everything it draws and reaches for nothing. `existing` is absent when the panel is pointing at a
-        // collection that holds nothing, and the strip then draws the generated ramp alone.
-        const held = fileColorsFor(config.collectionName, config.group);
+        // collection that holds nothing, and the strip then draws the generated ramp alone. Domain-keyed so
+        // Colors hexes and Spacing FLOATs cannot share an address.
+        const held = fileExistingFor(configPreviewDomain(), config.collectionName, config.group);
         const forPreview = held ? Object.assign({}, config, { existing: held }) : config;
 
         const seq = ++_previewSeq;
@@ -3615,6 +3648,10 @@
         // Here rather than in each caller: this is the only place that writes the block
         // programmatically, so this is the only place that can guarantee the two agree. Rendering
         // fires no change event, so it cannot start the load loop that a tab switch once did.
+        //
+        // **`skipFormProject`:** a Grid suggestion click already patches the open mode's fields and
+        // the suggestion cards in place. Re-projecting would wipe those nodes and rebuild them —
+        // the jump Márton saw — for no gain.
         blockWrites.push({
           by: by || 'unknown',
           at: new Date().toLocaleTimeString(),
@@ -3624,9 +3661,6 @@
         });
         if (blockWrites.length > 8) blockWrites.shift();
 
-        // **`skipFormProject`:** a Grid suggestion click already patches the open mode's fields and
-        // the suggestion cards in place. Re-projecting would wipe those nodes and rebuild them —
-        // the jump Márton saw — for no gain.
         if (!(opts && opts.skipFormProject) &&
             isConfigTab(currentTab) && configUIInstance) {
           projectConfigIntoForm();
@@ -4797,8 +4831,10 @@
        */
       function rememberReadResult(found) {
         if (!found || found.collection === undefined) return;
-        rememberFileColors(found.collection, found.group, found.existing);
-        rememberCurveRamps(found.config, found.existing);
+        var domain = configPreviewDomain();
+        rememberFileExisting(domain, found.collection, found.group, found.existing);
+        // Curve ramps (chart colour bars) are Colors-only — hex arrays, not FLOAT ladders.
+        if (domain === 'colors') rememberCurveRamps(found.config, found.existing);
         scheduleConfigPreview();
       }
 
@@ -4816,13 +4852,24 @@
           // Miss after an address change: reset to defaults for this Collection + Group so a new
           // name (e.g. Neutral after Blue) does not keep the previous set's strip and curves.
           // Load of an existing set is only via a candidate click (`adoptGroupCandidate`).
+          //
+          // **Modes are not part of that wipe.** They belong to the collection, not the group —
+          // `resetModesForNewCollection` already handled a collection switch. Writing the pristine
+          // starter `Value` here cleared Desktop/Tablet (or any modes typed on *New collection*)
+          // the moment Group was committed, which is exactly wrong.
           var resetBase = pendingPristine;
           pendingPristine = null;
           addressAlreadyReset = false;
           if (resetBase) {
             rememberCurveBaselines(null);
             _modeFitted = {};
-            writeConfigBlockText(resetBase, 'auto-import:miss-reset');
+            var keepModes = configModeEntries();
+            var toWrite = resetBase;
+            if (keepModes.length && window.CodeFigConfigUI && window.CodeFigConfigUI.fillConfigBlock) {
+              var withModes = window.CodeFigConfigUI.fillConfigBlock(resetBase, { modes: keepModes });
+              if (withModes && withModes.text) toWrite = withModes.text;
+            }
+            writeConfigBlockText(toWrite, 'auto-import:miss-reset');
           }
           var onMiss = orderConfigModesToFile();
           // No file modes yet (new collection, or read before anything exists): still unlock with Value.
@@ -7264,7 +7311,7 @@
                     // runs when a script opens on an address it already had — the only moment a saved
                     // Original config would otherwise have no live `existing` to preview or (once it
                     // exists) run against. `rememberReadResult` only touches session state
-                    // (`fileColorValues`/`_curveRamps`) and reschedules the preview — the fill below it
+                    // (`fileExistingValues`/`_curveRamps`) and reschedules the preview — the fill below it
                     // stays exactly what it was, so nothing here can overwrite what the person saved.
                     rememberReadResult(data.autoImport);
                     // Read-only half: list candidate groups under Group; load only on click.

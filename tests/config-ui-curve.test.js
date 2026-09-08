@@ -2226,3 +2226,24 @@ test("getValues() keeps an overshoot @rows curve's real height too, not only a f
   assert.deepEqual(Array.from(collected), wild,
     'an overshoot @rows curve\'s real height was clamped on collection: ' + JSON.stringify(collected));
 });
+
+test("the tip shows struck-through file sizes beside the new scale", () => {
+  const f = growthForm({ name: "V", ratio: 1.5, curve: [] });
+  f.curve.setAttribute("data-curve-tip-scale", "0, 2, 4, 8");
+  f.curve.setAttribute("data-curve-tip-scale-was", "0, 2, 5, 9");
+  const svg = f.curve.querySelector(".config-ui-curve__canvas");
+  const dot = f.growthDot();
+  dot._rect = { left: 90, top: 40, width: 10, height: 10, right: 100, bottom: 50 };
+  svg.dispatch("pointermove", { target: dot });
+  const tip = document.body.querySelector(".config-ui-curve-tip");
+  assert.ok(tip && tip.hidden !== true && tip.hidden !== "true");
+  assert.equal(tip.querySelector(".config-ui-curve-tip__value").textContent, "1.5");
+  assert.equal(
+    tip.querySelector(".config-ui-curve-tip__scale--was").textContent,
+    "0, 2, 5, 9"
+  );
+  assert.equal(
+    tip.querySelector(".config-ui-curve-tip__scale--now").textContent,
+    "0, 2, 4, 8"
+  );
+});

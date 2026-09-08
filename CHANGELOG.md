@@ -23,6 +23,10 @@ a plain statement of the new default.
 
 - **Duplicate component** utility. Selects components or component sets and creates new
   definitions beside the originals (no Configuration UI).
+- **Spacing / Corner radius / Typography was/now on curve edit.** When the collection already
+  holds FLOAT values for the open set, the preview shows the file number struck through beside the
+  new one (same idea as Colors’ hex strip), and the Scale chart tip lists both scales so you can
+  compare while dragging. Quiet when they match.
 
 ### Changed
 
@@ -43,6 +47,9 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Group change no longer clears Collection modes.** Typing a Group on *New collection* (or
+  pointing at an empty group under an existing collection) still resets tokens/curves for that
+  address, but keeps the modes you already named — modes belong to the collection.
 - **Group candidates clear on every script switch.** Switching any DSF script (Colors, Spacing,
   Typography, …) drops the previous "In this collection:" links and invalidates in-flight
   auto-import replies so a late answer cannot remount the wrong domain's groups.
@@ -165,8 +172,8 @@ a plain statement of the new default.
 
 - **Spacing / Corner radius / Typography Scale chart tip.** Hovering or dragging the growth
   handle (or a shape handle) shows the stored growth ratio and the open mode’s generated sizes as
-  a number list — e.g. `1.5` above `0, 2, 4, 8, 16, 24, 40, 80, 120`. Tip sits right-centre of the
-  handle.
+  a number list — e.g. `1.5` above `0, 2, 4, 8, 16, 24, 40, 80, 120`. When the file holds different
+  values, a struck-through file list sits above the new one. Tip sits right-centre of the handle.
 
 ### Changed
 

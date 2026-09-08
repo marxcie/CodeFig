@@ -70,10 +70,14 @@ function starterConfig() {
 
 function readout(html) {
   const names = [...html.matchAll(/spacing-preview-name">([^<]*)</g)].map((m) => m[1]);
-  const values = [...html.matchAll(/spacing-preview-value">([^<]*)</g)].map((m) => m[1]);
+  // Quiet: `…-value">`. Diff: `…-value--now">` per changed step; unchanged steps stay plain.
+  const values = [...html.matchAll(/spacing-preview-value(?:--now)?">([^<]*)</g)].map((m) => m[1]);
+  const was = [...html.matchAll(/spacing-preview-value--was">([^<]*)</g)].map((m) => m[1]);
   const notes = [...html.matchAll(/spacing-preview-note">([^<]*)</g)].map((m) => m[1]);
   const bars = [...html.matchAll(/height:([\d.]+)px/g)].map((m) => Number(m[1]));
-  return { names, values, notes, bars };
+  const tipScale = (html.match(/data-curve-tip-scale="([^"]*)"/) || [])[1] || '';
+  const tipWas = (html.match(/data-curve-tip-scale-was="([^"]*)"/) || [])[1] || '';
+  return { names, values, was, notes, bars, tipScale, tipWas };
 }
 
 test('the block renders the panel the frames show', () => {
@@ -303,4 +307,29 @@ test('a base of 0 is a base, not a missing one', () => {
   const out = readout(L.spacingPreviewHtml(config, 'spacing', 'Value'));
   assert.equal(out.values.length, 6, 'every token got a value');
   assert.equal(Number(out.values[0]), 0, 'and the base of 0 is the smallest of them');
+});
+
+test('file existing values show was/now when the curve would change a step', () => {
+  const config = starterConfig();
+  // Generated Value ramp is [1, 4, 6, 10, 14, 20]. Differ only on md.
+  config.existing = { Value: [1, 4, 6, 12, 14, 20] };
+  const out = readout(L.spacingPreviewHtml(config, 'spacing', 'Value'));
+  assert.deepEqual(out.values.map(Number), [1, 4, 6, 10, 14, 20]);
+  assert.equal(out.was.length, 1, 'only the changed step carries a struck-through was');
+  assert.equal(Number(out.was[0]), 12);
+  assert.match(L.spacingPreviewHtml(config, 'spacing', 'Value'), /spacing-preview-value--now">10</);
+  assert.ok(out.tipWas, 'tip carries the file scale when any step differs');
+  assert.match(out.tipWas, /12/);
+  assert.match(out.tipScale, /10/);
+});
+
+test('matching file values stay quiet — no was, no tip-was', () => {
+  const config = starterConfig();
+  config.existing = { Value: [1, 4, 6, 10, 14, 20] };
+  const html = L.spacingPreviewHtml(config, 'spacing', 'Value');
+  const out = readout(html);
+  assert.equal(out.was.length, 0);
+  assert.equal(html.indexOf('spacing-preview-value--was'), -1);
+  assert.equal(out.tipWas, '');
+  assert.ok(out.tipScale);
 });

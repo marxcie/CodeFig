@@ -168,6 +168,10 @@ test('an address change loads a set on hit and resets on miss', () => {
     'a miss after address change resets to defaults for the new Group');
   assert.match(apply, /resetBase/,
     'miss uses the prepared pristine text, not a second pristine call');
+  assert.match(apply, /keepModes = configModeEntries\(\)/,
+    'miss-reset must keep the collection\'s modes — Group is not a reason to wipe them');
+  assert.match(apply, /fillConfigBlock\(resetBase, \{ modes: keepModes \}\)/,
+    'kept modes are written into the pristine text before miss-reset lands');
   assert.match(ui, /addressAlreadyReset = true/,
     'address settle still claims so a competing detectOnly cannot steal the fill');
   assert.match(apply, /var base = pendingPristine \|\| currentConfigBlock\(\)/,

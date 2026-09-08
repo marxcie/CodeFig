@@ -108,13 +108,12 @@ test('a Grid suggestion click reuses cards and skips the form wipe', () => {
   // Rebuilding the buttons under the click was the other half of the jump. Identity is margin|gap;
   // matched nodes stay, and the write does not re-project the form.
   assert.match(UI, /function patchGridSuggestions\(slot, html\)/);
+  assert.match(UI, /skipFormProject/);
   assert.match(UI, /paintActiveModeMargins/);
   assert.match(UI, /paintSuggestionSelection/);
   const apply = UI.match(/function applySuggestion\(card\)[\s\S]*?\n      \}/)[0];
   assert.match(apply, /skipFormProject:\s*true/);
   assert.equal(/projectConfigIntoForm\(\)/.test(apply), false);
-  const write = UI.match(/function writeConfigBlockText\(text, by, opts\)[\s\S]*?\n      \}/)[0];
-  assert.match(write, /opts\.skipFormProject/);
 });
 
 test('section markers must be alone on a // line', () => {

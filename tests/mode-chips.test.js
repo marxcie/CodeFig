@@ -641,6 +641,19 @@ test('a miss with group candidates still aligns modes before returning', () => {
   assert.ok(offerReturn > orderAt, 'ordering runs before the offer short-circuit');
 });
 
+test('a group miss keeps the collection\'s modes', () => {
+  // *New collection* → name modes → commit Group: miss-reset used to write the pristine starter
+  // Value and clear Desktop/Tablet. Modes belong to the collection; Group must not replace them.
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
+  const apply = ui.slice(ui.indexOf('function applyAutoImport'), ui.indexOf('function recognitionNote'));
+  const missWrite = apply.indexOf("writeConfigBlockText(toWrite, 'auto-import:miss-reset')");
+  assert.ok(missWrite > 0, 'miss-reset writes through a modes-preserving buffer');
+  const keepAt = apply.indexOf('keepModes = configModeEntries()');
+  const fillAt = apply.indexOf('fillConfigBlock(resetBase, { modes: keepModes })');
+  assert.ok(keepAt > 0 && keepAt < missWrite, 'current modes are read before the wipe');
+  assert.ok(fillAt > keepAt && fillAt < missWrite, 'pristine is filled with those modes, not starter Value alone');
+});
+
 test('the note names three modes as a person would write them', () => {
   // Found by reading the real panel: `join(' and ')` gave *"Desktop and Pad and Mobile had no settings
   // here"*. Fine at one or two names, wrong at three, and three is the ordinary case for a responsive
@@ -709,9 +722,11 @@ test('the fill and the ordering are one write, not two', () => {
   assert.equal((apply.match(/writeConfigBlockText\(ordered\.text/g) || []).length, 1,
     'and exactly one write on the found path, so nothing can land between them');
 
-  // **Miss resets to prepared defaults** so a new Group name does not keep the previous ramp.
+  // **Miss resets to prepared defaults** so a new Group name does not keep the previous ramp —
+  // but carries the collection's modes into that write (Group must not replace Desktop with Value).
   // Hit path: one fill write. Miss path: one miss-reset write.
   assert.match(apply, /auto-import:miss-reset/);
+  assert.match(apply, /fillConfigBlock\(resetBase, \{ modes: keepModes \}\)/);
   const writes = apply.match(/writeConfigBlockText\([^,]+,\s*'([^']+)'/g) || [];
   assert.ok(writes.some(function (w) { return /miss-reset/.test(w); }),
     'miss must write prepared defaults for the new address');
