@@ -14,9 +14,9 @@
 //
 // | Area | Functions |
 // |---|---|
-// | Config reading | colorsParseSteps, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
+// | Config reading | colorsParseSteps, colorsParseOpacityVariations, colorsLightnessAnchors, colorsNumber, colorsMidIndex, colorsChannel |
 // | Seed | colorsApplySeedScale, colorsSeedPlacementIndex, colorsSyncLockedSeedMiddles |
-// | Generation | colorsGenerateMode, colorsBuildVariableMap, colorsManifestSlice |
+// | Generation | colorsGenerateMode, colorsBuildVariableMap, colorsManifestSlice, colorsOpacityVariantName, colorsHexToRgba |
 // | Alignment | colorsAlignment, colorsBestAnchor, colorsAnchorFits |
 // | Preview | colorsPreviewHtml, colorsAnchorStrip, colorsCard, colorsStrip |
 // @DOC_END
@@ -307,6 +307,78 @@ function colorsParseSteps(value) {
 }
 
 /**
+ * Opacity percentages from the Opacity variations field (string or array).
+ *
+ * Empty, or only `100`, means no opacity subgroups — solid colours in the main group only.
+ * `100` is never emitted as a subgroup; the opaque step in the main group already is that value.
+ *
+ * → `{ opacities: number[], active: boolean }` — `opacities` excludes 100; `active` is true when
+ * at least one subgroup opacity remains.
+ */
+function colorsParseOpacityVariations(value) {
+  var raw;
+  if (Array.isArray(value)) {
+    raw = value;
+  } else {
+    raw = String(value == null ? '' : value).split(',');
+  }
+  var opacities = [];
+  var seen = {};
+  for (var i = 0; i < raw.length; i++) {
+    var piece = String(raw[i] == null ? '' : raw[i]).trim().replace(/%$/, '');
+    if (!piece) continue;
+    var n = Number(piece);
+    if (!isFinite(n)) continue;
+    n = Math.round(n);
+    if (n < 0 || n > 100) continue;
+    if (seen[n]) continue;
+    seen[n] = true;
+    if (n === 100) continue;
+    opacities.push(n);
+  }
+  return { opacities: opacities, active: opacities.length > 0 };
+}
+
+/**
+ * Last segment of a group path — `pine` from `pine`, `Neutrals` from `Primitives/Neutrals`.
+ * Empty when the set sits at the collection root.
+ */
+function colorsGroupLeaf(group) {
+  var g = String(group == null ? '' : group).replace(/\/+$/, '');
+  if (!g) return '';
+  var parts = g.split('/');
+  return parts[parts.length - 1];
+}
+
+/**
+ * Full variable name for one opacity cell: `pine/pine-50/50-10%`.
+ * At the collection root (no group): `50/50-10%`.
+ */
+function colorsOpacityVariantName(group, step, opacity) {
+  var prefix = colorsGroupPrefix(group);
+  var leaf = colorsGroupLeaf(group);
+  var folder = leaf ? (leaf + '-' + step) : String(step);
+  return prefix + folder + '/' + step + '-' + opacity + '%';
+}
+
+/**
+ * Hex → `{ r, g, b, a }` with `a` from a 0–100 opacity percent. Null when the hex is unusable.
+ */
+function colorsHexToRgba(hex, opacityPct) {
+  var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex == null ? '' : hex));
+  if (!m) return null;
+  var a = typeof opacityPct === 'number' && isFinite(opacityPct)
+    ? Math.max(0, Math.min(1, opacityPct / 100))
+    : 1;
+  return {
+    r: parseInt(m[1], 16) / 255,
+    g: parseInt(m[2], 16) / 255,
+    b: parseInt(m[3], 16) / 255,
+    a: a
+  };
+}
+
+/**
  * Which step the seed occupies: named token, else `500` if present, else list midpoint.
  */
 function colorsSeedPlacementIndex(steps, placement) {
@@ -540,6 +612,11 @@ function colorsGenerateMode(config, mode, steps, sharedLadder) {
   // which a collection without a ramp does not have. Showing "Original has no colours…" there
   // blocks the one thing the panel is for — drawing what typed steps would generate. Fall back to
   // Linear from the anchors so 50, 900 (and a seed, later) can appear before anything is written.
+  //
+  // **Run must attach `existing` before calling this.** The preview injects held hexes from session
+  // state; the config block never stores them. Without that map, this fallback fires on every
+  // untouched Original load and a Run rewrites the file onto a linear ladder while the strip stays
+  // quiet. `runColors` loads them via `foundationColorsAutoImport(..., skipFit)`.
   if (segments.original && !held) {
     segments = { curve: bezierFromEase('linear', 'none', 1), original: false };
   }
@@ -1762,11 +1839,16 @@ function colorsGroupPrefix(group) {
  * name. Pure — same `colorsGenerateMode` path the preview uses, so a Run cannot invent colours the
  * panel did not show.
  *
- * → `{ variables, names, steps, modeNames, alignment, clamped, invalid }`
+ * When Opacity variations lists percentages other than 100, each step also gets a subgroup of
+ * cells (`pine/pine-50/50-10%`, …), written as links to the step's own variable at that opacity. `100` and an empty field leave the map as solid colours only.
+ *
+ * → `{ variables, names, steps, modeNames, opacities, alignment, clamped, invalid }`
  */
 function colorsBuildVariableMap(config) {
   var alignment = colorsAlignment(config || {});
   var prefix = colorsGroupPrefix(config && config.group);
+  var group = config && config.group;
+  var opacityInfo = colorsParseOpacityVariations(config && config.opacityVariations);
   var variables = {};
   var clamped = [];
   var invalid = [];
@@ -1791,6 +1873,32 @@ function colorsBuildVariableMap(config) {
     if (Object.keys(values).length > 0) {
       variables[name] = { type: 'COLOR', values: values };
     }
+
+    if (!opacityInfo.active) return;
+    for (var o = 0; o < opacityInfo.opacities.length; o++) {
+      var opacity = opacityInfo.opacities[o];
+      var variantName = colorsOpacityVariantName(group, step, opacity);
+      var variantValues = {};
+      alignment.modes.forEach(function (entry) {
+        if (!entry.name) return;
+        var row = entry.made && entry.made.rows && entry.made.rows[stepIndex];
+        if (!row || !row.hex) {
+          invalid.push({ name: variantName, mode: entry.name, reason: 'no-hex' });
+          return;
+        }
+        var rgba = colorsHexToRgba(row.hex, opacity);
+        if (!rgba) {
+          invalid.push({ name: variantName, mode: entry.name, reason: 'bad-hex' });
+          return;
+        }
+        variantValues[entry.name] = rgba;
+      });
+      if (Object.keys(variantValues).length > 0) {
+        // `opacityOf` / `opacity` let the write link the cell to its base variable; `values` is the
+        // RGBA the preview shows and the fallback when no link can be made.
+        variables[variantName] = { type: 'COLOR', values: variantValues, opacityOf: name, opacity: opacity };
+      }
+    }
   });
 
   alignment.modes.forEach(function (entry) {
@@ -1804,6 +1912,7 @@ function colorsBuildVariableMap(config) {
     names: Object.keys(variables),
     steps: alignment.steps.slice(),
     modeNames: modeNames,
+    opacities: opacityInfo.opacities.slice(),
     alignment: alignment,
     clamped: clamped,
     invalid: invalid
@@ -1834,6 +1943,11 @@ function colorsManifestSlice(config) {
     }) : []
   };
   if (c.generateOverview !== undefined) slice.generateOverview = !!c.generateOverview;
+  if (c.opacityVariations !== undefined && c.opacityVariations !== null && c.opacityVariations !== '') {
+    slice.opacityVariations = typeof c.opacityVariations === 'string'
+      ? c.opacityVariations
+      : (Array.isArray(c.opacityVariations) ? c.opacityVariations.join(', ') : String(c.opacityVariations));
+  }
   if (c.chromaCurve !== undefined) slice.chromaCurve = c.chromaCurve;
   if (c.saturationCurve !== undefined) slice.saturationCurve = c.saturationCurve;
   if (c.hueCurve !== undefined) slice.hueCurve = c.hueCurve;

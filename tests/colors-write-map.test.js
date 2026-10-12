@@ -54,11 +54,73 @@ test('colorsBuildVariableMap emits COLOR hexes per step × mode', () => {
   assert.deepEqual(built.steps, ['50', '500', '900']);
   assert.deepEqual(built.modeNames, ['Lime']);
   assert.equal(built.names.length, 3);
+  assert.deepEqual(built.opacities, []);
   assert.ok(built.variables['lime/50']);
   assert.equal(built.variables['lime/50'].type, 'COLOR');
   assert.ok(/^#[0-9A-Fa-f]{6}$/.test(built.variables['lime/50'].values.Lime));
   assert.ok(/^#[0-9A-Fa-f]{6}$/.test(built.variables['lime/500'].values.Lime));
   assert.ok(/^#[0-9A-Fa-f]{6}$/.test(built.variables['lime/900'].values.Lime));
+});
+
+test('colorsParseOpacityVariations: empty or only 100 is inactive', () => {
+  assert.deepEqual(E.colorsParseOpacityVariations(''), { opacities: [], active: false });
+  assert.deepEqual(E.colorsParseOpacityVariations('100'), { opacities: [], active: false });
+  assert.deepEqual(E.colorsParseOpacityVariations('100, 100'), { opacities: [], active: false });
+  assert.deepEqual(E.colorsParseOpacityVariations(null), { opacities: [], active: false });
+});
+
+test('colorsParseOpacityVariations: drops 100 and keeps the rest', () => {
+  assert.deepEqual(
+    E.colorsParseOpacityVariations('5, 10, 20, 50, 80, 90, 100'),
+    { opacities: [5, 10, 20, 50, 80, 90], active: true }
+  );
+  assert.deepEqual(
+    E.colorsParseOpacityVariations(['5%', '10', '5']),
+    { opacities: [5, 10], active: true }
+  );
+});
+
+test('colorsOpacityVariantName follows pine/pine-50/50-10%', () => {
+  assert.equal(E.colorsOpacityVariantName('pine', '50', 10), 'pine/pine-50/50-10%');
+  assert.equal(E.colorsOpacityVariantName('Primitives/Neutrals', '200', 5),
+    'Primitives/Neutrals/Neutrals-200/200-5%');
+  assert.equal(E.colorsOpacityVariantName('', '50', 10), '50/50-10%');
+});
+
+test('colorsBuildVariableMap adds opacity subgroups when variations are set', () => {
+  const built = E.colorsBuildVariableMap(sampleConfig({
+    opacityVariations: '5, 10, 100',
+  }));
+  // 3 solid + 3 steps × 2 opacities (100 dropped)
+  assert.equal(built.names.length, 9);
+  assert.deepEqual(built.opacities, [5, 10]);
+  assert.ok(built.variables['lime/50']);
+  assert.ok(built.variables['lime/lime-50/50-5%']);
+  assert.ok(built.variables['lime/lime-50/50-10%']);
+  assert.equal(built.variables['lime/lime-50/50-100%'], undefined);
+  const cell = built.variables['lime/lime-500/500-10%'].values.Lime;
+  assert.equal(typeof cell, 'object');
+  assert.ok(Math.abs(cell.a - 0.1) < 1e-9);
+  assert.ok(typeof cell.r === 'number');
+  const variant = built.variables['lime/lime-500/500-10%'];
+  assert.equal(variant.opacityOf, 'lime/500');
+  assert.equal(variant.opacity, 10);
+});
+
+test('colorsBuildVariableMap with empty opacityVariations matches solid-only map', () => {
+  const solid = E.colorsBuildVariableMap(sampleConfig());
+  const empty = E.colorsBuildVariableMap(sampleConfig({ opacityVariations: '' }));
+  const hundred = E.colorsBuildVariableMap(sampleConfig({ opacityVariations: '100' }));
+  assert.deepEqual(Object.keys(empty.variables).sort(), Object.keys(solid.variables).sort());
+  assert.deepEqual(Object.keys(hundred.variables).sort(), Object.keys(solid.variables).sort());
+});
+
+test('colorsManifestSlice records opacityVariations when set', () => {
+  assert.equal(E.colorsManifestSlice(sampleConfig()).opacityVariations, undefined);
+  assert.equal(
+    E.colorsManifestSlice(sampleConfig({ opacityVariations: '5, 10, 20' })).opacityVariations,
+    '5, 10, 20'
+  );
 });
 
 test('colorsBuildVariableMap agrees with colorsGenerateMode on every hex', () => {
@@ -72,6 +134,44 @@ test('colorsBuildVariableMap agrees with colorsGenerateMode on every hex', () =>
       'step ' + step + ' must match the generator the panel uses'
     );
   });
+});
+
+test('Original without existing falls back to Linear — Run must attach held hexes', () => {
+  /**
+   * The quiet-strip / loud-Run bug: HSL read leaves every curve as `[]` (Original). Preview
+   * injects `config.existing` so generation keeps the file. Run used to omit it, so this
+   * fallback rewrote every mid step onto a linear lightness ladder from the end anchors.
+   */
+  const steps = ['50', '500', '900'];
+  const held = ['#FCFCFC', '#7C8381', '#111717'];
+  const mode = {
+    name: 'Ash',
+    bright: { hue: 0, hslHue: 0, chroma: 0, saturation: 0, lightness: 98.8 },
+    dark: { hue: 196.4, hslHue: 180, chroma: 0.0091, saturation: 15, lightness: 7.8 },
+    chromaCurve: [], saturationCurve: [], hueCurve: [], hslHueCurve: [],
+    curve: [],
+  };
+  const base = {
+    colorModel: 'hsl',
+    steps: steps.join(', '),
+    curve: [],
+    modes: [mode],
+  };
+  const without = E.colorsBuildVariableMap(base);
+  const withHeld = E.colorsBuildVariableMap(Object.assign({}, base, {
+    existing: { Ash: held },
+  }));
+  assert.equal(withHeld.variables['500'].values.Ash.toUpperCase(), held[1]);
+  assert.notEqual(
+    without.variables['500'].values.Ash.toUpperCase(),
+    held[1],
+    'without existing, Original must not silently keep the file mid — that is the Linear fallback'
+  );
+  assert.equal(
+    E.colorsGenerateMode(Object.assign({}, base, { existing: { Ash: held } }), mode, steps, null)
+      .rows[1].hex.toUpperCase(),
+    held[1]
+  );
 });
 
 test('colorsManifestSlice drops previewOnly and existing, keeps modes', () => {

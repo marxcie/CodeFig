@@ -201,3 +201,21 @@ test('the panel still uses the shared group offer for Colors', () => {
   assert.match(ui, /renderGroupCandidates\(found\.candidates/);
   assert.match(ui, /foundationColorsAutoImport/);
 });
+
+test('foundationColorsAutoImport reads opacity variations off the variant names', async () => {
+  const lime = ['25', '50', '100'].map((s, i) =>
+    colorVar('lime/' + s, { id: 'l' + i, rgb: rgb(['#EEFFEE', '#88CC88', '#113311'][i]) })
+  );
+  const variants = [['50', 20], ['50', 5], ['100', 5], ['100', 50]].map(([step, pct], i) =>
+    colorVar('lime/lime-' + step + '/' + step + '-' + pct + '%', { id: 'o' + i, rgb: Object.assign(rgb('#88CC88'), { a: pct / 100 }) })
+  );
+  const stray = colorVar('lime/other-50/50-70%', { id: 's0', rgb: rgb('#88CC88') });
+  await withColors(lime.concat(variants, [stray]), async (ctx) => {
+    const found = await ctx.foundationColorsAutoImport('Colors', 'lime', ['Value'], 'oklch', null, true);
+    assert.equal(found.config.opacityVariations, '5, 20, 50');
+  });
+  await withColors(lime, async (ctx) => {
+    const found = await ctx.foundationColorsAutoImport('Colors', 'lime', ['Value'], 'oklch', null, true);
+    assert.equal(found.config.opacityVariations, '');
+  });
+});

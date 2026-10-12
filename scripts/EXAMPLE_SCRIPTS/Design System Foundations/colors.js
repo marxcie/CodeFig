@@ -50,6 +50,18 @@
 // A series expands the same way as Spacing: `shade-{1,12}` becomes twelve names. Names are labels;
 // lightness still comes from the ladder.
 //
+// ### Opacity variations
+//
+// Leave **Opacity variations** empty (or `100`) for solid colours only — same as before. Enter a
+// comma list such as `5, 10, 20, 50, 80, 90` and each step also gets a subgroup of those opacities.
+// With group `pine` and step `50`, the solid colour stays at `pine/50`; variants land at
+// `pine/pine-50/50-5%`, `pine/pine-50/50-10%`, and so on. `100` in the list is ignored — the main
+// group already holds full opacity.
+//
+// Each variant is a link to its step's variable at that opacity, not a copy of its hex, so editing
+// `pine/50` by hand moves every variant of it. A variant whose base is missing or translucent is
+// written as plain RGBA instead, because Figma ignores an opacity on a translucent source.
+//
 // ### The curve
 //
 // Drag handles, pick a preset, or paste `cubic-bezier(...)`. **Add middle point** splits the ramp into
@@ -92,6 +104,7 @@
 // | **Collection modes** | Chips for modes in the collection. Add, remove, or rename here. Each mode gets its own block below. |
 // | **Group within collection**<br>`group` | Folder for the colour variables, e.g. `Primitives/Neutrals`. |
 // | **Color tokens**<br>`steps` | Step names, lightest to darkest (default Tailwind `50…950`). Variables are `group/step`. Insert names for in-betweens; `shade-{1,12}` expands to a series. |
+// | **Opacity variations**<br>`opacityVariations` | Comma-separated opacities (0–100). Empty or `100` only: solid colours in the main group. Otherwise each step gets a subgroup (`pine/pine-50/50-10%`). `100` is never duplicated under the subgroup. Each variant links to its step's variable at that opacity. |
 // | **Color model**<br>`colorModel` | **OKLCH** or **HSL**. OKLCH shares lightness steps across modes; HSL matches existing HSL palettes. |
 // | **Shared lightness**<br>`curve` | OKLCH only. One lightness curve for every mode, from bright to dark. |
 // | **Lightness → Bright / Dark**<br>`lightness.bright` / `lightness.dark` | OKLCH only. Lightness at the two ends (0–100). The shared curve fills everything between. |
@@ -120,7 +133,7 @@
 @import { displayResults, createResult } from "@InfoPanel"
 @import { getOrCreateCollection, setupModes, processVariables, getVariable } from "@Variables"
 @import { foundationCreateColorsOverview } from "@Foundation overview"
-@import { namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment } from "@Foundation"
+@import { namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment, foundationColorsAutoImport } from "@Foundation"
 @import { colorsParseSteps, colorsPreviewHtml, colorsBuildVariableMap, colorsManifestSlice, colorsApplySeedScale, colorsSyncLockedSeedMiddles } from "@Color Ramp"
 
 // ========================================
@@ -134,6 +147,7 @@ var colorsConfigData = typeof colorsConfigData !== 'undefined' ? colorsConfigDat
   collectionName: "",
   group: "",
   steps: ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"],
+  opacityVariations: "",
   colorModel: "hsl",
   curve: [0.333333, 0.333333, 0.666667, 0.666667],
   lightness: {},
@@ -167,6 +181,9 @@ var __codefigPanel = {
       { key: "steps", type: "list", label: "Color tokens",
         placeholder: "50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950",
         helper: "Names from lightest to darkest. Starts as Tailwind's 50…950. Insert a name between two steps for an in-between. shade-{1,12} expands to a series." },
+      { key: "opacityVariations", type: "string", label: "Opacity variations",
+        placeholder: "eg. 5, 10, 20, 50, 80, 90",
+        helper: "Comma-separated opacities from 0 to 100. Leave empty for solid colours only. Each step gets a subgroup: pine/50 stays opaque; pine/pine-50/50-10% is 10%." },
       { key: "colorModel", type: "radio", label: "Color model",
         options: [{ hsl: "HSL" }, { oklch: "OKLCH" }],
         helper: "OKLCH when every mode should share the same lightness steps. HSL when you are matching a palette that already uses HSL. When to pick each: Documentation." },
@@ -183,12 +200,11 @@ var __codefigPanel = {
         { key: "curve", type: "curve", label: "Shared lightness", allowOriginal: true,
           ramp: "oklch($% 0 0)", ends: "lightness.bright..lightness.dark", range: [0, 100],
           helper: "One curve from bright to dark. Drag a handle or pick a preset. Add middle point to bend the two halves differently." },
-        { type: "preview" },
         { key: "lightness", type: "group", label: "Lightness",
           helper: "0–100 at the two ends. The curve fills everything between.",
           fields: [
-            { key: "bright", type: "number", label: "Bright" },
-            { key: "dark", type: "number", label: "Dark" }
+            { key: "bright", type: "number", label: "Bright", min: 0, max: 100 },
+            { key: "dark", type: "number", label: "Dark", min: 0, max: 100 }
           ] }
       ]},
     { type: "section", id: "mode-settings",
@@ -220,10 +236,10 @@ var __codefigPanel = {
                 helper: "Same control for HSL hue. Separate from OKLCH because the two models use different angles." },
               { type: "anchors", positions: ["bright", "middle", "dark"],
                 fields: [
-                  { key: "hue", showWhen: { colorModel: "oklch" },
+                  { key: "hue", min: 0, max: 360, showWhen: { colorModel: "oklch" },
                     labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },
                     placeholders: "eg. 264" },
-                  { key: "hslHue", showWhen: { colorModel: "hsl" },
+                  { key: "hslHue", min: 0, max: 360, showWhen: { colorModel: "hsl" },
                     labels: { bright: "Hue start", middle: "Hue middle", dark: "Hue end" },
                     placeholders: "eg. 264" }
                 ] }
@@ -246,10 +262,10 @@ var __codefigPanel = {
                   helper: "Same idea for HSL saturation. Kept separate from chroma so switching model keeps the right curve." },
                 { type: "anchors", positions: ["bright", "middle", "dark"],
                   fields: [
-                    { key: "chroma", showWhen: { colorModel: "oklch" },
+                    { key: "chroma", min: 0, max: 0.5, showWhen: { colorModel: "oklch" },
                       labels: { bright: "Chroma start", middle: "Chroma middle", dark: "Chroma end" },
                       placeholders: "eg. 0.012" },
-                    { key: "saturation", showWhen: { colorModel: "hsl" },
+                    { key: "saturation", min: 0, max: 100, showWhen: { colorModel: "hsl" },
                       labels: { bright: "Saturation start", middle: "Saturation middle", dark: "Saturation end" },
                       placeholders: "eg. 12" }
                   ] }
@@ -263,7 +279,7 @@ var __codefigPanel = {
               { type: "anchors", positions: ["bright", "middle", "dark"],
                 notes: { dark: "Anchors take effect once you choose a curve." },
                 fields: [
-                  { key: "lightness", showWhen: { colorModel: "hsl" },
+                  { key: "lightness", min: 0, max: 100, showWhen: { colorModel: "hsl" },
                     labels: { bright: "Bright", middle: "Middle", dark: "Dark" },
                     placeholders: { bright: "eg. 98", middle: "eg. 50", dark: "eg. 4" } }
                 ] }
@@ -284,9 +300,11 @@ var __codefigPanel = {
 
 /**
  * Drop aliased and non-opaque mode cells from the write map. Those cells are reported, never
- * overwritten — an alias is a deliberate link, and an alpha value is not a lightness step.
+ * overwritten — an alias is a deliberate link, and an alpha value on a main-ramp step is not a
+ * lightness step. Opacity-variation subgroups (nested under the group) are written on purpose and
+ * are not skipped for being non-opaque.
  */
-async function colorsApplyWriteGuards(collection, built) {
+async function colorsApplyWriteGuards(collection, built, group) {
   var skippedAlias = [];
   var skippedAlpha = [];
   if (!collection) {
@@ -294,22 +312,26 @@ async function colorsApplyWriteGuards(collection, built) {
   }
   var variables = {};
   var names = Object.keys(built.variables);
+  var prefix = namePrefix(group);
   for (var i = 0; i < names.length; i++) {
     var name = names[i];
     var entry = built.variables[name];
     var existing = await getVariable(collection, name);
     var values = {};
     var modeNames = Object.keys(entry.values || {});
+    var tail = prefix && name.indexOf(prefix) === 0 ? name.slice(prefix.length) : name;
+    // Nested under the group → opacity variant we own; do not treat existing alpha as a skip.
+    var nestedUnderGroup = tail.indexOf('/') !== -1;
     for (var m = 0; m < modeNames.length; m++) {
       var modeName = modeNames[m];
-      var hex = entry.values[modeName];
+      var cellValue = entry.values[modeName];
       if (!existing) {
-        values[modeName] = hex;
+        values[modeName] = cellValue;
         continue;
       }
       var mode = collection.modes.filter(function (mm) { return mm.name === modeName; })[0];
       if (!mode) {
-        values[modeName] = hex;
+        values[modeName] = cellValue;
         continue;
       }
       var cell = existing.valuesByMode[mode.modeId];
@@ -317,14 +339,18 @@ async function colorsApplyWriteGuards(collection, built) {
         skippedAlias.push(name + ' · ' + modeName);
         continue;
       }
-      if (cell && typeof cell.a === 'number' && cell.a < 1) {
+      if (!nestedUnderGroup && cell && typeof cell.a === 'number' && cell.a < 1) {
         skippedAlpha.push(name + ' · ' + modeName);
         continue;
       }
-      values[modeName] = hex;
+      values[modeName] = cellValue;
     }
     if (Object.keys(values).length > 0) {
       variables[name] = { type: 'COLOR', values: values };
+      if (entry.opacityOf) {
+        variables[name].opacityOf = entry.opacityOf;
+        variables[name].opacity = entry.opacity;
+      }
     }
   }
   return { variables: variables, skippedAlias: skippedAlias, skippedAlpha: skippedAlpha };
@@ -353,8 +379,11 @@ async function colorsFindOrphans(collection, group, steps) {
 function colorsPlanLines(built, guards, orphans) {
   var results = [];
   var names = Object.keys(guards.variables);
+  var opacityNote = (built.opacities && built.opacities.length)
+    ? ' · opacities ' + built.opacities.join(', ') + '%'
+    : '';
   results.push(createResult(
-    names.length + ' colour variables · ' + built.modeNames.length + ' modes',
+    names.length + ' colour variables · ' + built.modeNames.length + ' modes' + opacityNote,
     'Writing: ' + (names.length ? names.join(', ') : '—'),
     'info'
   ));
@@ -432,7 +461,30 @@ async function runColors(config) {
 
   var collectionName = resolveCollectionName({ config: data, collectionName: data.collectionName });
   var groupName = resolveGroup({ config: data, group: data.group });
-  var built = colorsBuildVariableMap(data);
+
+  // **Same `existing` the preview injects — otherwise Original becomes Linear.**
+  //
+  // The panel holds file hexes in session state and passes them into `colorsPreviewHtml` as
+  // `config.existing`. They are never saved into the config block (`colorsManifestSlice` drops
+  // them). A Run that builds the write map without them hits `colorsGenerateMode`'s
+  // "Original has nothing to hold onto → fall back to Linear" branch and rewrites every interior
+  // step onto a unified linear lightness range while the strip still shows the quiet file ramp.
+  // Confirmed live on `color - neutral`: strip hexes `#FCFCFC…`, Run wrote `#f1f1f1…`.
+  //
+  // `skipFit: true` — we only need the hex map; fitting curves here would redo work the panel
+  // already did (or deliberately left as Original).
+  var modeNames = (Array.isArray(data.modes) ? data.modes : []).map(function (m) {
+    return m && typeof m.name === 'string' ? m.name.trim() : '';
+  }).filter(Boolean);
+  var heldImport = await foundationColorsAutoImport(
+    collectionName, groupName, modeNames, data.colorModel || 'hsl', null, true
+  );
+  var forWrite = data;
+  if (heldImport && heldImport.existing && Object.keys(heldImport.existing).length > 0) {
+    forWrite = Object.assign({}, data, { existing: heldImport.existing });
+  }
+
+  var built = colorsBuildVariableMap(forWrite);
   if (!built.modeNames.length) {
     displayResults({
       title: 'Colors',
@@ -449,7 +501,7 @@ async function runColors(config) {
   var collection = await getOrCreateCollection(collectionName);
   setupModes(collection, built.modeNames);
 
-  var guards = await colorsApplyWriteGuards(collection, built);
+  var guards = await colorsApplyWriteGuards(collection, built, groupName);
   var orphans = await colorsFindOrphans(collection, groupName, built.steps);
 
   var names = Object.keys(guards.variables);
