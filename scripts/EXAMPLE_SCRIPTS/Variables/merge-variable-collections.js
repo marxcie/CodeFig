@@ -11,9 +11,11 @@
 // source variables (and the source collection when it is empty and unpublished). **Copy** leaves
 // the source and its bindings alone.
 //
-// Empty **Group** means every variable in the collection. Empty **Mode** on both sides means every
-// source mode, matched by name on the target (missing target modes are created). Source mode set
-// plus target mode set writes only that mode's values. Target mode may be a new name.
+// Empty **Group** means every variable in the collection. A source Mode of **All modes** copies every
+// source mode into the same-named target mode, creating the ones that are missing. A collection
+// created by the run gets exactly the source's modes. A single source mode goes into the same-named
+// target mode, or into the target mode you pick (which may be a new name). The target mode stays on
+// Same as source while the source is All modes.
 //
 // ### Design System Foundations stamps
 //
@@ -32,10 +34,10 @@
 // | --- | --- |
 // | **Collection**<br>`sourceCollection` | Source local collection. |
 // | **Group**<br>`sourceGroup` | Only variables under this path. Leave empty for the whole collection. |
-// | **Mode**<br>`sourceMode` | Only this mode's values. Leave empty to take every mode. |
+// | **Mode**<br>`sourceMode` | Only this mode's values. All modes (empty) takes every mode. |
 // | **Collection**<br>`targetCollection` | Destination local collection. |
 // | **Group**<br>`targetGroup` | Destination path prefix. Leave empty to keep each variable's name under the source group. |
-// | **Mode**<br>`targetMode` | Mode to write into. Pick an existing one or New mode. Leave empty to match source modes by name. |
+// | **Mode**<br>`targetMode` | Mode to write into. Pick an existing one or New mode. Same as source (empty) matches source modes by name. Locked to Same as source while the source is All modes. |
 // | **Move or copy**<br>`moveOrCopy` | **Move** rebinds this file and removes the source variables. **Copy** leaves the source alone. |
 // @DOC_END
 
@@ -57,17 +59,18 @@ var __codefigPanel = {
     { key: "sourceGroup", type: "string", label: "Group", placeholder: "color" },
     { type: "paragraph", attachTo: "previous",
       text: "Only variables under this path. Leave empty for the whole collection." },
-    { key: "sourceMode", type: "mode", label: "Mode", collection: "sourceCollection" },
-    { type: "paragraph", attachTo: "previous", text: "Only this mode’s values. Leave empty to take every mode." },
+    { key: "sourceMode", type: "mode", label: "Mode", collection: "sourceCollection", emptyLabel: "All modes" },
+    { type: "paragraph", attachTo: "previous", text: "Only this mode’s values. All modes takes every mode." },
     { type: "divider" },
     { type: "heading", text: "Target" },
     { key: "targetCollection", type: "collection", label: "Collection" },
     { key: "targetGroup", type: "string", label: "Group", placeholder: "brand" },
     { type: "paragraph", attachTo: "previous",
       text: "Destination path prefix. Leave empty to keep each variable’s name under the source group." },
-    { key: "targetMode", type: "mode", label: "Mode", collection: "targetCollection" },
+    { key: "targetMode", type: "mode", label: "Mode", collection: "targetCollection",
+      emptyLabel: "Same as source", disabledWhen: { sourceMode: "" } },
     { type: "paragraph", attachTo: "previous",
-      text: "Mode to write into. Pick an existing one or New mode. Leave empty to match source modes by name." },
+      text: "Mode to write into. Same as source matches modes by name and creates missing ones. It stays on while the source is All modes." },
     { type: "divider" },
     { key: "moveOrCopy", type: "radio", label: "Move or copy", options: ["Move", "Copy"] },
     { type: "paragraph", attachTo: "previous",
@@ -116,11 +119,21 @@ function findModeByName(col, name) {
   return null;
 }
 
-function ensureTargetMode(targetCol, modeName) {
+/**
+ * `state.placeholderModeId` is the default mode of a collection this run just created. The first
+ * mode the run needs renames it, so the target ends up with the source's modes and no extra one.
+ */
+function ensureTargetMode(targetCol, modeName, state) {
   var want = String(modeName == null ? '' : modeName).trim();
   if (!want) return null;
   var existing = findModeByName(targetCol, want);
   if (existing) return existing.modeId;
+  if (state && state.placeholderModeId && typeof targetCol.renameMode === 'function') {
+    var placeholderId = state.placeholderModeId;
+    state.placeholderModeId = null;
+    targetCol.renameMode(placeholderId, want);
+    return placeholderId;
+  }
   if (typeof targetCol.addMode !== 'function') {
     throw new Error('Cannot create mode "' + want + '" on target collection');
   }
@@ -132,9 +145,10 @@ function ensureTargetMode(targetCol, modeName) {
  * Empty source + empty target → every source mode → same-named target mode (created if needed).
  * Source set + target set → that pair only.
  * Source set + target empty → source mode → same-named target mode.
- * Source empty + target set → first source mode → that target mode.
+ * Source empty + target set → error, because several modes cannot share one target mode.
+ * A freshly created target has its default mode renamed rather than kept beside the new ones.
  */
-function buildModePairs(sourceCol, targetCol, sourceModeName, targetModeName) {
+function buildModePairs(sourceCol, targetCol, sourceModeName, targetModeName, state) {
   var srcWant = String(sourceModeName == null ? '' : sourceModeName).trim();
   var tgtWant = String(targetModeName == null ? '' : targetModeName).trim();
   if (!sourceCol.modes || sourceCol.modes.length === 0) {
@@ -144,7 +158,7 @@ function buildModePairs(sourceCol, targetCol, sourceModeName, targetModeName) {
   if (srcWant && tgtWant) {
     var sm = findModeByName(sourceCol, srcWant);
     if (!sm) throw new Error('Source mode not found: ' + srcWant);
-    pairs.push({ sourceModeId: sm.modeId, targetModeId: ensureTargetMode(targetCol, tgtWant) });
+    pairs.push({ sourceModeId: sm.modeId, targetModeId: ensureTargetMode(targetCol, tgtWant, state) });
     return pairs;
   }
   if (srcWant && !tgtWant) {
@@ -152,39 +166,40 @@ function buildModePairs(sourceCol, targetCol, sourceModeName, targetModeName) {
     if (!smOnly) throw new Error('Source mode not found: ' + srcWant);
     pairs.push({
       sourceModeId: smOnly.modeId,
-      targetModeId: ensureTargetMode(targetCol, smOnly.name)
+      targetModeId: ensureTargetMode(targetCol, smOnly.name, state)
     });
     return pairs;
   }
   if (!srcWant && tgtWant) {
-    pairs.push({
-      sourceModeId: sourceCol.modes[0].modeId,
-      targetModeId: ensureTargetMode(targetCol, tgtWant)
-    });
-    return pairs;
+    throw new Error('Pick a source mode, or leave the target mode on "Same as source".');
   }
   for (var i = 0; i < sourceCol.modes.length; i++) {
     var mode = sourceCol.modes[i];
     pairs.push({
       sourceModeId: mode.modeId,
-      targetModeId: ensureTargetMode(targetCol, mode.name)
+      targetModeId: ensureTargetMode(targetCol, mode.name, state)
     });
   }
   return pairs;
 }
 
+// Collect the selection and every descendant, parents before children. Uses findAll, not `children`: in the
+// plugin runtime an instance whose slot holds an instance of its own component expands forever through
+// `children` and aborts the run, while findAll is finite.
 function collectAllNodes(nodes) {
   var result = [];
-  function traverse(node) {
+  var seen = {};
+  function add(node) {
+    if (!node || seen[node.id]) return;
+    seen[node.id] = true;
     result.push(node);
-    if (node.children) {
-      for (var i = 0; i < node.children.length; i++) {
-        traverse(node.children[i]);
-      }
-    }
   }
-  for (var n = 0; n < nodes.length; n++) {
-    traverse(nodes[n]);
+  for (var i = 0; i < nodes.length; i++) {
+    add(nodes[i]);
+    if (nodes[i] && typeof nodes[i].findAll === 'function') {
+      var found = nodes[i].findAll(function () { return true; });
+      for (var j = 0; j < found.length; j++) add(found[j]);
+    }
   }
   return result;
 }
@@ -692,7 +707,7 @@ async function assertMoveBindingsReplaced(oldIdToNew) {
 }
 
 /**
- * @param {{ sourceCol, targetCol, sourceGroup, targetGroup, sourceMode, targetMode, isMove }} opts
+ * @param {{ sourceCol, targetCol, sourceGroup, targetGroup, sourceMode, targetMode, targetCreated, isMove }} opts
  */
 async function copyOrMoveVariables(opts) {
   var sourceCol = opts.sourceCol;
@@ -701,7 +716,11 @@ async function copyOrMoveVariables(opts) {
   var targetGroup = opts.targetGroup;
   var isMove = opts.isMove === true;
   if (isMove) await assertMoveSourceUnpublished(sourceCol);
-  var modePairs = buildModePairs(sourceCol, targetCol, opts.sourceMode, opts.targetMode);
+  var modeState = {
+    placeholderModeId: opts.targetCreated && targetCol.modes && targetCol.modes.length === 1 &&
+      targetCol.variableIds.length === 0 ? targetCol.modes[0].modeId : null
+  };
+  var modePairs = buildModePairs(sourceCol, targetCol, opts.sourceMode, opts.targetMode, modeState);
   var oldIdToNew = {};
   var created = 0;
   var updated = 0;
@@ -957,8 +976,10 @@ async function copyOrMoveVariables(opts) {
       return;
     }
     if (isMove) await assertMoveSourceUnpublished(sourceCol);
+    var targetCreated = false;
     if (!targetCol) {
       targetCol = figma.variables.createVariableCollection(tgtName);
+      targetCreated = true;
     }
 
     var stats = await copyOrMoveVariables({
@@ -968,6 +989,7 @@ async function copyOrMoveVariables(opts) {
       targetGroup: tgtGroup,
       sourceMode: srcMode,
       targetMode: tgtMode,
+      targetCreated: targetCreated,
       isMove: isMove
     });
 

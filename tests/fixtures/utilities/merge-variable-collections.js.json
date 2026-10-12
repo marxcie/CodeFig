@@ -35,11 +35,12 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "mode",
-    "collectionField": "sourceCollection"
+    "collectionField": "sourceCollection",
+    "emptyLabel": "All modes"
   },
   {
     "type": "paragraph",
-    "text": "Only this mode’s values. Leave empty to take every mode."
+    "text": "Only this mode’s values. All modes takes every mode."
   },
   {
     "type": "divider",
@@ -81,11 +82,20 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "mode",
-    "collectionField": "targetCollection"
+    "collectionField": "targetCollection",
+    "emptyLabel": "Same as source",
+    "disabledWhenRules": [
+      {
+        "field": "sourceMode",
+        "values": [
+          ""
+        ]
+      }
+    ]
   },
   {
     "type": "paragraph",
-    "text": "Mode to write into. Pick an existing one or New mode. Leave empty to match source modes by name."
+    "text": "Mode to write into. Same as source matches modes by name and creates missing ones. It stays on while the source is All modes."
   },
   {
     "type": "divider",
