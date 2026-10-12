@@ -17,7 +17,13 @@ a plain statement of the new default.
 
 ---
 
-## [2.0.0] - TBD
+## [Unreleased]
+
+Nothing yet. Add entries here as changes land, then rename this heading to the version at release.
+
+---
+
+## [2.0.0] - 2026-10-12
 
 **Foundations.** Generational config UX: `@PANEL_START` as live `var __codefigPanel = {…}` (values stay in `@CONFIG_*` / `@UI_CONFIG_*`); Configuration code tab removed. Script storage in Figma Variables with LocalStorage backup, settings gear, and canvas paste-share. Foundation maintain on open; copy/duplicate → new stamp identity. Design System Foundations open empty until a collection is chosen; ramp scripts scan for the group when none is recorded. Scoped preview CSS on DSF libraries (plans 29–32). Help rewritten as onboarding; utilities regrouped; Change case and nesting cleanup expanded.
 
@@ -2077,4 +2083,4 @@ deleting variable modes they did not recognise.
 ## [1.0.6] and earlier
 
 Released before this changelog existed. See `git log` and the GitHub releases; `v1.0.6` is the
-last tag that predates the find/replace work above.
+last tag that predates the 2.0.0 work above.

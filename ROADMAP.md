@@ -1,10 +1,11 @@
 # CodeFig roadmap and status
 
 **One page that says where the project is.** Written for whoever picks it up next, in any tool.
-Last consolidated 2026-10-12: **Release 2.0 — Foundations** on `dsf-foundations`.
-All work is committed and the branch is a fast-forward from `main`. Validate, the Node suite and
-the production build are green. **Do not tag 2.0.0 until Márton signs off** — no `build:release`,
-no version bump, no changelog date until he says so.
+Last consolidated 2026-10-12: **Release 2.0 — Foundations**, cut from `main`.
+**2.0.0 is released (2026-10-12).** Márton's testing round finished and he released it. The
+project is now in **user feedback and testing**: triage reports into `DEFERRED.md` or fix them,
+and land fixes under `## [Unreleased]` in `CHANGELOG.md`. The 2.0 exit gate below is kept as the
+record of what was checked.
 
 Keep it current. If a plan's status changes, change it here too, in the same pass. A roadmap that
 lies is worse than none.
@@ -48,7 +49,7 @@ the sequence. **Do not commit `.plans/`.**
 
 ---
 
-## Release: 2.0 Foundations (in exit sequence)
+## Release: 2.0 Foundations (released 2026-10-12)
 
 **Why 2.0.** Generational config UX: `@PANEL_START` panel recipes (live JS object in Source —
 syntax-highlighted, not `//`-commented JSON), values-only `@CONFIG`, Configuration code tab gone.
@@ -71,26 +72,25 @@ library vs CodeFigUI builder unambiguous. **May parallel or follow:** visual UI 
 
 **Exit gate (before `npm run build:release -- major` → 2.0.0):**
 
-**Hold:** extensive manual testing round first. Do **not** bump to 2.0.0 or run `build:release`
-until Márton says so.
+**Done:** the manual testing round finished and 2.0.0 was cut with `npm run build:release -- major`.
 
 1. ✅ `npm run validate && npm test` green on the commit tip 2026-10-12 (0 errors, 1500 pass)
 2. ✅ `npm run build:production` pass (2026-10-12)
 3. ✅ `npm run build:style-reference` current (`tests/style-reference.test.js` passes)
-4. ⚠️ Figma click-verify — automated scripts green (`_verify-panel-object-form`,
-   `_verify-dsf-content-reveal`, cleaned `_verify-dsf-2.0`). `npm run test:figma` not re-run on the
-   final tip. **Formal sign-off waits on Márton's testing round** (see
-   `artifacts/RELEASE-2.0-morning.md`). Do not treat this as closed until he says so.
-5. ✅ Changelog: one `[2.0.0] - TBD` entry, each category once. Set the date **on tag only**.
+4. ✅ Figma click-verify — automated scripts green (`_verify-panel-object-form`,
+   `_verify-dsf-content-reveal`, cleaned `_verify-dsf-2.0`) and Márton's manual testing round
+   finished (see `artifacts/RELEASE-2.0-morning.md`).
+5. ✅ Changelog: one `[2.0.0] - 2026-10-12` entry, each category once, deliberately comprehensive —
+   it is read by agents picking the project up, so do not condense it.
 6. ✅ DSF + Plan 37 committed on `dsf-foundations`; `main` has nothing the branch lacks
 7. README, `scripts/README.md` and this page reviewed against the shipped scripts and libraries
    2026-10-12
 8. ✅ **Plan 37 — syntax:** `@PANEL_START` as `var __codefigPanel = { blocks: […] }`
 9. ✅ **Plan 37 — cleanup / architecture:** Help-style bare keys; runnable vs library vs builder
 
-**Release steps once he says go:** merge `dsf-foundations` into `main`; put the date on
-`[2.0.0]` in `CHANGELOG.md` and commit it (the release script needs a clean tree);
-`npm run build:release -- major`; push the branch and tag.
+**Release steps (done locally; the push is Márton's call):** merge `dsf-foundations` into `main`;
+date `[2.0.0]` in `CHANGELOG.md` and commit; `npm run build:release -- major`; push the branch and
+the `v2.0.0` tag, which starts `release.yml` and attaches `codefig-v2.0.0-plugin.zip`.
 
 **Explicitly not in 2.0:** Colors dry-run; ramp recognition; library edit UX banner; HTML/JSX panel skin.
 
@@ -152,10 +152,11 @@ fork). Tied collisions still skipped.
 
 ## Next (priority)
 
-1. **Extensive testing round (Márton)** — then tag 2.0.0 only when he says so.
-2. **Figma click-verify remaining** — Spacing mode conflict on Responsive System; Colors with
-   group + steps; DSF preview CSS eyeball. Automate what `figma:ui` can; leave the rest for the
-   testing round.
+1. **User feedback on 2.0.0.** Reports go to `DEFERRED.md` (with how they were found and what
+   fixing involves) or are fixed and logged under `[Unreleased]`. Patch releases use
+   `npm run build:release -- patch`.
+2. **Figma click-verify of anything touched** — `npm run test:figma` needs the plugin open on a dev
+   build; run it on the tip before each release.
 3. **Polish cluster** — Colors live dry-run; DSF/utility visual polish; curve acceptance + probes;
    on-demand fit hang; fitter corners; other `DEFERRED.md` user-facing items.
 
