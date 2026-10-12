@@ -1,10 +1,10 @@
 # CodeFig roadmap and status
 
 **One page that says where the project is.** Written for whoever picks it up next, in any tool.
-Last consolidated 2026-09-02: **Release 2.0 — Foundations** on `dsf-foundations`.
-Cornerstones + Plan 37 syntax/cleanup landed (`a58d0fd`). **Do not tag 2.0.0 until Márton
-finishes an extensive testing round** — no `build:release`, no version bump, no changelog date
-until he says so. Visual UI polish may still parallel; it is not a release gate.
+Last consolidated 2026-10-12: **Release 2.0 — Foundations** on `dsf-foundations`.
+All work is committed and the branch is a fast-forward from `main`. Validate, the Node suite and
+the production build are green. **Do not tag 2.0.0 until Márton signs off** — no `build:release`,
+no version bump, no changelog date until he says so.
 
 Keep it current. If a plan's status changes, change it here too, in the same pass. A roadmap that
 lies is worse than none.
@@ -74,18 +74,23 @@ library vs CodeFigUI builder unambiguous. **May parallel or follow:** visual UI 
 **Hold:** extensive manual testing round first. Do **not** bump to 2.0.0 or run `build:release`
 until Márton says so.
 
-1. ✅ `npm run validate && npm test` green on working tree 2026-09-03 (1345 pass; re-check on
-   the commit tip before tag — polish still uncommitted)
-2. ✅ `npm run build:production` pass (2026-09-03 working tree)
-3. ✅ `npm run build:style-reference` regenerated (2026-09-03)
+1. ✅ `npm run validate && npm test` green on the commit tip 2026-10-12 (0 errors, 1500 pass)
+2. ✅ `npm run build:production` pass (2026-10-12)
+3. ✅ `npm run build:style-reference` current (`tests/style-reference.test.js` passes)
 4. ⚠️ Figma click-verify — automated scripts green (`_verify-panel-object-form`,
-   `_verify-dsf-content-reveal`, cleaned `_verify-dsf-2.0`). **Formal sign-off waits on
-   Márton's testing round** (see `artifacts/RELEASE-2.0-morning.md`). Do not treat this as
-   closed until he says so.
-5. Changelog `[2.0.0] - TBD` — Unreleased polish folded in; set date **on tag only** (not before)
-6. ✅ DSF + Plan 37 committed on `dsf-foundations` (`2371552`, `a58d0fd`, and prior)
-7. ✅ **Plan 37 — syntax:** `@PANEL_START` as `var __codefigPanel = { blocks: […] }`
-8. ✅ **Plan 37 — cleanup / architecture:** Help-style bare keys; runnable vs library vs builder
+   `_verify-dsf-content-reveal`, cleaned `_verify-dsf-2.0`). `npm run test:figma` not re-run on the
+   final tip. **Formal sign-off waits on Márton's testing round** (see
+   `artifacts/RELEASE-2.0-morning.md`). Do not treat this as closed until he says so.
+5. ✅ Changelog: one `[2.0.0] - TBD` entry, each category once. Set the date **on tag only**.
+6. ✅ DSF + Plan 37 committed on `dsf-foundations`; `main` has nothing the branch lacks
+7. README, `scripts/README.md` and this page reviewed against the shipped scripts and libraries
+   2026-10-12
+8. ✅ **Plan 37 — syntax:** `@PANEL_START` as `var __codefigPanel = { blocks: […] }`
+9. ✅ **Plan 37 — cleanup / architecture:** Help-style bare keys; runnable vs library vs builder
+
+**Release steps once he says go:** merge `dsf-foundations` into `main`; put the date on
+`[2.0.0]` in `CHANGELOG.md` and commit it (the release script needs a clean tree);
+`npm run build:release -- major`; push the branch and tag.
 
 **Explicitly not in 2.0:** Colors dry-run; ramp recognition; library edit UX banner; HTML/JSX panel skin.
 
@@ -93,18 +98,11 @@ until Márton says so.
 
 ## Current state
 
-**2026-09-05 review fixes (uncommitted):** Move effect bindings + publication preflight + residual
-binding check; script-storage collision/chunk integrity; loopback-only dev bridge; live test
-expectations and async suite completion. Verification: 1,406 Node tests; 130 Figma tests using
-current source resolved on disk; six real-variable backend storage checks; production + dev builds.
-Dev bridge restarted and verified on 127.0.0.1. Scratch collections/pages cleaned up.
-Final plugin reload verification waits for the unlocked Mac. Multiple open plugin consumers still
-share the dev queue; every test snippet checked the file name before mutating.
-Colors curve/fitting work is unchanged.
-
-**Committed** through `94d2577` on `dsf-foundations` (Colors Mode 1 / Value load fix). Major
-landings: `5322d2e` (panels + Variables storage + foundation maintain), `266b811` (canvas
-paste-share + Copy or move / Replace variables).
+**Committed** on `dsf-foundations`, nothing pending. Verification at the tip: 1,500 Node tests,
+validation clean, production build clean. The last batch (2026-10-12) added 3D transform, Colors
+opacity variations as aliases, number limits and resettable mode pickers in the config UI, the
+`findAll` selection walks (self-nesting slots no longer abort the plugin), and the Copy or move
+mode pickers; see `CHANGELOG.md`.
 
 **Product calls**
 
@@ -118,7 +116,7 @@ paste-share + Copy or move / Replace variables).
   parallel or after; it must not leave the format undecided. Colors dry-run / DSF visual polish
   sit with the deferred polish cluster.
 
-**Typography:** write path exists; if a panel fails to load, debug the read path.
+**Typography:** write path and font loading fixed; if a panel fails to load, debug the read path.
 
 ---
 

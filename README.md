@@ -8,7 +8,7 @@
 
 ## What is CodeFig?
 
-CodeFig is a script runner for Figma, inspired by the [Scripter plugin](https://www.figma.com/community/plugin/757836922707087381/Scripter) by **@rsms**. It comes with a curated set of utility scripts covering framing and auto-layout, style and variable batch operations, design-system foundations (grid, typography, spacing, corner radius), and smaller workflow helpers like generating annotations from comments.
+CodeFig is a script runner for Figma, inspired by the [Scripter plugin](https://www.figma.com/community/plugin/757836922707087381/Scripter) by **@rsms**. It comes with a curated set of utility scripts covering framing and auto-layout, style and variable batch operations, design-system foundations (colors, grid, typography, spacing, corner radius), and smaller workflow helpers like generating annotations from comments.
 
 Variables are supported as a first-class use case, but CodeFig is intentionally broader than variable tooling. Scripts run as plain JavaScript in the Figma plugin sandbox.
 
@@ -30,18 +30,26 @@ Scripter introduced script-based automation in Figma and remains an excellent mi
 - Keyboard shortcuts
 - Prebuilt utility scripts and libraries
 - User scripts with autosave (see note below)
-- UI config support (variables, booleans → visual controls)
+- Configuration UI — a script's settings become a form (fields, tabs, collection and mode pickers, curve editor, live preview) defined by a `@PANEL_START` recipe next to the script's values
+- `@import` for sharing functions between scripts and libraries
 - Real-time console logging in dev mode
+
+**Script storage and sharing**
+- Scripts are stored in a `CodeFig Scripts` Variables collection, so they travel with the file and its published library, with LocalStorage kept as a personal backup. The settings gear turns each store on or off.
+- Scripts from enabled remote libraries that publish `CodeFig Scripts` appear in their own sidebar folder.
+- **Render on canvas** builds a page of script cards; paste one into another file and the script appears in CodeFig there.
+- Footer menus export to JSON or sync one script or all scripts to Variables.
 
 > **Notes:**
 > - Only user scripts are auto-saved. Prebuilt scripts are read-only by default — duplicate them to edit and keep your changes.
 > - In dev mode, logs are written in real time to `figma-console.log`, so you can debug without copying errors out of Figma.
 
 **Bundled script examples**
-- **Layout & frames:** frame or auto-layout selections, scale or resize, remove unnecessary nesting
-- **Styles:** batch rename and replace, duplicate collections, text-to-styles, render a styles overview, detach
-- **Variables:** find/replace bindings, batch rename, duplicate collections, inspector
-- **Design-system foundations:** grid, typography, spacing, corner radius (responsive scale variables)
+- **Layout & frames:** frame or auto-layout selections, scale or resize, remove unnecessary nesting, 3D transform, duplicate components, change case
+- **Styles:** batch rename and replace, duplicate collections, text-to-styles, render a styles overview, relink
+- **Variables:** find/replace bindings, batch rename, copy or move between collections, duplicate and export/import collections, selection to variables, inspector
+- **Styles & variables:** check, detach, replace and select by bindings
+- **Design-system foundations:** colors, grid, typography, spacing, corner radius (responsive token variables with curve editors and previews)
 - **Other:** annotations generated from Figma comments (API-based)
 
 
@@ -52,7 +60,7 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 
 ## Quick Start
 
-1. Install from the Figma Community, or open the [**latest GitHub release**](https://github.com/marxcie/codefig/releases/latest) and download **`codefig-vX.Y.Z-plugin.zip`** (the version in the filename matches the release tag, e.g. `codefig-v1.0.5-plugin.zip`).
+1. Install from the Figma Community, or open the [**latest GitHub release**](https://github.com/marxcie/codefig/releases/latest) and download **`codefig-vX.Y.Z-plugin.zip`** (the version in the filename matches the release tag, e.g. `codefig-v2.0.0-plugin.zip`).
 2. Open the plugin in any Figma file.
 3. Browse the bundled scripts in the sidebar.
 4. Run a script with the Run button or `Cmd/Ctrl + R`.
@@ -61,7 +69,7 @@ Designers and engineers who want repeatable automation for layout, styles, and v
 
 ## Installing from GitHub
 
-On each [release](https://github.com/marxcie/codefig/releases), download **`codefig-vX.Y.Z-plugin.zip`** (same version as the tag, e.g. v1.0.5 → `codefig-v1.0.5-plugin.zip`). Unzip it, then in Figma go to **Plugins → Development → Import plugin from manifest…** and select the **`manifest.json`** in the unzipped folder, next to `code.js` and `ui.html`.
+On each [release](https://github.com/marxcie/codefig/releases), download **`codefig-vX.Y.Z-plugin.zip`** (same version as the tag, e.g. v2.0.0 → `codefig-v2.0.0-plugin.zip`). Unzip it, then in Figma go to **Plugins → Development → Import plugin from manifest…** and select the **`manifest.json`** in the unzipped folder, next to `code.js` and `ui.html`.
 
 That `manifest.json` is generated by the build, not committed: `npm run build:production` reads the `src/manifest.json` template, applies production network settings, and writes the result to `dist/manifest.json` alongside `code.js` and `ui.html`. There is no separate “latest.zip” filename; pick the versioned asset on the release you want.
 
@@ -134,7 +142,7 @@ npm install
 npm run dev
 ```
 
-This watches `src/code.ts`, `src/ui.html`, `src/ui.css`, and `scripts/`, starts the local console log server (writing to `figma-console.log`), and rebuilds on change. Reload the plugin in Figma to test.
+This watches `src/` (the sandbox code, the UI, `ui.css`, the config UI) and `scripts/`, starts the local console log server (writing to `figma-console.log`), and rebuilds on change. Reload the plugin in Figma to test.
 
 To load your local build, import **`dist/manifest.json`** in Figma (**Plugins → Development → Import plugin from manifest…**). Run a build first — the file is generated, so it does not exist in a fresh clone. *If you set up CodeFig for development before the manifest moved into `dist/`, you must re-import once: the old entry points at a repo-root `manifest.json` that no longer exists. Remove it and import `dist/manifest.json`.*
 
@@ -155,6 +163,12 @@ Both read the tracked template at `src/manifest.json` and never write to it, so 
 | `npm run validate:soft` | Same report, always exits 0. Used by `build:dev`. |
 | `npm run test:figma` | Runs the in-Figma specs in `scripts/_TESTS/` against the open plugin and exits non-zero on failure. Add a filter (`-- find-replace`) or `--verbose`. Cases that create styles, variables or pages only run in a file whose name contains `codefig-test`, so pointing it at real work is a no-op. |
 | `npm run figma:run -- <script>` | Runs a bundled script **inside the open plugin** from the terminal and exits non-zero if the run logs an error. Requires `npm run dev` and the plugin open on a dev build — it cannot launch Figma. Use `--code "<js>"` or `--file <path>` to run something that is not a bundled script. |
+| `npm test` | Node fixture tests — import resolver, matching, config UI, panel specs, dev bridge, colour maths. No Figma needed. |
+| `npm run figma:sync` | Waits until the open plugin reports the current dev build, so you know the reload took before you verify anything. |
+| `npm run figma:ui -- <command>` | Drives the plugin UI from the terminal (`selectScript`, `readConfig`, `setField`, `clickControl`, …). Dev builds only. |
+| `npm run bench:colors` | Measures how closely Colors reproduces real colour scales from a file. Fails above a threshold. |
+| `npm run build:style-reference` | Regenerates `artifacts/style-reference.html`, the Style & UI reference, from the real renderer and CSS. |
+| `npm run preview:panel -- "<script>"` | Renders a script's whole Configuration UI in a browser against the real CSS. |
 | `npm run clean` | Removes `dist/`. |
 | `npm run pack` | Runs `clean` and `build:production`, then writes `codefig-plugin.zip` — the contents of `dist/` (`manifest.json`, `code.js`, `ui.html`) at the archive root. Cleaning first keeps stale files from earlier builds out of the zip. Same layout as the GitHub Release asset; requires the `zip` CLI. |
 | `npm run build:release` | See **Shipping a new release** above. Build + pack + version bump + commit (`package.json`, lockfile) + tag. Optional `--push`; default is no push. `--dry-run` builds and packs only. |
@@ -193,10 +207,12 @@ General tools (layout, selection, API). Style, variable, and cross-cutting utili
 
 | Script | Description |
 |--------|-------------|
+| **3D transform** | Rotates selected shapes around X, Y and Z with a field of view and pivot, and redraws them as vector outlines with true perspective. Optional copies along a direction and optional extrusion depth. |
 | **Change case** | Renames canvas layers, components, variants, styles, and variables to a chosen case style (including hyphenated and ALL CAPS forms). |
 | **Comments to annotations** | Reads Figma comments via the REST API and converts them into annotations. Useful when duplicating designs across files, as comments don't carry over. The script preserves comment positions by creating hidden anchors (since comments are usually attached to the root frame, not individual elements). Requires a Read Comments API token. |
+| **Duplicate component** | Creates new definitions of selected components or component sets beside the originals. |
 | **Frame or auto layout selected** | Wraps (or unwraps) each selected layer in new frames or auto-layout containers individually. |
-| **Relink local instances** | Relinks instances to the canonical local component when several definitions share the same name. |
+| **Relink local component instances** | Relinks instances to the canonical local component when several definitions share the same name. |
 | **Remove unnecessary nesting** | Detects and removes redundant wrapper frames (e.g. wrappers with only one child). Optionally normalizes wrappers (e.g. combining padding-x on wrapper 1 and padding-y on wrapper 2 into a single wrapper). |
 | **Scale or resize elements** | Scales or resizes selected nodes by factor, ratio, or explicit dimensions (e.g. resize all selected to 16:9 with a width of 640px). |
 
@@ -204,7 +220,7 @@ General tools (layout, selection, API). Style, variable, and cross-cutting utili
 
 | Script | Description |
 |--------|-------------|
-| **Duplicate styles group** | Duplicate a styles group, with optionally rebinding its variable bindings to another collection. |
+| **Duplicate styles collection** | Duplicate a styles collection, with optionally rebinding its variable bindings to another collection. |
 | **Rename styles** | Batch-renames styles using find/replace rules, similar to Figma's batch rename. |
 | **Render styles overview** | Generates a visual overview of a defined style group in a frame. Primarily used to support Replace Styles, which requires all styles to exist in the file. The easiest approach is to generate the overview in the library file and paste it into the target file. |
 | **Relink local styles** | Relinks layers to the canonical local style when several definitions share the same name. |
@@ -218,7 +234,7 @@ General tools (layout, selection, API). Style, variable, and cross-cutting utili
 | **Duplicate variable collection** | Duplicates a variable collection with its metadata and values. |
 | **Export / import variables** | Copies local variable collections between files as JSON. |
 | **Match colors to collection variables** | Binds raw paint colors in the selection to COLOR variables from chosen collections. |
-| **Merge variable collections** | Copies or moves variable definitions from a source collection into a target collection. |
+| **Copy or move variables** | Copies or moves variables between collections, per mode. A move rebinds every consumer in the file first, and refuses published sources. |
 | **Rename variables** | Batch-renames variables using find/replace rules, similar to Figma's batch rename. |
 | **Replace variables** | Batch finds and rebinds layer variable references or collections to another. |
 | **Selection to variables** | Creates or updates variables from selected layers' names and values. |
@@ -230,19 +246,20 @@ General tools (layout, selection, API). Style, variable, and cross-cutting utili
 |--------|-------------|
 | **Check style–variable bindings** | Audits the selection for style and variable bindings that are not available in this file. |
 | **Detach styles & variables** | Removes style and/or variable bindings from the current selection. You can choose which types to detach (fill, stroke, effect, typography, etc.) or remove all bindings. |
-| **Replace style variable bindings** | Batch find and replaces variable bindings inside style definitions. |
+| **Replace variables in local styles** | Batch find and replaces variable bindings inside style definitions. |
 | **Select by styles or variables** | Selects all nodes that use a specific style or variable. |
 
 ---
 
 ### Design System Foundations
 
-These scripts let you build a highly configurable design system foundation with as many breakpoints as needed, and tune spacing, grid, typography, and corner radius per breakpoint.
+These scripts let you build a highly configurable design system foundation with as many breakpoints as needed, and tune colors, spacing, grid, typography, and corner radius per breakpoint. Each panel stays empty until you pick a collection, then loads what the file already holds, previews the result before you run, and writes tokens in place so existing bindings survive.
 
 | Script | Description |
 |--------|-------------|
+| **Colors** | Creates or updates a colour ramp per mode. HSL uses separate hue, saturation and lightness curves; OKLCH shares one lightness ladder with separate chroma and hue. Optional opacity variations written as aliases of the base colour. Loads an existing collection back into the panel. |
 | **Corner radius** | Creates or updates corner radius variables across breakpoint modes and sets their respective scopes. Highly configurable: set min–max values and define as many steps, increment types, and naming conventions as needed. |
-| **Grid** | Creates or updates layout grid variables across breakpoint modes, sets their respective scopes, creates grid styles for the setup, and generates preview frames with the grid setup. |
+| **Grid** | Creates or updates layout grid variables across breakpoint modes, sets their respective scopes, suggests whole-number margin and gap pairs, creates grid styles for the setup, and generates preview frames with the grid setup. |
 | **Spacing** | Creates or updates spacing variables across breakpoint modes and sets their respective scopes. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed. |
 | **Typography** | Creates or updates typography variables across breakpoint modes with their respective scopes, and optionally matching text styles. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed. |
 
@@ -258,8 +275,13 @@ These scripts let you build a highly configurable design system foundation with 
 | **@Math Helpers** | Math and scaling helpers for interpolation, easing, ratios, and generated scales. |
 | **@Pattern Matching** | Shared pattern and wildcard matching utilities. |
 | **@Replacement Engine** | Core logic for planning and applying find/replace operations. |
+| **@Rename Preview** | Previews find/replace renames with collision flags before writing. |
 | **@Styles** | Helpers for discovering, analyzing, and replacing styles. |
 | **@Variables** | Helpers for collections, variables, bindings, and value updates. |
+| **@Bezier**, **@Scale Models**, **@Linear Ramp**, **@Type Scale** | Curve maths and the number sequences behind the Spacing, Corner radius and Typography scales. |
+| **@OKLCH**, **@Color Ramp** | Colour conversion and ramp generation behind Colors. |
+| **@Foundation**, **@Foundation overview** | Design System Foundations manifests, set identity, and Overview frames. |
+| **@Test Harness** | Runs in-Figma specs against the real API (development). |
 
 **User libraries:** Create a script and name it with an `@` prefix (e.g. `@My Utils`) to treat it as a library. Libraries are imported by other scripts rather than run directly.
 

@@ -145,6 +145,8 @@ intentional, so this is low priority.
 
 ## 6. Preview has no in-panel Apply button
 
+**Resolved in 2.0.** The Preview only checkbox was removed from the find/replace scripts; a run now applies immediately, so there is nothing to apply from the panel. The text below is kept as history.
+
 **What.** Applying a previewed plan means unticking **Preview only** and running again. Plan 11
 left open whether an in-panel Apply button is worth the plumbing.
 
@@ -260,6 +262,8 @@ question the refusal is actually answering today.
 
 ## 10. A duplicated collection has no manifest and no stamps to recover from
 
+**Resolved in 2.0.** `Duplicate variable collection` copies the plugin-data configs under new set ids and re-stamps the variables. The text below describes the earlier behaviour.
+
 **Already fixed, and verified — recorded here so it isn't reinvented.** A renamed group already
 recovers correctly: `findFoundationSet` derives where a set lives
 from its per-variable stamps, and every writer (`@linear-ramp.js`, `grid.js`, `typography.js`)
@@ -336,7 +340,7 @@ collection gaining modes it doesn't know about (see `foundationCollectionModes` 
 path's own mode-list handling).
 
 
-## The tone pass over the remaining 77 helper texts
+## The tone pass over the remaining 77 helper texts (landed)
 
 **Status.** **Landed 2026-09-01** for Documentation across DSF, all utility EXAMPLE_SCRIPTS,
 CODEFIG_LIBRARIES, and Help. Panel `@helper` pass completed earlier for DSF (the scripts that
@@ -1026,6 +1030,8 @@ switch. Measured 19 Aug 2026; harness kept out of the repo, it is thirty lines a
 
 ## `spacing.js`'s option table documents a config that no longer exists
 
+**Resolved in 2.0 for `spacing.js`.** Its `@DOC_START` table now documents the current `modes[]` fields. `corner-radius.js` was not re-checked.
+
 **What.** `@DOC_START` in `scripts/EXAMPLE_SCRIPTS/Design System Foundations/spacing.js`
 documents `modes: { name, min, max }`, `scaling.type`, `scaling.rangeMode`, `scaling.ease`,
 `fontScaling` and `scaling.roundTo`. Its `@CONFIG_START` block holds `scaleType`, `base`,
@@ -1045,6 +1051,8 @@ does.
 ---
 
 ## The import blocks are hand-maintained dependency closures
+
+**Closed in substance.** The Design System Foundations scripts were wired to a package and their import lists trimmed (2026-09-01); the counts below predate that.
 
 **What.** `spacing.js` imports 37 names and calls 8. `corner-radius.js`: 37 and 8. `colors.js`:
 49 and 5. Re-count against your working tree.

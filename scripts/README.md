@@ -28,7 +28,7 @@ Contains utility scripts that demonstrate various Figma automation capabilities.
 Contains importable library scripts (prefixed with `@`) that provide reusable functions and utilities.
 - **Type**: `prebuilt`
 - **Purpose**: Core libraries and utilities that can be imported by other scripts
-- **Files**: `@core-library.js`, `@codefig-ui.js`, `@infopanel.js`, `@math-helpers.js`, `@pattern-matching.js`, `@replacement-engine.js`, `@styles.js`, `@variables.js`
+- **Files**: `@core-library.js`, `@codefig-ui.js`, `@infopanel.js`, `@math-helpers.js`, `@pattern-matching.js`, `@replacement-engine.js`, `@styles.js`, `@variables.js`, `@rename-preview.js`, `@bezier.js`, `@scale-models.js`, `@linear-ramp.js`, `@type-scale.js`, `@oklch.js`, `@color-ramp.js`, `@foundation.js`, `@foundation-overview.js`, `@test-harness.js`
 
 ### Excluded Folders
 Folders and files starting with `_` or `.` are automatically excluded from the build:
