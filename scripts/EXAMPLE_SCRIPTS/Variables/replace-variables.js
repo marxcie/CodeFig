@@ -56,8 +56,8 @@
 // @DOC_END
 
 @import { nameMatches, renameByPattern, patternModeNote } from "@Pattern Matching"
-@import { previewRowsFromPlan, previewWouldWrite, previewRecord, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature, readPreviewSignature, previewDriftMessage } from "@Rename Preview"
-@import { displayResults } from "@InfoPanel"
+@import { previewRowsFromPlan, previewWouldWrite, previewRecord, previewPayload, logPreviewPlan, previewSignature, savePreviewSignature } from "@Rename Preview"
+@import { displayResults, getPropertyDisplay } from "@InfoPanel"
 
 // ========================================
 // CONFIGURATION
@@ -284,19 +284,23 @@ function findPatternForPath(find, opts) {
   return opts && opts.useRegex ? raw.trim() : normalizeVariablePath(raw);
 }
 
-// Collect all nodes recursively
+// Collect the selection and every descendant, parents before children. Uses findAll, not `children`: in the
+// plugin runtime an instance whose slot holds an instance of its own component expands forever through
+// `children` and aborts the run, while findAll is finite.
 function collectAllNodes(nodes) {
   var result = [];
-  function traverse(node) {
+  var seen = {};
+  function add(node) {
+    if (!node || seen[node.id]) return;
+    seen[node.id] = true;
     result.push(node);
-    if (node.children) {
-      for (var i = 0; i < node.children.length; i++) {
-        traverse(node.children[i]);
-      }
-    }
   }
   for (var i = 0; i < nodes.length; i++) {
-    traverse(nodes[i]);
+    add(nodes[i]);
+    if (nodes[i] && typeof nodes[i].findAll === 'function') {
+      var found = nodes[i].findAll(function () { return true; });
+      for (var j = 0; j < found.length; j++) add(found[j]);
+    }
   }
   return result;
 }
@@ -603,11 +607,69 @@ async function resolveReplacementForBinding(currentVariable, currentCollectionNa
 }
 
 /**
+ * Things the script could not do and the user has to finish by hand. Out-of-scope bindings
+ * (other collections, no matching name) never land here, so a clean run leaves this empty and
+ * shows no panel. Grouped by property and variable so each group can select all its layers.
+ */
+function recordProblem(ctx, kind, property, from, to, reason, nodeId, label) {
+  var key = [kind, property, from, to || '', reason].join('|');
+  var entry = ctx.problems.map[key];
+  if (!entry) {
+    entry = { kind: kind, property: property, from: from, to: to || '', reason: reason, nodeIds: [], labels: [], count: 0 };
+    ctx.problems.map[key] = entry;
+    ctx.problems.order.push(key);
+  }
+  if (nodeId && entry.nodeIds.indexOf(nodeId) === -1) entry.nodeIds.push(nodeId);
+  if (label && entry.labels.indexOf(label) === -1) entry.labels.push(label);
+  entry.count++;
+}
+
+function problemTotals(problems) {
+  var items = 0;
+  for (var i = 0; i < problems.order.length; i++) items += problems.map[problems.order[i]].count;
+  return { groups: problems.order.length, items: items };
+}
+
+/** Plain-language reason for a failed write. */
+function explainRebindError(property, message) {
+  if (/invalid field for text node/i.test(message)) {
+    return "Figma's API can't change " + getPropertyDisplay(property).toLowerCase() + ' on text layers.';
+  }
+  return message;
+}
+
+function problemLabel(property) {
+  return property === 'variablesTable' ? 'Variables table alias' : getPropertyDisplay(property);
+}
+
+function problemResults(problems) {
+  var results = [];
+  for (var i = 0; i < problems.order.length; i++) {
+    var e = problems.map[problems.order[i]];
+    var unit = e.kind === 'table' ? 'alias' : 'layer';
+    var plural = e.count === 1 ? '' : (e.kind === 'table' ? 'es' : 's');
+    var message = problemLabel(e.property) + ' not rebound · ' + e.count + ' ' + unit + plural;
+    var parts = [];
+    if (e.labels.length > 0) {
+      var shown = e.labels.slice(0, 3).join(', ');
+      if (e.labels.length > 3) shown += ' +' + (e.labels.length - 3) + ' more';
+      parts.push(shown + '.');
+    }
+    parts.push(e.reason);
+    parts.push('Was ' + e.from + (e.to ? ', would become ' + e.to : '') + '.');
+    if (e.nodeIds.length > 0) parts.push('Click to select ' + (e.nodeIds.length === 1 ? 'it' : 'all ' + e.nodeIds.length) + '.');
+    var row = { message: message, details: parts.join(' '), severity: 'warning' };
+    if (e.nodeIds.length > 0) row.nodeIds = e.nodeIds;
+    results.push(row);
+  }
+  return results;
+}
+
+/**
  * Rebind VARIABLE_ALIAS values inside local variable definitions (all modes per collection).
  */
 async function replaceVariableTableAliases(localCollections, ctx) {
   var replacementCount = 0;
-  var skippedCount = 0;
   var orphanUnresolvedCount = 0;
 
   for (var ci = 0; ci < localCollections.length; ci++) {
@@ -622,41 +684,32 @@ async function replaceVariableTableAliases(localCollections, ctx) {
         var aliasValue = hostVariable.valuesByMode[mode.modeId];
         if (!isVariableAliasValue(aliasValue)) continue;
 
+        var where = getScope(hostCollection.name, hostVariable.name) + ' (' + mode.name + ')';
         try {
           var currentVariable = await resolveVariableFromAlias(aliasValue);
           if (!currentVariable) {
-            console.log('Variable table: orphan alias on', getScope(hostCollection.name, hostVariable.name),
-              'mode', mode.name, '—', aliasValue.id || aliasValue.key || '(none)');
+            console.log('Variable table: orphan alias on', where, '—', aliasValue.id || aliasValue.key || '(none)');
             orphanUnresolvedCount++;
-            skippedCount++;
             continue;
           }
 
           var currentCollection = await figma.variables.getVariableCollectionByIdAsync(currentVariable.variableCollectionId);
           var currentCollectionName = currentCollection ? currentCollection.name : 'Unknown';
 
-          console.log('Variable table alias:', getScope(hostCollection.name, hostVariable.name),
-            'mode', mode.name, '→', currentVariable.name, 'from', currentCollectionName);
-
           var result = await resolveReplacementForBinding(currentVariable, currentCollectionName, ctx);
-          if (result.status === 'alreadyTarget') {
-            console.log('  Already points at local target collection, skip');
-            continue;
-          }
-          if (result.status === 'source' || result.status === 'noMatch') continue;
+          if (result.status === 'alreadyTarget' || result.status === 'source' || result.status === 'noMatch') continue;
+
+          var fromPath = normalizeVariablePath(getScope(currentCollectionName, currentVariable.name));
           if (result.status === 'notFound') {
-            console.log('  ❌ Replacement variable not found:', result.newFullPath);
-            skippedCount++;
+            recordProblem(ctx, 'table', 'variablesTable', fromPath, result.newFullPath, 'No variable with that name in the target.', null, where);
             continue;
           }
           if (result.status === 'typeMismatch') {
-            console.log('  ❌ Type mismatch for', result.newFullPath);
-            skippedCount++;
+            recordProblem(ctx, 'table', 'variablesTable', fromPath, result.newFullPath, 'The target variable has a different type.', null, where);
             continue;
           }
           if (result.status === 'loadFailed') {
-            console.log('  ❌ Could not load replacement variable');
-            skippedCount++;
+            recordProblem(ctx, 'table', 'variablesTable', fromPath, result.newFullPath, 'The target variable could not be loaded.', null, where);
             continue;
           }
           if (result.status !== 'ok' || !result.replacementVariable) continue;
@@ -674,19 +727,19 @@ async function replaceVariableTableAliases(localCollections, ctx) {
               type: 'VARIABLE_ALIAS',
               id: result.replacementVariable.id
             });
-            console.log('  ✅ Replaced variable-table alias →', result.replacementVariable.name);
+            console.log('✅ ' + where + ' → ' + result.replacementVariable.name);
           }
           replacementCount++;
         } catch (error) {
           var errMsg = error instanceof Error ? error.message : String(error);
-          console.error('Variable table alias error:', errMsg);
-          skippedCount++;
+          console.log('Variable table alias error on ' + where + ':', errMsg);
+          recordProblem(ctx, 'table', 'variablesTable', where, '', errMsg, null, where);
         }
       }
     }
   }
 
-  return { replacementCount: replacementCount, skippedCount: skippedCount, orphanUnresolvedCount: orphanUnresolvedCount };
+  return { replacementCount: replacementCount, orphanUnresolvedCount: orphanUnresolvedCount };
 }
 
 async function findAndReplaceVariables() {
@@ -810,11 +863,11 @@ async function findAndReplaceVariables() {
     remapBySameName: remapBySameName,
     replacements: replacements,
     previewOnly: previewOnlyVal,
-    plan: []
+    plan: [],
+    problems: { order: [], map: {} }
   };
   
   var replacementCount = 0;
-  var skippedCount = 0;
   var orphanUnresolvedCount = 0;
   var variableTableCount = 0;
   
@@ -850,51 +903,36 @@ async function findAndReplaceVariables() {
           if (!currentVariable) {
             console.log('Could not resolve variable (orphan binding—no ID in this file and no usable library key):', variableAlias.id || variableAlias.key || '(none)');
             orphanUnresolvedCount++;
-            skippedCount++;
             continue;
           }
           
           var currentCollection = await figma.variables.getVariableCollectionByIdAsync(currentVariable.variableCollectionId);
           var currentCollectionName = currentCollection ? currentCollection.name : 'Unknown';
 
-          var variableId = currentVariable.id;
-          if (await isVariableFromStyle(node, property, variableId, bindIndex)) {
-            console.log('  ⏭️ Skipping (variable comes from style):', currentVariable.name);
-            skippedCount++;
-            continue;
-          }
-          
-          console.log('Found bound variable:', currentVariable.name, 'from collection:', currentCollectionName);
-
           var bindResult = await resolveReplacementForBinding(currentVariable, currentCollectionName, ctx);
-          if (bindResult.status === 'alreadyTarget') {
-            console.log('  Already bound to local target collection (same id), skip');
-            continue;
-          }
-          if (bindResult.status === 'source' || bindResult.status === 'noMatch') continue;
+          // Out of scope (other collection, no matching name, already migrated): nothing to say.
+          if (bindResult.status === 'alreadyTarget' || bindResult.status === 'source' || bindResult.status === 'noMatch') continue;
+
+          var fromPath = normalizeVariablePath(getScope(currentCollectionName, currentVariable.name));
+
+          // Bindings that come from an applied style belong to the style, not the layer.
+          if (await isVariableFromStyle(node, property, currentVariable.id, bindIndex)) continue;
+
           if (bindResult.status === 'notFound') {
-            console.log('  ❌ Replacement variable not found:', bindResult.newFullPath);
-            skippedCount++;
+            recordProblem(ctx, 'notFound', property, fromPath, bindResult.newFullPath, 'No variable with that name in the target.', node.id, node.name);
             continue;
           }
           if (bindResult.status === 'typeMismatch') {
-            console.log('  ❌ Type mismatch: current', currentVariable.resolvedType);
-            skippedCount++;
+            recordProblem(ctx, 'typeMismatch', property, fromPath, bindResult.newFullPath, 'The target variable has a different type.', node.id, node.name);
             continue;
           }
           if (bindResult.status === 'loadFailed') {
-            console.log('  ❌ Could not load replacement variable');
-            skippedCount++;
+            recordProblem(ctx, 'loadFailed', property, fromPath, bindResult.newFullPath, 'The target variable could not be loaded.', node.id, node.name);
             continue;
           }
           if (bindResult.status !== 'ok' || !bindResult.replacementVariable) continue;
 
           var replacementVariable = bindResult.replacementVariable;
-          if (!remapBySameName && bindResult.newFullPath) {
-            console.log('  Match! Looking for replacement:', bindResult.newFullPath);
-          } else if (remapBySameName) {
-            console.log('  Remap by name →', bindResult.newFullPath);
-          }
           
           // Apply the replacement
           try {
@@ -988,17 +1026,15 @@ async function findAndReplaceVariables() {
             
           } catch (apiError) {
             var errMsg = apiError instanceof Error ? apiError.message : String(apiError);
-            console.error('  ❌ API error setting variable:', errMsg);
-            figma.notify('Replace variables: ' + errMsg);
-            skippedCount++;
+            console.log('  ❌ ' + node.name + ' · ' + property + ':', errMsg);
+            recordProblem(ctx, 'api', property, fromPath, bindResult.newFullPath, explainRebindError(property, errMsg), node.id, node.name);
           }
           
         } catch (error) {
           var errMsg = error instanceof Error ? error.message : String(error);
-          console.error('Error processing binding:', errMsg);
-          if (error instanceof Error && error.stack) console.error(error.stack);
-          figma.notify('Replace variables: ' + errMsg);
-          skippedCount++;
+          console.log('Error processing binding:', errMsg);
+          if (error instanceof Error && error.stack) console.log(error.stack);
+          recordProblem(ctx, 'error', property, node.name, '', errMsg, node.id, node.name);
         }
       }
     }
@@ -1009,7 +1045,6 @@ async function findAndReplaceVariables() {
     var tableStats = await replaceVariableTableAliases(localCollections, ctx);
     variableTableCount = tableStats.replacementCount;
     replacementCount += tableStats.replacementCount;
-    skippedCount += tableStats.skippedCount;
     orphanUnresolvedCount += tableStats.orphanUnresolvedCount;
   }
   
@@ -1024,35 +1059,44 @@ async function findAndReplaceVariables() {
     return;
   }
 
-  var driftRows = previewRowsFromPlan(ctx.plan);
-  var drift = previewDriftMessage(await readPreviewSignature('replace-variables'), previewSignature(driftRows));
-  if (drift) console.warn(drift);
+  var totals = problemTotals(ctx.problems);
 
-  // Summary
   console.log('=== SUMMARY ===');
   if (includeSelection) console.log('Layer bindings replaced:', replacementCount - variableTableCount);
   if (includeVariableTable) console.log('Variable-table aliases replaced:', variableTableCount);
   console.log('Total replaced:', replacementCount);
-  console.log('Skipped:', skippedCount);
+  console.log('Needing a manual fix:', totals.items);
   if (orphanUnresolvedCount > 0) {
     console.log('Unresolved / missing variable IDs (cannot remap—no name in API):', orphanUnresolvedCount);
   }
-  
-  if (replacementCount > 0) {
-    var sumMsg = '✅ Replaced ' + replacementCount + ' binding(s)';
-    if (includeSelection && includeVariableTable) {
-      sumMsg += ' (' + (replacementCount - variableTableCount) + ' layer, ' + variableTableCount + ' variable table)';
-    } else if (includeVariableTable) {
-      sumMsg += ' in variable table';
-    }
-    if (orphanUnresolvedCount > 0) {
-      sumMsg += '. ' + orphanUnresolvedCount + ' still unresolved (missing ID—names not available to remap)';
-    }
-    figma.notify(sumMsg);
-  } else if (orphanUnresolvedCount > 0) {
-    figma.notify('⚠️ No bindings replaced. ' + orphanUnresolvedCount + ' unresolved (missing variable in this file). Others may be styles, wrong collection, or no matching name in target.');
+
+  // The panel opens only when something needs a hand; a clean run says so in one toast.
+  var replacedText = replacementCount + ' binding' + (replacementCount === 1 ? '' : 's');
+  if (totals.groups > 0) {
+    displayResults({
+      title: 'Replace variables — ' + totals.items + ' to finish by hand',
+      results: problemResults(ctx.problems),
+      type: 'warning',
+      showFilters: false
+    });
+    figma.notify((replacementCount > 0 ? 'Replaced ' + replacedText + '. ' : 'Nothing replaced. ') +
+      totals.items + ' need a manual fix, see the Info panel.');
   } else {
-    figma.notify('⚠️ No variables were replaced. Check console for details.');
+    if (typeof window !== 'undefined' && typeof window.codefigRunComplete === 'function') window.codefigRunComplete();
+    if (replacementCount > 0) {
+      var sumMsg = '✅ Replaced ' + replacedText;
+      if (includeSelection && includeVariableTable) {
+        sumMsg += ' (' + (replacementCount - variableTableCount) + ' layer, ' + variableTableCount + ' variable table)';
+      } else if (includeVariableTable) {
+        sumMsg += ' in the variables table';
+      }
+      figma.notify(sumMsg);
+    } else if (orphanUnresolvedCount > 0) {
+      figma.notify('Nothing to replace. ' + orphanUnresolvedCount + ' binding' + (orphanUnresolvedCount === 1 ? '' : 's') +
+        ' point at variables this file cannot see (deleted, or from a library that is not enabled).');
+    } else {
+      figma.notify('Nothing to replace. No binding matched the search.');
+    }
   }
   } catch (err) {
     var msg = err instanceof Error ? err.message : String(err);

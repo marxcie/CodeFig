@@ -91,22 +91,22 @@ var __codefigPanel = {
 
 // ===== UTILITY FUNCTIONS =====
 
+// Collect the selection and every descendant, parents before children, with findAll (see replace-variables.js).
 var collectAllNodes = function(nodes) {
   var allNodes = [];
-  
-  function traverse(node) {
+  var seen = {};
+  function add(node) {
+    if (!node || seen[node.id]) return;
+    seen[node.id] = true;
     allNodes.push(node);
-    if (node.children) {
-      for (var i = 0; i < node.children.length; i++) {
-        traverse(node.children[i]);
-      }
+  }
+  for (var i = 0; i < nodes.length; i++) {
+    add(nodes[i]);
+    if (nodes[i] && typeof nodes[i].findAll === 'function') {
+      var found = nodes[i].findAll(function () { return true; });
+      for (var j = 0; j < found.length; j++) add(found[j]);
     }
   }
-  
-  for (var i = 0; i < nodes.length; i++) {
-    traverse(nodes[i]);
-  }
-  
   return allNodes;
 };
 

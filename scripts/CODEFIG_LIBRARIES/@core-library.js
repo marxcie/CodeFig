@@ -128,51 +128,47 @@ function replaceByPattern(items, patterns, getName, setName) {
 }
 
 // === NODE TRAVERSAL ===
-// Iterative traversal to prevent stack overflow on deeply nested structures
+// Walks each root and its descendants, parents before children, with Figma's native findAll rather than
+// by following `children`. Inside the plugin runtime an instance whose slot content contains an instance
+// of its own component expands without end through `children` (each level is a fresh handle with a longer
+// id, so no visited-set stops it), and the run dies with "Plugin runtime aborted". findAll is finite.
+// Nodes are gathered first, then handed to the processor, so a processor may change the tree.
 // Options: { maxNodes: N } - stop after collecting/processing N nodes
 function traverseNodes(nodes, processor, options) {
   options = options || {};
   var maxNodes = options.maxNodes;
+  var roots = Array.isArray(nodes) ? nodes : [nodes];
   var processed = new Set();
-  var count = 0;
-  var visited = 0;
-  var stack = [];
-  var i;
+  var gathered = [];
   var STOP = {};
-  
-  function pushChildren(node) {
-    if (!('children' in node)) return;
-    var children = node.children;
-    for (i = children.length - 1; i >= 0; i--) {
-      stack.push(children[i]);
-    }
-  }
-  
-  if (Array.isArray(nodes)) {
-    for (i = nodes.length - 1; i >= 0; i--) {
-      stack.push(nodes[i]);
-    }
-  } else {
-    stack.push(nodes);
-  }
-  
-  while (stack.length > 0) {
-    if (maxNodes != null && visited >= maxNodes) break;
-    
-    var node = stack.pop();
-    if (!node || processed.has(node.id)) continue;
+  var count = 0;
+  var i;
+
+  function gather(node) {
+    if (!node || processed.has(node.id)) return;
     processed.add(node.id);
-    visited++;
-    
-    var result = processor(node);
+    gathered.push(node);
+  }
+
+  for (i = 0; i < roots.length; i++) {
+    if (maxNodes != null && gathered.length >= maxNodes) break;
+    var root = roots[i];
+    gather(root);
+    if (root && typeof root.findAll === 'function') {
+      root.findAll(function (n) {
+        if (maxNodes == null || gathered.length < maxNodes) gather(n);
+        return false;
+      });
+    }
+  }
+
+  for (i = 0; i < gathered.length; i++) {
+    if (maxNodes != null && i >= maxNodes) break;
+    var result = processor(gathered[i]);
     if (result === STOP) break;
     count += (result && result !== true ? result : 0);
-    
-    if (maxNodes == null || visited < maxNodes) {
-      pushChildren(node);
-    }
   }
-  
+
   return count;
 }
 

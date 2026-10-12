@@ -240,49 +240,43 @@ function classifyStyleType(t) {
   return 'OTHER';
 }
 
-/** Frames/sections whose names match Render styles overview / user markers — scanned in full before the capped page walk. */
+/**
+ * Frames/sections whose names match Render styles overview / user markers — scanned in full before the capped page walk.
+ *
+ * Uses the native findAll, not `children`: inside the plugin runtime an instance whose slot holds an instance of
+ * its own component expands forever through `children`, and a walk of the page aborts the run.
+ */
 function findReplaceStylesPriorityScanFrameRoots(page) {
   page = page || figma.currentPage;
-  var roots = [];
   var subs = typeof replaceStylesPriorityScanFrameNameSubstrings !== 'undefined' && Array.isArray(replaceStylesPriorityScanFrameNameSubstrings)
     ? replaceStylesPriorityScanFrameNameSubstrings
     : ['render styles', 'styles overview', 'warm-up'];
-  function walk(n) {
-    if (!n || typeof n !== 'object') return;
-    var t = n.type;
-    if (t === 'FRAME' || t === 'COMPONENT' || t === 'COMPONENT_SET' || t === 'INSTANCE' || t === 'SECTION') {
-      var nm = String(n.name || '').toLowerCase();
-      for (var i = 0; i < subs.length; i++) {
-        if (nm.indexOf(String(subs[i] || '').toLowerCase()) !== -1) {
-          roots.push(n);
-          return;
-        }
-      }
-    }
-    if ('children' in n && n.children) {
-      for (var c = 0; c < n.children.length; c++) {
-        walk(n.children[c]);
-      }
-    }
-  }
-  walk(page);
-  return roots;
-}
+  var lowered = [];
+  for (var si = 0; si < subs.length; si++) lowered.push(String(subs[si] || '').toLowerCase());
 
-function dedupeNodeListsPriorityFirst(firstList, secondList) {
-  var seen = {};
-  var out = [];
-  function addList(arr) {
-    for (var i = 0; i < arr.length; i++) {
-      var n = arr[i];
-      if (!n || seen[n.id]) continue;
-      seen[n.id] = true;
-      out.push(n);
+  var matched = {};
+  var roots = [];
+  page.findAll(function (n) {
+    var t = n.type;
+    if (t !== 'FRAME' && t !== 'COMPONENT' && t !== 'COMPONENT_SET' && t !== 'INSTANCE' && t !== 'SECTION') return false;
+    var nm = String(n.name || '').toLowerCase();
+    for (var i = 0; i < lowered.length; i++) {
+      if (nm.indexOf(lowered[i]) !== -1) {
+        matched[n.id] = true;
+        roots.push(n);
+        break;
+      }
     }
-  }
-  addList(firstList || []);
-  addList(secondList || []);
-  return out;
+    return false;
+  });
+
+  // A match inside another match is already covered by scanning the outer one in full.
+  return roots.filter(function (n) {
+    for (var p = n.parent; p; p = p.parent) {
+      if (matched[p.id]) return false;
+    }
+    return true;
+  });
 }
 
 function logReplaceStylesSummary(searchInVal, replacements, localStylesOnlyVal, totalReplacements) {
@@ -935,169 +929,133 @@ async function findLibraryStyleByNameAsync(name, expectedType, styleCache) {
 
 // Discover styles used on nodes (library + local) and merge into cache. `traverseRoots` is usually [currentPage].
 // Priority overview frames (name matches) are fully traversed first; then a capped walk of the page (see replaceStylesScanMaxNodes).
+// One synchronous sweep reads style ids off each node and keeps only those ids, never the nodes: holding tens of
+// thousands of node handles at once aborts Figma's plugin runtime on a large page. Each distinct style is then
+// resolved once, instead of once per node that uses it.
 function scanDocumentForLibraryStyles(cache, traverseRoots) {
   var scopeNodes = traverseRoots && traverseRoots.length ? traverseRoots : [figma.currentPage];
   var maxScan =
     typeof replaceStylesScanMaxNodes === 'number' && replaceStylesScanMaxNodes > 0 ? replaceStylesScanMaxNodes : 40000;
 
   var priorityScanRoots = findReplaceStylesPriorityScanFrameRoots(figma.currentPage);
-  var priorityNodes = [];
+  var scanTypeById = new Map();
+
+  function noteStyleId(id, scanType) {
+    if (!id || id === figma.mixed || scanTypeById.has(id)) return;
+    scanTypeById.set(id, scanType);
+  }
+
+  function collectStyleIds(node) {
+    if (!node || typeof node !== 'object') return 0;
+
+    if (node.type === 'TEXT' && typeof node.getStyledTextSegments === 'function') {
+      try {
+        var segments = node.getStyledTextSegments(['textStyleId']);
+        if (Array.isArray(segments)) {
+          for (var segIndex = 0; segIndex < segments.length; segIndex++) {
+            noteStyleId(segments[segIndex] && segments[segIndex].textStyleId, 'TEXT');
+          }
+        }
+      } catch (e) {
+        // Node might not support text segments
+      }
+    }
+
+    var styleProps = ['fillStyleId', 'strokeStyleId', 'effectStyleId'];
+    for (var propIndex = 0; propIndex < styleProps.length; propIndex++) {
+      var prop = styleProps[propIndex];
+      try {
+        if (prop in node && node[prop]) {
+          noteStyleId(node[prop], prop === 'effectStyleId' ? 'EFFECT' : 'PAINT');
+        }
+      } catch (e) {
+        // Property might be inaccessible
+      }
+    }
+    return 0;
+  }
+
+  var priorityVisited = 0;
   for (var wi = 0; wi < priorityScanRoots.length; wi++) {
     traverseNodes([priorityScanRoots[wi]], function(node) {
-      priorityNodes.push(node);
-      return 0;
+      priorityVisited++;
+      return collectStyleIds(node);
     }, { maxNodes: null });
   }
 
-  var mainNodes = [];
+  var mainVisited = 0;
   traverseNodes(scopeNodes, function(node) {
-    mainNodes.push(node);
-    return 0;
+    mainVisited++;
+    return collectStyleIds(node);
   }, { maxNodes: maxScan });
 
-  var truncated = mainNodes.length >= maxScan;
-  var nodesToProcess = dedupeNodeListsPriorityFirst(priorityNodes, mainNodes);
+  var truncated = mainVisited >= maxScan;
+  var nodesVisited = priorityVisited + mainVisited;
 
   if (_rsStats) {
-    _rsStats.scanNodesPlanned = nodesToProcess.length;
+    _rsStats.scanNodesPlanned = nodesVisited;
     _rsStats.scanPriorityFrames = priorityScanRoots.length;
-    _rsStats.scanPriorityNodes = priorityNodes.length;
+    _rsStats.scanPriorityNodes = priorityVisited;
     _rsStats.scanMaxNodesCap = maxScan;
     _rsStats.scanTruncated = truncated;
   }
 
   if (priorityScanRoots.length > 0) {
-    console.log('🔥 Priority style-overview scan: ' + priorityScanRoots.length + ' frame(s), ' + priorityNodes.length + ' nodes (full subtree)');
+    console.log('🔥 Priority style-overview scan: ' + priorityScanRoots.length + ' frame(s), ' + priorityVisited + ' nodes (full subtree)');
   }
   if (truncated) {
     console.log('⚠️ Style scan: main page walk hit cap (' + maxScan + ' nodes) — raise replaceStylesScanMaxNodes if targets are missing');
   }
-  rsLog('Style scan plan: priority overview subtrees=' + priorityNodes.length + ' nodes | main walk≤' + maxScan + ' → unique total=' + nodesToProcess.length + (truncated ? ' (main truncated)' : ''));
-  
-  return new Promise(function(resolve) {
-    var chunkStartIndex = 0;
-    var totalNodesScanned = 0;
-    var CHUNK_SIZE = 300; // Smaller chunks for memory
-    var YIELD_DELAY = 10;
-    
-    console.log('📄 Scanning ' + nodesToProcess.length + ' nodes for styles...');
-    if (typeof showProgress === 'function' && nodesToProcess.length > 0) {
-      showProgress('Scanning styles', 0, nodesToProcess.length);
-    }
-    
-    /** Add or upgrade cache entry from a resolved BaseStyle on a node (hydrates Team Library placeholders). */
-    function mergeScannedStyleIntoCache(key, scanType, style) {
-      if (!style) return;
-      var existing = cache.get(key);
-      if (!existing) {
-        cache.set(key, {
-          style: style,
-          type: scanType,
-          key: style.key || null,
-          isLibrary: style.remote || false
-        });
-        rsIncr('scanStylesAdded');
-        return;
-      }
-      if (!existing.style) {
-        cache.set(key, {
-          style: style,
-          type: scanType,
-          key: style.key || existing.key || null,
-          isLibrary: !!(style.remote || existing.isLibrary)
-        });
-        rsIncr('scanStylesHydrated');
-      }
-    }
-    
-    // Helper function to extract styles from a node (async for getStyleByIdAsync)
-    async function extractStylesFromNode(node) {
-      if (!node || typeof node !== 'object') {
-        return;
-      }
-      
-      // Handle text nodes
-      if (node.type === 'TEXT' && typeof node.getStyledTextSegments === 'function') {
-        try {
-          var segments = node.getStyledTextSegments(['textStyleId']);
-          if (Array.isArray(segments)) {
-            for (var segIndex = 0; segIndex < segments.length; segIndex++) {
-              var segment = segments[segIndex];
-              if (segment && segment.textStyleId && segment.textStyleId !== figma.mixed) {
-                try {
-                  var style = await figma.getStyleByIdAsync(segment.textStyleId);
-                  if (style) {
-                    var key = styleCacheKey(style.name, 'TEXT');
-                    mergeScannedStyleIntoCache(key, 'TEXT', style);
-                  }
-                } catch (e) {
-                  // Style might be inaccessible
-                }
-              }
-            }
-          }
-        } catch (e) {
-          // Node might not support text segments
-        }
-      }
-      
-      // Check other style types
-      var styleProps = ['fillStyleId', 'strokeStyleId', 'effectStyleId'];
-      for (var propIndex = 0; propIndex < styleProps.length; propIndex++) {
-        var prop = styleProps[propIndex];
-        if (prop in node && node[prop] && node[prop] !== figma.mixed) {
-          try {
-            var style = await figma.getStyleByIdAsync(node[prop]);
-            if (style) {
-              var scanType = 'PAINT';
-              if (prop === 'effectStyleId') scanType = 'EFFECT';
-              var key = styleCacheKey(style.name, scanType);
-              mergeScannedStyleIntoCache(key, scanType, style);
-            }
-          } catch (e) {
-            // Style might be inaccessible
-          }
-        }
-      }
-    }
-    
-    // Process nodes in chunks with yields (async for getStyleByIdAsync)
-    function processChunk() {
-      var chunkEnd = Math.min(chunkStartIndex + CHUNK_SIZE, nodesToProcess.length);
-      (async function runChunk() {
-        for (var i = chunkStartIndex; i < chunkEnd; i++) {
-          await extractStylesFromNode(nodesToProcess[i]);
-          totalNodesScanned++;
-        }
-        chunkStartIndex = chunkEnd;
+  rsLog('Style scan plan: priority overview subtrees=' + priorityVisited + ' nodes | main walk≤' + maxScan + ' → visited=' + nodesVisited + (truncated ? ' (main truncated)' : ''));
 
-        if (typeof showProgress === 'function') {
-          showProgress('Scanning styles', totalNodesScanned, nodesToProcess.length);
-        }
-        
-        if (chunkStartIndex >= nodesToProcess.length) {
-          if (_rsStats) _rsStats.scanNodesDone = totalNodesScanned;
-          console.log('✅ Scanned ' + totalNodesScanned + ' nodes, found ' + cache.size + ' unique styles');
-          rsLog('Scan done: nodesScanned=' + totalNodesScanned + ' | cache size now=' + cache.size + ' | new keys from scan=' + (_rsStats ? _rsStats.scanStylesAdded : '?'));
-          nodesToProcess = []; // Release reference
-          cleanupMemory();
-          resolve();
-        } else {
-          setTimeout(processChunk, YIELD_DELAY);
-        }
-      })().catch(function(e) {
-        console.log('⚠️ Error during style scan: ' + (e && e.message));
-        resolve();
+  /** Add or upgrade cache entry from a resolved BaseStyle on a node (hydrates Team Library placeholders). */
+  function mergeScannedStyleIntoCache(key, scanType, style) {
+    if (!style) return;
+    var existing = cache.get(key);
+    if (!existing) {
+      cache.set(key, {
+        style: style,
+        type: scanType,
+        key: style.key || null,
+        isLibrary: style.remote || false
       });
+      rsIncr('scanStylesAdded');
+      return;
     }
-    
-    if (nodesToProcess.length > 0) {
-      setTimeout(processChunk, YIELD_DELAY);
-    } else {
-      console.log('⚠️ No nodes to scan');
-      resolve();
+    if (!existing.style) {
+      cache.set(key, {
+        style: style,
+        type: scanType,
+        key: style.key || existing.key || null,
+        isLibrary: !!(style.remote || existing.isLibrary)
+      });
+      rsIncr('scanStylesHydrated');
     }
-  });
+  }
+
+  var styleIds = Array.from(scanTypeById.keys());
+  console.log('📄 Found ' + styleIds.length + ' distinct style(s) on ' + nodesVisited + ' nodes');
+
+  return (async function resolveStyles() {
+    try {
+      for (var i = 0; i < styleIds.length; i++) {
+        try {
+          var scanType = scanTypeById.get(styleIds[i]);
+          var style = await figma.getStyleByIdAsync(styleIds[i]);
+          if (style) mergeScannedStyleIntoCache(styleCacheKey(style.name, scanType), scanType, style);
+        } catch (e) {
+          // Style might be inaccessible
+        }
+      }
+      if (_rsStats) _rsStats.scanNodesDone = nodesVisited;
+      console.log('✅ Scanned ' + nodesVisited + ' nodes, found ' + cache.size + ' unique styles');
+      rsLog('Scan done: nodesScanned=' + nodesVisited + ' | cache size now=' + cache.size + ' | new keys from scan=' + (_rsStats ? _rsStats.scanStylesAdded : '?'));
+    } catch (e) {
+      console.log('⚠️ Error during style scan: ' + (e && e.message));
+    }
+    scanTypeById.clear();
+    cleanupMemory();
+  })();
 }
 
 async function processTextNode(node, styleCache, nodeName, replacements, searchInVal, localStylesOnlyVal, preview) {
