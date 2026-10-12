@@ -17,7 +17,9 @@ a plain statement of the new default.
 
 ---
 
-## [Unreleased]
+## [2.0.0] - TBD
+
+**Foundations.** Generational config UX: `@PANEL_START` as live `var __codefigPanel = {…}` (values stay in `@CONFIG_*` / `@UI_CONFIG_*`); Configuration code tab removed. Script storage in Figma Variables with LocalStorage backup, settings gear, and canvas paste-share. Foundation maintain on open; copy/duplicate → new stamp identity. Design System Foundations open empty until a collection is chosen; ramp scripts scan for the group when none is recorded. Scoped preview CSS on DSF libraries (plans 29–32). Help rewritten as onboarding; utilities regrouped; Change case and nesting cleanup expanded.
 
 ### Added
 
@@ -47,6 +49,361 @@ a plain statement of the new default.
   holds FLOAT values for the open set, the preview shows the file number struck through beside the
   new one (same idea as Colors’ hex strip), and the Scale chart tip lists both scales so you can
   compare while dragging. Quiet when they match.
+
+- **Mode tabs can collapse their settings.** On `layout: "tabs"` `@rows` controls (Spacing, Grid,
+  Corner radius, Typography), a chevron at the end of the mode tab bar hides the open mode's
+  fields so Preview sits closer. View-only — not written into the config. Colors blocks are
+  unchanged.
+- **Panel `section` containers and spacers.** `@PANEL_START` recipes may nest
+  `{ type: "section", id?, showWhen?, blocks: […] }`. The form keeps a real
+  `<section class="config-ui-section">` (plus `config-ui-section--{id}` when set). Section-level
+  `showWhen` gates the whole chunk and is inherited onto children. `{ type: "spacer-s" }` /
+  `spacer-m` / `spacer-l` add 8 / 12 / 24px gaps. A `{ type: "divider" }` between top-level
+  sections is edge-to-edge; inside a section it stays short. Flat `blocks` still work. Design
+  System Foundations panels and the Help specimen use sections.
+- **Colors: Generate overview.** Same control as Spacing / Corner radius / Grid / Typography. When on,
+  Run builds a **Colors — overview** section under the shared Design System Foundations frame: one
+  row per token, one column per mode, fills bound to the colour variables. Off by default.
+- **Colors: seed rebuilds the full scale.** Entering a seed hex writes bright / middle / dark hue and
+  chroma (or saturation), lightness ends, and Linear curves for that mode — tints.dev-shaped UX on
+  CodeFig's own model. Changing the hex again re-applies. **Lock seed color** keeps the exact hex on
+  the seed step and freezes middle Hue / Saturation (or Chroma) / Lightness (numbers and the middle
+  curve grip); ends and curve shape stay editable. Unlock lets later edits move the seed step.
+  Shared OKLCH lightness ends follow the seed that was applied (other modes' hue/chroma stay put).
+  Picking an `easeInOut` preset keeps (or restores) the middle point when the seed is locked or the
+  curve already had one — those presets are one cubic otherwise.
+- **Copy these values to: Mode…** on Spacing, Corner radius, and Typography. On a mode tab when
+  there are two or more modes, each other mode is a text link; click one to copy this mode's
+  scale settings onto it (names stay). Asks before replacing settings that already differ. Grid
+  and Colors stay unchanged.
+- **DSF Group candidates as links.** When Collection holds more than one Grid / Spacing /
+  Radius / Typography / Colors set (or the current Group points at none of them), their names
+  appear as text links directly under the Group input. Click one to fill Group and load that
+  set; after a load, sibling sets stay listed so you can switch without clearing the field. One
+  candidate still auto-fills Group as before. Colors loads the scale unchanged (Original /
+  `skipFit`); curve fit stays on demand when a channel tab opens.
+- **Grid: Extra values.** Shared Mode-settings list for CSS-calc-style formulas
+  (`col-1+gap`, `col-1*2+gap`, `margin-gap`, …) using `col-N`, `gap`, `margin` (the Margins
+  field), and numbers with `+ - * /`. Each entry becomes a FLOAT variable with that name, valued
+  per mode. Separate from Extra columns.
+
+- **Spacing / Corner radius / Typography Scale chart tip.** Hovering or dragging the growth
+  handle (or a shape handle) shows the stored growth ratio and the open mode’s generated sizes as
+  a number list — e.g. `1.5` above `0, 2, 4, 8, 16, 24, 40, 80, 120`. When the file holds different
+  values, a struck-through file list sits above the new one. Tip sits right-centre of the handle.
+
+- **Script-storage helpers (developer).** Pure chunk / index / export helpers for the planned
+  `"CodeFig Scripts"` STRING-variable store (`src/script-storage.js`, `CHUNK_CHAR_LIMIT` 90_000).
+- **`figma:ui` `saveScript` / `deleteScript`.** Drive SAVE / DELETE from the terminal for storage
+  verification (delete skips the confirm dialog).
+- **Script-storage sandbox dual-read.** LIST / SAVE / SAVE_BATCH / DELETE prefer the local
+  `"CodeFig Scripts"` STRING collection (with one-shot migrate from `clientStorage` and dual-write
+  back). `SCRIPT_STORAGE_VARIABLES` is true after Figma verify.
+- **Help & documentation Configuration UI uses `@PANEL_START`.** The Style & UI reference
+  specimen shelf keeps values in `@UI_CONFIG_START` and moves control specs into `@PANEL_START`.
+  Same live controls (including the intentional unsupported nested object); `artifacts/style-reference.html`
+  regenerates from the new split.
+- **Every other shipped EXAMPLE_SCRIPT with a config form uses `@PANEL_START` too.** Values stay
+  as `var` lines in `@UI_CONFIG_START` (runtime needs those names); the form recipe is JSON in
+  `@PANEL_START`. Find/replace, rename, merge, scale-selection, and the smaller utilities all
+  match this shape — same architecture as DSF, without rewriting how each script reads its knobs.
+- **Spacing and Corner radius Configuration UIs use `@PANEL_START`.** Same split as Colors:
+  `@CONFIG_START` holds values only (still with `// @fromFile: domains.spacing` /
+  `domains.radius`), and the panel recipe is JSON in `@PANEL_START`. Behaviour is unchanged —
+  collection chips, token lists, scale-type tabs, bezier/metric/fibonacci fields, and the preview
+  all match the previous panels.
+- **Typography's Configuration UI uses `@PANEL_START`.** Same split as Colors: `@CONFIG_START`
+  holds values only (still with `// @fromFile: domains.typography`), and the panel recipe is JSON
+  in `@PANEL_START`. Behaviour is unchanged — list tokens/weights, letter-spacing and line-height
+  percent groups, overview suggestions, and the preview textarea all match the previous panel.
+- **Grid's Configuration UI uses `@PANEL_START`.** Same split as Colors: `@CONFIG_START` holds
+  values only (still with `// @fromFile: domains.grid`), and the panel recipe is JSON in
+  `@PANEL_START`. Behaviour is unchanged — collection chips, mode tabs, suggestions, and the
+  preview all match the previous panel. The `variables` function stays a sibling after the panel
+  region.
+- **Colors Run writes colour variables.** The panel strip is the preview; Run creates or updates
+  the group's COLOR tokens in place, skips aliases and non-opaque cells, reports orphans when the
+  step list shrinks, and records the set with the same stamp bracket Spacing and Radius use. The
+  hexes come from the same `colorsGenerateMode` path the panel already showed.
+- **A Hue, Saturation or Chroma curve can now peak above or dip below both of its own ends** — a
+  Hue that reads the same at both ends with a real, different hue in the middle, for instance,
+  which cannot be expressed any other way: `oklchLerpHue`/`oklchLerp` interpolate the two ends
+  linearly, and a straight line between two equal numbers is that number regardless of how the
+  curve paces getting there. Dragging a handle past the edge of the plot used to clamp its height
+  to exactly the ceiling or floor, wherever the pointer actually went — confirmed live, a dragged
+  Hue handle landed at exactly `y = 1`. The overshoot protection that stops a handle leaving the
+  *plot box* is unchanged and still applies; only the restriction to the *range between the two
+  ends* is lifted, and only for these three channels — Lightness and every curve outside Colors
+  (Spacing, Radius, Typography's own scale curves, which share the same underlying shape) keep
+  exactly the range they always had. Also fixes the generation-side half of the same limitation: a
+  curve's pacing was clamped a second time when it was turned into a colour, so even a display that
+  correctly showed the overshoot would not have reached the swatch.
+- **Configuration code shows a migrated script's `@PANEL_START` spec, read-only, above the values
+  it explains** — a script with no `@PANEL_START` shows exactly what it always has. A second,
+  genuinely non-editable pane rather than one shared buffer: the values editor still writes back
+  exactly as before, so nothing about saving a config changed.
+- **A tab can be named for the model it is showing, and can take itself off the bar.** `#>Hue{colorModel=hsl}`
+  carries the same `{…}` condition a column does, and **two tab markers written next to each other are one
+  tab under two names** — captioned by the first whose condition holds, sharing one panel. A tab with nothing
+  visible left in it is not drawn at all.
+- **Channel tabs in a `@rows` block.** `#>Hue` starts a tab where `#Hue` starts a section — the columns
+  after it are shown only when that tab is open. Closed tabs are hidden rather than dropped, so every
+  channel is still read; switching one is not an edit and does not touch the config.
+- **The three anchor boxes sit under the chart**, left, centre and right. The two ends are the row's own
+  cells, moved into place rather than rebuilt, so they keep their captions and their keys. The **Middle**
+  box depends on the channel. Lightness has no middle anchor of its own, so its box **is** the curve's
+  middle handle read in lightness — type in it and the handle moves, drag the handle and it follows, and it
+  is disabled with an em dash when the curve has no middle point. Hue and Saturation do have one, and their
+  box is that anchor: the engine interpolates bright to middle to dark and paces it with the curve, which
+  are two different numbers, so showing the handle there would show neither.
+- **A curve can be drawn on a real axis.** `@ends: a..b` names the two fields a curve runs between and
+  `@range: lo..hi` the limits of the quantity, and together they turn the plot's y axis from a unit
+  square into the thing being edited — labelled at round values, with the dashed guide joining the two
+  ends rather than the corners of the box. The ends become **square** handles you can drag, and dragging
+  one types into its own field, drawn **filled** where a shape handle is hollow. Two columns sit beside the
+  plot: a **zoom** — a triangle you drag, with step buttons above and below — and a bar showing the
+  collection's own token colours across the window, which takes no input. Zoom in between two steps and
+  the bar is the blend between those two, because it is a picture of that ramp rather than of the channel. Neither moves when you drag the curve;
+  drag the empty chart vertically to follow a ramp that runs off the top or bottom. The ramp is clipped to
+  the plot, grips to the plot plus their radius so one on the boundary sits *on* the frame, and a drag
+  stops at the window's edge instead of pushing the curve out of sight. Curves without `@ends` — the scale
+  editors in Spacing, Radius and Typography — are unchanged.
+- **Every step is a dot on the curve, in its own colour, with a ring on the seed.** Drawn from the same
+  published colours as the bar beside the chart, so a step cannot appear at one value in one place and a
+  different one in the other. Small deliberately — a dot that competes with a handle makes the thing you
+  can drag harder to find.
+- **The Lightness chart is drawn as darkness** — 0 at the bottom is white, 100 at the top is black — so a
+  ramp climbs left to right the way its swatches darken. Display only: the config still holds lightness, a
+  drag still writes lightness, and a run still generates from it. Hue, chroma and saturation plot as
+  stored.
+- **Colors' Mode settings are three channel tabs over one chart** — Hue, Saturation and Lightness — with
+  Seed color above them, because a seed belongs to the mode rather than to a channel. Each tab holds that
+  channel's curve and its two ends, and every curve is now on a real axis: hue in degrees, chroma 0 to 0.4,
+  saturation and lightness as percentages. The five stacked curve editors are gone.
+- **Colors' lightness curves are drawn on that axis.** The OKLCH collection ladder reads against its
+  Bright and Dark, and each HSL mode's curve against its own — so the chart says what lightness a step
+  lands on rather than how far the shape sits from straight, and the ends are draggable. Chroma, hue
+  and saturation are unchanged for now: each of those still keeps a separate Middle field, and an axis
+  would put a second answer to that question on screen beside the first.
+
+- **Change case** — recursively renames frame and group layers, component variant labels and values,
+  and optionally instance names, in lower case, title case, or camelCase.
+- **Selection to variables takes a group.** A **Group within collection** field says once where the
+  variables go inside the collection, instead of every layer having to repeat it in its own name.
+  It is a prefix, so it composes with the slashes already in a layer name rather than replacing
+  them: group `bark` over a layer called `900` and no group over a layer called `bark/900` both
+  write `bark/900`, and group `primitives` over `bark/900` writes `primitives/bark/900`. Left empty,
+  nothing changes about how the script behaved before.
+- **A bezier curve editor, for curves you draw rather than curves you pick from a list.** Two anchors and
+  two handles: drag them, nudge them a percent at a time with the arrow keys (ten with shift), choose a
+  starting point from the preset list, or paste `cubic-bezier(0.37, 0, 0.63, 1)` into the field underneath.
+  **Add middle point** turns it into a three-anchor, two-segment curve so the top half can bend differently
+  from the bottom — the split is exact, so adding the point does not move the curve. The coordinates *are*
+  the setting: there is no family name stored beside them, so the preview can never show one curve while a
+  run generates another, and the dropdown reads *Custom* the moment a curve stops matching a preset.
+
+- **A Colors panel that reads a colour set and shows you where it stands — it does not write yet.**
+  Three lightness anchors and a curve make a **ladder shared by every mode in the script**, so two modes
+  land on the same tone with different hue and chroma; that is what makes them match under a greyscale
+  filter. Each mode block carries its own seed, its own hue and chroma per anchor, and **its own palette
+  strip**. In HSL the curve stays per mode, because an HSL curve legitimately belongs to a hue.
+  - **Point it at a collection and group and the panel fills itself** from the variables: the steps from
+    their names, and hue, chroma and the three anchors from the real first, middle and last values. It
+    does **not** guess a curve — an existing ramp is a list of colours with no record of how it was made
+    — so it draws what is in the file *underneath* what it would generate, each changed step's old hex
+    struck through beside the new one.
+  - **"OKLCH scale not applied" is a question, not a stored flag.** It is re-asked on every edit by
+    comparing the file's values against the config's own output, so it cannot go stale, and the banner
+    and the strips are driven from one comparison rather than two — they cannot disagree about how many
+    steps would change.
+  - **Lock seed re-anchors, it does not offset.** The middle anchor becomes the seed's own lightness and
+    the ladder is recomputed through it; bright and dark are untouched, so the endpoints still match the
+    shared ladder exactly. Interior steps drift, and the largest deviation is reported beside the field,
+    because that number is the whole decision.
+  - What it will not read: **an aliased variable is read through and never written** — an alias is a
+    deliberate indirection and replacing it with a raw value breaks a link silently. A **non-opaque
+    variable is reported and skipped**, never composited over an assumed background to invent a
+    lightness. A group where **more than half** the variables are non-opaque is an alpha ramp, not a
+    lightness ramp, and is declined in one line rather than itemised skip by skip.
+  - **Run writes nothing.** It says so, and says why: the write path is gated on its dry run being
+    reviewed first. A Run that half-wrote a colour set would be worse than one that refuses, because
+    what it would be half-writing is a collection other files subscribe to.
+- **HSL modes are per mode again.** A mode block in HSL now carries its own **Saturation** and
+  **Lightness** beside Hue, and Chroma appears only in OKLCH. This was not cosmetic: HSL has no shared
+  ladder, so a mode's own three lightness values *are* its ladder, and with nowhere to put them every
+  HSL mode fell back to the same 98/46/4 and generated an identical ramp whatever you typed. Reading a
+  collection now fills whichever set the panel is on, from readings taken in that model — a hue in
+  OKLCH is a perceptual angle and a hue in HSL is where the maximum channel sits, and putting one in
+  the other's field is a plausible-looking wrong number in every cell.
+- **A `@rows` column can carry `@placeholder="…"`**, the same annotation a field spells, so a cell can
+  show a grey example. A numeric cell labelled *Chroma* gives a first-time reader nothing otherwise:
+  `0.012` and `12` are both plausible guesses and only one of them is a colour.
+- **A column's condition can name a form field**, not only another column in the same row. It still
+  prefers the row — two modes on two tabs can be on different scale types at once — and falls back to
+  the form, which is what lets a mode's fields depend on a setting that sits above the whole table.
+- **A settings panel fills itself from a set CodeFig never made.** Point Grid at a collection and group
+  holding a grid — one built years before this plugin, or by hand — and the settings load from the
+  **variables themselves**, matched by name and structure: `columns`, `gap`, `padding`,
+  `viewport-width` and the `col-1…N` series. No id, no record, nothing CodeFig had to have written
+  first. A value the set does not carry is worked out from the ones it does, and the panel says which
+  of the two happened. It then checks itself and tells you whether running would change any of your
+  values — and names what could not come back rather than leaving it at a default that implies it was
+  read: *Generate overview* is not a variable, and *Extra columns* is inferred from how many `col-*`
+  variables there are.
+- **Grid suggests margin and gap pairs that divide into whole numbers.** The Suggested whole number
+  divisions section is live: it searches whole margins and gaps around what you have, keeps the pairs
+  where every column comes out a whole number, and ranks them by how many of your modes they are clean
+  for, then by how little they move your values, then towards round numbers — a 79px margin is
+  arithmetically as good as 80 and nobody wants one. Your current pair is always the first card when it
+  divides cleanly. **Clicking a card changes the mode you are looking at and no other**: the badges say
+  where else the pair would work, they are not a promise to write it. Nothing is applied by looking —
+  only by clicking. When nothing in range divides, it says so and says what it searched, and when there
+  are more results than cards it says how many.
+- **A Style & UI reference, inside Help & documentation.** Every control a script's settings form can
+  render, live in that script's own Configuration UI tab, with the exact line that produces each one
+  written underneath it — so a change can be asked for by pointing at the thing rather than describing
+  it. Its Documentation tab holds the type scale, the spacing scale and the colours, and keeps the two
+  heading ladders apart: the same `// # Title` is 20px in a Documentation tab and 16px as a form's
+  section title, which is not obvious from either one alone.
+- **A note under a field can mention an annotation.** `@helper:` text stopped at the next `@word`, so
+  a note reading *"an object with no `@rows`"* was stored as *"an object with no"*. Notes now run to
+  the end of the line, which means `@helper:` has to be the last annotation on it.
+- **A panel fills itself from where it points.** When a collection and group name somewhere CodeFig
+  has already generated, the settings load on their own and a line under Group says so — no button to
+  find, and nothing to press. It never overwrites what you have typed: once you have edited anything,
+  it stops filling and tells you a saved config is there instead.
+- **Grid records what it generated**, the way Spacing and Corner radius already did. That is what
+  lets the panel above fill itself, and what lets a config move between files. Plugin data only —
+  no variable, name or binding is affected.
+- **Pick a collection instead of typing its name.** The collection field is a list of the collections
+  in your file, plus *Create a new one* for a name that is not there yet. It stays one setting — the
+  name — because a collection whose name does not exist is created when you run, so there is nothing
+  extra for a config to remember. Which of the two is about to happen is said before you run:
+  *"Brand tokens" doesn't exist in this file — it will be created.* That also covers a config pasted
+  from another file, where the collection genuinely may not be here.
+- **Pick a mode the same way you pick a collection.** A settings form can now offer the modes of
+  whichever collection it is pointed at, plus *New mode* and a name — created on Run, exactly as a
+  new collection is. It follows the collection picker above it, so changing collection changes the
+  modes on offer — and empties it, because a mode you picked in one collection is not a mode of the
+  next one. Left empty, values go to the collection's default mode. A config that arrives naming a
+  mode this file does not have says so before you run, rather than creating it quietly.
+  **Selection to variables** uses it; any script can, with `// @mode: targetCollection` on a var line
+  and `getOrCreateMode` from `@Variables`.
+- **Design System Foundations scripts have a form.** Their settings were only ever editable as code,
+  because the form could not read the shape those blocks are written in. It can now, so every one of
+  them opens on Configuration UI, and the config block is still exactly the thing you paste. Settings
+  a form cannot represent yet stay editable in Configuration code and say so.
+- **See the scale before you commit to it.** Spacing and Corner radius draw their scale in the
+  Configuration tab and redraw it as you type — tokens down, modes across, each value as a bar,
+  with the gaps under each column, because `1, 4, 8, 12, 16, 24` reads as regular until you see
+  `3, 4, 4, 4, 8`. Nothing is written while you look: the preview generates in memory and cannot
+  reach your document. The same picture appears in the results panel after a run, as the record of
+  what was made.
+
+- **Adopt a file CodeFig has never touched.** Point **Foundation config** at a group of spacing or
+  corner-radius tokens in `adopt` mode and it works out how the scale was built — a base and a
+  growing step, a fixed ratio, or a straight ramp — and records it, so the import button and
+  `figma:run --from-file` work on a file made years before this plugin. **Nothing you can see
+  changes**: no value, no name, no binding, nothing deleted or recreated. Where the numbers do not
+  fit a model exactly it records them as they are and tells you what the closest fit would have
+  changed, so switching is your decision and you see the cost first. A published collection is
+  reported and left alone until you confirm, because recording writes plugin data and that shows
+  subscribers a library update.
+- **Foundation config** — a new Design System Foundations script that moves a config between
+  files. It reads the viewports and generated sets a file already has and hands you the config
+  **in the shape your scripts already use**: paste it straight between `// @CONFIG_START` and
+  `// @CONFIG_END` in Grid, Spacing, Corner radius or Typography. It can also park the config in
+  a text layer on canvas and read it back, and `check` tells you what a pasted config would mean
+  without writing anything. Older configs load too — `structure.*`, `spacingScaling`,
+  `fontScaling`, `figmaStyles`, `roundUpperValuesTo` — and every translation is listed, so a
+  paste never quietly means something else. It never generates variables: reading a config writes
+  the viewport list and nothing more.
+
+- **The mode chips do something.** They were a view; now they are the control. Click a chip's label to
+  rename that mode — a **rename**, so its values and every binding to it survive. The dash removes one,
+  and says what that costs before it happens: *"Removing mode Tablet at Run — 12 variables hold values
+  there, and any binding to it is lost."* The `+` adds one, seeded from the mode beside it so its
+  settings tab has real numbers to edit. Drag to reorder. **Nothing reaches your file until you press
+  Run**, and removing a mode then adding one with the same name is how you replace it — the panel says
+  *"Replacing…"* when that is what you have set up.
+- **A config pasted from another file still never deletes a mode.** A mode this config has not heard of
+  is left exactly where it is, values and all. The only thing that removes a mode is clicking its dash.
+- **Name a series of tokens instead of typing it out.** `spacing-{1,10}` in the Tokens field is ten
+  tokens, `spacing-1` through `spacing-10`, and it mixes with names you write yourself:
+  `none, px, spacing-{1,10}`. `{10}` is short for `{1,10}`. Two details worth knowing because they are
+  requested by writing them rather than by a setting: it counts **down** as readily as up, so
+  `heading-{6,1}` names a heading ramp smallest-to-largest, and a written leading zero is a width, so
+  `{01,10}` gives `spacing-01 … spacing-10` — which sorts the way it reads in Figma's variables list.
+- **Corner radius has its panel**, and its preview draws the thing you are judging: a 200×120 box per
+  token with the radius applied at its real size, the name beside it and the value past it. Same skeleton
+  as the others — General, a tab per mode, Preview — with each mode carrying its own scale and its own
+  rounding. `none` is no longer a special case in the maths: it is an extra value of `0` that fills the
+  smallest token name.
+
+  **A radius past 60 says so.** The corners of a 200×120 box meet there, so 60 and 600 draw the identical
+  pill — and the shipped design's own largest token is 96. Without the note, two different numbers look
+  like the same picture.
+
+  **The numbers are unchanged** in all three modes: desktop still generates `0, 4, 8, 12, 16, 24`. Only the
+  spelling moved.
+- **Typography has its panel.** The same skeleton as Grid and Spacing — General, a tab per mode, then
+  two sections of its own: an **Overview** table listing every step with its size, line height, ratio,
+  tracking and the variable a run will write, and a **specimen** setting your own preview copy at the
+  real sizes, largest last. Each mode carries its own scale (Modular, Metric or Fibonacci) and its own
+  rounding, and **Base unit is the size of the first token**, so tokens read smallest to largest and
+  nothing has to say where the base sits.
+
+  **Line height and letter spacing take two numbers each** — the value at the smallest step and,
+  optionally, the value at the largest. Both are in px, and what runs between them is the *relative*
+  quantity: line height as a ratio, tracking as a share of the size. That is what makes absolute line
+  height rise while its ratio falls, and tracking tighten as type grows, which is the interaction the
+  type-scale tools chart and none of them computes. **Fill in only the first and nothing changes from
+  before**: line height keeps the base ratio and tracking stays flat.
+
+  Two smaller things came with it: font weights are a list where a number is a weight and a word is a
+  Figma font style name (`400, Semi Bold`), and text styles have their own two fields — whether to create
+  them, and their naming — instead of being edited as an object in the code tab.
+
+  **Configs written before this keep working and generate exactly what they generated**, pinned by a
+  test: per-mode `minFont`/`baseFont`/`maxFont` with a top-level curve and easing still run, they simply
+  have no controls. The default block's token *names* are unchanged, so a run updates the variables you
+  already have — but its numbers are new, because a per-mode ratio has no min, max or easing with which
+  to reproduce a sine ramp from 8 to 200.
+- **Scale type is a set of radio buttons, and every ratio says what it is.** *Modular scale / Metric
+  scale / Fibonacci* are visible at once instead of hidden in a dropdown, and the Scaling method list
+  reads *1.25 Major third*, *1.618 Golden ratio* rather than bare numbers. The dropdown is now as wide as
+  its longest option instead of a fixed share of the row.
+
+- **A config form explains itself in one place: the ⓘ beside a label.** Helper text under the control,
+  the descriptive comment lines between fields, and a control's leftover comment prose were three kinds
+  of grey text in one form — and the third had never appeared at all, because it set a browser tooltip
+  whose only styling hook had no rule behind it. They are one thing now. Hover the ⓘ, or reach it with
+  Tab and press Enter to pin the bubble open; nothing that used to be written down has been thrown away.
+  - **What a script's config block looks like has not changed**, and neither has what it means. A
+    paragraph is still a comment line and `@helper:` is still `@helper:` — the panel decides where to
+    show them, and writes your block back exactly as you wrote it, comments and all.
+  - **A paragraph belongs to the control it sits against**, above it or below it, whichever it is
+    touching — a blank or bare `//` line is the separator that decides. All 68 in the shipped scripts
+    were checked one by one; two blocks whose spacing disagreed with their intent were given the
+    spacer that says what they mean.
+  - **A block that is meant to be read says so**, with `@prose` on a line of its own — its paragraphs
+    stay on the page. *Help & documentation*'s specimen shelf is the one that uses it.
+  - **Notes that report what is about to happen stay where they are**: why a field is disabled, that a
+    collection will be created, that a mode will be removed at Run. A description moves behind a hover;
+    a consequence does not.
+
+- **Every field label is sentence case, the way Figma writes one.** 87 of the plugin's 123 labels had
+  never been written by anyone: with no `@label:` set, the name of the variable was split at its
+  capitals and left there, so `fileKeyOrUrl` read as *File Key Or Url* while the 36 hand-written labels
+  beside it were sentence case. The plugin disagreed with itself on the first thing anyone reads. Your
+  config blocks are untouched by this — nothing starts writing `@label:` into them.
+
+- **Helper text explains the control it is attached to, in plain words.** A pass over every explanation
+  in the shipped scripts: the ones that named a variable in the source rather than the field on screen
+  ("leave `searchFor` empty" where the label says **Search for**), the ones that only repeated their
+  own label, and three broken sentences. Notes that had been parked under a section heading now sit on
+  the control they describe — *Amount* and *Hue* in Colors, the collection and payload fields in
+  Export/import.
 
 ### Changed
 
@@ -86,6 +443,424 @@ a plain statement of the new default.
   group match; a different collection or group adds a section. Applies to Colors, Spacing, Corner
   radius, Grid, and Typography. Colors no longer stacks groups inside a single Colors — overview
   frame (the old bare section is dropped on the next Colors overview run).
+
+- **Colors overview is horizontal, one section per Collection + Group.** Each colour set is a
+  left-to-right ramp (modes stacked) under Design System Foundations. Same address overwrites;
+  a different collection or group adds a section (see Unreleased note at top).
+- **Colors tokens are a list like Spacing.** Color tokens default to Tailwind's
+  `50…950` names (editable). Insert or remove steps for in-betweens; `shade-{1,12}` expands to a
+  series the same way Spacing does. Names stay labels — lightness still comes from the ladder.
+
+- **Typography** now creates and updates text styles by default, with **Style naming** filled as
+  `{$fontScale}/{$fontWeight}` (add a folder prefix if you want). **Font weights** accept
+  `450:Regular` so a variable-font number can keep a Regular / Semibold name. The panel adds a
+  **Text wrap style** radio (`Auto`, `Balance`, `Pretty`); the font is loaded before wrap style is
+  applied, so a run no longer stops after the first style.
+- **Help: when to use `@UI_CONFIG` vs `@CONFIG`.** Writing a script now says: flat `var`s for a few
+  separate settings; an object under `@CONFIG` when the body takes one nested config (Foundations).
+  The form treats both the same.
+- **Sidebar default width is 280px** (was 240px). Search + script list still resize between 200–400px.
+- **Change case** panel is Target (canvas / styles-and-variables / optional collection) then General
+  (case style, scope, recursive). Recursive stays visible for every target mix.
+- **Change case** expands beyond frames and groups. Tick Canvas targets (component names, variant
+  labels/values, layer names) and/or Styles and variables (variable names, style groups, style
+  names). Scope is Selection / This page / All pages for canvas only. Case style adds hyphenated
+  and ALL CAPS forms; the camelCase label is `camelCase`. Variables use one collection, optional
+  group, and Recursive (target + children). Collisions are skipped and reported.
+- **Help & documentation is CodeFig onboarding.** Overview, getting started, writing a script,
+  three roles, library catalogue (each library’s DOC title), shipped-script catalogue (display name
+  + DOC title), and common patterns come first. Style & UI reference stays last. Configuration UI
+  opens with a specimen intro; the unsupported nested-object demo explains what that empty control
+  means. Library API detail stays on each library’s Documentation tab.
+- **`@PANEL_START` is a live JS object.** Shipped panels use `var __codefigPanel = { blocks: […] }`
+  between the markers so Source syntax-highlights the recipe. The old `//`-commented JSON form
+  still parses (saved scripts). Panel regions sit at top level — not inside the `@CONFIG` object.
+  Utility panels that still looked like JSON (`"blocks":`) are reprinted in the same bare-key
+  Help style as Design System Foundations, so every shipped recipe teaches one language.
+
+- **Utility script sidebar groups.** Shipped utilities are grouped under **Styles** (6),
+  **Variables** (12), **Styles & Variables** (4), and **Utility Scripts** (6 general tools).
+  Design System Foundations is unchanged. Script filenames and `@import` targets are the same;
+  only the display prefix changed (e.g. `Styles / Rename styles` instead of
+  `Utility Scripts / Rename styles`). Resolve by filename or title as before.
+
+- **Grid, Spacing, Corner radius, and Typography** open with empty General fields (placeholders
+  only). **Mode settings** still wait on a collection; **Preview / Overview / Suggestions** stay
+  hidden until their HTML has something to show (content-reveal — not `@showWhen` alone), so an
+  empty collection no longer flashes placeholder copy. Ramp scripts **scan the collection for the
+  group that holds a set** when the current group has no manifest (same offer Grid already had for
+  `col-N` series). Auto-import still fills token names or the manifest once Group points at the
+  right place. **Fix:** the group scan no longer throws in the sandbox — the minimum-token
+  threshold lived in a top-level `var` that `@import` extraction does not carry. **Domain-aware:**
+  spacing and radius scans no longer treat each other's groups (or typography companions) as
+  candidates, so a collection with one of each can auto-set Group again.
+- **Content-reveal for DSF previews.** Preview and suggestions slots start `display: none` and
+  open only through `fillContentReveal` when the silent run returns non-empty HTML. Paired
+  section headings (Preview / Overview / Suggested…) follow the same gate. Fixes Colors strips
+  that stayed invisible after tokens were typed (empty slots had been left at `display: none`).
+  Typography no longer emits “Pick a scale type…” placeholders — incomplete scales return `''`.
+- **Spacing / Corner radius Run skips incomplete modes.** Collection alignment fills every mode;
+  a bezier base of 0 on Pad/Mobile no longer aborts the whole run when Desktop is ready. Skipped
+  modes are listed in the results; the run still fails only when *no* mode can generate.
+- **Collection modes on DSF panels.** Choosing a collection while Group is still empty left mode
+  chips in placeholder ("Modes locked by Collection scope") when group detection returned early or
+  when the address reset wrote `modes: []` after alignment. Modes from the file are written before
+  any group offer short-circuits now.
+- **Multi-collection pickers** show “No Collections available” when the file has none
+  (was an empty bordered box).
+- **DSF copy pass (helpers + Documentation).** All five Design System Foundations scripts
+  (Colors, Spacing, Corner radius, Typography, Grid): panel `@helper` text and `@DOC_START`
+  rewritten for a general audience. Docs open with a functional `#` title (core capability,
+  ≤~160 characters), list Configuration UI controls only (label primary, code key secondary),
+  and keep a full h1–h3 ladder. Configuration UI form headings demote one step (`h2`/`h3`, never `h1`).
+- **Full Documentation copy pass.** Utility EXAMPLE_SCRIPTS, all CODEFIG_LIBRARIES, and Help &
+  documentation: same functional-title / Overview / UI-only options rules. Standing instructions
+  in `.claude/skills/ux-copy/SKILL.md`. `@codefig-ui` keeps teaching `@PANEL_START` as the shipped
+  panel language.
+
+- **DSF: Group load is explicit; a miss resets.** Candidates always list under Group — click to load.
+  Nothing auto-fills Group. Pointing at a Collection/Group with no set resets the form to defaults
+  for that address (so the strip does not keep the previous ramp). A hit still fills from the file.
+  **Modes:** a collection change resets the mode list (then aligns to that collection’s modes).
+- **Colors / config typing: keystrokes no longer rewrite Source or force a preview.** `input`
+  events hold the form values (same as a curve drag); Source merge and auto-import wait for
+  `change` (blur / Enter / select). Preview’s 120ms “max wait” bypass applies only to live curve
+  drags — typing keeps the 400ms quiet debounce. Collection select still runs a full auto-import
+  (one-shot cost).
+- **Collection switch auto-import stays immediate.** Choosing a new collection (or committing a
+  Group) no longer waits an extra 350ms debounce after a settled select. Import resolution for
+  silent runs (auto-import, preview, quick-fit) is cached per open script so a collection switch
+  does not re-expand Colors’ package graph on the UI thread (~1s) every time; the first open still
+  pays once. The import kick is deferred with `setTimeout(0)` so the form can paint first.
+- **Collection load no longer loses to a stale detectOnly import.** Address settle claims the
+  address before any form rebuild (so `scheduleGroupDetection` does not queue a rival), and
+  `requestAutoImport` clears its timer with `clearTimeout` instead of orphaning it.
+
+- **Footer export menus open upward.** **This script** and **All user scripts** each offer
+  Export to JSON and Sync to variables (or Sync all). Sync pushes into the path-named
+  `"CodeFig Scripts"` collection and dual-writes `clientStorage`. ⌘E still exports the open
+  script as JSON. Import stays its own button.
+- **User scripts: read-only LIST, explicit Sync.** Opening the plugin no longer gap-fills
+  `clientStorage` into a local `"CodeFig Scripts"` collection (that was creating silent local
+  copies). LIST merges local Variables + `clientStorage` + enabled library collections named
+  `"CodeFig Scripts"` for display only. Sidebar: **Local scripts** folder, then one folder per
+  remote library name (not a library label on every row). Bodies import when you open a remote
+  script. Autosave never writes remotes — use **Save as local copy** (Sync). SAVE / DELETE /
+  Sync still dual-write local Variables + `clientStorage`.
+- **User scripts sync in parallel** between path-named `"CodeFig Scripts"` STRING variables
+  and `clientStorage` on SAVE / Sync (not on open). Variables win on name collision for
+  display. Scopes stay empty so script vars are not bindable text tokens. Local vs Library
+  banner / navigate-away still pending.
+- **Configuration code tab removed.** Configuration UI is the only config surface (Documentation
+  + Source still available). Panel recipes live in Source `@PANEL_START`; values in `@CONFIG_*`.
+  Unsupported / empty-form notes point at Source. Form edits write into `@CONFIG_START`.
+  `figma:ui writeConfig` splices Source directly (no second editor).
+- **Quiet foundation housekeeping on every plugin open.** Clear-case CodeFig plugin-data drift
+  is repaired with no toast or InfoPanel: orphan registry viewports, manifest keys with no
+  stamped tokens left, stamps whose set id has no manifest on that collection. Variables,
+  collections and styles are never deleted. Ambiguous stamp collisions (two groups, one set id)
+  are left alone until the locked copy=new-identity repair lands.
+
+- **On OKLCH the channels are Hue and Chroma, and there is no Lightness tab.** Chroma and saturation are
+  different quantities in different units, so the tab is named for the one you are editing rather than for
+  HSL's. Lightness is the collection's shared ladder in this model, not a mode's, so the tab held nothing —
+  it now goes rather than opening an empty panel. Switch to HSL and all three come back.
+- **The collapse chevron is dark.** It inherited the title row's secondary grey and then dimmed itself to
+  0.55 of it, which left the control paler than the label beside it — the look of something disabled.
+- **OKLCH's shared ladder gets the same curve editor a mode has.** The collection-scope curve was still the
+  old narrow control — 268px of chart in a full-width block, two unlabelled number boxes and no colour bar.
+  It is now the charted layout: full width, a greyscale bar beside it showing the whole 0-100 channel with
+  the zoomed window marked, and **Bright / Middle / Dark** captioned under the plot. The bar is greyscale
+  because the ladder *is* greyscale — one lightness sequence every mode shares, which is what makes them
+  match.
+- **A collapsed mode block hides its curve as well as its seed.** The chevron left the channel tabs and the
+  chart in place, so collapsing a block saved a line and a half. Collapsed now means the mode name and its
+  colour strip, nothing else.
+- **The Documentation tab says which model to generate in, and why.** OKLCH to generate, HSL to read what
+  is already there. HSL's colourfulness envelope, `C = S x (1 - |2L - 1|)`, has a corner at 50% lightness
+  that every full ramp crosses: measured with the colour flat and the lightness on one smooth cubic, the
+  second difference of chroma runs ±4 across the ramp and **-25 and -20 either side of the crossing**. The
+  same measurement in OKLCH is ±3 with no crossing artefact.
+
+- **The Lightness chart plots lightness, not darkness.** Its numbers now match the anchor boxes, the
+  config and the variable: bright at the top, dark at the bottom. The inverted axis read the other way
+  round from every number beside it.
+- **The coordinate field sits on the preset row** — which shape, how many points, and the shape as text
+  are one thought. Scale editors keep theirs under the plot, where the column is too narrow for three
+  controls on a line.
+- **The bar beside a chart shows the whole channel, with the window bracketed on it.** It showed only the
+  slice the plot shows, which on a hue ramp travelling one degree is a solid block of one colour — it said
+  nothing about where that degree sits on the wheel. The bar answers *where in the channel am I*; the chart
+  answers *what happens across it*.
+- **A swatch caption is the token and the colour it will be.** The struck-through old value and the
+  per-step lightness delta are gone; the caption above each strip already says how many steps change and
+  by how much.
+  The token is bold and full-strength, because it is the label.
+- **Reading a colour collection is about a third faster.** Selecting a collection and typing a group took
+  2.9 seconds for a two-mode collection and 3.7 for a three-mode one, almost all of it arithmetic rather
+  than reading the file — a second read of the same collection was no quicker. The anchor search already
+  fits every curve it needs and the caller was fitting the same six again; it hands them back now. Measured
+  in Figma: **2.9s to 2.1s** and **3.7s to 2.6s**, with every read landing on identical numbers.
+
+- **Selection to variables writes its results down without opening the panel over your file.** The Info
+  panel still holds the whole run — every variable, its value, and whether it was created or updated,
+  each row still clickable to select the layer — and the button still shows there is something in it.
+  It just stays where you left it. The notification is the outcome; a panel that takes over the window
+  to say the same thing in more words is the plugin talking over the work. Scripts can ask for this
+  with `autoOpen: false` on `displayResults`; the default is unchanged, so every other script still
+  opens the panel for anything that is not a plain success.
+
+- **The preview says how far a change is, not only how many steps it touches.** Now that a read reproduces
+  a collection closely, an untouched one reports ten of sixteen steps "changed" — every one by a few levels
+  out of 255, which nobody can see. It now reads *"10 of 16 steps would change, by up to 4 of 255"*, and a
+  difference too small to see is named as one.
+
+- **A read now lands within 10 of 255 in either colour model, on every scale.** It was 49 in HSL and 37 in
+  OKLCH, and the cause was that *where a ramp turns* was being decided twice: recognition read its three
+  anchors at the middle of the step list, while the generated ramp bent at its own midpoint. Those are one
+  fact. Real sets mostly turn at 400 while the midpoint of a sixteen-step list is 300, so the anchors were
+  read at one step and applied at another.
+  It is now found by measuring — generating at each candidate step and keeping the one closest to the file
+  — and recorded, so generation bends where the anchors were read. Two properties of the colours were tried
+  as a rule first and both failed: anchoring on the peak of OKLCH chroma is right for OKLCH and leaves HSL
+  at 60, anchoring on the peak of HSL saturation is the reverse at 67.
+
+- **Hue can carry its own curve.** Worth little on a cool palette (under 6°) and a lot on a warm one — an
+  amber ramp travelling 49° came back 10° out and is now within 1.2°. Only fitted where there is enough
+  chroma for a measured hue to be a value rather than rounding, which on a greyscale it is not.
+
+- **Colour has its own curve, not the lightness curve's timing.** Chroma used to be rebuilt by
+  interpolating three anchors on the *lightness* curve's schedule, so a palette was paced by its ladder
+  rather than by itself — Tailwind blue came back a third less colourful than the file at its most
+  saturated step. A read now fits a chroma curve too, and the worst-step error drops from 0.026–0.067 to
+  0.002–0.007. It is the same kind of curve as the lightness one, in the same editor: chroma is not
+  monotone, but each half of it is, and two half-fits joined at the peak is exactly a three-anchor curve.
+  Leaving it empty keeps the old behaviour, so nothing already made moves.
+
+- **A read recognises the curve the collection was already drawn with.** Opening a colour set used to land
+  on *Original* — the file's values and an empty curve editor — because a ramp carries no record of how it
+  was made. That is true of naming a preset and false of fitting one: a fitted three-anchor curve lands
+  within about a lightness point of published sets (Tailwind zinc 0.86, slate 0.64, blue 0.52, Radix gray
+  0.94) against 4.0–6.8 for the closest named curve. The dropdown calls it **Estimated original**, and
+  selecting it again restores it after you have bent it elsewhere.
+
+- **Colors opens empty, and fills in as you answer it.** Nothing below *General* until a collection is
+  chosen, and no preview until the colour tokens are named — it used to draw a full ramp over a placeholder
+  list, which reads as a result rather than as an invitation. A new scale starts on **Linear** rather than
+  *Original*, which names nothing on a collection that has no ramp yet.
+
+- **Steps is now called Color tokens.**
+
+- **Colors has one curve, not two.** *Lower* and *Upper* are gone; a colour ramp is described by a single
+  curve running bright to dark, and *Add middle point* is what bends the two halves differently. In **HSL**
+  that is one curve per mode; in **OKLCH** it is one curve for the whole collection, which is what makes
+  every mode land on the same lightness ladder and match in greyscale.
+
+  The curve's middle anchor now *is* the middle lightness and the step it sits on, so the separate **Middle**
+  lightness field is gone — it was a second answer to a question the curve already answered, and the two
+  could disagree. Existing configs written with a *Lower* and an *Upper* curve are joined into the single
+  curve they always described, reproducing their ladders to under 1e-6; nothing you have made moves.
+
+  One capability goes with it: a half on *Original* while the other half was a curve. A curve is now either
+  *Original* — the file's own colours, untouched — or a shape spanning every step.
+
+- **Bezier is the default scale everywhere.** Spacing and Corner radius ship it now too, so a fresh panel
+  opens on the model the whole thing is built around rather than the one you have to switch to. The starter
+  numbers change with it — a geometric ramp does not land on a flat 4/8/12/16 grid, and that is the model
+  showing what it is.
+
+- **The curve dropdown is the shape control, and *Custom* is a real state.** Picking Custom on a straight
+  line now gives you handles to drag; it used to do nothing, because "is there a shape" was derived from
+  "is the curve bent" and a straight line is not bent. *Linear* clears them again. An untouched curve still
+  stores `[]`, so an unrelated edit does not write coordinates nobody chose.
+
+- **Typography: a rounded size says so beside itself** — `Font size: 218 (218.37)` rather than a separate
+  *Rounded from* line at the bottom of the block, which left you matching it back to whichever value it
+  belonged to.
+
+- **Typography: line height and letter spacing are one row each, in percent.** `[Base][Max]` with the unit
+  drawn inside the field, and the numbers are percentages of the font size — Figma's own unit for both, and
+  unlike a pixel value a percentage still means the same thing after the scale grows. The variables are
+  still written in pixels, computed per token, so nothing downstream changes. A config from before this
+  spells them as bare numbers and keeps generating exactly what it always did; the two are told apart by
+  **shape** rather than by range, because `-1.2` is equally plausible as −1.2px or −1.2%.
+
+- **The script log is for errors and warnings.** A successful run used to fill it with a summary of what it
+  had just done, which buried the one case the block exists for. The lines are still captured and still
+  reach the dev bridge. Spacing and Corner radius also stopped repeating the scale table into the results
+  panel — the Configuration tab already draws it, live, and the copy went stale on the first edit.
+
+- **The scale editor is one control.** The growth has no field of its own, the *Add shape* button is gone,
+  and the dropdown does that job — *Linear* means no shape and draws no handles, anything else reveals them.
+  The field underneath always carries the whole scale, `1.5 cubic-bezier(0.333, 0.333, 0.667, 0.667)`, so
+  copying it out and pasting it back reproduces it; it takes a growth alone, a curve alone, or both. The
+  growth is still written to the config under its own name, so a block reads `ratio: 1.5` beside `curve: []`.
+
+- **The scale curve is open-ended again: a base, a growth ratio, and a shape — no largest value.** The first
+  version of this asked for both ends and distributed the tokens between them, which was wrong twice over.
+  Nobody knows the largest spacing in advance; and pinning both ends meant **adding a token re-subdivided
+  the range and moved every value below it** — six variables already bound to things in a file, silently
+  changed because somebody added a seventh. The top is now derived from the ratio, so the step count cancels
+  out: a flat curve is a modular scale exactly, and appending a token leaves everything before it alone.
+
+  The **named ratio dropdown is gone**. It was a closed list of eight, and the complaint was that nothing
+  sat between 1.25 and 1.333. Growth is a plain number now, and the curve's y axis is **logarithmic** — so a
+  constant ratio is a straight line whose slope *is* the ratio, and you drag it. **Add shape** reveals the
+  bezier handles for when the growth should vary across the scale. Past the last token the line continues
+  faintly, because the scale does.
+
+  Colours are unchanged: lightness is bounded, both ends are known, and the two-anchor editor is right there.
+
+- **Spacing, Corner radius and Typography: *Modular scale* is now *Bezier scale*, and generates the same
+  numbers.** A modular scale is a constant ratio between steps, which in log space is a straight line — so
+  the curve model with a straight curve *is* a modular scale, checked term for term. What it adds is the
+  ability to bend it: the ratio can vary across the scale, so a spacing set can stay tight at 4, 8, 12 and
+  still open out at the top, which one ratio could never say. A bezier mode takes **Largest value** and a
+  **Curve** where it used to take a *Scaling method* ratio.
+
+  **Configs that say `modular` keep working and keep generating exactly what they generated before** — the
+  ratio is converted to the equivalent ramp. Nothing in an existing file is regenerated to a different
+  number, which matters because these values are already bound to as variables. Typography's shipped default
+  moved from `modular`/`1.25` to `bezier` with a largest size of 60, and produces the identical ten sizes.
+
+- **Colors: the Family, Easing and Amount dropdowns are now the curve editor.** The lightness ladder's lower
+  and upper segments each get one. *Original* — the ramp already in the file — is still there, spelled as a
+  curve with no points. Configs carrying the old `{ family, easing, amount }` are converted on read;
+  `linear`, `quad` and `cubic` convert exactly, and the rest are within 0.01 of the range, which is
+  documented per family in `@Bezier`.
+
+- **One heading ladder, and one title per script.** The Documentation tab and a script's settings form
+  render the same markdown, and until now they styled it with separate rules — `## Overview` was 15px in
+  one tab and 14px in the other, and every heading question had to be asked twice. There is now a single
+  ladder both read: **`#` 16px, `##` 14px, `###` 12px semibold**, with body copy at 12px. The **document
+  title in the editor header is the only text above that, at 20px** (it was 15px), and it is where a
+  script's name lives.
+  - **The duplicated titles are gone from the scripts themselves.** Every doc block used to open by
+    repeating the script's own name, and most config blocks opened by repeating it a *third* time in a
+    third wording — "Rename variables" in the sidebar, "Rename variables" again as the first heading,
+    "Batch rename variables" over the settings. 70 of those lines were removed across 49 scripts. If you
+    write your own scripts, you no longer need a `# Title` line at the top of a doc or config block; the
+    header names the script. Existing user scripts are untouched and still render their title if they
+    have one — it will simply be a 16px section heading rather than a 20px page title.
+  - Genuine section titles were kept, including the ones that only *look* like a repeat: `@codefig-ui`'s
+    "Built-in components", match-colors' "Palettes", and export/import's `# Export` / `# Import` pair.
+
+- **Sizes and corners come from tokens now, so the same thing looks the same everywhere.** Seventeen
+  font sizes and twenty-four corner radii were written as raw pixel values, which is how "the same
+  corner" came to mean 2, 3, 4, 6, 9 or 10px depending on which control you were looking at. Every one
+  is now one of four radii and one of five sizes. Two things visibly change: **11px text that was not
+  code is now 10px** (status pills, dropdown group headers, stale-config notices), and **the `@rows` tab
+  strip is 12px, matching the Documentation/Configuration/Script tabs it was always meant to match.**
+
+- **Selection to variables picks its collection the same way every other script does.** The dropdown
+  now lists this file's collections with a **New collection** entry that reveals a name field, instead
+  of a *New collection* mode that took the collection name off the front of each layer name. **This
+  changes what your layer names mean:** a layer called `color - bark/bark/350` used to make collection
+  `color - bark` and variable `bark/350`, and now makes variable `color - bark/bark/350` in whichever
+  collection you picked. Name layers by the variable path alone — `bark/350` — and choose the
+  collection above. The old rule was also inconsistent with itself: picking an existing collection
+  already treated the whole layer name as the path, so the same layers landed in two different places
+  depending on a dropdown.
+
+- **A settings form's heading sizes now step evenly:** 16 / 14 / 12, two pixels a level, with the
+  smallest told apart from body copy by its weight. They were 20 / 14 / 14 — a jump, then no step at
+  all.
+
+- **Grid's config block lists its settings in the order the panel shows them** — collection, group,
+  extra columns, then the per-viewport modes. A visible diff if you paste that block around, and no
+  change to what any of it does.
+- **Selects are the same height as text inputs.** They were two pixels taller everywhere, which only
+  became obvious once a form put the two side by side. They also have a chevron of their own now
+  instead of the browser's.
+- **Rounding is spelled one way.** `roundTo` sits beside the other settings instead of inside
+  `scaling`, because it applies whatever model a scale uses, while `scaling` describes a curve that
+  only the `endpoints` model reads. Spacing and Corner radius shipped with
+  `scaling: { type: "sine", ease: "in", roundTo: 2 }` above sets that all said `model: "metric"` —
+  two descriptions of one scale, two of the three fields inert, and nothing to tell you which was
+  live. Every old spelling still works and is promoted for you: `scaling.roundTo`,
+  `roundUpperValuesTo` and the `fontScaling` alias all mean the same thing. A curve is only
+  recorded when something reads it.
+- **A mode that is not a viewport is left alone.** If a collection's modes are a density axis —
+  `tight` / `relaxed` — rather than breakpoints, CodeFig says so and does not add them to your
+  viewport list. Previously it adopted any mode it did not recognise as a viewport, which meant the
+  tool decided which axis your collection used. Figma gives a collection one mode axis, so that is
+  your decision. The message carries the way in: *"The registry is untouched — add them in Grid if
+  they're breakpoints."* A file that has no viewport list yet gets one sentence pointing at Grid
+  rather than a complaint per collection.
+- **A scale can be described once instead of once per breakpoint.** Spacing and Corner radius take
+  a list of parameter sets, each saying which modes it applies to. `appliesTo: "*"` means every
+  mode the collection already has — the common case, which previously had to be written out once
+  per viewport. Add a second set naming one mode and it overrides the wildcard there; the run says
+  which set won for which mode. Two sets naming the same mode outright is a contradiction nobody
+  can resolve from the config, so the run says so and writes **nothing at all** — no collection, no
+  variable, no recorded set — rather than applying part of it. Configs written the old way keep
+  working and are read as one set per mode.
+- **A wildcard never creates a mode; naming one does.** `appliesTo: "*"` describes the modes a
+  collection has, so it cannot add to them — otherwise a collection would gain modes whenever your
+  viewport list grew. Naming a mode is a request, and a named mode missing from the collection is
+  created. A collection that is new, or still has only Figma's default *Mode 1*, is seeded from the
+  file's viewport list, and the run says which of the two happened, because only one of them
+  changes the shape of your collection. With neither, the run says so and points at Grid.
+- **Find/replace now means one thing across the library.** Six scripts took a name pattern and
+  no two agreed: contains vs prefix, case-sensitive vs not, wildcards in three of them, three
+  separate replace implementations. All six now share one matcher.
+  - Matching is **contains** and **case-insensitive** by default. Tick **Match case** for
+    case-sensitive.
+  - `*` is a wildcard in every field that takes a pattern. A CodeFig extension — Figma has no
+    wildcard.
+  - **Regex is an explicit toggle.** It used to be inferred from the presence of brackets or
+    parens, which silently mangled ordinary names (see Fixed). Tick **Use regular expression**.
+  - A **blank find replaces the entire name**, matching Figma's blank Match field.
+  - `rename-variables` scoping works the way it reads: `Typography/Body` now scopes to that
+    group. It previously matched a case-sensitive prefix against a spaced-slash path, so the
+    obvious spelling matched nothing.
+- **Preview is on by default** in `rename-styles`, `rename-variables`, `replace-styles`,
+  `replace-variables` and `replace-style-variable-bindings`. A run lists what it *would* change
+  and changes nothing; untick **Preview only** and run again to apply. Rows are flagged when the
+  new name already exists, when two rows produce the same name, when a pattern matched but
+  changed nothing, or when the result would be empty. `select-by-styles-variables` has no
+  preview by design — it only changes the selection.
+- **`$n` / `$N` counters are positional**, so they depend on the set of matches. Preview and
+  apply are two runs; if the file changes in between, the numbering moves. The apply run now
+  says so when the plan no longer matches what was previewed.
+- Scripts that gained capability they did not have: `replace-styles` and `replace-variables` now
+  support the `$&` / `$1` replacement tokens; `select-by-styles-variables` and
+  `replace-style-variable-bindings` now support `*` wildcards.
+- Figma's default `Mode 1` on a newly created collection is now renamed to your first viewport
+  rather than deleted and replaced, which uses one fewer mode from your plan's budget.
+- **The shipped Spacing and Corner radius defaults now generate a metric scale, not an endpoint
+  range.** A metric scale is a base plus a step that grows every few tokens — 4, 8, 12, 16, 24, 32
+  — which is how a spacing scale is normally written down. The previous default ran a curve
+  between a minimum and a maximum, which meant working backwards from the numbers you wanted to a
+  curve that happened to pass through them.
+
+  **Your own configs are untouched.** A config with no `model` is read as `endpoints`, so anything
+  you have configured produces exactly what it always did. What changes is the *starting point* in
+  the shipped script — and because prebuilt scripts reload from the embedded source, that reaches
+  you on upgrade if you have been running the shipped block as-is.
+
+  Two things make that visible and reversible. Every run now prints the model and its parameters
+  next to the created/updated counts — *"Desktop: metric, base 4, step 4, mod 3"* — so if the
+  numbers move, the reason is in the output that reports the move. And if the file already has a
+  recorded set, the **import button** hands your previous config straight back into the config
+  block: that only works because the config shape and the import landed first.
+- **Spacing and Corner radius record what they generated**, so the import button and
+  `figma:run --from-file` can offer it back. Nothing about the variables they produce changes —
+  the two scripts now share one generator, and a test proves the collapse value for value against
+  frozen copies of the code it replaced.
+- Grid now honours a nested `{ config: { collectionName, group } }` config the way Spacing,
+  Corner radius and Typography always have. Previously it read only the top level, so a pasted
+  config quietly wrote to `Responsive System`.
+- **Import this file's config into a Design System Foundations script.** A button beside the
+  results button fills the config block from what this file already has, in one click, and names
+  where it came from — *imported from Responsive System · Spacing*. It appears only when this file
+  actually has a config for that script. **Nothing is read from your file until you press it**, so
+  a config you paste into the editor is always the config that runs, and Cmd-Z undoes an import.
+  The imported values live in the editor, not in the script: switching scripts and back brings the
+  shipped defaults again, and one click brings your file's settings back.
+- `npm run figma:run -- <script>` still runs the script's own config. `--from-file` imports this
+  file's config first, the way the button does; `--config <path>` supplies one explicitly. Every
+  run prints which of the three it used.
 
 ### Fixed
 
@@ -186,77 +961,6 @@ a plain statement of the new default.
   Remote multi-part scripts now read their chunk metadata as well as their values.
 - **The dev bridge binds to loopback only**, rather than every network interface.
 
-### Developer
-
-- **`npm run dev` no longer drops the main-require shim.** `tsc --watch` rewrote `dist/code.js`
-  without it, so the plugin failed to open with "`__codefigMainRequire` is not defined" until some
-  script file changed. A watcher on `dist/code.js` now re-applies it (`build-scripts.js --shim-only`,
-  a no-op when nothing changed), and `tsc --watch` keeps its output instead of clearing the screen.
-- **Validation runs in about 5 seconds instead of 50.** `validateResolvedCalls` re-stripped comments
-  from the whole resolved script on every regex match. This also speeds up `build:dev`, `dev` and
-  `npm test`.
-- **`_tests-move-integrity.js` imports the Foundation functions it calls**, which clears the nine
-  validation errors that failed `build:production`.
-
-- Updated live matching and Colors expectations to current behavior. Foundation-maintenance
-  smoke tests are awaited before reporting completion. Test suites hold the run open during async
-  Figma reads, preventing the idle timer from returning a partial result as a completed run.
-- Added Move and storage integrity regressions, including a real Figma effect-binding check.
-
-### Added
-
-- **Mode tabs can collapse their settings.** On `layout: "tabs"` `@rows` controls (Spacing, Grid,
-  Corner radius, Typography), a chevron at the end of the mode tab bar hides the open mode's
-  fields so Preview sits closer. View-only — not written into the config. Colors blocks are
-  unchanged.
-- **Panel `section` containers and spacers.** `@PANEL_START` recipes may nest
-  `{ type: "section", id?, showWhen?, blocks: […] }`. The form keeps a real
-  `<section class="config-ui-section">` (plus `config-ui-section--{id}` when set). Section-level
-  `showWhen` gates the whole chunk and is inherited onto children. `{ type: "spacer-s" }` /
-  `spacer-m` / `spacer-l` add 8 / 12 / 24px gaps. A `{ type: "divider" }` between top-level
-  sections is edge-to-edge; inside a section it stays short. Flat `blocks` still work. Design
-  System Foundations panels and the Help specimen use sections.
-- **Colors: Generate overview.** Same control as Spacing / Corner radius / Grid / Typography. When on,
-  Run builds a **Colors — overview** section under the shared Design System Foundations frame: one
-  row per token, one column per mode, fills bound to the colour variables. Off by default.
-- **Colors: seed rebuilds the full scale.** Entering a seed hex writes bright / middle / dark hue and
-  chroma (or saturation), lightness ends, and Linear curves for that mode — tints.dev-shaped UX on
-  CodeFig's own model. Changing the hex again re-applies. **Lock seed color** keeps the exact hex on
-  the seed step and freezes middle Hue / Saturation (or Chroma) / Lightness (numbers and the middle
-  curve grip); ends and curve shape stay editable. Unlock lets later edits move the seed step.
-  Shared OKLCH lightness ends follow the seed that was applied (other modes' hue/chroma stay put).
-  Picking an `easeInOut` preset keeps (or restores) the middle point when the seed is locked or the
-  curve already had one — those presets are one cubic otherwise.
-- **Copy these values to: Mode…** on Spacing, Corner radius, and Typography. On a mode tab when
-  there are two or more modes, each other mode is a text link; click one to copy this mode's
-  scale settings onto it (names stay). Asks before replacing settings that already differ. Grid
-  and Colors stay unchanged.
-- **DSF Group candidates as links.** When Collection holds more than one Grid / Spacing /
-  Radius / Typography / Colors set (or the current Group points at none of them), their names
-  appear as text links directly under the Group input. Click one to fill Group and load that
-  set; after a load, sibling sets stay listed so you can switch without clearing the field. One
-  candidate still auto-fills Group as before. Colors loads the scale unchanged (Original /
-  `skipFit`); curve fit stays on demand when a channel tab opens.
-- **Grid: Extra values.** Shared Mode-settings list for CSS-calc-style formulas
-  (`col-1+gap`, `col-1*2+gap`, `margin-gap`, …) using `col-N`, `gap`, `margin` (the Margins
-  field), and numbers with `+ - * /`. Each entry becomes a FLOAT variable with that name, valued
-  per mode. Separate from Extra columns.
-
-### Changed
-
-- **Colors overview is horizontal, one section per Collection + Group.** Each colour set is a
-  left-to-right ramp (modes stacked) under Design System Foundations. Same address overwrites;
-  a different collection or group adds a section (see Unreleased note at top).
-- **Colors tokens are a list like Spacing.** Color tokens default to Tailwind's
-  `50…950` names (editable). Insert or remove steps for in-betweens; `shade-{1,12}` expands to a
-  series the same way Spacing does. Names stay labels — lightness still comes from the ladder.
-
-### Removed
-
-- **Colors Token count.** The N-on-a-rail control is gone; edit the token list directly instead.
-
-### Fixed
-
 - **Colors: HSL Lightness middle is absolute.** The Lightness chart now uses Bright / Middle / Dark
   ends like Hue and Saturation, so moving an end no longer slides a locked seed's middle along with
   it. Seed apply writes `middle.lightness` and a three-point lightness curve.
@@ -287,48 +991,6 @@ a plain statement of the new default.
   Missing Font family used to write an empty `FONT_FAMILY` string, hit Figma's "unloaded
   font" error, and could move stamped variables first. The Info panel lists what to fill;
   nothing is written until the form is complete.
-
-## [2.0.0] - TBD
-
-**Foundations.** Generational config UX: `@PANEL_START` as live `var __codefigPanel = {…}` (values stay in `@CONFIG_*` / `@UI_CONFIG_*`); Configuration code tab removed. Script storage in Figma Variables with LocalStorage backup, settings gear, and canvas paste-share. Foundation maintain on open; copy/duplicate → new stamp identity. Design System Foundations open empty until a collection is chosen; ramp scripts scan for the group when none is recorded. Scoped preview CSS on DSF libraries (plans 29–32). Help rewritten as onboarding; utilities regrouped; Change case and nesting cleanup expanded.
-
-### Added
-
-- **Spacing / Corner radius / Typography Scale chart tip.** Hovering or dragging the growth
-  handle (or a shape handle) shows the stored growth ratio and the open mode’s generated sizes as
-  a number list — e.g. `1.5` above `0, 2, 4, 8, 16, 24, 40, 80, 120`. When the file holds different
-  values, a struck-through file list sits above the new one. Tip sits right-centre of the handle.
-
-### Changed
-
-- **Typography** now creates and updates text styles by default, with **Style naming** filled as
-  `{$fontScale}/{$fontWeight}` (add a folder prefix if you want). **Font weights** accept
-  `450:Regular` so a variable-font number can keep a Regular / Semibold name. The panel adds a
-  **Text wrap style** radio (`Auto`, `Balance`, `Pretty`); the font is loaded before wrap style is
-  applied, so a run no longer stops after the first style.
-- **Help: when to use `@UI_CONFIG` vs `@CONFIG`.** Writing a script now says: flat `var`s for a few
-  separate settings; an object under `@CONFIG` when the body takes one nested config (Foundations).
-  The form treats both the same.
-- **Sidebar default width is 280px** (was 240px). Search + script list still resize between 200–400px.
-- **Change case** panel is Target (canvas / styles-and-variables / optional collection) then General
-  (case style, scope, recursive). Recursive stays visible for every target mix.
-- **Change case** expands beyond frames and groups. Tick Canvas targets (component names, variant
-  labels/values, layer names) and/or Styles and variables (variable names, style groups, style
-  names). Scope is Selection / This page / All pages for canvas only. Case style adds hyphenated
-  and ALL CAPS forms; the camelCase label is `camelCase`. Variables use one collection, optional
-  group, and Recursive (target + children). Collisions are skipped and reported.
-- **Help & documentation is CodeFig onboarding.** Overview, getting started, writing a script,
-  three roles, library catalogue (each library’s DOC title), shipped-script catalogue (display name
-  + DOC title), and common patterns come first. Style & UI reference stays last. Configuration UI
-  opens with a specimen intro; the unsupported nested-object demo explains what that empty control
-  means. Library API detail stays on each library’s Documentation tab.
-- **`@PANEL_START` is a live JS object.** Shipped panels use `var __codefigPanel = { blocks: […] }`
-  between the markers so Source syntax-highlights the recipe. The old `//`-commented JSON form
-  still parses (saved scripts). Panel regions sit at top level — not inside the `@CONFIG` object.
-  Utility panels that still looked like JSON (`"blocks":`) are reprinted in the same bare-key
-  Help style as Design System Foundations, so every shipped recipe teaches one language.
-
-### Fixed
 
 - **Config block blank lines.** Editing a Configuration UI field no longer stacks empty lines
   under `// @CONFIG_START` on every save (Colors and other object-config scripts).
@@ -379,77 +1041,6 @@ a plain statement of the new default.
 - **Preview-snippet test slice** updated so New-collection unlock helpers after
   `pristineConfigForAddress` do not fail the “address change leaves no trace” guard.
 
-### Removed
-
-- **Copy simple variables JSON** — superseded by Export/import variables.
-- **Stack or flatter color scale** (`color-scale-layout`) — moved to a personal user script.
-- **Preview only** and **Match case** controls on Rename styles/variables, Replace styles,
-  Replace style variable bindings, and Select by styles/variables. Matching is always
-  case-sensitive; runs always apply.
-
-### Changed
-
-- **Utility script sidebar groups.** Shipped utilities are grouped under **Styles** (6),
-  **Variables** (12), **Styles & Variables** (4), and **Utility Scripts** (6 general tools).
-  Design System Foundations is unchanged. Script filenames and `@import` targets are the same;
-  only the display prefix changed (e.g. `Styles / Rename styles` instead of
-  `Utility Scripts / Rename styles`). Resolve by filename or title as before.
-
-- **Grid, Spacing, Corner radius, and Typography** open with empty General fields (placeholders
-  only). **Mode settings** still wait on a collection; **Preview / Overview / Suggestions** stay
-  hidden until their HTML has something to show (content-reveal — not `@showWhen` alone), so an
-  empty collection no longer flashes placeholder copy. Ramp scripts **scan the collection for the
-  group that holds a set** when the current group has no manifest (same offer Grid already had for
-  `col-N` series). Auto-import still fills token names or the manifest once Group points at the
-  right place. **Fix:** the group scan no longer throws in the sandbox — the minimum-token
-  threshold lived in a top-level `var` that `@import` extraction does not carry. **Domain-aware:**
-  spacing and radius scans no longer treat each other's groups (or typography companions) as
-  candidates, so a collection with one of each can auto-set Group again.
-- **Content-reveal for DSF previews.** Preview and suggestions slots start `display: none` and
-  open only through `fillContentReveal` when the silent run returns non-empty HTML. Paired
-  section headings (Preview / Overview / Suggested…) follow the same gate. Fixes Colors strips
-  that stayed invisible after tokens were typed (empty slots had been left at `display: none`).
-  Typography no longer emits “Pick a scale type…” placeholders — incomplete scales return `''`.
-- **Spacing / Corner radius Run skips incomplete modes.** Collection alignment fills every mode;
-  a bezier base of 0 on Pad/Mobile no longer aborts the whole run when Desktop is ready. Skipped
-  modes are listed in the results; the run still fails only when *no* mode can generate.
-- **Collection modes on DSF panels.** Choosing a collection while Group is still empty left mode
-  chips in placeholder ("Modes locked by Collection scope") when group detection returned early or
-  when the address reset wrote `modes: []` after alignment. Modes from the file are written before
-  any group offer short-circuits now.
-- **Multi-collection pickers** show “No Collections available” when the file has none
-  (was an empty bordered box).
-- **DSF copy pass (helpers + Documentation).** All five Design System Foundations scripts
-  (Colors, Spacing, Corner radius, Typography, Grid): panel `@helper` text and `@DOC_START`
-  rewritten for a general audience. Docs open with a functional `#` title (core capability,
-  ≤~160 characters), list Configuration UI controls only (label primary, code key secondary),
-  and keep a full h1–h3 ladder. Configuration UI form headings demote one step (`h2`/`h3`, never `h1`).
-- **Full Documentation copy pass.** Utility EXAMPLE_SCRIPTS, all CODEFIG_LIBRARIES, and Help &
-  documentation: same functional-title / Overview / UI-only options rules. Standing instructions
-  in `.claude/skills/ux-copy/SKILL.md`. `@codefig-ui` keeps teaching `@PANEL_START` as the shipped
-  panel language.
-
-### Developer
-
-- **Plan 32 step 6 (DSF import trim).** Spacing / Corner radius import lists 37→13 names; Colors
-  65→19; Typography 40→35 (Grid already minimal). Package sibling extraction pulls the rest.
-  `extractFunctions` now increments depth only on cross-file hops so Bezier’s tree survives
-  Linear Ramp → Scale Models → Bezier.
-- **Plan 29 (field identity, in-rows).** `@rows` tabpanels carry `data-section`; curves and
-  cells carry `data-key` / `data-type` (and `data-group` where applicable), so panel CSS can
-  select `[data-section="hue"] [data-type="curve"]`.
-- **Plan 30 (scoped stylesheets).** Opening a script injects a scoped
-  `<style data-style-owner>` from `@STYLE_START` on **imported libraries** (shared components)
-  plus the open script (overrides), scoped on the Configuration form **and** the side Preview.
-  Design System Foundations teach the three tiers: CodeFig `ui.css`, library sheets next to
-  markup (`@Color Ramp`, `@Linear Ramp`, `@Type Scale`, grid/suggestions on `@Foundation`),
-  and optional script-only sheets. `package.css` is not the product path.
-- **Plan 32 (packages, wiring).** Build stamps `packageId` / `packageVisibility` on Design
-  System Foundations (5 scripts + 9 libraries). Package libraries stay listed in CodeFig
-  Libraries (openable as examples); `@import` resolution still passes `packageId` for sibling
-  extraction.
-### Fixed
-
 - **Preview no longer bleeds across script switches.** Cached preview HTML from the previous
   panel was redrawn into the next one's slot and forced visible, overriding `@showWhen`; switching
   scripts now clears that cache and defers row visibility to the form's condition sweep.
@@ -460,28 +1051,6 @@ a plain statement of the new default.
   Configuration UI.** Section markers must sit alone on a `//` line (same rule as extraction).
   The Configuration UI tab appears only when the config block yields form fields — no more
   “no settings a form can show” dead end (e.g. `@Foundation`).
-
-### Changed
-
-- **DSF: Group load is explicit; a miss resets.** Candidates always list under Group — click to load.
-  Nothing auto-fills Group. Pointing at a Collection/Group with no set resets the form to defaults
-  for that address (so the strip does not keep the previous ramp). A hit still fills from the file.
-  **Modes:** a collection change resets the mode list (then aligns to that collection’s modes).
-- **Colors / config typing: keystrokes no longer rewrite Source or force a preview.** `input`
-  events hold the form values (same as a curve drag); Source merge and auto-import wait for
-  `change` (blur / Enter / select). Preview’s 120ms “max wait” bypass applies only to live curve
-  drags — typing keeps the 400ms quiet debounce. Collection select still runs a full auto-import
-  (one-shot cost).
-- **Collection switch auto-import stays immediate.** Choosing a new collection (or committing a
-  Group) no longer waits an extra 350ms debounce after a settled select. Import resolution for
-  silent runs (auto-import, preview, quick-fit) is cached per open script so a collection switch
-  does not re-expand Colors’ package graph on the UI thread (~1s) every time; the first open still
-  pays once. The import kick is deferred with `setTimeout(0)` so the form can paint first.
-- **Collection load no longer loses to a stale detectOnly import.** Address settle claims the
-  address before any form rebuild (so `scheduleGroupDetection` does not queue a rival), and
-  `requestAutoImport` clears its timer with `clearTimeout` instead of orphaning it.
-
-### Fixed
 
 - **Foundation stamps: Copy / duplicate create new identity; Move keeps it.** CodeFig **Copy**
   (and Duplicate variable collection) mint a new set id, restamp the new variables, and write a
@@ -501,12 +1070,9 @@ a plain statement of the new default.
   variables). Match case and Preview only removed — runs apply immediately, always case-sensitive.
   Still rebinds only; does not move definitions.
 
-### Fixed
-
 - **Foundation maintain runs again on LIST**, not only at plugin open. Open could finish
   before Figma’s variable graph was ready, so a native group-duplicate collision was planned
   empty and left alone; the first sidebar LIST re-runs the same quiet repair.
-
 
 - **Colors loads again when Collection and Group point at an existing set.** Renaming the
   shipped starter mode to `Value` (so a fresh collection can run) made auto-import ask the
@@ -548,181 +1114,6 @@ a plain statement of the new default.
   sibling modules as `__codefigMainRequire` in `dist/code.js` (same for `script-storage.js`).
   Do not run bare `tsc` against `dist/` — it overwrites the shim; use `npm run build:dev`.
   Quiet clear-case repairs work as documented.
-
-### Removed
-
-- **Foundation config** — the Design System Foundations script that copied / parked / read a
-  portable config between files is gone. Generators already write manifests; paste between
-  `@CONFIG` blocks (and future script storage) covers sharing. Portable helpers in
-  `@Foundation` remain for tests.
-
-### Changed
-
-- **Footer export menus open upward.** **This script** and **All user scripts** each offer
-  Export to JSON and Sync to variables (or Sync all). Sync pushes into the path-named
-  `"CodeFig Scripts"` collection and dual-writes `clientStorage`. ⌘E still exports the open
-  script as JSON. Import stays its own button.
-- **User scripts: read-only LIST, explicit Sync.** Opening the plugin no longer gap-fills
-  `clientStorage` into a local `"CodeFig Scripts"` collection (that was creating silent local
-  copies). LIST merges local Variables + `clientStorage` + enabled library collections named
-  `"CodeFig Scripts"` for display only. Sidebar: **Local scripts** folder, then one folder per
-  remote library name (not a library label on every row). Bodies import when you open a remote
-  script. Autosave never writes remotes — use **Save as local copy** (Sync). SAVE / DELETE /
-  Sync still dual-write local Variables + `clientStorage`.
-- **User scripts sync in parallel** between path-named `"CodeFig Scripts"` STRING variables
-  and `clientStorage` on SAVE / Sync (not on open). Variables win on name collision for
-  display. Scopes stay empty so script vars are not bindable text tokens. Local vs Library
-  banner / navigate-away still pending.
-- **Configuration code tab removed.** Configuration UI is the only config surface (Documentation
-  + Source still available). Panel recipes live in Source `@PANEL_START`; values in `@CONFIG_*`.
-  Unsupported / empty-form notes point at Source. Form edits write into `@CONFIG_START`.
-  `figma:ui writeConfig` splices Source directly (no second editor).
-- **Quiet foundation housekeeping on every plugin open.** Clear-case CodeFig plugin-data drift
-  is repaired with no toast or InfoPanel: orphan registry viewports, manifest keys with no
-  stamped tokens left, stamps whose set id has no manifest on that collection. Variables,
-  collections and styles are never deleted. Ambiguous stamp collisions (two groups, one set id)
-  are left alone until the locked copy=new-identity repair lands.
-
-### Added
-
-- **Script-storage helpers (developer).** Pure chunk / index / export helpers for the planned
-  `"CodeFig Scripts"` STRING-variable store (`src/script-storage.js`, `CHUNK_CHAR_LIMIT` 90_000).
-- **`figma:ui` `saveScript` / `deleteScript`.** Drive SAVE / DELETE from the terminal for storage
-  verification (delete skips the confirm dialog).
-- **Script-storage sandbox dual-read.** LIST / SAVE / SAVE_BATCH / DELETE prefer the local
-  `"CodeFig Scripts"` STRING collection (with one-shot migrate from `clientStorage` and dual-write
-  back). `SCRIPT_STORAGE_VARIABLES` is true after Figma verify.
-- **Help & documentation Configuration UI uses `@PANEL_START`.** The Style & UI reference
-  specimen shelf keeps values in `@UI_CONFIG_START` and moves control specs into `@PANEL_START`.
-  Same live controls (including the intentional unsupported nested object); `artifacts/style-reference.html`
-  regenerates from the new split.
-- **Every other shipped EXAMPLE_SCRIPT with a config form uses `@PANEL_START` too.** Values stay
-  as `var` lines in `@UI_CONFIG_START` (runtime needs those names); the form recipe is JSON in
-  `@PANEL_START`. Find/replace, rename, merge, scale-selection, and the smaller utilities all
-  match this shape — same architecture as DSF, without rewriting how each script reads its knobs.
-- **Spacing and Corner radius Configuration UIs use `@PANEL_START`.** Same split as Colors:
-  `@CONFIG_START` holds values only (still with `// @fromFile: domains.spacing` /
-  `domains.radius`), and the panel recipe is JSON in `@PANEL_START`. Behaviour is unchanged —
-  collection chips, token lists, scale-type tabs, bezier/metric/fibonacci fields, and the preview
-  all match the previous panels.
-- **Typography's Configuration UI uses `@PANEL_START`.** Same split as Colors: `@CONFIG_START`
-  holds values only (still with `// @fromFile: domains.typography`), and the panel recipe is JSON
-  in `@PANEL_START`. Behaviour is unchanged — list tokens/weights, letter-spacing and line-height
-  percent groups, overview suggestions, and the preview textarea all match the previous panel.
-- **Grid's Configuration UI uses `@PANEL_START`.** Same split as Colors: `@CONFIG_START` holds
-  values only (still with `// @fromFile: domains.grid`), and the panel recipe is JSON in
-  `@PANEL_START`. Behaviour is unchanged — collection chips, mode tabs, suggestions, and the
-  preview all match the previous panel. The `variables` function stays a sibling after the panel
-  region.
-- **Colors Run writes colour variables.** The panel strip is the preview; Run creates or updates
-  the group's COLOR tokens in place, skips aliases and non-opaque cells, reports orphans when the
-  step list shrinks, and records the set with the same stamp bracket Spacing and Radius use. The
-  hexes come from the same `colorsGenerateMode` path the panel already showed.
-- **A Hue, Saturation or Chroma curve can now peak above or dip below both of its own ends** — a
-  Hue that reads the same at both ends with a real, different hue in the middle, for instance,
-  which cannot be expressed any other way: `oklchLerpHue`/`oklchLerp` interpolate the two ends
-  linearly, and a straight line between two equal numbers is that number regardless of how the
-  curve paces getting there. Dragging a handle past the edge of the plot used to clamp its height
-  to exactly the ceiling or floor, wherever the pointer actually went — confirmed live, a dragged
-  Hue handle landed at exactly `y = 1`. The overshoot protection that stops a handle leaving the
-  *plot box* is unchanged and still applies; only the restriction to the *range between the two
-  ends* is lifted, and only for these three channels — Lightness and every curve outside Colors
-  (Spacing, Radius, Typography's own scale curves, which share the same underlying shape) keep
-  exactly the range they always had. Also fixes the generation-side half of the same limitation: a
-  curve's pacing was clamped a second time when it was turned into a colour, so even a display that
-  correctly showed the overshoot would not have reached the swatch.
-- **Configuration code shows a migrated script's `@PANEL_START` spec, read-only, above the values
-  it explains** — a script with no `@PANEL_START` shows exactly what it always has. A second,
-  genuinely non-editable pane rather than one shared buffer: the values editor still writes back
-  exactly as before, so nothing about saving a config changed.
-- **A tab can be named for the model it is showing, and can take itself off the bar.** `#>Hue{colorModel=hsl}`
-  carries the same `{…}` condition a column does, and **two tab markers written next to each other are one
-  tab under two names** — captioned by the first whose condition holds, sharing one panel. A tab with nothing
-  visible left in it is not drawn at all.
-- **Channel tabs in a `@rows` block.** `#>Hue` starts a tab where `#Hue` starts a section — the columns
-  after it are shown only when that tab is open. Closed tabs are hidden rather than dropped, so every
-  channel is still read; switching one is not an edit and does not touch the config.
-- **The three anchor boxes sit under the chart**, left, centre and right. The two ends are the row's own
-  cells, moved into place rather than rebuilt, so they keep their captions and their keys. The **Middle**
-  box depends on the channel. Lightness has no middle anchor of its own, so its box **is** the curve's
-  middle handle read in lightness — type in it and the handle moves, drag the handle and it follows, and it
-  is disabled with an em dash when the curve has no middle point. Hue and Saturation do have one, and their
-  box is that anchor: the engine interpolates bright to middle to dark and paces it with the curve, which
-  are two different numbers, so showing the handle there would show neither.
-- **A curve can be drawn on a real axis.** `@ends: a..b` names the two fields a curve runs between and
-  `@range: lo..hi` the limits of the quantity, and together they turn the plot's y axis from a unit
-  square into the thing being edited — labelled at round values, with the dashed guide joining the two
-  ends rather than the corners of the box. The ends become **square** handles you can drag, and dragging
-  one types into its own field, drawn **filled** where a shape handle is hollow. Two columns sit beside the
-  plot: a **zoom** — a triangle you drag, with step buttons above and below — and a bar showing the
-  collection's own token colours across the window, which takes no input. Zoom in between two steps and
-  the bar is the blend between those two, because it is a picture of that ramp rather than of the channel. Neither moves when you drag the curve;
-  drag the empty chart vertically to follow a ramp that runs off the top or bottom. The ramp is clipped to
-  the plot, grips to the plot plus their radius so one on the boundary sits *on* the frame, and a drag
-  stops at the window's edge instead of pushing the curve out of sight. Curves without `@ends` — the scale
-  editors in Spacing, Radius and Typography — are unchanged.
-- **Every step is a dot on the curve, in its own colour, with a ring on the seed.** Drawn from the same
-  published colours as the bar beside the chart, so a step cannot appear at one value in one place and a
-  different one in the other. Small deliberately — a dot that competes with a handle makes the thing you
-  can drag harder to find.
-- **The Lightness chart is drawn as darkness** — 0 at the bottom is white, 100 at the top is black — so a
-  ramp climbs left to right the way its swatches darken. Display only: the config still holds lightness, a
-  drag still writes lightness, and a run still generates from it. Hue, chroma and saturation plot as
-  stored.
-- **Colors' Mode settings are three channel tabs over one chart** — Hue, Saturation and Lightness — with
-  Seed color above them, because a seed belongs to the mode rather than to a channel. Each tab holds that
-  channel's curve and its two ends, and every curve is now on a real axis: hue in degrees, chroma 0 to 0.4,
-  saturation and lightness as percentages. The five stacked curve editors are gone.
-- **Colors' lightness curves are drawn on that axis.** The OKLCH collection ladder reads against its
-  Bright and Dark, and each HSL mode's curve against its own — so the chart says what lightness a step
-  lands on rather than how far the shape sits from straight, and the ends are draggable. Chroma, hue
-  and saturation are unchanged for now: each of those still keeps a separate Middle field, and an axis
-  would put a second answer to that question on screen beside the first.
-
-### Changed
-
-- **On OKLCH the channels are Hue and Chroma, and there is no Lightness tab.** Chroma and saturation are
-  different quantities in different units, so the tab is named for the one you are editing rather than for
-  HSL's. Lightness is the collection's shared ladder in this model, not a mode's, so the tab held nothing —
-  it now goes rather than opening an empty panel. Switch to HSL and all three come back.
-- **The collapse chevron is dark.** It inherited the title row's secondary grey and then dimmed itself to
-  0.55 of it, which left the control paler than the label beside it — the look of something disabled.
-- **OKLCH's shared ladder gets the same curve editor a mode has.** The collection-scope curve was still the
-  old narrow control — 268px of chart in a full-width block, two unlabelled number boxes and no colour bar.
-  It is now the charted layout: full width, a greyscale bar beside it showing the whole 0-100 channel with
-  the zoomed window marked, and **Bright / Middle / Dark** captioned under the plot. The bar is greyscale
-  because the ladder *is* greyscale — one lightness sequence every mode shares, which is what makes them
-  match.
-- **A collapsed mode block hides its curve as well as its seed.** The chevron left the channel tabs and the
-  chart in place, so collapsing a block saved a line and a half. Collapsed now means the mode name and its
-  colour strip, nothing else.
-- **The Documentation tab says which model to generate in, and why.** OKLCH to generate, HSL to read what
-  is already there. HSL's colourfulness envelope, `C = S x (1 - |2L - 1|)`, has a corner at 50% lightness
-  that every full ramp crosses: measured with the colour flat and the lightness on one smooth cubic, the
-  second difference of chroma runs ±4 across the ramp and **-25 and -20 either side of the crossing**. The
-  same measurement in OKLCH is ±3 with no crossing artefact.
-
-- **The Lightness chart plots lightness, not darkness.** Its numbers now match the anchor boxes, the
-  config and the variable: bright at the top, dark at the bottom. The inverted axis read the other way
-  round from every number beside it.
-- **The coordinate field sits on the preset row** — which shape, how many points, and the shape as text
-  are one thought. Scale editors keep theirs under the plot, where the column is too narrow for three
-  controls on a line.
-- **The bar beside a chart shows the whole channel, with the window bracketed on it.** It showed only the
-  slice the plot shows, which on a hue ramp travelling one degree is a solid block of one colour — it said
-  nothing about where that degree sits on the wheel. The bar answers *where in the channel am I*; the chart
-  answers *what happens across it*.
-- **A swatch caption is the token and the colour it will be.** The struck-through old value and the
-  per-step lightness delta are gone; the caption above each strip already says how many steps change and
-  by how much.
-  The token is bold and full-strength, because it is the label.
-- **Reading a colour collection is about a third faster.** Selecting a collection and typing a group took
-  2.9 seconds for a two-mode collection and 3.7 for a three-mode one, almost all of it arithmetic rather
-  than reading the file — a second read of the same collection was no quicker. The anchor search already
-  fits every curve it needs and the caller was fitting the same six again; it hands them back now. Measured
-  in Figma: **2.9s to 2.1s** and **3.7s to 2.6s**, with every read landing on identical numbers.
-
-### Fixed
 
 - **Colors curve toolbar order is type → coordinates → add/remove middle**, matching how you think
   about the shape before you change how many points it has.
@@ -1151,340 +1542,6 @@ a plain statement of the new default.
   than where the split's own safety margin left the corner. `points[5]` remains as a fallback for a
   caller that predates this.
 
-### Developer
-
-- **`window.codefigProbe(tag, data)`, a generic, opt-in trace for chasing a UI discrepancy live.**
-  Off unless `window.CODEFIG_PROBE` is set (on for now, while the Colors curve editor investigation
-  below is active); every call is one `[PROBE][tag]` JSON line in `figma-console.log`. Added because
-  several rounds of screenshot-and-report on the curve editor's overshoot/middle-point bugs cost more
-  turns than the bugs themselves — a screenshot shows the symptom, never the sequence of internal
-  state that produced it. Four call sites tagged `// PROBE:` — `curve:setPoints` and `curve:drag`/
-  `curve:midInput` in `renderer.js`'s curve control, `preview:request`/`preview:result` around the
-  config preview's own sequence-numbered round trip in `ui.html` — are what exists today; the utility
-  itself is generic, so another panel with the same kind of "looks wrong and is hard to catch
-  mid-change" problem can call it directly. Meant to leave cleanly: delete the `codefigProbe`
-  definition and every `// PROBE:`-tagged line once whatever it was chasing is confirmed fixed.
-- **`src/import-resolver.js` can resolve and extract across a package's members, opt-in.**
-  `findScript`'s new third argument and `extractFunctions`'s new fifth argument are both no-ops
-  when omitted — every existing script keeps resolving exactly as before, confirmed by the full
-  pre-existing `tests/import-resolver.test.js` suite passing unedited. `build-package-manifest.js`
-  compiles a package's manifest from its scripts and an explicit library list, verified against
-  this repo's real Design System Foundations scripts. See `.plans/32-packages.md` — no shipped
-  script has a package id yet, so none of this changes anything a user can see.
-- **`src/config-ui/parser.js`'s `parse()` accepts an optional second argument, `panelSpecText`.**
-  When given, the config form is read from a `@PANEL_START` JSON block instead of the one-line
-  annotation syntax — see `.plans/31-panel-spec-json.md`. `src/ui.html` now looks for this region
-  alongside `@CONFIG_START` at every real call site and passes it through; a script without one
-  (every shipped script except Colors and Typography) takes exactly the old path. **Colors and
-  Typography have migrated** — their specs live in `@PANEL_START`, `@CONFIG_START` holds only
-  values, and the panel renders, edits and saves identically to before (Colors proved twice: a DOM
-  diff against the old parser's own render, and a live Figma session against a throwaway copy of
-  the script, before the real one was touched; Typography against its pre-migration rows dump). A
-  paragraph in the new format states which neighbouring field it explains
-  (`attachTo: "next" | "previous"`, required, no default) — the one thing a blank comment line
-  could say that JSON otherwise couldn't, and the gap a DOM-level render comparison
-  (`npm run devtools:dom-diff-panel`, new) found before anything shipped. Spacing, Corner Radius
-  and Grid stay on the old path for now.
-- **A CSS scoping module (`src/style-scoper.js`) is inlined into the build, unused.** Rewrites a
-  stylesheet's selectors under an owner attribute, namespaces `@keyframes`, and rejects any
-  non-`data:` `url()` and `position: fixed` outright rather than stripping them silently. Nothing
-  calls it yet — it is groundwork for letting a script own its panel's styling, not a user-facing
-  change; see `.plans/30-scoped-stylesheets.md` and `DEFERRED.md`.
-- **A plain config field's DOM wrapper carries `data-key`, `data-type` and `data-section`; the form
-  root carries `data-package`.** Additive — no class changed, no user script's rendering changes —
-  so a stylesheet can finally address "everything in the General section" or "this one field"
-  without editing `renderer.js`. Does not yet reach inside an `@rows` table (a mode's cells, an
-  anchor group); see `DEFERRED.md`.
-
-### Removed
-
-- **The auto-import status note under Group within collection.** It reported what a read did or
-  did not find, updating on every address change; Márton asked for it to go. `readAutoImport`
-  (`npm run figma:ui`) still carries the same text — nothing about diagnosing a stalled or empty
-  read from the terminal changed, only the on-screen copy.
-- **The "OKLCH scale not applied to ..." banner.** Its *Apply OKLCH scale* button had no handler and had not
-  had one for some time: pressing it did nothing. Each mode's own strip already names what changes and by
-  how much, which is the same fact at a grain you can act on.
-
-- **Dragging one inner handle brings the other with it**, collinear through the middle anchor — a smooth
-  node, the way every vector tool behaves — so the two halves of a curve meet at the tangent and not only
-  at the point. Only when the node was *already* smooth when the drag began: a curve fitted to a real ramp
-  may hold a genuine corner, and mirroring on touch would destroy it. **Alt** inverts either way. Nothing
-  is stored — collinear or not, the coordinates already say which kind of node it is.
-- **The colour strip redraws while you drag a curve handle**, instead of waiting for you to stop. Its
-  400ms debounce was reset by every frame of the drag, so it never fired until the pointer settled. There
-  is a 120ms maximum wait now — the drawing itself measures 0.6ms, so what is being paced is the round
-  trip, not the work.
-- **The three anchor boxes and the three chart points are one set of values, both ways.** Dragging the
-  middle anchor writes its field and typing in the field moves the anchor — the ends already worked, the
-  middle did not, because the anchor lives in the curve and the value in a field.
-- **An anchor drag no longer rounds a chroma to nothing.** It rounded to one decimal, which is right for a
-  lightness or a hue and turns 0.044 on a `0..0.4` channel into 0. The precision comes from the channel's
-  own range now.
-
-- **`easeInOut` presets are one curve, not two halves joined at a middle point.** Two segments meant a
-  *middle anchor*, and a colour channel travels through its middle anchor value — so choosing
-  *Sine · easeInOut* for a saturation ramp routed it through a middle of 83 while its ends were 100 and 90.
-  A preset named for smoothness put a corner in. They are single cubics now, fitted to the easing function
-  they name: `sine` is 0.0002 out, the worst (`circ`, `exponential`) 0.033, and `quad` and `cubic` stop
-  being exact — that is the price. **`outin` is unchanged**, because no single cubic comes within 0.04 of
-  it and several are 0.15 out.
-- **The anchor boxes no longer vanish when you let go of a handle.** Each channel declares two curves —
-  one per colour model — and both were bound to the same group cell, because a group holds both models'
-  parts. Releasing a drag refreshes every curve *except* the one being dragged, so the hidden twin was the
-  only one to redraw, and it took the boxes into a panel nobody can see.
-- **A colour channel bends at its middle anchor only if its curve has a middle point.** The two were
-  independent, and the ramp resolved the contradiction in favour of the anchor — so removing the middle
-  point from a saturation curve left a corner the curve could not possibly draw. On lime that was a dive
-  to 83 and back in a ramp running 100 to 90. The curve decides now, and the Middle box is greyed when it
-  is not consulted, keeping its value for when the middle point comes back.
-- **The bar beside each chart shows that channel, not the tokens.** It was drawn from the collection's
-  token colours — a lightness ramp — so it looked right on Lightness and showed a light-to-dark sweep on
-  Hue and Saturation, and it could not follow a drag because those colours are the file's. Each curve now
-  carries a CSS colour template: a hue wheel, a saturation fade, a lightness fade, mixed by the browser
-  and re-read on every redraw.
-- **A colour channel whose two ends match now has a chart.** Lime's saturation is `100 … 83 … 100` —
-  both ends pinned, all the movement in the middle — and the axis bailed on the equal ends, taking the
-  ticks, the zoom, the colour bar and the draggable ends with it. The whole Saturation tab looked
-  unimplemented. The window now opens on all three anchors, not two.
-- **The zoom reads as how much of the channel is on screen**, so a chart showing all of it sits at the
-  bottom of its track instead of half way up. It was reported as a multiple of the view the channel opened
-  on, which meant a full-range chart claimed to be half zoomed in.
-- **Colors: an OKLCH collection's lightness ladder is now averaged across its modes** instead of
-  taken from whichever one was read first. The ladder is shared — that is what makes the modes match
-  in greyscale — so one mode used to get a ladder fitted to itself and the rest got someone else's.
-  On a two-mode lime that was worth thirteen 8-bit levels of accuracy for the mode that lost the
-  toss (21 from the file against 11); both now read 15. Collections whose modes already agree pay at
-  most one level.
-
-The find/replace scripts were the focus: they now agree on what a pattern means, and they show
-you what they will do before they do it. The Design System Foundations scripts also stopped
-deleting variable modes they did not recognise.
-
-### Added
-
-- **Change case** — recursively renames frame and group layers, component variant labels and values,
-  and optionally instance names, in lower case, title case, or camelCase.
-- **Selection to variables takes a group.** A **Group within collection** field says once where the
-  variables go inside the collection, instead of every layer having to repeat it in its own name.
-  It is a prefix, so it composes with the slashes already in a layer name rather than replacing
-  them: group `bark` over a layer called `900` and no group over a layer called `bark/900` both
-  write `bark/900`, and group `primitives` over `bark/900` writes `primitives/bark/900`. Left empty,
-  nothing changes about how the script behaved before.
-- **A bezier curve editor, for curves you draw rather than curves you pick from a list.** Two anchors and
-  two handles: drag them, nudge them a percent at a time with the arrow keys (ten with shift), choose a
-  starting point from the preset list, or paste `cubic-bezier(0.37, 0, 0.63, 1)` into the field underneath.
-  **Add middle point** turns it into a three-anchor, two-segment curve so the top half can bend differently
-  from the bottom — the split is exact, so adding the point does not move the curve. The coordinates *are*
-  the setting: there is no family name stored beside them, so the preview can never show one curve while a
-  run generates another, and the dropdown reads *Custom* the moment a curve stops matching a preset.
-
-
-- **A Colors panel that reads a colour set and shows you where it stands — it does not write yet.**
-  Three lightness anchors and a curve make a **ladder shared by every mode in the script**, so two modes
-  land on the same tone with different hue and chroma; that is what makes them match under a greyscale
-  filter. Each mode block carries its own seed, its own hue and chroma per anchor, and **its own palette
-  strip**. In HSL the curve stays per mode, because an HSL curve legitimately belongs to a hue.
-  - **Point it at a collection and group and the panel fills itself** from the variables: the steps from
-    their names, and hue, chroma and the three anchors from the real first, middle and last values. It
-    does **not** guess a curve — an existing ramp is a list of colours with no record of how it was made
-    — so it draws what is in the file *underneath* what it would generate, each changed step's old hex
-    struck through beside the new one.
-  - **"OKLCH scale not applied" is a question, not a stored flag.** It is re-asked on every edit by
-    comparing the file's values against the config's own output, so it cannot go stale, and the banner
-    and the strips are driven from one comparison rather than two — they cannot disagree about how many
-    steps would change.
-  - **Lock seed re-anchors, it does not offset.** The middle anchor becomes the seed's own lightness and
-    the ladder is recomputed through it; bright and dark are untouched, so the endpoints still match the
-    shared ladder exactly. Interior steps drift, and the largest deviation is reported beside the field,
-    because that number is the whole decision.
-  - What it will not read: **an aliased variable is read through and never written** — an alias is a
-    deliberate indirection and replacing it with a raw value breaks a link silently. A **non-opaque
-    variable is reported and skipped**, never composited over an assumed background to invent a
-    lightness. A group where **more than half** the variables are non-opaque is an alpha ramp, not a
-    lightness ramp, and is declined in one line rather than itemised skip by skip.
-  - **Run writes nothing.** It says so, and says why: the write path is gated on its dry run being
-    reviewed first. A Run that half-wrote a colour set would be worse than one that refuses, because
-    what it would be half-writing is a collection other files subscribe to.
-- **HSL modes are per mode again.** A mode block in HSL now carries its own **Saturation** and
-  **Lightness** beside Hue, and Chroma appears only in OKLCH. This was not cosmetic: HSL has no shared
-  ladder, so a mode's own three lightness values *are* its ladder, and with nowhere to put them every
-  HSL mode fell back to the same 98/46/4 and generated an identical ramp whatever you typed. Reading a
-  collection now fills whichever set the panel is on, from readings taken in that model — a hue in
-  OKLCH is a perceptual angle and a hue in HSL is where the maximum channel sits, and putting one in
-  the other's field is a plausible-looking wrong number in every cell.
-- **A `@rows` column can carry `@placeholder="…"`**, the same annotation a field spells, so a cell can
-  show a grey example. A numeric cell labelled *Chroma* gives a first-time reader nothing otherwise:
-  `0.012` and `12` are both plausible guesses and only one of them is a colour.
-- **A column's condition can name a form field**, not only another column in the same row. It still
-  prefers the row — two modes on two tabs can be on different scale types at once — and falls back to
-  the form, which is what lets a mode's fields depend on a setting that sits above the whole table.
-- **A settings panel fills itself from a set CodeFig never made.** Point Grid at a collection and group
-  holding a grid — one built years before this plugin, or by hand — and the settings load from the
-  **variables themselves**, matched by name and structure: `columns`, `gap`, `padding`,
-  `viewport-width` and the `col-1…N` series. No id, no record, nothing CodeFig had to have written
-  first. A value the set does not carry is worked out from the ones it does, and the panel says which
-  of the two happened. It then checks itself and tells you whether running would change any of your
-  values — and names what could not come back rather than leaving it at a default that implies it was
-  read: *Generate overview* is not a variable, and *Extra columns* is inferred from how many `col-*`
-  variables there are.
-- **Grid suggests margin and gap pairs that divide into whole numbers.** The Suggested whole number
-  divisions section is live: it searches whole margins and gaps around what you have, keeps the pairs
-  where every column comes out a whole number, and ranks them by how many of your modes they are clean
-  for, then by how little they move your values, then towards round numbers — a 79px margin is
-  arithmetically as good as 80 and nobody wants one. Your current pair is always the first card when it
-  divides cleanly. **Clicking a card changes the mode you are looking at and no other**: the badges say
-  where else the pair would work, they are not a promise to write it. Nothing is applied by looking —
-  only by clicking. When nothing in range divides, it says so and says what it searched, and when there
-  are more results than cards it says how many.
-- **A Style & UI reference, inside Help & documentation.** Every control a script's settings form can
-  render, live in that script's own Configuration UI tab, with the exact line that produces each one
-  written underneath it — so a change can be asked for by pointing at the thing rather than describing
-  it. Its Documentation tab holds the type scale, the spacing scale and the colours, and keeps the two
-  heading ladders apart: the same `// # Title` is 20px in a Documentation tab and 16px as a form's
-  section title, which is not obvious from either one alone.
-- **A note under a field can mention an annotation.** `@helper:` text stopped at the next `@word`, so
-  a note reading *"an object with no `@rows`"* was stored as *"an object with no"*. Notes now run to
-  the end of the line, which means `@helper:` has to be the last annotation on it.
-- **A panel fills itself from where it points.** When a collection and group name somewhere CodeFig
-  has already generated, the settings load on their own and a line under Group says so — no button to
-  find, and nothing to press. It never overwrites what you have typed: once you have edited anything,
-  it stops filling and tells you a saved config is there instead.
-- **Grid records what it generated**, the way Spacing and Corner radius already did. That is what
-  lets the panel above fill itself, and what lets a config move between files. Plugin data only —
-  no variable, name or binding is affected.
-- **Pick a collection instead of typing its name.** The collection field is a list of the collections
-  in your file, plus *Create a new one* for a name that is not there yet. It stays one setting — the
-  name — because a collection whose name does not exist is created when you run, so there is nothing
-  extra for a config to remember. Which of the two is about to happen is said before you run:
-  *"Brand tokens" doesn't exist in this file — it will be created.* That also covers a config pasted
-  from another file, where the collection genuinely may not be here.
-- **Pick a mode the same way you pick a collection.** A settings form can now offer the modes of
-  whichever collection it is pointed at, plus *New mode* and a name — created on Run, exactly as a
-  new collection is. It follows the collection picker above it, so changing collection changes the
-  modes on offer — and empties it, because a mode you picked in one collection is not a mode of the
-  next one. Left empty, values go to the collection's default mode. A config that arrives naming a
-  mode this file does not have says so before you run, rather than creating it quietly.
-  **Selection to variables** uses it; any script can, with `// @mode: targetCollection` on a var line
-  and `getOrCreateMode` from `@Variables`.
-- **Design System Foundations scripts have a form.** Their settings were only ever editable as code,
-  because the form could not read the shape those blocks are written in. It can now, so every one of
-  them opens on Configuration UI, and the config block is still exactly the thing you paste. Settings
-  a form cannot represent yet stay editable in Configuration code and say so.
-- **See the scale before you commit to it.** Spacing and Corner radius draw their scale in the
-  Configuration tab and redraw it as you type — tokens down, modes across, each value as a bar,
-  with the gaps under each column, because `1, 4, 8, 12, 16, 24` reads as regular until you see
-  `3, 4, 4, 4, 8`. Nothing is written while you look: the preview generates in memory and cannot
-  reach your document. The same picture appears in the results panel after a run, as the record of
-  what was made.
-
-- **Adopt a file CodeFig has never touched.** Point **Foundation config** at a group of spacing or
-  corner-radius tokens in `adopt` mode and it works out how the scale was built — a base and a
-  growing step, a fixed ratio, or a straight ramp — and records it, so the import button and
-  `figma:run --from-file` work on a file made years before this plugin. **Nothing you can see
-  changes**: no value, no name, no binding, nothing deleted or recreated. Where the numbers do not
-  fit a model exactly it records them as they are and tells you what the closest fit would have
-  changed, so switching is your decision and you see the cost first. A published collection is
-  reported and left alone until you confirm, because recording writes plugin data and that shows
-  subscribers a library update.
-- **Foundation config** — a new Design System Foundations script that moves a config between
-  files. It reads the viewports and generated sets a file already has and hands you the config
-  **in the shape your scripts already use**: paste it straight between `// @CONFIG_START` and
-  `// @CONFIG_END` in Grid, Spacing, Corner radius or Typography. It can also park the config in
-  a text layer on canvas and read it back, and `check` tells you what a pasted config would mean
-  without writing anything. Older configs load too — `structure.*`, `spacingScaling`,
-  `fontScaling`, `figmaStyles`, `roundUpperValuesTo` — and every translation is listed, so a
-  paste never quietly means something else. It never generates variables: reading a config writes
-  the viewport list and nothing more.
-
-- **The mode chips do something.** They were a view; now they are the control. Click a chip's label to
-  rename that mode — a **rename**, so its values and every binding to it survive. The dash removes one,
-  and says what that costs before it happens: *"Removing mode Tablet at Run — 12 variables hold values
-  there, and any binding to it is lost."* The `+` adds one, seeded from the mode beside it so its
-  settings tab has real numbers to edit. Drag to reorder. **Nothing reaches your file until you press
-  Run**, and removing a mode then adding one with the same name is how you replace it — the panel says
-  *"Replacing…"* when that is what you have set up.
-- **A config pasted from another file still never deletes a mode.** A mode this config has not heard of
-  is left exactly where it is, values and all. The only thing that removes a mode is clicking its dash.
-- **Name a series of tokens instead of typing it out.** `spacing-{1,10}` in the Tokens field is ten
-  tokens, `spacing-1` through `spacing-10`, and it mixes with names you write yourself:
-  `none, px, spacing-{1,10}`. `{10}` is short for `{1,10}`. Two details worth knowing because they are
-  requested by writing them rather than by a setting: it counts **down** as readily as up, so
-  `heading-{6,1}` names a heading ramp smallest-to-largest, and a written leading zero is a width, so
-  `{01,10}` gives `spacing-01 … spacing-10` — which sorts the way it reads in Figma's variables list.
-- **Corner radius has its panel**, and its preview draws the thing you are judging: a 200×120 box per
-  token with the radius applied at its real size, the name beside it and the value past it. Same skeleton
-  as the others — General, a tab per mode, Preview — with each mode carrying its own scale and its own
-  rounding. `none` is no longer a special case in the maths: it is an extra value of `0` that fills the
-  smallest token name.
-
-  **A radius past 60 says so.** The corners of a 200×120 box meet there, so 60 and 600 draw the identical
-  pill — and the shipped design's own largest token is 96. Without the note, two different numbers look
-  like the same picture.
-
-  **The numbers are unchanged** in all three modes: desktop still generates `0, 4, 8, 12, 16, 24`. Only the
-  spelling moved.
-- **Typography has its panel.** The same skeleton as Grid and Spacing — General, a tab per mode, then
-  two sections of its own: an **Overview** table listing every step with its size, line height, ratio,
-  tracking and the variable a run will write, and a **specimen** setting your own preview copy at the
-  real sizes, largest last. Each mode carries its own scale (Modular, Metric or Fibonacci) and its own
-  rounding, and **Base unit is the size of the first token**, so tokens read smallest to largest and
-  nothing has to say where the base sits.
-
-  **Line height and letter spacing take two numbers each** — the value at the smallest step and,
-  optionally, the value at the largest. Both are in px, and what runs between them is the *relative*
-  quantity: line height as a ratio, tracking as a share of the size. That is what makes absolute line
-  height rise while its ratio falls, and tracking tighten as type grows, which is the interaction the
-  type-scale tools chart and none of them computes. **Fill in only the first and nothing changes from
-  before**: line height keeps the base ratio and tracking stays flat.
-
-  Two smaller things came with it: font weights are a list where a number is a weight and a word is a
-  Figma font style name (`400, Semi Bold`), and text styles have their own two fields — whether to create
-  them, and their naming — instead of being edited as an object in the code tab.
-
-  **Configs written before this keep working and generate exactly what they generated**, pinned by a
-  test: per-mode `minFont`/`baseFont`/`maxFont` with a top-level curve and easing still run, they simply
-  have no controls. The default block's token *names* are unchanged, so a run updates the variables you
-  already have — but its numbers are new, because a per-mode ratio has no min, max or easing with which
-  to reproduce a sine ramp from 8 to 200.
-- **Scale type is a set of radio buttons, and every ratio says what it is.** *Modular scale / Metric
-  scale / Fibonacci* are visible at once instead of hidden in a dropdown, and the Scaling method list
-  reads *1.25 Major third*, *1.618 Golden ratio* rather than bare numbers. The dropdown is now as wide as
-  its longest option instead of a fixed share of the row.
-
-- **A config form explains itself in one place: the ⓘ beside a label.** Helper text under the control,
-  the descriptive comment lines between fields, and a control's leftover comment prose were three kinds
-  of grey text in one form — and the third had never appeared at all, because it set a browser tooltip
-  whose only styling hook had no rule behind it. They are one thing now. Hover the ⓘ, or reach it with
-  Tab and press Enter to pin the bubble open; nothing that used to be written down has been thrown away.
-  - **What a script's config block looks like has not changed**, and neither has what it means. A
-    paragraph is still a comment line and `@helper:` is still `@helper:` — the panel decides where to
-    show them, and writes your block back exactly as you wrote it, comments and all.
-  - **A paragraph belongs to the control it sits against**, above it or below it, whichever it is
-    touching — a blank or bare `//` line is the separator that decides. All 68 in the shipped scripts
-    were checked one by one; two blocks whose spacing disagreed with their intent were given the
-    spacer that says what they mean.
-  - **A block that is meant to be read says so**, with `@prose` on a line of its own — its paragraphs
-    stay on the page. *Help & documentation*'s specimen shelf is the one that uses it.
-  - **Notes that report what is about to happen stay where they are**: why a field is disabled, that a
-    collection will be created, that a mode will be removed at Run. A description moves behind a hover;
-    a consequence does not.
-
-- **Every field label is sentence case, the way Figma writes one.** 87 of the plugin's 123 labels had
-  never been written by anyone: with no `@label:` set, the name of the variable was split at its
-  capitals and left there, so `fileKeyOrUrl` read as *File Key Or Url* while the 36 hand-written labels
-  beside it were sentence case. The plugin disagreed with itself on the first thing anyone reads. Your
-  config blocks are untouched by this — nothing starts writing `@label:` into them.
-
-- **Helper text explains the control it is attached to, in plain words.** A pass over every explanation
-  in the shipped scripts: the ones that named a variable in the source rather than the field on screen
-  ("leave `searchFor` empty" where the label says **Search for**), the ones that only repeated their
-  own label, and three broken sentences. Notes that had been parked under a section heading now sit on
-  the control they describe — *Amount* and *Hue* in Colors, the collection and payload fields in
-  Export/import.
-
-### Fixed
-
 - **"New mode" adds a mode; it no longer renames the one you had and writes through it.** A collection
   that has been in the file for months, whose single mode nobody ever bothered to rename, is still
   called *Mode 1* — and `getOrCreateMode` treated that name alone as proof the mode was a placeholder
@@ -1671,25 +1728,6 @@ deleting variable modes they did not recognise.
   your file was affected; the config in the editor was. A panel now only overwrites what it actually
   shows, so a setting it has no field for survives being read.
 
-### Removed
-
-- **Two type tokens that held the same value, and one that was a pixel from another.**
-  `--font-size-caption` and `--font-size-helper` were both 10px and differed only in which part of the
-  stylesheet used them; they are one token, `--font-size-small`. `--font-size-headline` (15px) sat one
-  pixel from `--font-size-title` (16px) — two sizes that close read as an accident rather than a
-  decision — and is gone, its three users now either the 20px document title or the 16px section size.
-  `--font-size-code` (11px) is new and monospace-only: a mono face at the body's 12px reads larger than
-  the prose beside it, which is the one reason an 11 belongs in the sheet.
-
-- **The import button is gone.** Auto-import replaced it: choose a Collection and a Group, and a
-  recorded config loads itself with a line under Group saying so. The button only ever appeared when
-  it had something to offer, which meant working out whether it *would* appear was a question you
-  could not answer by looking — and it appeared a beat late after a run, which is now moot rather than
-  fixed. Nothing else about loading changed: it still writes into the editor only, and your file is
-  unchanged until you run.
-
-### Fixed
-
 - **The configuration panel no longer gets slower the longer you work in it.** The form's `change` and
   `input` listeners sit on a container that outlives the form inside it, and nothing removed them — so
   every rebuild of the form added another pair, and one keystroke ran the whole pipeline once per rebuild
@@ -1700,270 +1738,6 @@ deleting variable modes they did not recognise.
   per pointer event, the config editor is no longer rewritten mid-drag — the text is committed when you
   let go, and flushed before anything reads it — and dragging one curve no longer redraws every other
   curve on the page.
-
-### Changed
-
-- **Selection to variables writes its results down without opening the panel over your file.** The Info
-  panel still holds the whole run — every variable, its value, and whether it was created or updated,
-  each row still clickable to select the layer — and the button still shows there is something in it.
-  It just stays where you left it. The notification is the outcome; a panel that takes over the window
-  to say the same thing in more words is the plugin talking over the work. Scripts can ask for this
-  with `autoOpen: false` on `displayResults`; the default is unchanged, so every other script still
-  opens the panel for anything that is not a plain success.
-
-- **The preview says how far a change is, not only how many steps it touches.** Now that a read reproduces
-  a collection closely, an untouched one reports ten of sixteen steps "changed" — every one by a few levels
-  out of 255, which nobody can see. It now reads *"10 of 16 steps would change, by up to 4 of 255"*, and a
-  difference too small to see is named as one.
-
-- **A read now lands within 10 of 255 in either colour model, on every scale.** It was 49 in HSL and 37 in
-  OKLCH, and the cause was that *where a ramp turns* was being decided twice: recognition read its three
-  anchors at the middle of the step list, while the generated ramp bent at its own midpoint. Those are one
-  fact. Real sets mostly turn at 400 while the midpoint of a sixteen-step list is 300, so the anchors were
-  read at one step and applied at another.
-  It is now found by measuring — generating at each candidate step and keeping the one closest to the file
-  — and recorded, so generation bends where the anchors were read. Two properties of the colours were tried
-  as a rule first and both failed: anchoring on the peak of OKLCH chroma is right for OKLCH and leaves HSL
-  at 60, anchoring on the peak of HSL saturation is the reverse at 67.
-
-- **Hue can carry its own curve.** Worth little on a cool palette (under 6°) and a lot on a warm one — an
-  amber ramp travelling 49° came back 10° out and is now within 1.2°. Only fitted where there is enough
-  chroma for a measured hue to be a value rather than rounding, which on a greyscale it is not.
-
-- **Colour has its own curve, not the lightness curve's timing.** Chroma used to be rebuilt by
-  interpolating three anchors on the *lightness* curve's schedule, so a palette was paced by its ladder
-  rather than by itself — Tailwind blue came back a third less colourful than the file at its most
-  saturated step. A read now fits a chroma curve too, and the worst-step error drops from 0.026–0.067 to
-  0.002–0.007. It is the same kind of curve as the lightness one, in the same editor: chroma is not
-  monotone, but each half of it is, and two half-fits joined at the peak is exactly a three-anchor curve.
-  Leaving it empty keeps the old behaviour, so nothing already made moves.
-
-- **A read recognises the curve the collection was already drawn with.** Opening a colour set used to land
-  on *Original* — the file's values and an empty curve editor — because a ramp carries no record of how it
-  was made. That is true of naming a preset and false of fitting one: a fitted three-anchor curve lands
-  within about a lightness point of published sets (Tailwind zinc 0.86, slate 0.64, blue 0.52, Radix gray
-  0.94) against 4.0–6.8 for the closest named curve. The dropdown calls it **Estimated original**, and
-  selecting it again restores it after you have bent it elsewhere.
-
-- **Colors opens empty, and fills in as you answer it.** Nothing below *General* until a collection is
-  chosen, and no preview until the colour tokens are named — it used to draw a full ramp over a placeholder
-  list, which reads as a result rather than as an invitation. A new scale starts on **Linear** rather than
-  *Original*, which names nothing on a collection that has no ramp yet.
-
-- **Steps is now called Color tokens.**
-
-- **Colors has one curve, not two.** *Lower* and *Upper* are gone; a colour ramp is described by a single
-  curve running bright to dark, and *Add middle point* is what bends the two halves differently. In **HSL**
-  that is one curve per mode; in **OKLCH** it is one curve for the whole collection, which is what makes
-  every mode land on the same lightness ladder and match in greyscale.
-
-  The curve's middle anchor now *is* the middle lightness and the step it sits on, so the separate **Middle**
-  lightness field is gone — it was a second answer to a question the curve already answered, and the two
-  could disagree. Existing configs written with a *Lower* and an *Upper* curve are joined into the single
-  curve they always described, reproducing their ladders to under 1e-6; nothing you have made moves.
-
-  One capability goes with it: a half on *Original* while the other half was a curve. A curve is now either
-  *Original* — the file's own colours, untouched — or a shape spanning every step.
-
-- **Bezier is the default scale everywhere.** Spacing and Corner radius ship it now too, so a fresh panel
-  opens on the model the whole thing is built around rather than the one you have to switch to. The starter
-  numbers change with it — a geometric ramp does not land on a flat 4/8/12/16 grid, and that is the model
-  showing what it is.
-
-- **The curve dropdown is the shape control, and *Custom* is a real state.** Picking Custom on a straight
-  line now gives you handles to drag; it used to do nothing, because "is there a shape" was derived from
-  "is the curve bent" and a straight line is not bent. *Linear* clears them again. An untouched curve still
-  stores `[]`, so an unrelated edit does not write coordinates nobody chose.
-
-- **Typography: a rounded size says so beside itself** — `Font size: 218 (218.37)` rather than a separate
-  *Rounded from* line at the bottom of the block, which left you matching it back to whichever value it
-  belonged to.
-
-- **Typography: line height and letter spacing are one row each, in percent.** `[Base][Max]` with the unit
-  drawn inside the field, and the numbers are percentages of the font size — Figma's own unit for both, and
-  unlike a pixel value a percentage still means the same thing after the scale grows. The variables are
-  still written in pixels, computed per token, so nothing downstream changes. A config from before this
-  spells them as bare numbers and keeps generating exactly what it always did; the two are told apart by
-  **shape** rather than by range, because `-1.2` is equally plausible as −1.2px or −1.2%.
-
-- **The script log is for errors and warnings.** A successful run used to fill it with a summary of what it
-  had just done, which buried the one case the block exists for. The lines are still captured and still
-  reach the dev bridge. Spacing and Corner radius also stopped repeating the scale table into the results
-  panel — the Configuration tab already draws it, live, and the copy went stale on the first edit.
-
-- **The scale editor is one control.** The growth has no field of its own, the *Add shape* button is gone,
-  and the dropdown does that job — *Linear* means no shape and draws no handles, anything else reveals them.
-  The field underneath always carries the whole scale, `1.5 cubic-bezier(0.333, 0.333, 0.667, 0.667)`, so
-  copying it out and pasting it back reproduces it; it takes a growth alone, a curve alone, or both. The
-  growth is still written to the config under its own name, so a block reads `ratio: 1.5` beside `curve: []`.
-
-- **The scale curve is open-ended again: a base, a growth ratio, and a shape — no largest value.** The first
-  version of this asked for both ends and distributed the tokens between them, which was wrong twice over.
-  Nobody knows the largest spacing in advance; and pinning both ends meant **adding a token re-subdivided
-  the range and moved every value below it** — six variables already bound to things in a file, silently
-  changed because somebody added a seventh. The top is now derived from the ratio, so the step count cancels
-  out: a flat curve is a modular scale exactly, and appending a token leaves everything before it alone.
-
-  The **named ratio dropdown is gone**. It was a closed list of eight, and the complaint was that nothing
-  sat between 1.25 and 1.333. Growth is a plain number now, and the curve's y axis is **logarithmic** — so a
-  constant ratio is a straight line whose slope *is* the ratio, and you drag it. **Add shape** reveals the
-  bezier handles for when the growth should vary across the scale. Past the last token the line continues
-  faintly, because the scale does.
-
-  Colours are unchanged: lightness is bounded, both ends are known, and the two-anchor editor is right there.
-
-- **Spacing, Corner radius and Typography: *Modular scale* is now *Bezier scale*, and generates the same
-  numbers.** A modular scale is a constant ratio between steps, which in log space is a straight line — so
-  the curve model with a straight curve *is* a modular scale, checked term for term. What it adds is the
-  ability to bend it: the ratio can vary across the scale, so a spacing set can stay tight at 4, 8, 12 and
-  still open out at the top, which one ratio could never say. A bezier mode takes **Largest value** and a
-  **Curve** where it used to take a *Scaling method* ratio.
-
-  **Configs that say `modular` keep working and keep generating exactly what they generated before** — the
-  ratio is converted to the equivalent ramp. Nothing in an existing file is regenerated to a different
-  number, which matters because these values are already bound to as variables. Typography's shipped default
-  moved from `modular`/`1.25` to `bezier` with a largest size of 60, and produces the identical ten sizes.
-
-- **Colors: the Family, Easing and Amount dropdowns are now the curve editor.** The lightness ladder's lower
-  and upper segments each get one. *Original* — the ramp already in the file — is still there, spelled as a
-  curve with no points. Configs carrying the old `{ family, easing, amount }` are converted on read;
-  `linear`, `quad` and `cubic` convert exactly, and the rest are within 0.01 of the range, which is
-  documented per family in `@Bezier`.
-
-- **One heading ladder, and one title per script.** The Documentation tab and a script's settings form
-  render the same markdown, and until now they styled it with separate rules — `## Overview` was 15px in
-  one tab and 14px in the other, and every heading question had to be asked twice. There is now a single
-  ladder both read: **`#` 16px, `##` 14px, `###` 12px semibold**, with body copy at 12px. The **document
-  title in the editor header is the only text above that, at 20px** (it was 15px), and it is where a
-  script's name lives.
-  - **The duplicated titles are gone from the scripts themselves.** Every doc block used to open by
-    repeating the script's own name, and most config blocks opened by repeating it a *third* time in a
-    third wording — "Rename variables" in the sidebar, "Rename variables" again as the first heading,
-    "Batch rename variables" over the settings. 70 of those lines were removed across 49 scripts. If you
-    write your own scripts, you no longer need a `# Title` line at the top of a doc or config block; the
-    header names the script. Existing user scripts are untouched and still render their title if they
-    have one — it will simply be a 16px section heading rather than a 20px page title.
-  - Genuine section titles were kept, including the ones that only *look* like a repeat: `@codefig-ui`'s
-    "Built-in components", match-colors' "Palettes", and export/import's `# Export` / `# Import` pair.
-
-- **Sizes and corners come from tokens now, so the same thing looks the same everywhere.** Seventeen
-  font sizes and twenty-four corner radii were written as raw pixel values, which is how "the same
-  corner" came to mean 2, 3, 4, 6, 9 or 10px depending on which control you were looking at. Every one
-  is now one of four radii and one of five sizes. Two things visibly change: **11px text that was not
-  code is now 10px** (status pills, dropdown group headers, stale-config notices), and **the `@rows` tab
-  strip is 12px, matching the Documentation/Configuration/Script tabs it was always meant to match.**
-
-- **Selection to variables picks its collection the same way every other script does.** The dropdown
-  now lists this file's collections with a **New collection** entry that reveals a name field, instead
-  of a *New collection* mode that took the collection name off the front of each layer name. **This
-  changes what your layer names mean:** a layer called `color - bark/bark/350` used to make collection
-  `color - bark` and variable `bark/350`, and now makes variable `color - bark/bark/350` in whichever
-  collection you picked. Name layers by the variable path alone — `bark/350` — and choose the
-  collection above. The old rule was also inconsistent with itself: picking an existing collection
-  already treated the whole layer name as the path, so the same layers landed in two different places
-  depending on a dropdown.
-
-- **A settings form's heading sizes now step evenly:** 16 / 14 / 12, two pixels a level, with the
-  smallest told apart from body copy by its weight. They were 20 / 14 / 14 — a jump, then no step at
-  all.
-
-- **Grid's config block lists its settings in the order the panel shows them** — collection, group,
-  extra columns, then the per-viewport modes. A visible diff if you paste that block around, and no
-  change to what any of it does.
-- **Selects are the same height as text inputs.** They were two pixels taller everywhere, which only
-  became obvious once a form put the two side by side. They also have a chevron of their own now
-  instead of the browser's.
-- **Rounding is spelled one way.** `roundTo` sits beside the other settings instead of inside
-  `scaling`, because it applies whatever model a scale uses, while `scaling` describes a curve that
-  only the `endpoints` model reads. Spacing and Corner radius shipped with
-  `scaling: { type: "sine", ease: "in", roundTo: 2 }` above sets that all said `model: "metric"` —
-  two descriptions of one scale, two of the three fields inert, and nothing to tell you which was
-  live. Every old spelling still works and is promoted for you: `scaling.roundTo`,
-  `roundUpperValuesTo` and the `fontScaling` alias all mean the same thing. A curve is only
-  recorded when something reads it.
-- **A mode that is not a viewport is left alone.** If a collection's modes are a density axis —
-  `tight` / `relaxed` — rather than breakpoints, CodeFig says so and does not add them to your
-  viewport list. Previously it adopted any mode it did not recognise as a viewport, which meant the
-  tool decided which axis your collection used. Figma gives a collection one mode axis, so that is
-  your decision. The message carries the way in: *"The registry is untouched — add them in Grid if
-  they're breakpoints."* A file that has no viewport list yet gets one sentence pointing at Grid
-  rather than a complaint per collection.
-- **A scale can be described once instead of once per breakpoint.** Spacing and Corner radius take
-  a list of parameter sets, each saying which modes it applies to. `appliesTo: "*"` means every
-  mode the collection already has — the common case, which previously had to be written out once
-  per viewport. Add a second set naming one mode and it overrides the wildcard there; the run says
-  which set won for which mode. Two sets naming the same mode outright is a contradiction nobody
-  can resolve from the config, so the run says so and writes **nothing at all** — no collection, no
-  variable, no recorded set — rather than applying part of it. Configs written the old way keep
-  working and are read as one set per mode.
-- **A wildcard never creates a mode; naming one does.** `appliesTo: "*"` describes the modes a
-  collection has, so it cannot add to them — otherwise a collection would gain modes whenever your
-  viewport list grew. Naming a mode is a request, and a named mode missing from the collection is
-  created. A collection that is new, or still has only Figma's default *Mode 1*, is seeded from the
-  file's viewport list, and the run says which of the two happened, because only one of them
-  changes the shape of your collection. With neither, the run says so and points at Grid.
-- **Find/replace now means one thing across the library.** Six scripts took a name pattern and
-  no two agreed: contains vs prefix, case-sensitive vs not, wildcards in three of them, three
-  separate replace implementations. All six now share one matcher.
-  - Matching is **contains** and **case-insensitive** by default. Tick **Match case** for
-    case-sensitive.
-  - `*` is a wildcard in every field that takes a pattern. A CodeFig extension — Figma has no
-    wildcard.
-  - **Regex is an explicit toggle.** It used to be inferred from the presence of brackets or
-    parens, which silently mangled ordinary names (see Fixed). Tick **Use regular expression**.
-  - A **blank find replaces the entire name**, matching Figma's blank Match field.
-  - `rename-variables` scoping works the way it reads: `Typography/Body` now scopes to that
-    group. It previously matched a case-sensitive prefix against a spaced-slash path, so the
-    obvious spelling matched nothing.
-- **Preview is on by default** in `rename-styles`, `rename-variables`, `replace-styles`,
-  `replace-variables` and `replace-style-variable-bindings`. A run lists what it *would* change
-  and changes nothing; untick **Preview only** and run again to apply. Rows are flagged when the
-  new name already exists, when two rows produce the same name, when a pattern matched but
-  changed nothing, or when the result would be empty. `select-by-styles-variables` has no
-  preview by design — it only changes the selection.
-- **`$n` / `$N` counters are positional**, so they depend on the set of matches. Preview and
-  apply are two runs; if the file changes in between, the numbering moves. The apply run now
-  says so when the plan no longer matches what was previewed.
-- Scripts that gained capability they did not have: `replace-styles` and `replace-variables` now
-  support the `$&` / `$1` replacement tokens; `select-by-styles-variables` and
-  `replace-style-variable-bindings` now support `*` wildcards.
-- Figma's default `Mode 1` on a newly created collection is now renamed to your first viewport
-  rather than deleted and replaced, which uses one fewer mode from your plan's budget.
-- **The shipped Spacing and Corner radius defaults now generate a metric scale, not an endpoint
-  range.** A metric scale is a base plus a step that grows every few tokens — 4, 8, 12, 16, 24, 32
-  — which is how a spacing scale is normally written down. The previous default ran a curve
-  between a minimum and a maximum, which meant working backwards from the numbers you wanted to a
-  curve that happened to pass through them.
-
-  **Your own configs are untouched.** A config with no `model` is read as `endpoints`, so anything
-  you have configured produces exactly what it always did. What changes is the *starting point* in
-  the shipped script — and because prebuilt scripts reload from the embedded source, that reaches
-  you on upgrade if you have been running the shipped block as-is.
-
-  Two things make that visible and reversible. Every run now prints the model and its parameters
-  next to the created/updated counts — *"Desktop: metric, base 4, step 4, mod 3"* — so if the
-  numbers move, the reason is in the output that reports the move. And if the file already has a
-  recorded set, the **import button** hands your previous config straight back into the config
-  block: that only works because the config shape and the import landed first.
-- **Spacing and Corner radius record what they generated**, so the import button and
-  `figma:run --from-file` can offer it back. Nothing about the variables they produce changes —
-  the two scripts now share one generator, and a test proves the collapse value for value against
-  frozen copies of the code it replaced.
-- Grid now honours a nested `{ config: { collectionName, group } }` config the way Spacing,
-  Corner radius and Typography always have. Previously it read only the top level, so a pasted
-  config quietly wrote to `Responsive System`.
-- **Import this file's config into a Design System Foundations script.** A button beside the
-  results button fills the config block from what this file already has, in one click, and names
-  where it came from — *imported from Responsive System · Spacing*. It appears only when this file
-  actually has a config for that script. **Nothing is read from your file until you press it**, so
-  a config you paste into the editor is always the config that runs, and Cmd-Z undoes an import.
-  The imported values live in the editor, not in the script: switching scripts and back brings the
-  shipped defaults again, and one click brings your file's settings back.
-- `npm run figma:run -- <script>` still runs the script's own config. `--from-file` imports this
-  file's config first, the way the button does; `--config <path>` supplies one explicitly. Every
-  run prints which of the three it used.
-
-### Fixed
 
 - **The import button works again.** It reported that the config could not be read, on every file,
   whatever the config said. The text was fine — the button was calling something the UI had no way
@@ -2033,6 +1807,97 @@ deleting variable modes they did not recognise.
 
 ### Removed
 
+- **Colors Token count.** The N-on-a-rail control is gone; edit the token list directly instead.
+
+- **Copy simple variables JSON** — superseded by Export/import variables.
+- **Stack or flatter color scale** (`color-scale-layout`) — moved to a personal user script.
+- **Preview only** and **Match case** controls on Rename styles/variables, Replace styles,
+  Replace style variable bindings, and Select by styles/variables. Matching is always
+  case-sensitive; runs always apply.
+
+- **Foundation config** — the Design System Foundations script that copied / parked / read a
+  portable config between files is gone. Generators already write manifests; paste between
+  `@CONFIG` blocks (and future script storage) covers sharing. Portable helpers in
+  `@Foundation` remain for tests.
+
+- **The auto-import status note under Group within collection.** It reported what a read did or
+  did not find, updating on every address change; Márton asked for it to go. `readAutoImport`
+  (`npm run figma:ui`) still carries the same text — nothing about diagnosing a stalled or empty
+  read from the terminal changed, only the on-screen copy.
+- **The "OKLCH scale not applied to ..." banner.** Its *Apply OKLCH scale* button had no handler and had not
+  had one for some time: pressing it did nothing. Each mode's own strip already names what changes and by
+  how much, which is the same fact at a grain you can act on.
+
+- **Dragging one inner handle brings the other with it**, collinear through the middle anchor — a smooth
+  node, the way every vector tool behaves — so the two halves of a curve meet at the tangent and not only
+  at the point. Only when the node was *already* smooth when the drag began: a curve fitted to a real ramp
+  may hold a genuine corner, and mirroring on touch would destroy it. **Alt** inverts either way. Nothing
+  is stored — collinear or not, the coordinates already say which kind of node it is.
+- **The colour strip redraws while you drag a curve handle**, instead of waiting for you to stop. Its
+  400ms debounce was reset by every frame of the drag, so it never fired until the pointer settled. There
+  is a 120ms maximum wait now — the drawing itself measures 0.6ms, so what is being paced is the round
+  trip, not the work.
+- **The three anchor boxes and the three chart points are one set of values, both ways.** Dragging the
+  middle anchor writes its field and typing in the field moves the anchor — the ends already worked, the
+  middle did not, because the anchor lives in the curve and the value in a field.
+- **An anchor drag no longer rounds a chroma to nothing.** It rounded to one decimal, which is right for a
+  lightness or a hue and turns 0.044 on a `0..0.4` channel into 0. The precision comes from the channel's
+  own range now.
+
+- **`easeInOut` presets are one curve, not two halves joined at a middle point.** Two segments meant a
+  *middle anchor*, and a colour channel travels through its middle anchor value — so choosing
+  *Sine · easeInOut* for a saturation ramp routed it through a middle of 83 while its ends were 100 and 90.
+  A preset named for smoothness put a corner in. They are single cubics now, fitted to the easing function
+  they name: `sine` is 0.0002 out, the worst (`circ`, `exponential`) 0.033, and `quad` and `cubic` stop
+  being exact — that is the price. **`outin` is unchanged**, because no single cubic comes within 0.04 of
+  it and several are 0.15 out.
+- **The anchor boxes no longer vanish when you let go of a handle.** Each channel declares two curves —
+  one per colour model — and both were bound to the same group cell, because a group holds both models'
+  parts. Releasing a drag refreshes every curve *except* the one being dragged, so the hidden twin was the
+  only one to redraw, and it took the boxes into a panel nobody can see.
+- **A colour channel bends at its middle anchor only if its curve has a middle point.** The two were
+  independent, and the ramp resolved the contradiction in favour of the anchor — so removing the middle
+  point from a saturation curve left a corner the curve could not possibly draw. On lime that was a dive
+  to 83 and back in a ramp running 100 to 90. The curve decides now, and the Middle box is greyed when it
+  is not consulted, keeping its value for when the middle point comes back.
+- **The bar beside each chart shows that channel, not the tokens.** It was drawn from the collection's
+  token colours — a lightness ramp — so it looked right on Lightness and showed a light-to-dark sweep on
+  Hue and Saturation, and it could not follow a drag because those colours are the file's. Each curve now
+  carries a CSS colour template: a hue wheel, a saturation fade, a lightness fade, mixed by the browser
+  and re-read on every redraw.
+- **A colour channel whose two ends match now has a chart.** Lime's saturation is `100 … 83 … 100` —
+  both ends pinned, all the movement in the middle — and the axis bailed on the equal ends, taking the
+  ticks, the zoom, the colour bar and the draggable ends with it. The whole Saturation tab looked
+  unimplemented. The window now opens on all three anchors, not two.
+- **The zoom reads as how much of the channel is on screen**, so a chart showing all of it sits at the
+  bottom of its track instead of half way up. It was reported as a multiple of the view the channel opened
+  on, which meant a full-range chart claimed to be half zoomed in.
+- **Colors: an OKLCH collection's lightness ladder is now averaged across its modes** instead of
+  taken from whichever one was read first. The ladder is shared — that is what makes the modes match
+  in greyscale — so one mode used to get a ladder fitted to itself and the rest got someone else's.
+  On a two-mode lime that was worth thirteen 8-bit levels of accuracy for the mode that lost the
+  toss (21 from the file against 11); both now read 15. Collections whose modes already agree pay at
+  most one level.
+
+The find/replace scripts were the focus: they now agree on what a pattern means, and they show
+you what they will do before they do it. The Design System Foundations scripts also stopped
+deleting variable modes they did not recognise.
+
+- **Two type tokens that held the same value, and one that was a pixel from another.**
+  `--font-size-caption` and `--font-size-helper` were both 10px and differed only in which part of the
+  stylesheet used them; they are one token, `--font-size-small`. `--font-size-headline` (15px) sat one
+  pixel from `--font-size-title` (16px) — two sizes that close read as an accident rather than a
+  decision — and is gone, its three users now either the 20px document title or the 16px section size.
+  `--font-size-code` (11px) is new and monospace-only: a mono face at the body's 12px reads larger than
+  the prose beside it, which is the one reason an 11 belongs in the sheet.
+
+- **The import button is gone.** Auto-import replaced it: choose a Collection and a Group, and a
+  recorded config loads itself with a line under Group saying so. The button only ever appeared when
+  it had something to offer, which meant working out whether it *would* appear was a question you
+  could not answer by looking — and it appeared a beat late after a run, which is now moot rather than
+  fixed. Nothing else about loading changed: it still writes into the editor only, and your file is
+  unchanged until you run.
+
 - **`distributeToMaxColumns` is gone from Grid.** It could make `col-6` mean "the same fraction of the
   grid as 6 of 12" rather than "six columns", by rounding the span for modes with fewer columns. The
   rounding made tokens collide: on an eight-column mode `col-1` and `col-2` were both one column, and
@@ -2044,6 +1909,82 @@ deleting variable modes they did not recognise.
 - 42 scripts that never shipped. Everything under `scripts/` now ships, apart from `_TESTS/`.
 
 ### Developer
+
+- **`npm run dev` no longer drops the main-require shim.** `tsc --watch` rewrote `dist/code.js`
+  without it, so the plugin failed to open with "`__codefigMainRequire` is not defined" until some
+  script file changed. A watcher on `dist/code.js` now re-applies it (`build-scripts.js --shim-only`,
+  a no-op when nothing changed), and `tsc --watch` keeps its output instead of clearing the screen.
+- **Validation runs in about 5 seconds instead of 50.** `validateResolvedCalls` re-stripped comments
+  from the whole resolved script on every regex match. This also speeds up `build:dev`, `dev` and
+  `npm test`.
+- **`_tests-move-integrity.js` imports the Foundation functions it calls**, which clears the nine
+  validation errors that failed `build:production`.
+
+- Updated live matching and Colors expectations to current behavior. Foundation-maintenance
+  smoke tests are awaited before reporting completion. Test suites hold the run open during async
+  Figma reads, preventing the idle timer from returning a partial result as a completed run.
+- Added Move and storage integrity regressions, including a real Figma effect-binding check.
+
+- **Plan 32 step 6 (DSF import trim).** Spacing / Corner radius import lists 37→13 names; Colors
+  65→19; Typography 40→35 (Grid already minimal). Package sibling extraction pulls the rest.
+  `extractFunctions` now increments depth only on cross-file hops so Bezier’s tree survives
+  Linear Ramp → Scale Models → Bezier.
+- **Plan 29 (field identity, in-rows).** `@rows` tabpanels carry `data-section`; curves and
+  cells carry `data-key` / `data-type` (and `data-group` where applicable), so panel CSS can
+  select `[data-section="hue"] [data-type="curve"]`.
+- **Plan 30 (scoped stylesheets).** Opening a script injects a scoped
+  `<style data-style-owner>` from `@STYLE_START` on **imported libraries** (shared components)
+  plus the open script (overrides), scoped on the Configuration form **and** the side Preview.
+  Design System Foundations teach the three tiers: CodeFig `ui.css`, library sheets next to
+  markup (`@Color Ramp`, `@Linear Ramp`, `@Type Scale`, grid/suggestions on `@Foundation`),
+  and optional script-only sheets. `package.css` is not the product path.
+- **Plan 32 (packages, wiring).** Build stamps `packageId` / `packageVisibility` on Design
+  System Foundations (5 scripts + 9 libraries). Package libraries stay listed in CodeFig
+  Libraries (openable as examples); `@import` resolution still passes `packageId` for sibling
+  extraction.
+
+- **`window.codefigProbe(tag, data)`, a generic, opt-in trace for chasing a UI discrepancy live.**
+  Off unless `window.CODEFIG_PROBE` is set (on for now, while the Colors curve editor investigation
+  below is active); every call is one `[PROBE][tag]` JSON line in `figma-console.log`. Added because
+  several rounds of screenshot-and-report on the curve editor's overshoot/middle-point bugs cost more
+  turns than the bugs themselves — a screenshot shows the symptom, never the sequence of internal
+  state that produced it. Four call sites tagged `// PROBE:` — `curve:setPoints` and `curve:drag`/
+  `curve:midInput` in `renderer.js`'s curve control, `preview:request`/`preview:result` around the
+  config preview's own sequence-numbered round trip in `ui.html` — are what exists today; the utility
+  itself is generic, so another panel with the same kind of "looks wrong and is hard to catch
+  mid-change" problem can call it directly. Meant to leave cleanly: delete the `codefigProbe`
+  definition and every `// PROBE:`-tagged line once whatever it was chasing is confirmed fixed.
+- **`src/import-resolver.js` can resolve and extract across a package's members, opt-in.**
+  `findScript`'s new third argument and `extractFunctions`'s new fifth argument are both no-ops
+  when omitted — every existing script keeps resolving exactly as before, confirmed by the full
+  pre-existing `tests/import-resolver.test.js` suite passing unedited. `build-package-manifest.js`
+  compiles a package's manifest from its scripts and an explicit library list, verified against
+  this repo's real Design System Foundations scripts. See `.plans/32-packages.md` — no shipped
+  script has a package id yet, so none of this changes anything a user can see.
+- **`src/config-ui/parser.js`'s `parse()` accepts an optional second argument, `panelSpecText`.**
+  When given, the config form is read from a `@PANEL_START` JSON block instead of the one-line
+  annotation syntax — see `.plans/31-panel-spec-json.md`. `src/ui.html` now looks for this region
+  alongside `@CONFIG_START` at every real call site and passes it through; a script without one
+  (every shipped script except Colors and Typography) takes exactly the old path. **Colors and
+  Typography have migrated** — their specs live in `@PANEL_START`, `@CONFIG_START` holds only
+  values, and the panel renders, edits and saves identically to before (Colors proved twice: a DOM
+  diff against the old parser's own render, and a live Figma session against a throwaway copy of
+  the script, before the real one was touched; Typography against its pre-migration rows dump). A
+  paragraph in the new format states which neighbouring field it explains
+  (`attachTo: "next" | "previous"`, required, no default) — the one thing a blank comment line
+  could say that JSON otherwise couldn't, and the gap a DOM-level render comparison
+  (`npm run devtools:dom-diff-panel`, new) found before anything shipped. Spacing, Corner Radius
+  and Grid stay on the old path for now.
+- **A CSS scoping module (`src/style-scoper.js`) is inlined into the build, unused.** Rewrites a
+  stylesheet's selectors under an owner attribute, namespaces `@keyframes`, and rejects any
+  non-`data:` `url()` and `position: fixed` outright rather than stripping them silently. Nothing
+  calls it yet — it is groundwork for letting a script own its panel's styling, not a user-facing
+  change; see `.plans/30-scoped-stylesheets.md` and `DEFERRED.md`.
+- **A plain config field's DOM wrapper carries `data-key`, `data-type` and `data-section`; the form
+  root carries `data-package`.** Additive — no class changed, no user script's rendering changes —
+  so a stylesheet can finally address "everything in the General section" or "this one field"
+  without editing `renderer.js`. Does not yet reach inside an `@rows` table (a mode's cells, an
+  anchor group); see `DEFERRED.md`.
 
 - **`@rows`** — a repeatable-group control for a config field holding a list of objects. Add and
   remove rows; `@tabs` renders one tab per row using its `name` instead of stacking them, which is a
