@@ -44,6 +44,8 @@ function stripUndefinedDeep(value) {
   if (value && typeof value === 'object') {
     const out = {};
     Object.keys(value).forEach((k) => {
+      // Number bounds (min / max) postdate the pinned shape; their own test is in config-ui-bounds.test.js.
+      if (k === 'min' || k === 'max') return;
       if (value[k] !== undefined) out[k] = stripUndefinedDeep(value[k]);
     });
     return out;

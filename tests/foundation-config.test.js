@@ -397,12 +397,12 @@ test('the font weights come back as the list the block holds, not the map a run 
   }).config;
   assert.deepEqual(toDomainConfig(promoted, 'typography').fontWeights, [400, 600]);
 
-  // A name that is not its own value is `number:Name` in the list field: `{ Regular: 450 }` is what
-  // a run makes of `450:Regular`, and that is what has to come back so the field can show it.
+  // A name that is not its own value is `Name:value` in the list field: `{ Regular: 450 }` is what
+  // a run makes of `Regular:450`, and that is what has to come back so the field can show it.
   const named = normaliseConfig({
     fontScale: ['Text-Small'], fontWeights: { Regular: 400, Semibold: 600 }
   }).config;
-  assert.deepEqual(toDomainConfig(named, 'typography').fontWeights, ['400:Regular', '600:Semibold']);
+  assert.deepEqual(toDomainConfig(named, 'typography').fontWeights, ['Regular:400', 'Semibold:600']);
 
   // A style name promotes to a key equal to itself, so it demotes back too.
   const styles = normaliseConfig({
@@ -1031,4 +1031,13 @@ test('an address holding nothing loads nothing', async () => {
   const found = await ctx.foundationAutoImport('Responsive System', 'Typography', 'typography');
   assert.equal(found.source, 'none');
   assert.equal(found.config, null, 'an empty answer, not an empty set');
+});
+
+test('colors: opacityVariations survives the manifest round trip', () => {
+  const result = normaliseConfig({
+    collectionName: 'Colors', group: 'lime', colorModel: 'hsl', opacityVariations: '5, 10, 20',
+    modes: [{ name: 'Lime' }]
+  });
+  assert.equal(toDomainConfig(result.config, 'colors').opacityVariations, '5, 10, 20');
+  assert.ok(!codes(result).includes('config-unknown-key'));
 });

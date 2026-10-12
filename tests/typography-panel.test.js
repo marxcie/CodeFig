@@ -342,6 +342,20 @@ test('the weights list becomes the map the styles are named from', () => {
   assert.equal(variables['Typography/font-family/primary'].type, 'STRING');
 });
 
+test('Regular:A Regular names the style Regular and stores the font style', () => {
+  const typed = { fontScale: ['a'], fontWeights: 'Regular:A Regular, Semibold:B SemiBold, Bold:700', modes: [] };
+  T.ensureCompatTypographyConfig(typed);
+  assert.deepEqual(typed.fontWeights, { Regular: 'A Regular', Semibold: 'B SemiBold', Bold: 700 });
+
+  const config = starterConfig();
+  config.fontScale = ['a'];
+  config.fontWeights = ['Regular:A Regular'];
+  T.ensureCompatTypographyConfig(config);
+  const variables = T.generateTypographyVariables(config);
+  assert.equal(variables['Typography/font-style/Regular'].type, 'STRING');
+  assert.equal(variables['Typography/font-style/Regular'].values.Value, 'A Regular');
+});
+
 test('450:Regular writes the number and names the style Regular', () => {
   const typed = { fontScale: ['a'], fontWeights: ['450:Regular', '550:Semibold'], modes: [] };
   T.ensureCompatTypographyConfig(typed);

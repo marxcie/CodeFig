@@ -212,3 +212,11 @@ test('the section is no longer marked unwired', () => {
   const slot = renderer.slice(renderer.indexOf('data-suggestions-slot'));
   assert.doesNotMatch(slot.slice(0, 400), /data-unwired/);
 });
+
+test('a mode name that matches nothing gets no suggestions', () => {
+  // Falling back to the first mode drew Desktop-lg's pairs under another tab.
+  const answer = F.gridSuggestions(MODES, 'no-such-mode', 6);
+  assert.equal(answer.ok, false);
+  assert.equal(answer.shown.length, 0);
+  assert.equal(F.gridSuggestionsHtml({ modes: MODES }, 'grid', 'no-such-mode'), '');
+});

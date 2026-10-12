@@ -157,3 +157,22 @@ test('the preview follows the mode it is asked for', () => {
 test('a label cannot close a tag', () => {
   assert.equal(lib.foundationEscapeHtml('<img src=x>'), '&lt;img src=x&gt;');
 });
+
+test('columns that do not fit say so instead of drawing negative widths', () => {
+  const html = lib.gridPreviewHtml(
+    { collectionName: 'C', modes: [{ name: 'mobile', containerWidth: 375, columns: 16, gap: 40, padding: 24 }] },
+    'grid', 'mobile'
+  );
+  assert.ok(html.indexOf('grid-preview-note') !== -1, 'a note, not a diagram');
+  assert.ok(html.indexOf('grid-preview-col') === -1, 'no columns drawn');
+  assert.ok(/16 columns/.test(html) && /375/.test(html));
+});
+
+test('columns that fit still draw', () => {
+  const html = lib.gridPreviewHtml(
+    { collectionName: 'C', modes: [{ name: 'mobile', containerWidth: 375, columns: 16, gap: 15, padding: 15 }] },
+    'grid', 'mobile'
+  );
+  assert.ok(html.indexOf('grid-preview-col') !== -1);
+  assert.ok(html.indexOf('grid-preview-note') === -1);
+});

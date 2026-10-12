@@ -62,15 +62,25 @@ function variableValueEquals(existing, modeId, newValue) {
   if (typeof newValue === 'number' && typeof current === 'number') return current === newValue;
   if (typeof newValue === 'string' && typeof current === 'string') return current === newValue;
   if (typeof newValue === 'boolean' && typeof current === 'boolean') return current === newValue;
-  // COLOR writes pass `{ r, g, b }` (0..1). Without this every run rewrote every swatch even when
-  // the hex had not moved — Colors' update-in-place path depends on the skip.
+  // A colour linked to another colour variable at an opacity reads back as `{ color: alias, opacity }`.
+  if (newValue && typeof newValue === 'object' && newValue.color && newValue.color.type === 'VARIABLE_ALIAS') {
+    return !!(typeof current === 'object' && current.color && current.color.type === 'VARIABLE_ALIAS' &&
+      current.color.id === newValue.color.id &&
+      typeof current.opacity === 'number' && Math.abs(current.opacity - newValue.opacity) < 0.01);
+  }
+  // COLOR writes pass `{ r, g, b }` or `{ r, g, b, a }` (0..1). Without this every run rewrote
+  // every swatch even when the hex had not moved — Colors' update-in-place path depends on the skip.
+  // Alpha must count: opacity variants differ only in `a`, and omitting it left them stuck forever.
   if (newValue && typeof newValue === 'object' && typeof current === 'object' &&
       current.type !== 'VARIABLE_ALIAS' &&
       typeof newValue.r === 'number' && typeof current.r === 'number') {
     var eps = 1 / 512;
+    var currentA = typeof current.a === 'number' ? current.a : 1;
+    var newA = typeof newValue.a === 'number' ? newValue.a : 1;
     return Math.abs(current.r - newValue.r) < eps &&
       Math.abs(current.g - newValue.g) < eps &&
-      Math.abs(current.b - newValue.b) < eps;
+      Math.abs(current.b - newValue.b) < eps &&
+      Math.abs(currentA - newA) < eps;
   }
   return false;
 }
@@ -123,7 +133,7 @@ async function getVariableValue(collection, variableName, modeId) {
 async function setVariableValue(collection, variableName, modeId, value) {
   var variable = await getVariable(collection, variableName);
   if (variable) {
-    variable.setValueForMode(modeId, value);
+    await setVariableValueLoadingFonts(variable, modeId, value);
     return true;
   }
   return false;
@@ -889,6 +899,39 @@ function applyModeIntents(collection, intents) {
 /**
  * Create or update a variable in a collection
  */
+/**
+ * Writes one variable value, loading any font Figma reports as unloaded and retrying.
+ *
+ * Changing a font-weight, font-family or line-height value re-resolves every text style bound to
+ * it, and Figma throws until each font that resolves to is loaded. The error names them, so the
+ * loop reads the names out of it rather than guessing which family and weights are in play.
+ */
+async function setVariableValueLoadingFonts(variable, modeId, value) {
+  var requested = {};
+  for (var attempt = 0; attempt < 8; attempt++) {
+    try {
+      variable.setValueForMode(modeId, value);
+      return;
+    } catch (e) {
+      var message = e && e.message ? String(e.message) : '';
+      var fontRe = /loadFontAsync\(\{\s*family:\s*"([^"]+)",\s*style:\s*"([^"]+)"\s*\}\)/g;
+      var found = fontRe.exec(message);
+      var loadedAny = false;
+      while (found) {
+        var key = found[1] + '|' + found[2];
+        if (!requested[key]) {
+          requested[key] = true;
+          await figma.loadFontAsync({ family: found[1], style: found[2] });
+          loadedAny = true;
+        }
+        found = fontRe.exec(message);
+      }
+      if (!loadedAny) throw e;
+    }
+  }
+  variable.setValueForMode(modeId, value);
+}
+
 async function createOrUpdateVariable(collection, name, config, modes) {
   // Handle both old signature (type, values) and new signature (config, modes)
   var actualConfig, actualModes;
@@ -955,12 +998,14 @@ async function createOrUpdateVariable(collection, name, config, modes) {
   // Set values for each mode
   var firstWrittenValue = null;
   var wroteMode = {};
-  actualModes.forEach(function(modeName) {
+  var failedModes = [];
+  for (var modeIndex = 0; modeIndex < actualModes.length; modeIndex++) {
+    var modeName = actualModes[modeIndex];
     try {
       var mode = collection.modes.find(function(m) { return m.name === modeName; });
       if (!mode) {
         console.error('Mode not found: ' + modeName);
-        return;
+        continue;
       }
       
       if (actualConfig.values && actualConfig.values[modeName] !== undefined) {
@@ -969,36 +1014,49 @@ async function createOrUpdateVariable(collection, name, config, modes) {
         // Validate value
         if (value === null || value === undefined) {
           console.error('Invalid value for mode ' + modeName + ': ' + value);
-          return;
+          continue;
         }
         
+        // An opacity variant links to its base colour variable instead of holding a copy of its hex.
+        // Falls back to the plain RGBA when the base is missing, or is itself translucent (Figma
+        // ignores the opacity on a translucent source).
+        if (actualConfig.type === 'COLOR' && actualConfig.opacityOf && typeof actualConfig.opacity === 'number') {
+          var linkBase = await getVariable(collection, actualConfig.opacityOf);
+          var baseCell = linkBase && linkBase.valuesByMode ? linkBase.valuesByMode[mode.modeId] : undefined;
+          var baseOpaque = baseCell && (baseCell.type === 'VARIABLE_ALIAS' || typeof baseCell.a !== 'number' || baseCell.a >= 1);
+          if (linkBase && baseOpaque) {
+            value = { color: figma.variables.createVariableAlias(linkBase), opacity: actualConfig.opacity };
+          }
+        }
+
         // Convert color strings to RGB objects
         if (actualConfig.type === 'COLOR' && typeof value === 'string') {
           value = hexToRgb(value);
           if (!value) {
             console.error('Invalid color value for mode ' + modeName + ': ' + actualConfig.values[modeName]);
-            return;
+            continue;
           }
         }
         
         // Validate number values
         if (actualConfig.type === 'FLOAT' && (typeof value !== 'number' || isNaN(value))) {
           console.error('Invalid FLOAT value for mode ' + modeName + ': ' + value + ' (type: ' + typeof value + ')');
-          return;
+          continue;
         }
 
         if (!isNew && variableValueEquals(existing, mode.modeId, value)) {
           wroteMode[modeName] = true;
           if (firstWrittenValue === null && typeof value === 'number') firstWrittenValue = value;
-          return;
+          continue;
         }
         
-        existing.setValueForMode(mode.modeId, value);
+        await setVariableValueLoadingFonts(existing, mode.modeId, value);
         wroteMode[modeName] = true;
         if (firstWrittenValue === null && typeof value === 'number') firstWrittenValue = value;
-        console.log('  ' + modeName + ': ' + (actualConfig.type === 'COLOR' ? rgbToHex(value.r, value.g, value.b) : value));
+        console.log('  ' + modeName + ': ' + (actualConfig.type === 'COLOR' && typeof value.r === 'number' ? rgbToHex(value.r, value.g, value.b) : (actualConfig.type === 'COLOR' ? 'linked at ' + value.opacity + '%' : value)));
       }
     } catch (e) {
+      failedModes.push(modeName);
       console.error('Error setting value for mode ' + modeName + ':', e);
       console.error('Error details:', {
         message: e.message,
@@ -1009,7 +1067,7 @@ async function createOrUpdateVariable(collection, name, config, modes) {
         type: actualConfig.type
       });
     }
-  });
+  }
 
   // New set / incomplete sibling modes: copy the first written value into modes that are
   // still empty or 0. Skipped panel modes (base left at 0) never enter `values`, so Figma
@@ -1021,7 +1079,7 @@ async function createOrUpdateVariable(collection, name, config, modes) {
       var cur = existing.valuesByMode ? existing.valuesByMode[sibling.modeId] : undefined;
       if (cur === undefined || cur === null || cur === 0) {
         try {
-          existing.setValueForMode(sibling.modeId, firstWrittenValue);
+          await setVariableValueLoadingFonts(existing, sibling.modeId, firstWrittenValue);
           console.log('  ' + sibling.name + ': ' + firstWrittenValue + ' (from first mode)');
         } catch (seedErr) {
           console.warn('Could not seed mode ' + sibling.name + ': ' +
@@ -1031,6 +1089,12 @@ async function createOrUpdateVariable(collection, name, config, modes) {
     }
   }
   
+  // A mode that could not be written leaves the variable half-updated; say so rather than counting it as updated.
+  if (failedModes.length > 0) {
+    console.warn('Not fully written: ' + name + ' (' + failedModes.join(', ') + ')');
+    return 'skipped';
+  }
+
   return action;
 }
 
@@ -1098,6 +1162,10 @@ async function processVariables(collection, variables, configValues, modes) {
       }
       if (varConfig.description && typeof varConfig.description === 'string') {
         calculatedConfig.description = varConfig.description;
+      }
+      if (varConfig.opacityOf && typeof varConfig.opacity === 'number') {
+        calculatedConfig.opacityOf = varConfig.opacityOf;
+        calculatedConfig.opacity = varConfig.opacity;
       }
 
       var result = await createOrUpdateVariable(collection, varName, calculatedConfig, modes);

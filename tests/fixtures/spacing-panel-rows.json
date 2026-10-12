@@ -70,7 +70,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "boolean",
-    "helper": "Builds a Spacing overview on the canvas: one row per token, one column per mode, with variable-bound width bars.",
+    "helper": "Builds a Spacing overview under Design System Foundations: one row per token, one column per mode. One section per Collection + Group; the same address overwrites.",
     "showWhenRules": [
       {
         "field": "collectionName",

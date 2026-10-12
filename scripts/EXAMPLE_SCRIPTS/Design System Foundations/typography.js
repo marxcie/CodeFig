@@ -37,7 +37,7 @@
 // | **Group within collection**<br>`group` | Prefix used to group variables. Empty means the collection root. |
 // | **Tokens**<br>`fontScale` | Token names from smallest to largest. A series works: `heading-{1,6}`, and it can mix with names you write. |
 // | **Font family**<br>`fontFamily` | Font family name, e.g. `Inter`. |
-// | **Font weights**<br>`fontWeights` | A number is a weight (`400`). A word is a Figma style name, e.g. `Semi Bold`. `450:Regular` writes 450 and names the style Regular. |
+// | **Font weights**<br>`fontWeights` | A number is a weight (`400`). A word is a Figma style name, e.g. `Semi Bold`. `Name:value` keeps a different name in styles and variables, e.g. `Regular:400` or `Regular:A Regular`. |
 // | **Create and update text styles**<br>`createStyles` | When on, creates and updates text styles bound to the variables. On by default. |
 // | **Style naming**<br>`styleNaming` | Pattern for each text style. Defaults to `{$fontScale}/{$fontWeight}`. A prefix puts them in a folder, e.g. `text/{$fontScale}/{$fontWeight}`. |
 // | **Text wrap style**<br>`textWrapStyle` | How text styles wrap multi-line text: Auto, Balance, or Pretty. |
@@ -109,11 +109,15 @@ function typographyWeightIsNumber(text) {
 }
 
 /**
- * One Font weights term: a number, a Figma style name, or `450:Regular`.
+ * One Font weights term. Either a bare value, or `Name:value`.
  *
- * The map key is what styles and variable names show. The value is what Figma stores — a number is a
- * FONT_WEIGHT axis, a word is a FONT_STYLE name. `450:Regular` (or `Regular:450`) is the variable-font
- * case: write 450, name the style Regular.
+ * Bare, a number is a weight (`400`) and a word is a Figma style name (`Semi Bold`), and the text is
+ * also the name used in style and variable names. With a colon, the left side is the name that style
+ * and variable names show and the right side is what Figma stores. A number writes a FONT_WEIGHT axis
+ * and a word writes a FONT_STYLE name, so `Regular:400` and `Regular:A Regular` both name the style
+ * Regular.
+ *
+ * `450:Regular` (a number, then a word) is the older spelling of `Regular:450` and still reads that way.
  */
 function typographyParseWeightEntry(entry) {
   if (entry === null || entry === undefined || entry === '') return null;
@@ -124,17 +128,11 @@ function typographyParseWeightEntry(entry) {
     var left = text.slice(0, colon).trim();
     var right = text.slice(colon + 1).trim();
     if (left && right) {
-      if (left === right) {
-        return typographyWeightIsNumber(left)
-          ? { name: left, value: Number(left) }
-          : { name: left, value: left };
-      }
+      var value = typographyWeightIsNumber(right) ? Number(right) : right;
       if (typographyWeightIsNumber(left) && !typographyWeightIsNumber(right)) {
         return { name: right, value: Number(left) };
       }
-      if (typographyWeightIsNumber(right) && !typographyWeightIsNumber(left)) {
-        return { name: left, value: Number(right) };
-      }
+      return { name: left, value: value };
     }
   }
   if (typographyWeightIsNumber(text)) return { name: text, value: Number(text) };
@@ -150,7 +148,8 @@ function typographyParseWeightEntry(entry) {
  * generator learning a second shape: `[400, "Semi Bold"]` becomes
  * `{ "400": 400, "Semi Bold": "Semi Bold" }`, and the style path reads `Typography/Heading-1/400`.
  *
- * `450:Regular` becomes `{ Regular: 450 }`, so the variable holds 450 and the style is named Regular.
+ * `Regular:450` becomes `{ Regular: 450 }` and `Regular:A Regular` becomes `{ Regular: "A Regular" }`, so the
+ * variable holds the value and the style is named Regular.
  *
  * **A string is read as that same list.** Every other shape here is enumerated with `Object.keys`, and
  * a string enumerates as its character *indices* — so a quoted value in the config block generated a
@@ -391,7 +390,7 @@ var __codefigPanel = {
         placeholder: "eg.: Inter Tight" },
       { key: "fontWeights", type: "list", label: "Font weights",
         placeholder: "400, 600",
-        helper: "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold. For a variable font, 450:Regular writes 450 and names the style Regular." },
+        helper: "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold. To name a style differently from its value, write Name:value, e.g. Regular:400 or Regular:A Regular." },
       { key: "createStyles", type: "boolean", label: "Create and update text styles" },
       { key: "styleNaming", type: "string", label: "Style naming",
         placeholder: "eg.: text/{$fontScale}/{$fontWeight}",
@@ -418,13 +417,13 @@ var __codefigPanel = {
             { key: "curve", type: "curve", label: "Scale", growth: "ratio",
               showWhen: { scaleType: "bezier" },
               helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
-            { key: "step", type: "number", label: "Step",
+            { key: "step", type: "number", label: "Step", min: 0,
               showWhen: { scaleType: ["metric", "fibonacci"] },
               helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
-            { key: "mod", type: "number", label: "Every N steps",
+            { key: "mod", type: "number", label: "Every N steps", min: 1,
               showWhen: { scaleType: "metric" },
               helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
-            { key: "base", type: "number", label: "Base unit" },
+            { key: "base", type: "number", label: "Base unit", min: 0 },
             { key: "letterSpacing", type: "group", label: "Letter spacing",
               helper: "Percent of font size (as Figma shows it). Interpolated between the two ends, then written in pixels.",
               fields: [
@@ -437,7 +436,7 @@ var __codefigPanel = {
                 { key: "base", type: "number", label: "Base", unit: "%" },
                 { key: "max", type: "number", label: "Largest", unit: "%" }
               ] },
-            { key: "roundTo", type: "number", label: "Round numbers to" }
+            { key: "roundTo", type: "number", label: "Round numbers to", min: 0 }
           ] }
       ]},
     { type: "section", id: "overview", blocks: [
@@ -855,58 +854,6 @@ function hasFontStyleScope(variable) {
   return variable.scopes[0] === 'FONT_STYLE';
 }
 
-/**
- * Log typography weight variables that conflict with the current config.
- * Does not remove variables — remove() can crash Figma when bindings are resolved (editScope).
- */
-async function logConflictingTypographyWeightVariables(collection, config, collectionVariables) {
-  var data = config.config || config;
-  if (!data || !data.fontWeights || typeof data.fontWeights !== 'object') return;
-
-  var prefix = namePrefix(resolveGroup(config));
-  var variables = collectionVariables || await getCollectionVariables(collection);
-  console.log('Checking typography weight variables for conflicts...');
-
-  Object.keys(data.fontWeights).forEach(function(weightName) {
-    var weightValue = data.fontWeights[weightName];
-    var isNumeric = typeof weightValue === 'number';
-
-    if (isNumeric) {
-      var styleVarName = prefix + 'font-style/' + weightName;
-      var styleVar = variables.find(function(v) { return v && v.name === styleVarName; });
-      if (styleVar && !styleVar.remote) {
-        console.warn('Conflicting font-style variable (numeric weight now used): ' + styleVarName + ' — delete manually in Variables panel if needed.');
-      }
-
-      var weightVarName = prefix + 'font-weight/' + weightName;
-      var weightVar = variables.find(function(v) { return v && v.name === weightVarName; });
-      if (weightVar && !weightVar.remote &&
-          (weightVar.resolvedType !== 'FLOAT' || !hasFontWeightScope(weightVar))) {
-        console.warn(
-          'Font-weight variable needs manual fix (expected FLOAT + FONT_WEIGHT scope): ' + weightVarName +
-          ' (type: ' + weightVar.resolvedType + ', scopes: [' + (weightVar.scopes || []).join(', ') + '])'
-        );
-      }
-    } else {
-      var obsoleteWeightName = prefix + 'font-weight/' + weightName;
-      var obsoleteWeight = variables.find(function(v) { return v && v.name === obsoleteWeightName; });
-      if (obsoleteWeight && !obsoleteWeight.remote) {
-        console.warn('Conflicting font-weight variable (string style now used): ' + obsoleteWeightName + ' — delete manually in Variables panel if needed.');
-      }
-
-      var styleVarName = prefix + 'font-style/' + weightName;
-      var styleVar = variables.find(function(v) { return v && v.name === styleVarName; });
-      if (styleVar && !styleVar.remote &&
-          (styleVar.resolvedType !== 'STRING' || !hasFontStyleScope(styleVar))) {
-        console.warn(
-          'Font-style variable needs manual fix (expected STRING + FONT_STYLE scope): ' + styleVarName +
-          ' (type: ' + styleVar.resolvedType + ', scopes: [' + (styleVar.scopes || []).join(', ') + '])'
-        );
-      }
-    }
-  });
-}
-
 async function createOrUpdateCollection(config) {
   var data = config.config || config;
   ensureCompatTypographyConfig(data);
@@ -947,7 +894,6 @@ async function createOrUpdateCollection(config) {
   setupModes(collection, modes);
 
   var collectionVariables = await getCollectionVariables(collection);
-  await logConflictingTypographyWeightVariables(collection, config, collectionVariables);
 
   // Identity before names, so a renamed group moves this set rather than duplicating it. Typography
   // writes three variables per token, and duplicating it means three orphans per token.
@@ -956,6 +902,8 @@ async function createOrUpdateCollection(config) {
   var setId = (await findFoundationSet(collection, 'typography', groupName)).id || '';
   var aligned = await alignStampedTokens(collection, 'typography', groupName, names, setId);
   describeStampAlignment(aligned).forEach(function(line) { console.log(line); });
+
+  await preloadTypographyFonts(data);
 
   var stats = await processVariables(collection, config.variables, config.config, modes);
 
@@ -998,6 +946,7 @@ async function createOrUpdateCollection(config) {
   }
 
   async function finishTypographySummary(styleStats) {
+    await retireStaleWeightVariables(collection, config);
     var manifest = recordTypographySet();
     // After the manifest: it mints the set id, and the stamps have to carry the same one.
     var stamped = await stampGeneratedTokens(
@@ -1024,6 +973,95 @@ async function createOrUpdateCollection(config) {
   return Promise.resolve(finishTypographySummary(styleStats));
 }
 
+/**
+ * Removes this group's font-weight and font-style variables that the current Font weights no longer
+ * call for. A number keeps only font-weight/<name> and a name keeps only font-style/<name>, so changing
+ * an entry's type retires the variable of the other kind.
+ *
+ * Text styles are unbound first because removing a variable that styles still resolve through can
+ * crash Figma. Only variables in this group's own font-weight/ and font-style/ folders are touched, and
+ * published (remote) ones never are.
+ */
+async function retireStaleWeightVariables(collection, config) {
+  var data = config.config || config;
+  var weights = (data && data.fontWeights && typeof data.fontWeights === 'object') ? data.fontWeights : null;
+  if (!weights) return;
+
+  var prefix = namePrefix(resolveGroup(config));
+  var keep = {};
+  Object.keys(weights).forEach(function (name) {
+    keep[prefix + (typeof weights[name] === 'number' ? 'font-weight/' : 'font-style/') + name] = true;
+  });
+
+  var variables = await getCollectionVariables(collection);
+  var stale = variables.filter(function (v) {
+    if (!v || v.remote) return false;
+    var inFolder = v.name.indexOf(prefix + 'font-weight/') === 0 || v.name.indexOf(prefix + 'font-style/') === 0;
+    return inFolder && !keep[v.name];
+  });
+  if (!stale.length) return;
+
+  var staleIds = {};
+  stale.forEach(function (v) { staleIds[v.id] = true; });
+  var styles = await figma.getLocalTextStylesAsync();
+  styles.forEach(function (style) {
+    ['fontWeight', 'fontStyle'].forEach(function (field) {
+      var alias = style.boundVariables && style.boundVariables[field];
+      if (alias && staleIds[alias.id]) {
+        try { style.setBoundVariable(field, null); } catch (e) { /* already unbound */ }
+      }
+    });
+  });
+
+  stale.forEach(function (v) {
+    var name = v.name;
+    try {
+      v.remove();
+      console.log('Removed unused weight variable: ' + name);
+    } catch (e) {
+      console.warn('Could not remove ' + name + ': ' + (e && e.message ? e.message : e));
+    }
+  });
+}
+
+/**
+ * Loads every font Figma may need while the variables are written.
+ *
+ * Changing a bound font-family or font-weight variable re-resolves each text style that uses it, and
+ * Figma refuses unless that style's current font is loaded. That covers the styles already in the file,
+ * which hold the old weight, and the family with each configured weight, since a name such as Semibold
+ * is a style on a static font and not an axis value.
+ */
+async function preloadTypographyFonts(data) {
+  var fonts = {};
+  function want(family, style) {
+    if (family && style) fonts[family + '\u0000' + style] = { family: family, style: style };
+  }
+
+  var family = data && data.fontFamily ? String(data.fontFamily).trim() : '';
+  var weights = (data && data.fontWeights && typeof data.fontWeights === 'object') ? data.fontWeights : {};
+  Object.keys(weights).forEach(function (name) {
+    var value = weights[name];
+    if (typeof value === 'string') want(family, value);
+    want(family, name);
+  });
+
+  var styles = await figma.getLocalTextStylesAsync();
+  styles.forEach(function (style) {
+    var fontName = style.fontName;
+    if (fontName && fontName !== figma.mixed) want(fontName.family, fontName.style);
+  });
+
+  var keys = Object.keys(fonts);
+  for (var i = 0; i < keys.length; i++) {
+    try {
+      await figma.loadFontAsync(fonts[keys[i]]);
+    } catch (e) {
+      // A guessed pair that the family does not have. Only the pairs actually used need to load.
+    }
+  }
+}
+
 async function loadFontForTextStyle(textStyle) {
   var fontName = textStyle && textStyle.fontName;
   if (!fontName || fontName === figma.mixed) return false;
@@ -1033,6 +1071,16 @@ async function loadFontForTextStyle(textStyle) {
   } catch (e) {
     return false;
   }
+}
+
+/**
+ * A style name with the spacing around its slashes removed, so `a / b / c` and `a/b/c` are one name.
+ *
+ * Figma folds both into the same folder, and Duplicate styles writes the spaced form, so a file can
+ * hold either. Matching exactly treated the spaced styles as missing and created a second set beside them.
+ */
+function typographyStyleNameKey(name) {
+  return String(name || '').split('/').map(function (part) { return part.trim(); }).join('/');
 }
 
 // Function to create or update text styles using the variables
@@ -1052,8 +1100,11 @@ function createOrUpdateTextStyles(config, collection) {
           .replace('{$fontScale}', scaleName)
           .replace('{$fontWeight}', weightName);
 
+        var wantKey = typographyStyleNameKey(styleName);
         var existingStyle = existingStyles.find(function(style) {
           return style.name === styleName;
+        }) || existingStyles.find(function(style) {
+          return typographyStyleNameKey(style.name) === wantKey;
         });
 
         var textStyle;
@@ -1094,14 +1145,26 @@ function createOrUpdateTextStyles(config, collection) {
           textStyle.setBoundVariable('letterSpacing', letterSpacingVar);
         }
 
-        // Bind font weight (numeric) or font style (string) variable
-        if (fontWeightVar) {
-          textStyle.setBoundVariable('fontWeight', fontWeightVar);
-          console.log('Numeric font weight bound for: ' + styleName);
+        // A number binds the weight axis and a name binds the font style. The entry's type decides,
+        // so a leftover variable of the other kind is never picked up.
+        var weightEntry = config.config.fontWeights[weightName];
+        if (typeof weightEntry === 'number') {
+          if (fontWeightVar) {
+            try { textStyle.setBoundVariable('fontStyle', null); } catch (e) { /* not bound */ }
+            textStyle.setBoundVariable('fontWeight', fontWeightVar);
+            console.log('Numeric font weight bound for: ' + styleName);
+          }
         } else if (fontStyleVar) {
-          // For string-based font styles, we'll set the font name directly
-          var fontStyleValue = config.config.fontWeights[weightName];
-          console.log('Font style variable found for ' + styleName + ': ' + fontStyleValue);
+          try {
+            await figma.loadFontAsync({ family: config.config.fontFamily, style: weightEntry });
+            textStyle.fontName = { family: config.config.fontFamily, style: weightEntry };
+            try { textStyle.setBoundVariable('fontWeight', null); } catch (e) { /* not bound */ }
+            textStyle.setBoundVariable('fontStyle', fontStyleVar);
+            console.log('Font style bound for ' + styleName + ': ' + weightEntry);
+          } catch (styleError) {
+            console.warn('Could not bind font style for ' + styleName + ': ' + weightEntry +
+              ' is not a style of ' + config.config.fontFamily + '.');
+          }
         }
 
         if (fontFamilyVar) {

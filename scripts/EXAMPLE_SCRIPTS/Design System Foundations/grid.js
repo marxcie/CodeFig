@@ -426,7 +426,7 @@ var __codefigPanel = {
       showWhen: { collectionName: "*" },
       blocks: [
         { type: "heading", text: "Mode settings" },
-        { key: "extensionColumns", type: "number", label: "Extra columns",
+        { key: "extensionColumns", type: "number", label: "Extra columns", min: 0,
           helper: "Extra column variables past the main grid, for layouts that need to overshoot." },
         { key: "extraValues", type: "list", label: "Extra values",
           placeholder: "col-1+gap, col-1*2+gap",
@@ -436,10 +436,10 @@ var __codefigPanel = {
         { key: "modes", type: "rows", label: "Modes", layout: "tabs",
           columns: [
             { key: "name", type: "text", label: "Mode" },
-            { key: "containerWidth", type: "number", label: "Width" },
-            { key: "columns", type: "number", label: "Columns" },
-            { key: "gap", type: "number", label: "Gap" },
-            { key: "padding", type: "number", label: "Margins" }
+            { key: "containerWidth", type: "number", label: "Width", min: 1 },
+            { key: "columns", type: "number", label: "Columns", min: 1 },
+            { key: "gap", type: "number", label: "Gap", min: 0 },
+            { key: "padding", type: "number", label: "Margins", min: 0 }
           ] }
       ]},
     { type: "section", id: "suggestions",
@@ -507,6 +507,18 @@ async function createOrUpdateCollection(config) {
     console.warn('Mode "' + skip.name + '" was left alone: ' + skip.reason);
   });
 
+  // A mode whose columns, gaps and margins need more than its width has no column to write: its col-*
+  // values would be negative. Say so per mode instead of writing them without a word.
+  getViewportConfigKeys(innerConfig).forEach(function (k) {
+    var vc = innerConfig[k];
+    var colWidth = calculateColumnWidth(vc);
+    if (colWidth <= 0) {
+      console.warn('Mode "' + viewportLabel(k) + '": ' + vc.columns + ' columns with a gap of ' + vc.gap +
+        ' and margins of ' + vc.padding + ' do not fit in ' + vc.containerWidth + ' (a column would be ' +
+        Math.round(colWidth * 100) / 100 + ' wide), so its col-* values are not usable. Reduce the columns, gap or margins.');
+    }
+  });
+
   // Mode order follows modes[] array or legacy config key order
   var modes = getViewportConfigKeys(innerConfig).map(function(k) { return viewportLabel(k); });
   if (modes.length === 0) {
@@ -550,7 +562,7 @@ async function createOrUpdateCollection(config) {
 async function createGridStyles(collection, config) {
   var group = resolveGroup(config);
   var prefix = namePrefix(group);
-  var styleName = "Grid";
+  var styleName = "Grid/" + collection.name + (group ? "/" + group : "");
   var styleStats = { created: 0, updated: 0 };
 
   var innerConfig = resolveGridInnerConfig(config);
@@ -573,6 +585,11 @@ async function createGridStyles(collection, config) {
 
   var localGridStyles = await figma.getLocalGridStylesAsync();
   var existing = localGridStyles.find(function(s) { return s.name === styleName; });
+  if (!existing) {
+    // A style from before the Grid/[collection]/[group] naming is renamed, never recreated, so bindings survive.
+    existing = localGridStyles.find(function(s) { return s.name === "Grid"; });
+    if (existing) existing.name = styleName;
+  }
   var gridStyle;
   if (existing) {
     gridStyle = existing;

@@ -263,7 +263,8 @@
 // }
 //
 // .grid-suggestions-empty,
-// .grid-suggestions-more {
+// .grid-suggestions-more,
+// .grid-preview-note {
 //   grid-column: 1 / -1;
 //   margin: 0;
 //   font-size: var(--font-size-small);
@@ -2503,7 +2504,7 @@ function foundationSliceKeys(domain) {
   // warns about its own untouched config the first time anyone runs it, which is how people learn that
   // warnings are noise.
   if (domain === 'colors') return keys.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
-    'lower', 'upper', 'lightness', 'modes']);
+    'lower', 'upper', 'lightness', 'modes', 'opacityVariations']);
   return keys;
 }
 
@@ -2521,7 +2522,7 @@ function foundationDomainKeys(domain) {
   }
   if (domain === 'grid') return common.concat(['extensionColumns', 'extraValues']);
   if (domain === 'colors') return common.concat(['light', 'dark', 'colorModel', 'curve', 'chromaCurve', 'saturationCurve', 'hueCurve', 'hslHueCurve',
-    'lower', 'upper', 'lightness', 'modes']);
+    'lower', 'upper', 'lightness', 'modes', 'opacityVariations']);
   return common;
 }
 
@@ -2772,15 +2773,15 @@ function foundationClone(value) {
 
 /**
  * `{ "400": 400, "Semi Bold": "Semi Bold" }` → `[400, "Semi Bold"]`.
- * `{ Regular: 450 }` → `["450:Regular"]`.
+ * `{ Regular: 450 }` → `["Regular:450"]`.
  *
  * The panel's Font weights field is a comma list, and the generator promotes that list into a map
  * before it runs — so a map whose every key is its own value spelled out is a *list on its way home*,
  * not something anybody wrote. Handing it back as an object put `{ 400: 400 }` into a text field,
  * which came back out as a string and generated a text style per character.
  *
- * A map whose keys differ from its values is `number:Name` in that same list — `{ Regular: 450 }`
- * is what `450:Regular` becomes on a run, and it has to come back as the term the field accepts.
+ * A map whose keys differ from its values is `Name:value` in that same list — `{ Regular: 450 }`
+ * is what `Regular:450` becomes on a run, and it has to come back as the term the field accepts.
  */
 function foundationFontWeightsForBlock(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return foundationClone(value);
@@ -2792,10 +2793,8 @@ function foundationFontWeightsForBlock(value) {
     if (typeof entry !== 'number' && typeof entry !== 'string') return foundationClone(value);
     if (String(entry) === keys[i]) {
       list.push(entry);
-    } else if (typeof entry === 'number') {
-      list.push(String(entry) + ':' + keys[i]);
     } else {
-      return foundationClone(value);
+      list.push(keys[i] + ':' + entry);
     }
   }
   return list;
@@ -3035,6 +3034,9 @@ function buildDomainSlice(inner, domain, translations, warnings) {
     if (inner.curve !== undefined) slice.curve = foundationClone(inner.curve);
     if (inner.lightness !== undefined) slice.lightness = foundationClone(inner.lightness);
     if (Array.isArray(inner.modes)) slice.modes = foundationClone(inner.modes);
+    if (typeof inner.opacityVariations === 'string' && inner.opacityVariations.trim()) {
+      slice.opacityVariations = inner.opacityVariations;
+    }
   }
   if (domain === 'grid') {
     if (typeof inner.extensionColumns === 'number') slice.extensionColumns = inner.extensionColumns;
@@ -3241,6 +3243,9 @@ function toDomainConfig(v1, domain, options) {
   if (config.lightness !== undefined) out.lightness = foundationClone(config.lightness);
   if (Array.isArray(config.modes) && config.modes.length > 0 && domain === 'colors') {
     out.modes = foundationClone(config.modes);
+  }
+  if (domain === 'colors' && typeof config.opacityVariations === 'string') {
+    out.opacityVariations = config.opacityVariations;
   }
   if (config.extensionColumns !== undefined) out.extensionColumns = config.extensionColumns;
   if (config.extraValues !== undefined) out.extraValues = foundationClone(config.extraValues);
@@ -3488,6 +3493,14 @@ function gridPreviewHtml(config, domain, modeName) {
   var model = gridPreviewModel(mode, maxWidth);
   // **Hide until width and columns are set** — a grey placeholder diagram reads as a result.
   if (!model.ok) return '';
+  // Columns, gaps and margins that need more than the width leave a column of zero or less. Drawing it
+  // paints negative widths, and a run would write negative col-* values — so say it does not fit.
+  if (model.colWidth <= 0) {
+    return '<p class="grid-preview-note">' + model.columns + ' columns with a gap of ' +
+      gridPreviewNumber(model.gap) + ' and margins of ' + gridPreviewNumber(model.margin) +
+      ' do not fit in ' + gridPreviewNumber(model.width) + ' \u2014 each column would be ' +
+      gridPreviewNumber(model.colWidth) + ' wide. Reduce the columns, gap or margins.</p>';
+  }
 
   var metaCh = gridPreviewMetaMinCh(modes);
   var out = ['<div class="grid-preview" style="--grid-preview-meta-ch:' + metaCh + '">'];
@@ -3656,7 +3669,8 @@ function gridSuggestions(modes, modeName, cap) {
       break;
     }
   }
-  if (!mode) mode = list[0] || null;
+  // A name that matches no mode gets no suggestions. Falling back to the first mode drew Desktop-lg's
+  // pairs under whichever tab had lost its name.
 
   var answer = {
     mode: mode ? mode.name : null, ok: false, current: null, range: null,
@@ -4473,6 +4487,12 @@ async function colorsResolveAlias(id, collections, index) {
     if (!owner) return null;
     var value = variable.valuesByMode[owner.defaultModeId];
     if (value && value.type === 'VARIABLE_ALIAS') { currentId = value.id; continue; }
+    // A colour linked to another at an opacity: resolve the colour, then apply the opacity as alpha.
+    if (value && value.color && value.color.type === 'VARIABLE_ALIAS') {
+      var linked = await colorsResolveAlias(value.color.id, collections, index);
+      if (!linked) return null;
+      return { r: linked.r, g: linked.g, b: linked.b, a: (typeof linked.a === 'number' ? linked.a : 1) * (value.opacity / 100) };
+    }
     if (value && typeof value.r === 'number') return value;
     return null;
   }
@@ -4492,6 +4512,31 @@ function colorsRound1(value) {
 /** A chroma. Four places, because 0.002 and 0.006 are different neutrals and 0.00 is neither. */
 function colorsRound4(value) {
   return Math.round(value * 10000) / 10000;
+}
+
+/**
+ * The opacities a group's variants already use, as the field spells them (`5, 10, 20`).
+ *
+ * Variants sit at `group/leaf-step/step-N%`, one folder per step, so the percentages are read off those
+ * names. A folder that does not repeat its own step is somebody else's naming and is ignored.
+ */
+function colorsOpacityVariationsIn(collection, group, index) {
+  var trimmed = String(group == null ? '' : group).replace(/\/+$/, '');
+  var prefix = trimmed ? trimmed + '/' : '';
+  var parts = trimmed ? trimmed.split('/') : [];
+  var leaf = parts.length ? parts[parts.length - 1] : '';
+  var seen = {};
+  var ids = collection.variableIds || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = index && index.byId ? index.byId[ids[i]] : null;
+    if (!variable || variable.resolvedType !== 'COLOR') continue;
+    if (variable.name.indexOf(prefix) !== 0) continue;
+    var hit = /^([^\/]+)\/([^\/]+)-(\d+)%$/.exec(variable.name.slice(prefix.length));
+    if (!hit) continue;
+    if (hit[1] !== (leaf ? leaf + '-' + hit[2] : hit[2])) continue;
+    seen[Number(hit[3])] = true;
+  }
+  return Object.keys(seen).map(Number).sort(function (a, b) { return a - b; }).join(', ');
 }
 
 /**
@@ -4723,6 +4768,7 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
   // **The modes it was averaged from**, not the one that happened to be read first — a list, because with
   // more than one mode there is no single answer and a name would be a plausible-looking wrong one.
   answer.recognition.lightnessFrom = shared ? sharedNames.slice() : [leadName];
+  var opacitiesInFile = colorsOpacityVariationsIn(owner, group, readIndex);
   answer.source = 'recognised';
   answer.modes = perMode.map(function (m) { return m.name; });
   answer.tokens = perMode[0].steps.slice();
@@ -4737,6 +4783,9 @@ async function foundationColorsAutoImport(collectionName, group, modeNames, colo
     // default where the file's own shape belongs — see the note above `shared` for why this still runs
     // under HSL. `skipFit`: `[]`, Original, no fit at all.
     curve: skipFit ? [] : (shared ? shared.curve : colorsFitCurve(answer.existing[leadName], true)),
+    // Read from the variables the way everything else here is, so it loads for a set that was never
+    // recorded and cannot disagree with what the file holds. Empty when the group has none.
+    opacityVariations: opacitiesInFile,
     // **No middle.** The ladder's bend is the curve's own anchor now, so a middle lightness here would be a
     // second answer to a question the curve already answers — and the block has no field to show it in.
     lightness: {

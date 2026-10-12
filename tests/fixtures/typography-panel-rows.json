@@ -58,7 +58,7 @@
     "tooltip": "",
     "inputType": "list",
     "placeholder": "400, 600",
-    "helper": "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold. For a variable font, 450:Regular writes 450 and names the style Regular."
+    "helper": "A number is a weight (400). A word is a Figma style name, e.g. Semi Bold. To name a style differently from its value, write Name:value, e.g. Regular:400 or Regular:A Regular."
   },
   {
     "type": "field",
@@ -142,7 +142,7 @@
     "labelSpelled": true,
     "tooltip": "",
     "inputType": "boolean",
-    "helper": "Builds a Typography overview on the canvas: one specimen tile per text style, grouped by weight.",
+    "helper": "Builds a Typography overview under Design System Foundations: one specimen tile per text style. One section per Collection + Group; the same address overwrites.",
     "showWhenRules": [
       {
         "field": "collectionName",

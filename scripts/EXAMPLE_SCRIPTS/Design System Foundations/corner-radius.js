@@ -120,14 +120,14 @@ var __codefigPanel = {
             { key: "curve", type: "curve", label: "Scale", growth: "ratio",
               showWhen: { scaleType: "bezier" },
               helper: "Drag the end handle to set how fast the scale grows. Adding a token extends the range instead of squeezing it. Add shape for tighter small steps and looser large ones." },
-            { key: "step", type: "number", label: "Step",
+            { key: "step", type: "number", label: "Step", min: 0,
               showWhen: { scaleType: ["metric", "fibonacci"] },
               helper: "Metric: how much each step adds before growth starts.\\nFibonacci: the first increment. Each later step is the sum of the two before it." },
-            { key: "mod", type: "number", label: "Every N steps",
+            { key: "mod", type: "number", label: "Every N steps", min: 1,
               showWhen: { scaleType: "metric" },
               helper: "How often the step size grows. Step 4 and Every 3 gives 4, 4, 4, 8, 8, 8, 12." },
-            { key: "base", type: "number", label: "Base unit" },
-            { key: "roundTo", type: "number", label: "Round numbers to" },
+            { key: "base", type: "number", label: "Base unit", min: 0 },
+            { key: "roundTo", type: "number", label: "Round numbers to", min: 0 },
             { key: "extras", type: "list", label: "Extra values",
               helper: "Off-scale values, merged by size. Put 0 here for a none token: it takes the smallest name and the scale continues above it." }
           ] }
