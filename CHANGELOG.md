@@ -21,6 +21,26 @@ a plain statement of the new default.
 
 ### Added
 
+- **Mode pickers have an empty entry you can pick again.** Once a mode is chosen you can go back
+  to empty. In Copy or move variables the source entry reads "All modes" and the target entry reads
+  "Same as source", and the target is locked to "Same as source" while the source is "All modes".
+  A hand-edited config with a source of all modes and a target mode now stops with a message
+  instead of copying only the first source mode.
+
+- **3D transform.** New script that rotates selected shapes around X, Y and Z with a field of
+  view and a pivot point, and redraws them as vector outlines with true perspective. Rounded
+  corners and curves stay smooth, strokes stay strokes, and the selected layers are replaced in
+  place. Optional copies repeat the selection along a direction, with distance, angle and rotation
+  written as series such as `120 * 0.8` or `0 + 20`. Optional depth extrudes each shape into a
+  group of Front face, Side face and Back face layers. Text is flattened to outlines first, and frames (including auto layout) are taken apart into a
+  background rectangle plus their children. Fills are not warped, and components, instances and
+  layers inside an unselected auto layout frame are skipped.
+
+- **Colors — Opacity variations.** Optional comma list (e.g. `5, 10, 20, 50, 80, 90`). Empty or
+  `100` only leaves generation unchanged (solid colours in the main group). Otherwise each step
+  also gets a subgroup of those opacities — with group `pine` and step `50`, solid stays at
+  `pine/50` and variants land at `pine/pine-50/50-5%`, `pine/pine-50/50-10%`, and so on. `100` in
+  the list is never duplicated under the subgroup.
 - **Duplicate component** utility. Selects components or component sets and creates new
   definitions beside the originals (no Configuration UI).
 - **Spacing / Corner radius / Typography was/now on curve edit.** When the collection already
@@ -29,6 +49,28 @@ a plain statement of the new default.
   compare while dragging. Quiet when they match.
 
 ### Changed
+
+- **Design System Foundations: number fields have limits.** Grid columns and width stop at 1,
+  gaps and margins at 0, "Every N steps" at 1, and Colors' hue (0–360), saturation and lightness
+  (0–100) and chroma (0–0.5) stay in range. The spinner honours the limit while you click, and a
+  typed value snaps back to the nearest limit when you leave the field. Panel recipes take `min` and
+  `max` on any number field or column.
+
+- **Colors: opacity variations link to their base colour.** A variant such as `pine/pine-50/50-10%`
+  is now an alias of `pine/50` at 10% opacity instead of a copy of its hex, so a hand edit to the
+  base carries into every variant. Re-running Colors converts existing variants in place (same
+  variable, so bindings survive). A variant whose base is missing or translucent is still written
+  as plain RGBA.
+
+- **Replace variables reports only what needs a hand.** A run where everything in scope was
+  rebound shows nothing in the Info panel, and bindings outside the search (other collections, no
+  matching name) are never listed. Bindings that come from a text, fill, stroke or effect style are
+  left to the style tools and not mentioned. When a layer could not be rebound (a write Figma's API
+  refuses, such as min width on text layers, or a missing or mistyped target), the panel lists it
+  per property and variable, and a click selects every affected layer. The per-error toast is gone;
+  the closing toast says what was replaced and how many layers are left.
+- **Script errors block shows errors and warnings only.** Once a run raised one error, the block
+  used to print the whole log beneath it, including every success line.
 
 - **Grid preview fits the panel.** The largest mode draws at 100% of the preview column; smaller
   modes are proportionally narrower. A non-interactive ruler marks every mode by name + width above
@@ -47,6 +89,77 @@ a plain statement of the new default.
 
 ### Fixed
 
+- **Copy or move into a new collection no longer leaves a stray first mode.** The new
+  collection's default mode is renamed to the first mode the run needs, so it ends up with exactly
+  the source's modes.
+- **Colors: Opacity variations came back empty after loading a collection.** The value was saved to
+  the manifest but dropped on the way back into the panel, so every other field filled and this one
+  stayed blank. It now loads with the rest, read from the variant names in the file (so it also
+  loads for sets that were never recorded).
+
+- **A Grid suggestion no longer lands on another mode.** Clicking a suggestion wrote the right mode
+  into the script but painted the new Margins and Gap into the first row of the form (Desktop-lg),
+  because the form hides the mode name and the painter fell back to row 0. The next edit saved that
+  painted row and put the mode you had open back. The painter now follows the open tab, paints
+  nothing when no tab is open, and the suggestion list shows nothing for a name it cannot match
+  instead of the first mode's pairs.
+
+- **Configuration edits no longer vanish after a Grid suggestion click.** A suggestion writes the
+  script's values and patches the open mode in place, but the form never recorded that it matched the
+  new text. Every edit afterwards was refused as "form is a projection of different text", with no
+  message, so changes such as Columns 12 to 16 on the last modes never reached a run. The write now
+  records the match, and a refused edit rebuilds the form from the script's values and says an edit
+  was not applied.
+- **Grid says when columns do not fit.** Columns, gaps and margins that need more than a mode's width
+  left a column of zero or less; the preview drew negative widths and a run wrote negative `col-N`
+  values without a word. The preview now explains it, and a run warns per mode.
+
+- **Typography updates existing text styles whose names have spaces around the slashes.** Styles made
+  by Duplicate styles are named `group / scale / weight`, which never equalled the generated
+  `group/scale/weight`, so every style looked missing and a second set was created beside the first.
+  Names now match with the spacing around slashes ignored; an exact match still wins.
+
+- **Selection walks no longer abort the plugin on instances with self-nesting slots.** Replace
+  variables, Copy or move variables, Variable inspector and Replace styles walked layers by following
+  `children`. In the plugin runtime an instance whose slot content holds an instance of its own
+  component expands without end that way, which ended the run with "Plugin runtime aborted" or
+  "API error trying to convert error message in invokeCallback()". They now use Figma's native
+  `findAll`, which is finite (649 layers in 49 ms on the frame that failed). The shared walker in
+  `@Core Library` (`traverseNodes`) changed the same way, so Relink local styles, Relink local
+  component instances, Select by styles or variables and Check style and variable bindings are
+  covered too. A layer selected together with its ancestor is now visited once.
+
+- **Typography no longer fails with "unloaded font" when a font variable changes.** Writing a
+  font-weight, font-family or line-height value re-resolves the text styles bound to it, and Figma
+  threw until the fonts it resolves to were loaded. The write now loads whichever fonts the error
+  names and retries. A variable that still cannot be written is counted as skipped, not updated.
+
+- **Replace styles no longer aborts the plugin on a large page.** Two steps before the run walked the
+  page in ways that could exhaust Figma's plugin runtime and end it with "Plugin runtime aborted" and
+  no output. The search for Render styles overview frames was an uncapped recursive walk that re-read
+  `children` (a fresh array of node handles each time) inside its loop. The style scan held a handle
+  to every node it visited (up to 40,000). The search is now iterative, capped, and reads `children`
+  once per node, and the scan keeps only the style ids it finds and resolves each distinct style once.
+
+- **Typography — named font weights on static fonts.** Entering `Regular, Semibold` failed with
+  "unloaded font" when the file already had text styles, and the style name was never applied to the
+  text style. The script now loads the fonts it needs before writing variables, and binds each named
+  weight to the style's font style. Numbers still write the weight axis. Each entry's type decides
+  which variable the style binds, and font-weight / font-style variables the Font weights no longer
+  call for are removed (text styles are unbound first). Font weights also take `Name:value` pairs, such
+  as `Regular:400` or `Regular:A Regular`, so a style keeps its name while its font style changes.
+  `450:Regular` still reads as before.
+
+- **Colors: untouched Original Run no longer rewrites onto Linear.** Loading a collection left
+  every curve as Original (`[]`) and the preview strip quiet (file hexes via session `existing`).
+  Run did not attach those hexes, so generation fell back to a unified linear lightness range and
+  changed the file while the strip showed no change. Run now reads the same held map the panel
+  uses before building the write map.
+- **Colors: Shared lightness shows when switching to OKLCH.** OKLCH settings held a leftover
+  panel-level Preview slot (the alignment banner is gone; nothing fills it). Content-reveal treated
+  the whole section as a host, so Shared lightness stayed hidden after an HSL → OKLCH switch. The
+  orphan slot is removed, and a settings section that also has a preview is no longer a reveal host
+  — only dedicated Preview/Overview/Suggestions sections hide as one block.
 - **Group change no longer clears Collection modes.** Typing a Group on *New collection* (or
   pointing at an empty group under an existing collection) still resets tokens/curves for that
   address, but keeps the modes you already named — modes belong to the collection.
@@ -58,9 +171,10 @@ a plain statement of the new default.
   (so the strip does not keep the previous ramp).
 - **Typography preview meta omits Font weight** (still on the specimen note above the steps) and
   uses 1.25 line-height on the meta column.
-- **Preview sections hide as one block.** A `type: "section"` that contains Preview (or another
-  content-reveal slot) hides dividers, spacers, and the heading with the slot until there is
-  HTML to show — not only the slot itself.
+- **Dedicated Preview sections hide as one block.** A Preview/Overview/Suggestions `type: "section"`
+  (heading, dividers, spacers, and the slot — no form fields) hides together until there is HTML to
+  show. Settings sections that also hold a preview keep ordinary `@showWhen`; only the slot
+  content-reveals.
 - **Move preserves effect bindings and refuses published sources.** Direct blur/effect bindings
   now follow the destination variables. A published or unreadable source is refused before copying.
   Failed value writes or remaining local bindings stop removal and keep the source variables;
@@ -73,6 +187,16 @@ a plain statement of the new default.
 - **The dev bridge binds to loopback only**, rather than every network interface.
 
 ### Developer
+
+- **`npm run dev` no longer drops the main-require shim.** `tsc --watch` rewrote `dist/code.js`
+  without it, so the plugin failed to open with "`__codefigMainRequire` is not defined" until some
+  script file changed. A watcher on `dist/code.js` now re-applies it (`build-scripts.js --shim-only`,
+  a no-op when nothing changed), and `tsc --watch` keeps its output instead of clearing the screen.
+- **Validation runs in about 5 seconds instead of 50.** `validateResolvedCalls` re-stripped comments
+  from the whole resolved script on every regex match. This also speeds up `build:dev`, `dev` and
+  `npm test`.
+- **`_tests-move-integrity.js` imports the Foundation functions it calls**, which clears the nine
+  validation errors that failed `build:production`.
 
 - Updated live matching and Colors expectations to current behavior. Foundation-maintenance
   smoke tests are awaited before reporting completion. Test suites hold the run open during async
