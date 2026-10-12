@@ -258,7 +258,8 @@ function inlineMainRequireShim() {
     console.warn('⚠️  dist/code.js missing — skip require shim');
     return;
   }
-  let code = fs.readFileSync(codePath, 'utf8');
+  const original = fs.readFileSync(codePath, 'utf8');
+  let code = original;
   // Idempotent: strip a previous shim so a second pass never nests factories.
   const startMarker = '/* CodeFig: Figma main has no Node require';
   const endMarker = '/* CodeFig: end main-require shim */';
@@ -318,6 +319,8 @@ function inlineMainRequireShim() {
         'src/code.ts must use __codefigMainRequire (Figma JSVM has no require)'
     );
   }
+  // Unchanged output is not rewritten, so a watcher on dist/code.js settles after one pass.
+  if (shim + code === original) return;
   fs.writeFileSync(codePath, shim + code);
   console.log('✅ dist/code.js (require shim for main siblings)');
 }
@@ -329,7 +332,10 @@ module.exports = {
   wrapCjsModuleFactory,
 };
 
-if (require.main === module) {
+if (require.main === module && process.argv.includes('--shim-only')) {
+  // `tsc --watch` rewrites dist/code.js without the shim; dev re-applies just that.
+  inlineMainRequireShim();
+} else if (require.main === module) {
   // Run the build (vendors inlined into dist/ui.html from src/ui.html)
   console.log('🔨 Building...' + (isDev ? ' (dev: localhost allowed)' : ' (build: localhost not allowed)'));
   clearFigmaConsoleLog();

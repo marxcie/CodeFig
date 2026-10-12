@@ -1,6 +1,7 @@
 // Tests: Move preserves bindings and refuses published sources
 @import { testBegin, it, itInTestFile, expect, testFinish, testPrefix, withScratchPage } from "@Test Harness"
 @import { copyOrMoveVariables, assertMoveSourceUnpublished, assertMoveBindingsReplaced } from "Copy or move variables"
+@import { foundationNamespace, parseManifest, writeManifest, foundationMintSetId, foundationSetIdFromKey, foundationModeIds, stampToken, readStamp, planCopyMoveSetIdentity } from "@Foundation"
 
 testBegin('move-integrity');
 (async function () {

@@ -375,7 +375,8 @@ function validateResolvedCalls(scripts) {
     // `scaleType:radio(modular|metric)` in Spacing's `@rows` line was reported as a call to `radio()`,
     // which is declared in `@codefig-ui.js`, so the error even named a file to import it from. A
     // validator that has to be worked around is one nobody trusts the next time.
-    while ((match = callRe.exec(withoutComments(resolved))) !== null) called.add(match[2]);
+    const resolvedNoComments = withoutComments(resolved);
+    while ((match = callRe.exec(resolvedNoComments)) !== null) called.add(match[2]);
 
     [...called]
       .filter((name) => declaredSomewhere.has(name) && !declaredHere.has(name))
