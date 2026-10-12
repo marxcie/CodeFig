@@ -173,3 +173,36 @@ test('section showWhen suppresses a filled preview host', () => {
   attached.applyVisibility();
   assert.equal(host.style.display, 'none', 'failed showWhen suppresses the filled host');
 });
+
+test('a settings section with a preview slot is not a content-reveal host', () => {
+  // Colors once put `{ type: "preview" }` next to Shared lightness inside oklch-settings. The
+  // alignment banner that used to fill `__panel__` is gone, so treating that section as a host
+  // hid the curve forever. Form fields keep ordinary showWhen; only the slot content-reveals.
+  const schema = {
+    rows: [
+      { type: 'field', name: 'colorModel', inputType: 'radio', value: 'oklch',
+        options: ['hsl:HSL', 'oklch:OKLCH'] },
+      {
+        type: 'section',
+        id: 'oklch-settings',
+        showWhenRules: [{ field: 'colorModel', values: ['oklch'] }],
+        blocks: [
+          { type: 'heading', text: 'OKLCH settings' },
+          { type: 'field', name: 'curve', inputType: 'curve', value: [0.33, 0.33, 0.67, 0.67],
+            ends: [], range: [0, 100] },
+          { type: 'preview' },
+        ],
+      },
+    ],
+  };
+  const container = mount(schema);
+  const attached = R.attachListeners(container, schema, function () {});
+  const sec = container.querySelector('[data-section="oklch-settings"]');
+  assert.ok(sec);
+  assert.equal(sec.getAttribute('data-content-reveal-host'), null,
+    'settings + preview must not become a reveal host');
+  attached.applyVisibility();
+  assert.equal(sec.style.display, '', 'showWhen alone opens the settings section');
+  const slot = sec.querySelector('[data-preview-slot]');
+  assert.equal(slot.style.display, 'none', 'empty preview slot still stays closed');
+});

@@ -379,7 +379,7 @@
 // | `{ type: "paragraph", attachTo: "previous", text: "…" }` | a paragraph, folded into the ⓘ of the control it sits against |
 // | `{ type: "directive", name: "prose" }` | this block's paragraphs are its content — leave them on the page |
 // | `{ key: "x", type: "collection" }` | collection picker: this file's collections, plus **New collection** |
-// | `{ key: "x", type: "mode", collection: "field" }` | mode picker: the modes of the collection that `field` holds, plus **New mode**. Changing that collection resets it |
+// | `{ key: "x", type: "mode", collection: "field" }` | mode picker: the modes of the collection that `field` holds, plus **New mode**. Changing that collection resets it. Optional `emptyLabel` names the empty entry ("All modes") and `disabledWhen: { field: "" }` makes the picker inert while that field holds a value |
 // | `{ type: "chips", label: "…", from: "modes" }` | the mode chips — a marker row of its own, reading names from the `modes` field |
 // | `{ key: "x", type: "rows", columns: […] }` | a table, one line per array entry |
 // | `layout: "tabs"` on `type: "rows"` | the same array as one tab per entry, fields stacked and labelled; chevron at the end of the tab bar collapses the open mode's settings (Preview stays) |

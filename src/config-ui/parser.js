@@ -994,6 +994,9 @@
     // `@unit="%"` in the one-liner — a unit printed inside the input at its right edge.
     // Typography's letterSpacing / lineHeight groups carry it; Colors never needed one.
     if (block.unit != null) column.unit = block.unit;
+    // Bounds for a number column. Absent means unbounded.
+    if (typeof block.min === "number") column.min = block.min;
+    if (typeof block.max === "number") column.max = block.max;
     if (block.ends) column.ends = panelEnds(block.ends);
     if (block.range) column.range = panelRange(block.range);
     if (block.ramp) column.ramp = block.ramp;
@@ -1099,6 +1102,8 @@
         // as a value. An empty field stays visibly empty instead.
         var placeholder = position === "middle" ? null : perPosition(field.placeholders, position);
         if (placeholder != null) col.placeholder = placeholder;
+        if (typeof field.min === "number") col.min = field.min;
+        if (typeof field.max === "number") col.max = field.max;
         var fieldWhen = panelConditionRules(field.showWhen);
         if (fieldWhen) col.showWhen = fieldWhen;
         return col;
@@ -1171,6 +1176,8 @@
       syntax: "property"
     };
     if (block.placeholder) row.placeholder = block.placeholder;
+    if (typeof block.min === "number") row.min = block.min;
+    if (typeof block.max === "number") row.max = block.max;
     if (block.helper) row.helper = block.helper;
     if (block.fillIfEmpty) row.fillIfEmpty = String(block.fillIfEmpty);
     // Dynamic lists (`@options: localVariableCollections`) are a string source name, not a
@@ -1218,6 +1225,11 @@
     // distinguish "explicitly unbound" from "never a mode field".
     if (block.type === "mode") {
       row.collectionField = block.collection != null ? block.collection : null;
+      // The label of the empty entry ("All modes", "Same as source"), and the condition that makes
+      // the picker inert while it holds that entry.
+      if (block.emptyLabel) row.emptyLabel = String(block.emptyLabel);
+      var modeOff = panelConditionRules(block.disabledWhen);
+      if (modeOff) row.disabledWhenRules = modeOff;
     }
     return row;
   }

@@ -433,6 +433,8 @@
       ni.className = "config-ui-input config-ui-input--number";
       ni.setAttribute("data-field", n);
       if (field.placeholder) ni.setAttribute("placeholder", field.placeholder);
+      if (typeof field.min === "number") ni.min = String(field.min);
+      if (typeof field.max === "number") ni.max = String(field.max);
       cw.appendChild(ni);
     } else if (t === "radio" && field.options && field.options.length) {
       var rg = document.createElement("div");
@@ -686,6 +688,19 @@
     fillContentReveal(slot, slot.innerHTML);
   }
 
+  /**
+   * True when a section is only reveal chrome — heading, divider, spacer, prose, and the
+   * preview/suggestions slot — with no form fields. Those are the Preview/Overview/Suggestions
+   * chunks that should hide as one host. A settings section that also holds a slot is not.
+   */
+  function sectionIsRevealChromeOnly(sec) {
+    if (!sec) return false;
+    return !sec.querySelector(
+      "[data-field], [data-curve-field], [data-rows-field], [data-chips-field], " +
+      "[data-group-field], [data-mode-field]"
+    );
+  }
+
   function buildRow(r, idx, schema, prose) {
     if (r.type === "lineBreak") {
       var wr = document.createElement("div");
@@ -902,10 +917,16 @@
             }
             if (slug) currentSectionSlug = slug;
             appendPanelRows(r.blocks, sec);
-            // **Section is the reveal unit.** A Preview/Overview/Suggestions chunk hides as one
-            // block — dividers and spacers inside it included — until the slot has HTML. Flat
-            // recipes (no section) still use sibling pairing below.
-            if (sec.querySelector("[data-content-reveal]")) {
+            // **A dedicated Preview/Overview/Suggestions section hides as one block** — dividers,
+            // spacers and the heading with the slot — until HTML arrives. Flat recipes still use
+            // sibling pairing below.
+            //
+            // **Not every section that contains a slot.** Colors once put a panel-level `@preview`
+            // next to Shared lightness (the alignment banner is gone; nothing fills `__panel__`),
+            // and Mode settings holds an in-row strip. Marking those as hosts hid the *controls*
+            // until preview HTML arrived — or forever, for the empty `__panel__` slot. A section
+            // with form fields keeps ordinary `@showWhen`; the slot still content-reveals alone.
+            if (sec.querySelector("[data-content-reveal]") && sectionIsRevealChromeOnly(sec)) {
               sec.setAttribute("data-content-reveal-host", "true");
               sec.style.display = "none";
             }
@@ -1456,6 +1477,12 @@
       wrap.setAttribute("data-mode-collection-field", field.collectionField);
     }
     wrap.setAttribute("data-initial-value", value);
+    // What the empty entry says, and when the picker is inert. Both are read back from the wrap, so a
+    // later repopulate needs nothing but the DOM.
+    if (field.emptyLabel) wrap.setAttribute("data-mode-empty-label", field.emptyLabel);
+    if (field.disabledWhenRules && field.disabledWhenRules.length) {
+      wrap.setAttribute("data-mode-disabled-when", JSON.stringify(field.disabledWhenRules));
+    }
 
     // No `data-field` on either part, for the reason the collection picker has none: the flat
     // collector would report the sentinel as the value.
@@ -1557,6 +1584,8 @@
     if (!select) return;
 
     var st = state || {};
+    // An inert picker holds nothing, whatever the config or an earlier pick said.
+    if (wrap.getAttribute("data-mode-inert") === "true") value = "";
     var collection = st.collection == null ? "" : String(st.collection);
     var answered = Object.prototype.hasOwnProperty.call(st, "exists");
     var exists = !!st.exists;
@@ -1577,13 +1606,13 @@
     select.innerHTML = "";
     var placeholder = document.createElement("option");
     placeholder.value = "";
+    // With a collection chosen the empty entry is a real option, so a picked mode can be un-picked.
     placeholder.textContent = collection
-      ? "Select mode or create a new one"
+      ? wrap.getAttribute("data-mode-empty-label") || ""
       : "Pick a collection first";
-    placeholder.disabled = true;
-    placeholder.hidden = !!collection;
+    placeholder.disabled = !collection;
     select.appendChild(placeholder);
-    select.disabled = !collection;
+    select.disabled = !collection || wrap.getAttribute("data-mode-inert") === "true";
 
     list.forEach(function (name) {
       var o = document.createElement("option");
@@ -1637,7 +1666,7 @@
   }
 
   /**
-   * Put the picker back to "Select mode or create a new one".
+   * Put the picker back to its empty state.
    *
    * Called when the collection underneath it changes, because every part of what it was showing
    * belonged to the collection that is no longer selected. Leaving the name behind was worse than
@@ -5289,6 +5318,10 @@
     // numeric cell labelled *Chroma* gives a first-time reader nothing to go on — 0.012 and 12 are both
     // plausible guesses and only one of them is a colour.
     if (column.placeholder != null) input.placeholder = String(column.placeholder);
+    if (column.type === "number") {
+      if (typeof column.min === "number") input.min = String(column.min);
+      if (typeof column.max === "number") input.max = String(column.max);
+    }
     input.value = value == null ? "" : String(value);
     if (column.unit) return stampCellIdentity(curveUnitWrap(input, column.unit));
     return stampCellIdentity(input);
@@ -5675,6 +5708,36 @@
         row.style.display = v ? "" : "none";
       });
       fillEmptyOnReveal();
+      // A mode picker can be inert while another field holds its empty entry (the target mode while the
+      // source mode is "All modes"). Going inert clears the pick, so what the picker shows is what it reads.
+      container.querySelectorAll("[data-mode-disabled-when]").forEach(function (wrap) {
+        var rules;
+        try {
+          rules = JSON.parse(wrap.getAttribute("data-mode-disabled-when"));
+        } catch (e) {
+          return;
+        }
+        var off = conditionsHold(rules, []);
+        var was = wrap.getAttribute("data-mode-inert") === "true";
+        var select = wrap.querySelector(".config-ui-mode-select");
+        var newName = wrap.querySelector(".config-ui-mode-new");
+        wrap.setAttribute("data-mode-inert", off ? "true" : "false");
+        wrap.classList.toggle("is-disabled", off);
+        if (!select) return;
+        if (off) {
+          select.disabled = true;
+          if (!was) {
+            select.value = "";
+            if (newName) {
+              newName.value = "";
+              newName.style.display = "none";
+            }
+            renderModeNote(wrap);
+          }
+        } else if (was) {
+          select.disabled = !wrap.getAttribute("data-mode-collection");
+        }
+      });
       // Slots with no showWhen still need a pass after a rebuild / empty fill.
       container.querySelectorAll("[data-content-reveal]").forEach(function (row) {
         if (row.getAttribute("data-show-when-rules")) return;
@@ -6010,6 +6073,7 @@
      * frame, on a panel whose whole point is having several ramps side by side.
      */
     function handleControlEvent(e) {
+      if (e.type === "change") clampNumberInput(e.target);
       applyVisibility();
       if (!e.codefigLive) refreshCurveControls(container, e.target);
       refreshModePickers();
@@ -6033,6 +6097,22 @@
      * been rebuilt. Colours rebuilds it most: mode chips, auto-import fills, a collection change and a model
      * switch all re-render.
      */
+    /**
+     * Pulls a typed number back inside its `min` / `max` once the field is left. Typing bypasses the
+     * attributes (only the spinner honours them), and doing it per keystroke would fight someone
+     * typing `12` into a field whose minimum is 10. A blank field is left blank.
+     */
+    function clampNumberInput(el) {
+      if (!el || el.type !== "number" || el.value === "") return;
+      var x = parseFloat(el.value);
+      if (Number.isNaN(x)) return;
+      var lo = el.min !== "" ? parseFloat(el.min) : null;
+      var hi = el.max !== "" ? parseFloat(el.max) : null;
+      var next = x;
+      if (lo !== null && next < lo) next = lo;
+      if (hi !== null && next > hi) next = hi;
+      if (next !== x) el.value = String(next);
+    }
     function onChangeEvent(e) {
       if (isControlEvent(e.target)) handleControlEvent(e);
     }

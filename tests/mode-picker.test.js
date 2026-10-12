@@ -141,7 +141,7 @@ test('a collection with one mode still offers it, and a way to add another', () 
   // The separator carries its dashes as text and no value, so this is placeholder, the one mode, the
   // rule, and New mode.
   assert.deepEqual(picker.options(), ['', 'Mode 1', '', NEW]);
-  assert.equal(picker.select.children[0].textContent, 'Select mode or create a new one');
+  assert.equal(picker.select.children[0].textContent, '');
 });
 
 test('a value naming a mode the collection does not have says so', () => {
@@ -303,4 +303,63 @@ test('@mode round-trips as it was written', () => {
     assert.equal(/@mode: targetCollection/.test(out), line === named,
       'the annotation changed shape: ' + out);
   });
+});
+
+const TWO_VALUES = [
+  'var sourceCollection = "A";',
+  'var sourceMode = "";',
+  'var targetCollection = "B";',
+  'var targetMode = "Dark";',
+].join('\n');
+
+const TWO_PANEL = [
+  'var __codefigPanel = { blocks: [',
+  '  { key: "sourceCollection", type: "collection", label: "Collection" },',
+  '  { key: "sourceMode", type: "mode", label: "Mode", collection: "sourceCollection", emptyLabel: "All modes" },',
+  '  { key: "targetCollection", type: "collection", label: "Collection" },',
+  '  { key: "targetMode", type: "mode", label: "Mode", collection: "targetCollection",',
+  '    emptyLabel: "Same as source", disabledWhen: { sourceMode: "" } }',
+  '] };',
+].join('\n');
+
+function renderPair() {
+  const schema = P.parse(TWO_VALUES, TWO_PANEL);
+  const container = document.createElement('div');
+  R.buildForm(schema, container);
+  R.attachListeners(container, schema, () => {});
+  const source = container.querySelector('[data-mode-field="sourceMode"]');
+  const target = container.querySelector('[data-mode-field="targetMode"]');
+  R.populateModeControl(source, ['Light', 'Dark'], '', { collection: 'A', exists: true });
+  R.populateModeControl(target, ['Light', 'Dark'], 'Dark', { collection: 'B', exists: true });
+  return { source, target, sel: (w) => w.querySelector('.config-ui-mode-select') };
+}
+
+test('the empty entry is a selectable option with its own label', () => {
+  const { source, sel } = renderPair();
+  const first = sel(source).children[0];
+  assert.equal(first.textContent, 'All modes');
+  assert.ok(!first.disabled);
+});
+
+test('the target mode is inert and empty while the source mode is All modes', () => {
+  const { target, sel } = renderPair();
+  assert.equal(sel(target).disabled, true);
+  assert.equal(R.readModeControl(target), '');
+  assert.equal(sel(target).children[0].textContent, 'Same as source');
+});
+
+test('picking a source mode frees the target mode, and All modes locks it again', () => {
+  const { source, target, sel } = renderPair();
+  sel(source).value = 'Light';
+  sel(source).dispatch('change', { bubbles: true });
+  assert.equal(sel(target).disabled, false);
+
+  sel(target).value = 'Dark';
+  sel(target).dispatch('change', { bubbles: true });
+  assert.equal(R.readModeControl(target), 'Dark');
+
+  sel(source).value = '';
+  sel(source).dispatch('change', { bubbles: true });
+  assert.equal(sel(target).disabled, true);
+  assert.equal(R.readModeControl(target), '');
 });

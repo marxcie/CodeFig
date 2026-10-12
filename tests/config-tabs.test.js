@@ -303,3 +303,35 @@ test('the space around a section divider is symmetric', () => {
   );
   assert.match(css, /\.config-ui-row--divider \+ \.config-ui-row--heading h3 \{\s*\n\s*margin-top: 0;/);
 });
+
+test('a Grid suggestion paints the open tab\'s row, never the first one', () => {
+  // Under @tabs the name input is not drawn, so the painter once found no match and fell back to row 0.
+  // The next form save then wrote the painted values onto Desktop-lg and reverted the mode that was open.
+  const paint = UI.match(/function paintActiveModeMargins\(margin, gap\)[\s\S]*?\n      \}/)[0];
+  const index = UI.match(/function activeModeIndex\(\)[\s\S]*?\n      \}/)[0];
+  const make = (activeAt) => {
+    const rows = [0, 1, 2].map(() => ({ padding: { value: '' }, gap: { value: '' } }));
+    const items = rows.map((r) => ({
+      querySelector: (sel) => (sel.indexOf('padding') !== -1 ? r.padding : r.gap)
+    }));
+    const tabs = [0, 1, 2].map((i) => ({ classList: { contains: () => i === activeAt } }));
+    const document = {
+      querySelectorAll: (sel) => (sel.indexOf('rows-tab') !== -1 ? tabs : [])
+    };
+    const configUIContainer = { querySelectorAll: () => items };
+    const run = new Function('document', 'configUIContainer', index + paint + '; return paintActiveModeMargins;')(document, configUIContainer);
+    return { run, rows };
+  };
+
+  const open = make(2);
+  open.run(7, 12);
+  assert.deepEqual(open.rows.map((r) => r.padding.value), ['', '', '7']);
+  assert.deepEqual(open.rows.map((r) => r.gap.value), ['', '', '12']);
+
+  const none = make(-1);
+  none.run(7, 12);
+  assert.deepEqual(none.rows.map((r) => r.padding.value), ['', '', '']);
+
+  const apply = UI.match(/function applySuggestion\(card\)[\s\S]*?\n      \}/)[0];
+  assert.match(apply, /activeModeIndex\(\) === -1\) return/);
+});

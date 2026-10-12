@@ -289,6 +289,32 @@
         font-weight: 600;
       }
       
+      .search-input {
+        padding-right: calc(var(--space-xl) + 20px);
+      }
+
+      .search-clear {
+        position: absolute;
+        top: 50%;
+        right: var(--space-lg);
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--text-primary);
+        opacity: 0.5;
+        cursor: pointer;
+      }
+
+      .search-clear[hidden] { display: none; }
+      .search-clear:hover { opacity: 1; }
+
       /* Script list container */
       .script-list { 
         flex: 1; 

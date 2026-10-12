@@ -52,6 +52,9 @@
           <div class="sidebar-header">
             <div class="search-container">
               <input type="text" id="searchInput" class="search-input" placeholder="Search..." title="Search scripts (⌘/)">
+              <button type="button" id="searchClear" class="search-clear" aria-label="Clear search" title="Clear search" hidden>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg>
+              </button>
             </div>
           </div>
           <div class="script-list" id="scriptList">
@@ -465,7 +468,7 @@
         const container = _codefigEnsureConsoleContainer();
         if (!container) return;
 
-        const lines = _codefigLastRunConsole.slice();
+        const lines = _codefigLastRunConsole.filter(function (l) { return l.level === 'error' || l.level === 'warn'; });
         const errorCount = lines.filter(function (l) { return l.level === 'error'; }).length;
         const warnCount = lines.filter(function (l) { return l.level === 'warn'; }).length;
         const total = lines.length;
@@ -1134,6 +1137,8 @@
        * rather than something each writer has to remember to close.
        */
       let configProjectedFrom = null;
+      /** True while a refused merge is rebuilding the form, so the rebuild cannot refuse itself. */
+      let healingFormProjection = false;
       let scriptHasDocs = false;
       let scriptHasConfig = false;
       let scriptHasUIConfig = false; // which marker extractConfigSection uses (@UI_CONFIG vs @CONFIG)
@@ -1407,6 +1412,24 @@
             modes: 'form is a projection of different text'
           });
           if (blockWrites.length > 8) blockWrites.shift();
+          // **A refusal that says nothing loses every edit that follows it.** The form had drifted from the
+          // block and stayed drifted: each later change was refused the same way, so a whole editing session
+          // never reached the script and nothing on screen said so. The block is what a run reads, so the
+          // form is rebuilt from it — what is shown is then what will run — and the note says an edit was lost.
+          if (!healingFormProjection) {
+            healingFormProjection = true;
+            try {
+              projectConfigIntoForm();
+              var healNote = document.getElementById('configStaleNote');
+              if (healNote) {
+                healNote.style.display = 'block';
+                healNote.textContent = 'The form was out of date with the values the script will run, so your last ' +
+                  'edit was not applied. It now shows those values; enter the edit again.';
+              }
+            } finally {
+              healingFormProjection = false;
+            }
+          }
           return;
         }
         const schema = window.CodeFigConfigUI.parse(blockNow, currentPanelSpecText());
@@ -2805,6 +2828,16 @@
         return tab ? tab.textContent : null;
       }
 
+      /** Position of the open mode tab, or -1 when the form has tabs and none is open. Null with no tab bar. */
+      function activeModeIndex() {
+        var tabs = document.querySelectorAll('.config-ui-rows-tabs .config-ui-rows-tab');
+        if (!tabs.length) return null;
+        for (var i = 0; i < tabs.length; i++) {
+          if (tabs[i].classList.contains('is-active')) return i;
+        }
+        return -1;
+      }
+
       /** `// @SUGGESTIONS: <fn>`, the same shape as `@PREVIEW:`. */
       function scriptSuggestionsFunction(code) {
         const match = /^[^\S\n]*\/\/[^\S\n]*@SUGGESTIONS:[^\S\n]*([A-Za-z_$][\w$]*)/m.exec(code || '');
@@ -3195,6 +3228,7 @@
         if (!row) return;
 
         var wanted = activeModeName();
+        if (activeModeIndex() === -1) return;
         var entries = row.value.map(function (entry) {
           var isTarget = wanted
             ? api.sameModeName(entry && entry.name, wanted)
@@ -3207,7 +3241,7 @@
           return next;
         });
 
-        paintActiveModeMargins(margin, gap, wanted, api);
+        paintActiveModeMargins(margin, gap);
         paintSuggestionSelection(margin, gap);
 
         var values = {};
@@ -3215,22 +3249,19 @@
         writeConfigBlockText(api.serialize(schema, values), 'suggestion', { skipFormProject: true });
       }
 
-      /** Set Margins / Gap on the open mode's fields without rebuilding the rows control. */
-      function paintActiveModeMargins(margin, gap, wanted, api) {
+      /**
+       * Set Margins / Gap on the open mode's fields without rebuilding the rows control.
+       *
+       * Under `@tabs` the name input is not drawn, so a row cannot be found by name. Rows and tabs share
+       * one order, so the open tab's position picks the row. With tabs present and none open, nothing is
+       * painted, because writing into the wrong row is saved to the script by the next form edit.
+       */
+      function paintActiveModeMargins(margin, gap) {
         if (!configUIContainer) return;
         var items = configUIContainer.querySelectorAll('.config-ui-rows-item');
-        var target = null;
-        Array.prototype.forEach.call(items, function (item) {
-          if (target) return;
-          var nameEl = item.querySelector('[data-row-field="name"]');
-          var name = nameEl ? String(nameEl.value || '') : '';
-          if (wanted && api && typeof api.sameModeName === 'function') {
-            if (api.sameModeName(name, wanted)) target = item;
-          } else if (item.style.display !== 'none') {
-            target = item;
-          }
-        });
-        if (!target && items.length) target = items[0];
+        var at = activeModeIndex();
+        if (at === -1) return;
+        var target = items[at === null ? 0 : at];
         if (!target) return;
         var paddingEl = target.querySelector('[data-row-field="padding"]');
         var gapEl = target.querySelector('[data-row-field="gap"]');
@@ -3664,6 +3695,11 @@
         if (!(opts && opts.skipFormProject) &&
             isConfigTab(currentTab) && configUIInstance) {
           projectConfigIntoForm();
+        } else if (opts && opts.skipFormProject) {
+          // The caller patched the form in place, so the form now *is* a projection of this text. Not
+          // recording that left `configProjectedFrom` naming the text from before the write, and
+          // `mergeConfigIntoMain` refused every edit made after a suggestion click.
+          configProjectedFrom = text.replace(/^\n+/, '').replace(/\n\s*$/, '');
         }
 
         // **And the preview with it.** The form was brought along; the strip was not, and it is the third
@@ -6741,8 +6777,18 @@
       }
 
       // Search functionality
+      const searchClear = document.getElementById('searchClear');
+
       searchInput.addEventListener('input', (e) => {
+        searchClear.hidden = !e.target.value;
         updateScriptList(e.target.value);
+      });
+
+      searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        searchClear.hidden = true;
+        updateScriptList('');
+        searchInput.focus();
       });
 
       // Code change detection (main script editor)
