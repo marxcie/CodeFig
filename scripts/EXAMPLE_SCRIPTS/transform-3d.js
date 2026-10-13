@@ -16,19 +16,20 @@
 // one, so 4 copies gives five in total. Each copy moves along a direction by a distance, and
 // turns by its own rotation, around its own pivot.
 //
-// Distance, Angle and the three rotations accept a series written as `start operator step`.
-// The start value applies to the original. Each further copy applies the operator and step to the
-// previous value. Use `+`, `-`, `*`, `/` (or `x`). A plain number stays the same for every copy.
+// Distance, Angle, Scale and the three rotations accept a formula in `i`, the copy number. The original
+// is 0, the first copy is 1, and so on. Use `+`, `-`, `*`, `/`, `^` and parentheses. A plain number
+// stays the same for every copy, and a number next to `i` multiplies, so `20i` means `20 * i`.
 //
 // | Entry | Values for the first four shapes |
 // | --- | --- |
 // | `120` | 120, 120, 120, 120 |
-// | `90 + 5` | 90, 95, 100, 105 |
-// | `120 * 2` | 120, 240, 480, 960 |
+// | `90 + 5 * i` | 90, 95, 100, 105 |
+// | `120 * 2 ^ i` | 120, 240, 480, 960 |
 //
-// Distance and Angle describe the move from one copy to the next, so the first move uses the
-// start value. Angle 0 points right and 90 points up, counterclockwise, like Rotate Z. Each new
-// copy sits above the previous one in the layer stack.
+// Distance and Angle describe the move from one copy to the next, so the first move uses i = 0.
+// Angle 0 points up, 90 right, 180 down and 270 left, like a compass. Scale is a multiplier, so 1
+// keeps the size and 0.9 ^ i shrinks each copy by 10%, around the same pivot the rotation uses. Each new copy sits above the
+// previous one in the layer stack, unless Reverse order is on.
 //
 // ### Works on
 //
@@ -66,9 +67,13 @@
 // past edge-on. The Front face keeps its original place, and the Back face and Side face follow
 // the same rotation.
 //
-// The Side face copies the solid fill of the shape, 25% darker, with a hairline stroke in the same
-// colour that hides seams between its panels. It has no other stroke. The Back face copies the
+// The Side face is one seamless shape that copies the solid fill of the shape, 25% darker. It has
+// no stroke. The Back face copies the
 // fills and strokes of the front.
+//
+// Individual decides which shapes get that depth. Off extrudes only the outermost layer of each
+// selected item, so a frame becomes one slab and the layers inside it are drawn flat on its front.
+// On extrudes every shape. Items that were selected on their own always get depth.
 //
 // ### Limits
 //
@@ -82,38 +87,44 @@
 //
 // | Control | Description |
 // | --- | --- |
-// | **Rotate X**<br>`rotateX` | Degrees, or a series. Positive tilts the top edge away from you. |
-// | **Rotate Y**<br>`rotateY` | Degrees, or a series. Positive turns the right edge away from you. |
-// | **Rotate Z**<br>`rotateZ` | Degrees, or a series. Positive spins counterclockwise, like Figma's rotation field. |
+// | **Rotate X**<br>`rotateX` | Degrees, or a formula in `i`. Positive tilts the top edge away from you. |
+// | **Rotate Y**<br>`rotateY` | Degrees, or a formula in `i`. Positive turns the right edge away from you. |
+// | **Rotate Z**<br>`rotateZ` | Degrees, or a formula in `i`. Positive spins counterclockwise, like Figma's rotation field. |
 // | **Field of view**<br>`fov` | Degrees from 0 to 170. 0 removes perspective. |
 // | **Pivot of**<br>`pivotOf` | `selection` rotates all layers around one shared pivot. `each layer` rotates each layer around its own. |
 // | **Pivot point**<br>`pivotPoint` | Which point of the selection or layer stays in place while it rotates. |
 // | **Depth**<br>`depth` | Pixels to extrude backward. 0 keeps a single layer per shape. |
+// | **Individual**<br>`extrudeIndividually` | Off extrudes only the outermost layer of each selected item. On extrudes every shape inside it too. |
 // | **Copies**<br>`copies` | Extra duplicates of the selection, from 0 to 200. 0 only transforms the selection. |
-// | **Distance**<br>`copyDistance` | Pixels from one copy to the next, or a series. |
-// | **Angle**<br>`copyAngle` | Direction of that move in degrees, or a series. |
+// | **Distance**<br>`copyDistance` | Pixels from one copy to the next, or a formula in `i`. |
+// | **Angle**<br>`copyAngle` | Direction of that move in degrees, or a formula in `i`. |
+// | **Scale**<br>`copyScale` | Size multiplier of each copy around the pivot, or a formula in `i`. 1 keeps the size. |
+// | **Reverse order**<br>`reverseOrder` | Stacks each copy below the previous one instead of above it. |
 // @DOC_END
 
 // @UI_CONFIG_START
 var rotateX = "0";
-var rotateY = "40";
+var rotateY = "0";
 var rotateZ = "0";
-var fov = 60;
+var fov = 35;
 var pivotOf = "selection";
 var pivotPoint = "center";
 var depth = 0;
 var copies = 0;
-var copyDistance = "120";
-var copyAngle = "90";
+var copyDistance = "0";
+var copyAngle = "0";
+var copyScale = "1";
+var extrudeIndividually = false;
+var reverseOrder = false;
 // @UI_CONFIG_END
 
 // @PANEL_START
 var __codefigPanel = {
   blocks: [
     { type: "heading", level: 2, text: "Rotation" },
-    { key: "rotateX", type: "string", label: "Rotate X", placeholder: "0 + 20", helper: "Degrees. Tilts the top edge away from you, and negative tilts it toward you. With copies, enter a series like 0 + 20 to turn each copy further." },
-    { key: "rotateY", type: "string", label: "Rotate Y", placeholder: "0 + 20", helper: "Degrees. Turns the right edge away from you, and negative turns it toward you. With copies, enter a series like 0 + 20 to turn each copy further." },
-    { key: "rotateZ", type: "string", label: "Rotate Z", placeholder: "0 + 20", helper: "Degrees. Spins the shape counterclockwise on the canvas, like Figma's rotation field. With copies, enter a series like 0 + 20." },
+    { key: "rotateX", type: "string", label: "Rotate X", placeholder: "20 * i", helper: "Degrees. Tilts the top edge away from you, and negative tilts it toward you. Use i for the copy number, like 20 * i, to turn each copy further." },
+    { key: "rotateY", type: "string", label: "Rotate Y", placeholder: "20 * i", helper: "Degrees. Turns the right edge away from you, and negative turns it toward you. Use i for the copy number, like 20 * i, to turn each copy further." },
+    { key: "rotateZ", type: "string", label: "Rotate Z", placeholder: "20 * i", helper: "Degrees. Spins the shape counterclockwise on the canvas, like Figma's rotation field. Use i for the copy number, like 20 * i." },
     { type: "heading", level: 2, text: "Camera" },
     { key: "fov", type: "number", label: "Field of view", unit: "°", helper: "Sets how strong the perspective looks. Low values look flat, high values exaggerate the near edge. 0 turns perspective off." },
     { type: "heading", level: 2, text: "Pivot" },
@@ -121,10 +132,13 @@ var __codefigPanel = {
     { key: "pivotPoint", type: "select", label: "Pivot point", options: ["center", "top left", "top", "top right", "left", "right", "bottom left", "bottom", "bottom right"], helper: "The point that stays in place while the shape rotates. Defaults to the center." },
     { type: "heading", level: 2, text: "Depth" },
     { key: "depth", type: "number", label: "Depth", unit: "px", helper: "How far to extrude each shape backward. 0 keeps one layer. Above 0, each shape becomes a group of Front face, Side face and Back face." },
+    { key: "extrudeIndividually", type: "boolean", label: "Individual", helper: "Off extrudes only the outermost layer of each selected item, so a frame becomes one slab and its contents stay flat on the front. On extrudes every shape inside as well." },
     { type: "heading", level: 2, text: "Copies" },
-    { key: "copies", type: "number", label: "Copies", helper: "Extra duplicates of the selection. 0 only transforms what is selected. Each copy also gets its own rotation from the series above." },
-    { key: "copyDistance", type: "string", label: "Distance", placeholder: "120 * 0.8", helper: "Pixels from one copy to the next. Enter 120 for an even gap, or a series like 120 * 0.8 to shrink it each time." },
-    { key: "copyAngle", type: "string", label: "Angle", placeholder: "90 + 5", helper: "Direction of each move in degrees. 0 points right and 90 points up. Enter a series like 90 + 5 to curve the line of copies." }
+    { key: "copies", type: "number", label: "Copies", helper: "Extra duplicates of the selection. 0 only transforms what is selected. Each copy also gets its own rotation from the formulas above." },
+    { key: "copyDistance", type: "string", label: "Distance", placeholder: "120 * 0.8 ^ i", helper: "Pixels from one copy to the next. Enter 120 for an even gap, or use i for the copy number, like 120 * 0.8 ^ i, to shrink it each time." },
+    { key: "copyAngle", type: "string", label: "Angle", placeholder: "5 * i", helper: "Direction of each move in degrees. 0 points up, 90 right, 180 down and 270 left. Use i for the copy number, like 5 * i, to curve the line of copies." },
+    { key: "copyScale", type: "string", label: "Scale", placeholder: "0.9 ^ i", helper: "Size of each copy as a multiplier, around the pivot. 1 keeps the size, 0.5 halves it and 2 doubles it. Use i for the copy number, like 0.9 ^ i, to shrink each copy a little more. Depth scales with it." },
+    { key: "reverseOrder", type: "boolean", label: "Reverse order", helper: "Stacks each copy below the previous one, so the original ends up on top. Off puts each copy above the previous one." }
   ]
 };
 // @PANEL_END
@@ -132,7 +146,6 @@ var __codefigPanel = {
 var CURVE_PIECES = 16;
 var MAX_COPIES = 200;
 var SIDE_SHADE = 0.75;
-var SEAM_STROKE = 0.5;
 var CLIP_FRACTION = 0.02;
 var SHAPE_TYPES = ["RECTANGLE", "ELLIPSE", "POLYGON", "STAR", "VECTOR", "LINE", "BOOLEAN_OPERATION"];
 var PIVOT_FRACTIONS = {
@@ -152,49 +165,134 @@ function degToRad(d) {
 }
 
 /**
- * Reads "start", or "start operator step" with + - * / x or ×. Empty means 0.
+ * Compiles a formula in `i`, the copy number, where the original is 0. Supports + - * / ^,
+ * parentheses, unary minus, and implicit multiplication like 20i or 2(i + 1). Empty means 0.
  */
-function parseSeries(text, label) {
-  var s = String(text === undefined || text === null ? "" : text).trim();
-  if (s === "") return { start: 0, op: null, step: 0 };
-  var m = s.match(/^(-?\d*\.?\d+)\s*(?:([+\-*\/x\u00d7])\s*(-?\d*\.?\d+))?$/i);
-  if (!m) {
-    throw new Error(label + ' must be a number or a series like "45" or "45 * 0.8"');
-  }
-  var op = m[2] ? m[2].toLowerCase() : null;
-  if (op === "x" || op === "\u00d7") op = "*";
-  var step = m[3] === undefined ? 0 : parseFloat(m[3]);
-  if (op === "/" && step === 0) {
-    throw new Error(label + " cannot divide by 0");
-  }
-  return { start: parseFloat(m[1]), op: op, step: step };
-}
+function parseExpression(text, label) {
+  var src = String(text === undefined || text === null ? "" : text).trim();
+  if (src === "") return function () { return 0; };
 
-/** Value of a series for the k-th shape, where k = 0 is the original. */
-function seriesValue(series, k) {
-  var v = series.start;
-  for (var i = 0; i < k; i++) {
-    if (series.op === "+") v += series.step;
-    else if (series.op === "-") v -= series.step;
-    else if (series.op === "*") v *= series.step;
-    else if (series.op === "/") v /= series.step;
+  var tokens = [];
+  var re = /\s*(\d*\.?\d+|[iI]|[-+*\/^()x\u00d7])/y;
+  var pos = 0;
+  var m;
+  while (pos < src.length) {
+    re.lastIndex = pos;
+    m = re.exec(src);
+    if (!m) {
+      if (/^\s*$/.test(src.slice(pos))) break;
+      throw new Error(label + ' must be a number or a formula in i, like "30 * i" or "120 * 0.8 ^ i"');
+    }
+    tokens.push(m[1]);
+    pos = re.lastIndex;
   }
-  return v;
+
+  var at = 0;
+  function fail() {
+    throw new Error(label + ' is not a valid formula. Try something like "30 + 10 * i"');
+  }
+  function peek() { return tokens[at]; }
+
+  function combine(op, l, r) {
+    return function (i) {
+      var a = l(i);
+      var b = r(i);
+      if (op === "+") return a + b;
+      if (op === "-") return a - b;
+      if (op === "/") return a / b;
+      return a * b;
+    };
+  }
+
+  function parseSum() {
+    var left = parseProduct();
+    while (peek() === "+" || peek() === "-") {
+      var op = tokens[at++];
+      left = combine(op, left, parseProduct());
+    }
+    return left;
+  }
+
+  function parseProduct() {
+    var left = parseUnary();
+    for (;;) {
+      var t = peek();
+      if (t === "*" || t === "x" || t === "X" || t === "\u00d7") {
+        at++;
+        left = combine("*", left, parseUnary());
+      } else if (t === "/") {
+        at++;
+        left = combine("/", left, parseUnary());
+      } else if (t === "i" || t === "I" || t === "(") {
+        left = combine("*", left, parseUnary());
+      } else {
+        return left;
+      }
+    }
+  }
+
+  function parseUnary() {
+    if (peek() === "-") {
+      at++;
+      var inner = parseUnary();
+      return function (i) { return -inner(i); };
+    }
+    if (peek() === "+") {
+      at++;
+      return parseUnary();
+    }
+    return parsePower();
+  }
+
+  function parsePower() {
+    var base = parseAtom();
+    if (peek() === "^") {
+      at++;
+      var exp = parseUnary();
+      return function (i) { return Math.pow(base(i), exp(i)); };
+    }
+    return base;
+  }
+
+  function parseAtom() {
+    var t = tokens[at++];
+    if (t === undefined) fail();
+    if (t === "i" || t === "I") return function (i) { return i; };
+    if (t === "(") {
+      var inner = parseSum();
+      if (tokens[at++] !== ")") fail();
+      return inner;
+    }
+    if (/^\d|^\./.test(t)) {
+      var n = parseFloat(t);
+      return function () { return n; };
+    }
+    return fail();
+  }
+
+  var fn = parseSum();
+  if (at < tokens.length) fail();
+
+  return function (i) {
+    var v = fn(i);
+    if (!isFinite(v)) throw new Error(label + " gives an invalid number when i = " + i);
+    return v;
+  };
 }
 
 /**
  * Canvas offsets of shapes 0..n from the original. Move i leads from shape i to shape i + 1,
- * using the i-th distance and angle. Angle 0 points right, 90 points up.
+ * using the i-th distance and angle. Angle 0 points up and 90 points right, clockwise.
  */
-function copyOffsets(n, distanceSeries, angleSeries) {
+function copyOffsets(n, distanceFormula, angleFormula) {
   var offsets = [{ x: 0, y: 0 }];
   var x = 0;
   var y = 0;
   for (var i = 0; i < n; i++) {
-    var dist = seriesValue(distanceSeries, i);
-    var ang = degToRad(seriesValue(angleSeries, i));
-    x += dist * Math.cos(ang);
-    y -= dist * Math.sin(ang);
+    var dist = distanceFormula(i);
+    var ang = degToRad(angleFormula(i));
+    x += dist * Math.sin(ang);
+    y -= dist * Math.cos(ang);
     offsets.push({ x: x, y: y });
   }
   return offsets;
@@ -593,8 +691,16 @@ async function dissolveFrame(frame) {
 /**
  * Collects the shapes to transform. Text is flattened to a vector, and frames dissolve into a
  * background rectangle plus their children, so everything ends up as a plain shape.
+ *
+ * When `flags` is given, it receives one entry per target. An entry is true for a shape that sits
+ * inside a frame, which is the shape Depth leaves flat unless Individual is on.
  */
-async function prepareTargets(nodes, targets, skipped) {
+async function prepareTargets(nodes, targets, skipped, flags, nested) {
+  function add(shape) {
+    targets.push(shape);
+    if (flags) flags.push(!!nested);
+  }
+
   for (var i = 0; i < nodes.length; i++) {
     var node = nodes[i];
     if (node.locked) {
@@ -606,23 +712,23 @@ async function prepareTargets(nodes, targets, skipped) {
       continue;
     }
     if (node.type === "GROUP") {
-      await prepareTargets(node.children.slice(), targets, skipped);
+      await prepareTargets(node.children.slice(), targets, skipped, flags, nested);
     } else if (node.type === "FRAME") {
       if (node.visible === false) {
         skipped.push(node.name + " (hidden frame)");
         continue;
       }
       var parts = await dissolveFrame(node);
-      if (parts.background) targets.push(parts.background);
-      await prepareTargets(parts.children, targets, skipped);
+      if (parts.background) add(parts.background);
+      await prepareTargets(parts.children, targets, skipped, flags, true);
     } else if (node.type === "TEXT") {
       try {
-        targets.push(await textToVector(node));
+        add(await textToVector(node));
       } catch (error) {
         skipped.push(node.name + " (text)");
       }
     } else if (SHAPE_TYPES.indexOf(node.type) !== -1) {
-      targets.push(node);
+      add(node);
     } else {
       skipped.push(node.name + " (" + node.type.toLowerCase() + ")");
     }
@@ -658,14 +764,16 @@ function cameraForBounds(bounds, rot, offset) {
 }
 
 /** Throws if any corner of the bounds, once moved and rotated, lands behind the camera. */
-function assertInFront(cam, bounds, offset, depth) {
+function assertInFront(cam, bounds, offset, depth, scale) {
   var zs = depth > 0 ? [0, -depth] : [0];
   var xs = [bounds.x, bounds.x + bounds.width];
   var ys = [bounds.y, bounds.y + bounds.height];
   xs.forEach(function (x) {
     ys.forEach(function (y) {
       zs.forEach(function (z) {
-        projectPoint(cam, x + offset.x, y + offset.y, 0, 0, z);
+        var sx = cam.px + scale * (x + offset.x - cam.px);
+        var sy = cam.py + scale * (y + offset.y - cam.py);
+        projectPoint(cam, sx, sy, 0, 0, z * scale);
       });
     });
   });
@@ -684,9 +792,22 @@ async function placeNetwork(vector, net) {
   placeNode(vector, origin.x + (kept.x - back.x), origin.y + (kept.y - back.y));
 }
 
+/** Signed area of the polygon through the given points, positive when it runs clockwise on screen. */
+function signedArea(points) {
+  var sum = 0;
+  for (var i = 0; i < points.length; i++) {
+    var a = points[i];
+    var b = points[(i + 1) % points.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum / 2;
+}
+
 /**
- * Joins the front and back outlines into one network of side panels. Each segment of the
- * outline becomes a closed four-sided region, so the panels fill as separate shapes.
+ * Joins the front and back outlines into one network for the side. Each segment of the outline
+ * becomes a four-sided panel, and every panel is wound the same way and put in a single region,
+ * so the fill rule unions them into one seamless shape. Panels wound the other way would cancel
+ * the ones they overlap and leave holes.
  */
 function buildSideNetwork(front, back) {
   var count = front.vertices.length;
@@ -715,11 +836,13 @@ function buildSideNetwork(front, back) {
     return links[v];
   }
 
-  var regions = front.segments.map(function (seg, j) {
-    return { windingRule: "NONZERO", loops: [[j, link(seg.end), total + j, link(seg.start)]] };
+  var loops = front.segments.map(function (seg, j) {
+    var loop = [j, link(seg.end), total + j, link(seg.start)];
+    var corners = [vertices[seg.start], vertices[seg.end], vertices[seg.end + count], vertices[seg.start + count]];
+    return signedArea(corners) < 0 ? loop.reverse() : loop;
   });
 
-  return { vertices: vertices, segments: segments, regions: regions };
+  return { vertices: vertices, segments: segments, regions: [{ windingRule: "NONZERO", loops: loops }] };
 }
 
 function darkenPaint(paint) {
@@ -740,7 +863,7 @@ function firstVisibleSolid(paints) {
   return null;
 }
 
-/** Gives the side the front's solid fill, darkened, plus a thin stroke to close seams. */
+/** Gives the side the front's solid fill, darkened, and no stroke. */
 function styleSide(side, front) {
   var source = firstVisibleSolid(front.fills) || firstVisibleSolid(front.strokes);
   if (!source) {
@@ -749,11 +872,7 @@ function styleSide(side, front) {
   }
   var shaded = darkenPaint(source);
   side.fills = [shaded];
-  side.strokes = [shaded];
-  side.strokeWeight = SEAM_STROKE;
-  side.strokeAlign = "CENTER";
-  side.strokeJoin = "ROUND";
-  side.dashPattern = [];
+  side.strokes = [];
 }
 
 /** True when the front of the shape points toward the camera. */
@@ -779,12 +898,16 @@ function flattenNode(node) {
   return vector;
 }
 
-async function transformShape(node, cam, offset, depthValue) {
+async function transformShape(node, cam, offset, depthValue, scale) {
   var name = node.name;
   var bounds = node.absoluteBoundingBox;
   var vector = node.type === "VECTOR" ? node : flattenNode(node);
   var t = vector.absoluteTransform;
-  var matrix = [[t[0][0], t[0][1], t[0][2] + offset.x], [t[1][0], t[1][1], t[1][2] + offset.y]];
+  var matrix = [
+    [t[0][0] * scale, t[0][1] * scale, cam.px + scale * (t[0][2] + offset.x - cam.px)],
+    [t[1][0] * scale, t[1][1] * scale, cam.py + scale * (t[1][2] + offset.y - cam.py)]
+  ];
+  depthValue = depthValue * scale;
   var source = vector.vectorNetwork;
   var frontNet = transformNetwork(source, matrix, cam, CURVE_PIECES, 0);
 
@@ -861,12 +984,12 @@ function groupResultSets(resultSets, root, baseName) {
   });
 }
 
-/** Clones every target once, stacking each clone directly above the previous shape. */
-function cloneTargets(targets, previous) {
+/** Clones every target once, stacking each clone directly above (or below) the previous shape. */
+function cloneTargets(targets, previous, below) {
   return targets.map(function (node, i) {
     var clone = node.clone();
     var parent = node.parent;
-    parent.insertChild(parent.children.indexOf(previous[i]) + 1, clone);
+    parent.insertChild(parent.children.indexOf(previous[i]) + (below ? 0 : 1), clone);
     return clone;
   });
 }
@@ -887,29 +1010,36 @@ function cloneTargets(targets, previous) {
       throw new Error("Depth cannot be negative");
     }
 
-    var rotSeries = {
-      x: parseSeries(rotateX, "Rotate X"),
-      y: parseSeries(rotateY, "Rotate Y"),
-      z: parseSeries(rotateZ, "Rotate Z")
+    var rotFormulas = {
+      x: parseExpression(rotateX, "Rotate X"),
+      y: parseExpression(rotateY, "Rotate Y"),
+      z: parseExpression(rotateZ, "Rotate Z")
     };
-    var offsets = copyOffsets(count, parseSeries(copyDistance, "Distance"), parseSeries(copyAngle, "Angle"));
+    var offsets = copyOffsets(count, parseExpression(copyDistance, "Distance"), parseExpression(copyAngle, "Angle"));
+
+    var scaleFormula = parseExpression(String(copyScale).trim() === "" ? "1" : copyScale, "Scale");
+    for (var q = 0; q <= count; q++) {
+      if (!(scaleFormula(q) > 0)) {
+        throw new Error("Scale must stay above 0 (copy " + q + " gives " + scaleFormula(q) + ")");
+      }
+    }
 
     // One camera per shape and copy. Shared mode builds them all from the combined bounds.
     function makePlan(boundsList) {
       var shared = unionBoundsOf(boundsList);
       return offsets.map(function (offset, k) {
         var rot = {
-          x: seriesValue(rotSeries.x, k),
-          y: seriesValue(rotSeries.y, k),
-          z: seriesValue(rotSeries.z, k)
+          x: rotFormulas.x(k),
+          y: rotFormulas.y(k),
+          z: rotFormulas.z(k)
         };
         var cams = boundsList.map(function (own) {
           var bounds = pivotOf === "each layer" ? own : shared;
           var cam = cameraForBounds(bounds, rot, offset);
-          assertInFront(cam, bounds, offset, depthValue);
+          assertInFront(cam, bounds, offset, depthValue, scaleFormula(k));
           return cam;
         });
-        return { offset: offset, cams: cams };
+        return { offset: offset, cams: cams, scale: scaleFormula(k) };
       });
     }
 
@@ -926,7 +1056,8 @@ function cloneTargets(targets, previous) {
 
     var targets = [];
     var skipped = [];
-    await prepareTargets(selection, targets, skipped);
+    var inside = [];
+    await prepareTargets(selection, targets, skipped, inside, false);
     if (!targets.length) {
       throw new Error("No supported shapes in the selection");
     }
@@ -936,8 +1067,10 @@ function cloneTargets(targets, previous) {
     // Clones come from the untouched originals, so make them all before transforming any.
     var sets = [targets];
     for (var k = 1; k <= count; k++) {
-      sets.push(cloneTargets(targets, sets[k - 1]));
+      sets.push(cloneTargets(targets, sets[k - 1], reverseOrder === true || reverseOrder === "true"));
     }
+
+    var individual = extrudeIndividually === true || extrudeIndividually === "true";
 
     var resultSets = [];
     for (var s = 0; s < sets.length; s++) {
@@ -945,7 +1078,7 @@ function cloneTargets(targets, previous) {
       for (var i = 0; i < sets[s].length; i++) {
         var cam = plan[s].cams[i];
         try {
-          made.push(await transformShape(sets[s][i], cam, plan[s].offset, depthValue));
+          made.push(await transformShape(sets[s][i], cam, plan[s].offset, !individual && inside[i] ? 0 : depthValue, plan[s].scale));
         } catch (error) {
           console.log("[3D transform] " + sets[s][i].name + ": " + error.message);
           skipped.push(sets[s][i].name + " (" + error.message + ")");

@@ -19,7 +19,16 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
-Nothing yet. Add entries here as changes land, then rename this heading to the version at release.
+### Added
+
+- **3D transform** has a **Scale** field under Copies. It is a size multiplier for each copy around the pivot, or a formula in `i` such as `0.9 ^ i`. 1 keeps the size, and depth scales with it.
+- **3D transform** has an **Individual** checkbox under Depth. Off (the default) extrudes only the outermost layer of each selected item, so a frame becomes one slab with its contents flat on the front. On extrudes every shape inside as well, which is how Depth behaved before. Frames and groups with Depth above 0 now come out differently until you turn it on.
+- **3D transform** has a **Reverse order** checkbox under Copies. On, each copy stacks below the previous one, so the original ends up on top. Off keeps the old behaviour.
+
+### Changed
+
+- **3D transform** copy values are now formulas in `i`, the copy number (the original is 0). Write `30 + 10 * i` or `20i` instead of the old `30 + 10`, and `120 * 0.8 ^ i` instead of `120 * 0.8`. Supports `+ - * / ^` and parentheses. A saved entry like `0 + 20` now reads as a constant 20, so rewrite it as `20 * i`.
+- **3D transform** Angle is now a compass bearing: 0 is up, 90 right, 180 down, 270 left. The default is 0, which still moves copies up. A saved angle of 90 now moves right instead of up.
 
 ---
 

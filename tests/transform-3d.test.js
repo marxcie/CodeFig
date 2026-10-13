@@ -18,7 +18,7 @@ function load() {
   const fn = new Function(
     'figma',
     'window',
-    source + '\nreturn { prepareTargets, groupResultSets, buildCamera, projectPoint, transformNetwork, remapLoop, networkOrigin, parseSeries, seriesValue, copyOffsets, buildSideNetwork, frontFacesCamera };'
+    source + '\nreturn { prepareTargets, groupResultSets, buildCamera, projectPoint, transformNetwork, remapLoop, networkOrigin, parseExpression, copyOffsets, buildSideNetwork, frontFacesCamera };'
   );
   const out = fn(stub, {});
   out.stub = stub;
@@ -151,42 +151,52 @@ test('loops keep a connected walk after segments split, including reversed ones'
 });
 
 function series(text) {
-  const parsed = lib.parseSeries(text, 'Field');
-  return [0, 1, 2, 3].map((k) => lib.seriesValue(parsed, k));
+  const formula = lib.parseExpression(text, 'Field');
+  return [0, 1, 2, 3].map((k) => formula(k));
 }
 
-test('a series applies its operator to the previous value for each copy', () => {
+test('a formula in i gives each copy its own value, with the original at i = 0', () => {
   assert.deepStrictEqual(series('120'), [120, 120, 120, 120]);
-  assert.deepStrictEqual(series('90 + 5'), [90, 95, 100, 105]);
-  assert.deepStrictEqual(series('90-5'), [90, 85, 80, 75]);
-  assert.deepStrictEqual(series('120 * 2'), [120, 240, 480, 960]);
-  assert.deepStrictEqual(series('120 x 2'), [120, 240, 480, 960]);
-  assert.deepStrictEqual(series('120 \u00d7 2'), [120, 240, 480, 960]);
-  assert.deepStrictEqual(series('80 / 2'), [80, 40, 20, 10]);
-  assert.deepStrictEqual(series('-10 + -5'), [-10, -15, -20, -25]);
+  assert.deepStrictEqual(series('90 + 5 * i'), [90, 95, 100, 105]);
+  assert.deepStrictEqual(series('90-5i'), [90, 85, 80, 75]);
+  assert.deepStrictEqual(series('120 * 2 ^ i'), [120, 240, 480, 960]);
+  assert.deepStrictEqual(series('10 x i'), [0, 10, 20, 30]);
+  assert.deepStrictEqual(series('10 \u00d7 i'), [0, 10, 20, 30]);
+  assert.deepStrictEqual(series('2(i + 1)'), [2, 4, 6, 8]);
+  assert.deepStrictEqual(series('-i'), [-0, -1, -2, -3]);
+  assert.deepStrictEqual(series('2 ^ 3 ^ 2'), [512, 512, 512, 512]);
   assert.deepStrictEqual(series(''), [0, 0, 0, 0]);
   assert.deepStrictEqual(series(45), [45, 45, 45, 45]);
 });
 
-test('a malformed series is refused with the field name', () => {
-  assert.throws(() => lib.parseSeries('45 ** 2', 'Angle'), /Angle/);
-  assert.throws(() => lib.parseSeries('abc', 'Distance'), /Distance/);
-  assert.throws(() => lib.parseSeries('10 / 0', 'Distance'), /divide/);
+test('a malformed formula is refused with the field name', () => {
+  assert.throws(() => lib.parseExpression('abc', 'Distance'), /Distance/);
+  assert.throws(() => lib.parseExpression('3 +', 'Angle'), /Angle/);
+  assert.throws(() => lib.parseExpression('(i', 'Angle'), /Angle/);
+  assert.throws(() => lib.parseExpression('1 / i', 'Distance')(0), /Distance/);
 });
 
-test('copy offsets accumulate, with angle 0 right and 90 up', () => {
-  const right = lib.copyOffsets(2, lib.parseSeries('100', 'd'), lib.parseSeries('0', 'a'));
+test('copy offsets accumulate, with angle 0 up and 90 right', () => {
+  const f = (t) => lib.parseExpression(t, 'f');
+
+  const right = lib.copyOffsets(2, f('100'), f('90'));
   near(right[1].x, 100);
   near(right[2].x, 200);
   near(right[2].y, 0);
 
-  const up = lib.copyOffsets(1, lib.parseSeries('50', 'd'), lib.parseSeries('90', 'a'));
+  const up = lib.copyOffsets(1, f('50'), f('0'));
   near(up[1].x, 0);
   near(up[1].y, -50);
 
-  const geometric = lib.copyOffsets(3, lib.parseSeries('10 * 2', 'd'), lib.parseSeries('0', 'a'));
+  const down = lib.copyOffsets(1, f('50'), f('180'));
+  near(down[1].y, 50);
+
+  const left = lib.copyOffsets(1, f('50'), f('270'));
+  near(left[1].x, -50);
+
+  const geometric = lib.copyOffsets(3, f('10 * 2 ^ i'), f('90'));
   near(geometric[3].x, 10 + 20 + 40);
-  assert.strictEqual(lib.copyOffsets(0, lib.parseSeries('10', 'd'), lib.parseSeries('0', 'a')).length, 1);
+  assert.strictEqual(lib.copyOffsets(0, f('10'), f('0')).length, 1);
 });
 
 test('depth at zero projects the same as no depth, and back points sit behind the front', () => {
@@ -196,28 +206,41 @@ test('depth at zero projects the same as no depth, and back points sit behind th
   assert.ok(Math.abs(back.x - 50) < Math.abs(front.x - 50), 'back copy is smaller, so farther away');
 });
 
-test('side network has one closed four-sided region per outline segment', () => {
+test('side network is one region of four-sided panels, all wound the same way', () => {
   const cam = lib.buildCamera(20, 30, 0, 60, 50, 50, 100);
   const front = lib.transformNetwork(rectNet(100, 100), IDENTITY, cam, 8, 0);
   const back = lib.transformNetwork(rectNet(100, 100), IDENTITY, cam, 8, -30);
   const side = lib.buildSideNetwork(front, back);
-  assert.strictEqual(side.regions.length, front.segments.length);
+  assert.strictEqual(side.regions.length, 1);
+  assert.strictEqual(side.regions[0].windingRule, 'NONZERO');
+  assert.strictEqual(side.regions[0].loops.length, front.segments.length);
 
-  side.regions.forEach((region) => {
-    const loop = region.loops[0];
+  const orientations = side.regions[0].loops.map((loop) => {
     assert.strictEqual(loop.length, 4);
+    // Walk the loop and collect the vertices it visits, in order.
     let cur = null;
+    const points = [];
     loop.forEach((idx, i) => {
       const seg = side.segments[idx];
       if (i === 0) {
         const next = side.segments[loop[1]];
-        cur = [seg.start, seg.end].find((v) => v === next.start || v === next.end);
+        cur = [seg.start, seg.end].find((v) => v !== next.start && v !== next.end);
+        points.push(side.vertices[cur]);
+        cur = cur === seg.start ? seg.end : seg.start;
         return;
       }
       assert.ok(seg.start === cur || seg.end === cur, 'walk is connected');
+      points.push(side.vertices[cur]);
       cur = seg.start === cur ? seg.end : seg.start;
     });
+    let sum = 0;
+    points.forEach((a, k) => {
+      const b = points[(k + 1) % points.length];
+      sum += a.x * b.y - b.x * a.y;
+    });
+    return Math.sign(Math.round(sum * 1e6));
   });
+  assert.ok(orientations.every((o) => o >= 0), 'no panel winds against the rest');
 });
 
 test('the front faces the camera at rest and not after a half turn about Y', () => {
@@ -294,6 +317,24 @@ function wireFigma(env) {
     return vector;
   };
 }
+
+test('only shapes inside a frame are flagged as inner, so Depth can skip them', async () => {
+  const env = load();
+  wireFigma(env);
+  const page = fakePage();
+  const frame = fakeNode('FRAME', 'Card', 100, 50, { fills: [{ type: 'SOLID', visible: true }] });
+  page.insertChild(0, frame);
+  frame.insertChild(0, fakeNode('RECTANGLE', 'A', 10, 10));
+  const solo = fakeNode('ELLIPSE', 'Solo', 20, 20);
+  page.insertChild(1, solo);
+
+  const targets = [];
+  const flags = [];
+  await env.prepareTargets([frame, solo], targets, [], flags, false);
+
+  assert.deepStrictEqual(targets.map((n) => n.name), ['Card', 'A', 'Solo']);
+  assert.deepStrictEqual(flags, [false, true, false]);
+});
 
 test('a filled frame becomes a rectangle with its children moved out above it', async () => {
   const env = load();
