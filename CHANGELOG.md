@@ -19,6 +19,12 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+Nothing yet. Add entries here as changes land, then rename this heading to the version at release.
+
+---
+
+## [2.1.0] - 2026-10-13
+
 ### Added
 
 - Mode chips have a three-dot menu (also on right-click) with **Duplicate mode**, **Rename mode** and **Delete mode**. A duplicate starts with the source mode's settings. Delete mode asks first, then leaves the chip in place, dimmed and struck through, until Run; **Cancel delete** in its menu undoes it and brings its settings back.
