@@ -425,12 +425,18 @@ function install(extras) {
     body: body,
     querySelector: (sel) => body.querySelector(sel),
     querySelectorAll: (sel) => body.querySelectorAll(sel),
+    // Document-level listeners (the chip menu's outside-click and Escape). Nothing dispatches to them
+    // here, so they are accepted and dropped.
+    addEventListener() {},
+    removeEventListener() {},
   };
   // `CodeFigBezier` is what `build-bezier.js` puts on the real window. A test that wants the curve
   // editor to do arithmetic passes it in; one that only wants the markup does not, and the control
   // degrades to drawing a straight line rather than throwing — which is also what the plugin does if
   // the inlined block ever goes missing.
-  const window = Object.assign({ marked: undefined, innerWidth: 320, innerHeight: 480 }, extras || {});
+  const window = Object.assign({
+    marked: undefined, innerWidth: 320, innerHeight: 480, addEventListener() {}, removeEventListener() {}
+  }, extras || {});
   global.document = document;
   global.window = window;
   global.Event = ShimEvent;

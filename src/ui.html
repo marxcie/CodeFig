@@ -691,6 +691,11 @@
       let currentDocumentId = null;
       let removedModeIds = [];
       /**
+       * The config entry a deleted chip had, by `modeId`, so Cancel delete brings back its settings
+       * instead of a copy of a neighbour's.
+       */
+      let removedModeEntries = {};
+      /**
        * Modes typed with the chips' `+`, by name, at this address.
        *
        * The counterpart to `removedModeIds`, and it exists for the same reason. A mode you added and a
@@ -713,6 +718,31 @@
       /** And the modes it dropped, same lifetime, same rule. */
       let lastDroppedModes = [];
 
+      /**
+       * Modes the file has that a chip deleted and Run has not yet carried out, in the file's order.
+       * Derived from the same record the removal note reads, so the two cannot disagree.
+       */
+      function pendingDeleteModes() {
+        const modes = fileModes.modes || [];
+        return removedModeIds
+          .map(function (id) {
+            return modes.filter(function (m) { return m.modeId === id; })[0];
+          })
+          .filter(Boolean)
+          .filter(function (mode) { return chipModeIds.indexOf(mode.modeId) === -1; })
+          .sort(function (a, b) { return modes.indexOf(a) - modes.indexOf(b); });
+      }
+
+      /** How many live chips precede this mode in the file's order — where its entry or ghost belongs. */
+      function chipsBeforeMode(modeId) {
+        const modes = fileModes.modes || [];
+        const at = modes.map(function (m) { return m.modeId; }).indexOf(modeId);
+        return chipModeIds.filter(function (id) {
+          const pos = id ? modes.map(function (m) { return m.modeId; }).indexOf(id) : -1;
+          return pos !== -1 && pos < at;
+        }).length;
+      }
+
       /** Everything about chips that a rebuild has to put back. Derived; call it after any render. */
       function syncChipsToPanelState() {
         if (!configUIContainer || !window.CodeFigConfigUI) return;
@@ -722,58 +752,12 @@
           if (window.CodeFigConfigUI.populateChipsControl) {
             window.CodeFigConfigUI.populateChipsControl(wrap, chipModeIds);
           }
-          renderModeRemovalNote(wrap);
+          if (window.CodeFigConfigUI.populatePendingDeletes) {
+            window.CodeFigConfigUI.populatePendingDeletes(wrap, pendingDeleteModes().map(function (mode) {
+              return { modeId: mode.modeId, name: mode.name, before: chipsBeforeMode(mode.modeId) };
+            }));
+          }
         });
-      }
-
-      /**
-       * What a pending removal costs, said before it happens.
-       *
-       * Nothing reaches the document until Run, so this is a standing line rather than a toast: it
-       * describes a decision that has been made and not yet carried out, and it should still be there
-       * when you come back to the tab. The count comes from the mode table read when the address
-       * resolved — a chip click cannot afford its own document read, because only one silent run may
-       * be in flight and the preview's debounce owns that slot half the time. With no count it says
-       * so instead of inventing one.
-       */
-      function renderModeRemovalNote(wrap) {
-        const row = wrap.closest ? wrap.closest('.config-ui-row') : null;
-        const host = row || wrap.parentNode;
-        if (!host) return;
-        let note = host.querySelector('.config-ui-chips-removal');
-        const names = window.CodeFigConfigUI ? window.CodeFigConfigUI.readChipsControl(wrap) : [];
-        const pending = removedModeIds
-          .map(function (id) {
-            return (fileModes.modes || []).filter(function (m) { return m.modeId === id; })[0];
-          })
-          .filter(Boolean)
-          .filter(function (mode) { return chipModeIds.indexOf(mode.modeId) === -1; });
-
-        if (!pending.length) {
-          if (note) note.remove();
-          return;
-        }
-        if (!note) {
-          note = document.createElement('div');
-          note.className = 'config-ui-field-note config-ui-chips-removal';
-          host.appendChild(note);
-        }
-        note.textContent = pending.map(function (mode) {
-          const count = typeof mode.valueCount === 'number' ? mode.valueCount : null;
-          const held = count === null
-            ? 'its values go with it'
-            : count + (count === 1 ? ' variable holds a value' : ' variables hold values') + ' there';
-          // **Removed, or replaced.** Adding a chip with the name you just removed is how you replace a
-          // mode — the old one goes with its values and a fresh one is created. Same intent, very
-          // different outcome, so it does not get the same sentence.
-          const replaced = names.some(function (chipName) {
-            return window.CodeFigConfigUI.sameModeName(chipName, mode.name);
-          });
-          return replaced
-            ? 'Replacing mode ' + mode.name + ' at Run — ' + held + ', and it is recreated empty.'
-            : 'Removing mode ' + mode.name + ' at Run — ' + held +
-              ', and any binding to it is lost.';
-        }).join(' ');
       }
 
       /**
@@ -806,7 +790,7 @@
       function applyChipOperation(wrap) {
         const api = window.CodeFigConfigUI;
         if (!api || !api.readChipOp || !api.applyChipOp) return;
-        const op = api.readChipOp(wrap);
+        let op = api.readChipOp(wrap);
         if (!op) return;
 
         const field = wrap.getAttribute('data-chips-field') || 'modes';
@@ -828,9 +812,26 @@
           return;
         }
 
+        if (op.op === 'restore') {
+          // Cancel delete: the entry comes back with its settings, at the position its mode holds.
+          const gone = (fileModes.modes || []).filter(function (m) { return m.modeId === op.modeId; })[0];
+          op = {
+            op: 'restore', modeId: op.modeId, index: chipsBeforeMode(op.modeId),
+            entry: removedModeEntries[op.modeId] || { name: gone ? gone.name : '' }
+          };
+        }
+        const removedEntry = op.op === 'remove' ? row.value[op.index] : null;
+
         const next = api.applyChipOp(row.value, chipModeIds, op);
         chipModeIds = next.ids;
-        if (next.removed) removedModeIds = removedModeIds.concat([next.removed.modeId]);
+        if (next.removed) {
+          removedModeIds = removedModeIds.concat([next.removed.modeId]);
+          if (removedEntry) removedModeEntries[next.removed.modeId] = removedEntry;
+        }
+        if (op.op === 'restore') {
+          removedModeIds = removedModeIds.filter(function (id) { return id !== op.modeId; });
+          delete removedModeEntries[op.modeId];
+        }
         // **`+` is the record of an intent, not just an edit.** A mode you typed and a mode the script's
         // template shipped are indistinguishable in the config — a name and no id — so alignment drops
         // the ones nobody claimed, and this is the claim. Without it, adding a mode and then correcting
@@ -851,16 +852,18 @@
             return !sameChipName(name, op.name);
           });
         }
-        if (op.op === 'remove') {
-          dropHeldFileColors(op.name);
-        }
         // **Original needs the file's hexes under the new name.** Deep-cloning the mode copies
         // `curve: []`, which still means Original — without this, the new strip has no colours to
         // show. Template is the entry that was last before the push (now second-to-last).
         if (next.added && next.entries.length >= 2) {
-          var templateName = next.entries[next.entries.length - 2] &&
-            next.entries[next.entries.length - 2].name;
+          var templateName = op.op === 'duplicate' ? op.from : (next.entries[next.entries.length - 2] &&
+            next.entries[next.entries.length - 2].name);
           copyHeldFileColors(templateName, next.added);
+        }
+        // Figma can only add a mode at the end of a collection, and has no call to move one. Say so
+        // once, at the moment it matters, rather than letting the chips look like they will be reordered.
+        if (next.added && fileModes.found) {
+          post('NOTIFY', { message: 'Mode "' + next.added + '" is added at the end. To reorder modes, drag them in the Variables editor.' });
         }
 
         const values = {};
@@ -2373,6 +2376,7 @@
         fileModes = { document: null, collection: null, collectionId: null, modes: [], found: false };
         chipModeIds = [];
         removedModeIds = [];
+        removedModeEntries = {};
         addedModeNames = [];
         collectionCreating = false;
 
@@ -3454,14 +3458,6 @@
         });
       }
 
-      function dropHeldFileColors(name) {
-        var api = window.CodeFigConfigUI;
-        if (!api || typeof api.dropModeKeyedEntry !== 'function') return;
-        rewriteHeldFileColors(function (byMode) {
-          return api.dropModeKeyedEntry(byMode, name);
-        });
-      }
-
       /**
        * **The colours the bar beside each chart is drawn from**, keyed the way the renderer addresses its
        * curve controls — the same shape as `_curveBaselines`, published through the same call.
@@ -4094,6 +4090,7 @@
         };
         chipModeIds = [];
         removedModeIds = [];
+        removedModeEntries = {};
         addedModeNames = [];
         try {
           var cur = currentConfigBlock();
@@ -4504,6 +4501,7 @@
         fileModes = next;
         if (changedCollection) {
           removedModeIds = [];
+          removedModeEntries = {};
           addedModeNames = [];
         }
 
@@ -7759,7 +7757,7 @@
         if (!container) throw new Error('The configuration form is not open');
         // **Coerced, not trusted, and never silently zero.** `index=1` arrives from the CLI as the
         // string "1", and `typeof index === 'number'` sent it to index 0 — so a verification run
-        // renamed the wrong chip and read as a pass. On a `chip-remove` that would remove the wrong
+        // renamed the wrong chip and read as a pass. On a `chip-menu-delete` that would remove the wrong
         // mode, and that one reaches the document at Run. A value that is present and not a number is
         // refused rather than defaulted.
         var at = 0;
@@ -7788,8 +7786,18 @@
           var chipList = chips.querySelectorAll('.config-ui-chip');
           if (part === 'chip-add') return chips.querySelector('.config-ui-chip-add');
           if (part === 'chip-input') return chips.querySelector('.config-ui-chip-input');
-          if (part === 'chip-remove') {
-            return chipList[at] ? chipList[at].querySelector('.config-ui-chip-remove') : null;
+          if (part === 'chip-menu') {
+            return chipList[at] ? chipList[at].querySelector('.config-ui-chip-menu-btn') : null;
+          }
+          // The open menu's items, which live on `document.body`; click `chip-menu` first.
+          if (part === 'chip-menu-duplicate' || part === 'chip-menu-rename' || part === 'chip-menu-delete') {
+            var wanted = part === 'chip-menu-duplicate' ? 'Duplicate mode'
+              : part === 'chip-menu-rename' ? 'Rename mode' : 'Delete mode';
+            var items = document.querySelectorAll('.config-ui-chip-menu-item');
+            for (var mi = 0; mi < items.length; mi++) {
+              if (items[mi].textContent === wanted) return items[mi];
+            }
+            return null;
           }
           // `chip` and `chip-label`: the label, which is the rename affordance.
           return chipList[at] ? chipList[at].querySelector('.config-ui-chip-label') : null;
@@ -8216,8 +8224,8 @@
             // else that writes to the document: `figma:run` is the path for that, and it carries the
             // filename guard a UI click would bypass.
             // An allow-list, and it stays one: a click that can reach anything the UI does not regard
-            // as part of a config control is a click that can eventually reach Run. `chip-remove` is
-            // here because removing a mode is a click; renaming and adding are not — they are three
+            // as part of a config control is a click that can eventually reach Run. `chip-menu` and its
+            // items are here because deleting a mode is a click; renaming and adding are not — they are three
             // events, so they go through `setField` as a whole gesture.
             // `cell:shape` and `cell:middle` reach the curve editor's two buttons. Named suffixes rather
             // than a free-form selector, for the reason the whole addressing scheme exists: a command that
@@ -8225,8 +8233,10 @@
             var curveButton = /:(shape|middle)$/.test(String(a.part || ''));
             var channelTab = String(a.part || '').indexOf('channel:') === 0;
             if (!curveButton && !channelTab &&
-                ['add', 'remove', 'tab', 'chip-remove', 'card'].indexOf(a.part) === -1) {
-              throw new Error('clickControl accepts part add, remove, tab, chip-remove, card, ' +
+                ['add', 'remove', 'tab', 'chip-menu', 'chip-menu-duplicate', 'chip-menu-rename',
+                  'chip-menu-delete', 'card'].indexOf(a.part) === -1) {
+              throw new Error('clickControl accepts part add, remove, tab, chip-menu, chip-menu-duplicate, ' +
+                'chip-menu-rename, chip-menu-delete, card, ' +
                 '<cell>:shape, <cell>:middle, or channel:<name> — not "' + a.part + '"');
             }
             var clickable = uiControlTarget(a.name, a.part, a.index);
@@ -8655,17 +8665,17 @@
                 // mode-table read survived being reasoned about twice.
                 modeId: chip.getAttribute('data-mode-id'),
                 placeholder: chip.classList.contains('config-ui-chip--placeholder'),
-                removable: !!chip.querySelector('.config-ui-chip-remove'),
+                removable: !!chip.querySelector('.config-ui-chip-menu-btn') && wrap.querySelectorAll('.config-ui-chip').length > 1,
                 draggable: chip.getAttribute('draggable') === 'true'
               });
             });
-            var removalRow = wrap.closest ? wrap.closest('.config-ui-row') : null;
-            var removalNote = removalRow ? removalRow.querySelector('.config-ui-chips-removal') : null;
             fields.push({
               name: wrap.getAttribute('data-chips-field'),
               control: 'chips',
               chips: chips,
-              pending: removalNote ? removalNote.textContent : null,
+              pendingDelete: [].map.call(wrap.querySelectorAll('.config-ui-chip-pending'), function (el) {
+                return el.getAttribute('data-pending-delete');
+              }),
               placeholder: wrap.getAttribute('data-placeholder') === 'true',
               editing: !!wrap.querySelector('.config-ui-chip-input'),
               visible: rowVisible(wrap)

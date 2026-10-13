@@ -627,17 +627,35 @@ This is a paragraph — `{ type: &quot;paragraph&quot;, text: &quot;…&quot; }`
               <label class="config-ui-field__label">Collection modes</label>
               <div class="config-ui-field__control">
                 <div class="config-ui-chips" data-chips-field="modes" data-placeholder="false">
-                  <span class="config-ui-chip" data-chip-name="Desktop" data-chip-index="0" draggable="true">
+                  <span class="config-ui-chip" data-chip-name="Desktop" data-chip-index="0">
                     <span class="config-ui-chip-label" role="button" title="Click to rename — the mode keeps its values and bindings">Desktop</span>
-                    <button type="button" class="config-ui-chip-remove" aria-label="Remove mode Desktop">—</button>
+                    <button type="button" class="config-ui-chip-menu-btn" aria-label="Actions for mode Desktop" aria-haspopup="menu">
+                      <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                        <circle cx="2" cy="6" r="1.1" fill="currentColor"></circle>
+                        <circle cx="6" cy="6" r="1.1" fill="currentColor"></circle>
+                        <circle cx="10" cy="6" r="1.1" fill="currentColor"></circle>
+                      </svg>
+                    </button>
                   </span>
-                  <span class="config-ui-chip" data-chip-name="Tablet" data-chip-index="1" draggable="true">
+                  <span class="config-ui-chip" data-chip-name="Tablet" data-chip-index="1">
                     <span class="config-ui-chip-label" role="button" title="Click to rename — the mode keeps its values and bindings">Tablet</span>
-                    <button type="button" class="config-ui-chip-remove" aria-label="Remove mode Tablet">—</button>
+                    <button type="button" class="config-ui-chip-menu-btn" aria-label="Actions for mode Tablet" aria-haspopup="menu">
+                      <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                        <circle cx="2" cy="6" r="1.1" fill="currentColor"></circle>
+                        <circle cx="6" cy="6" r="1.1" fill="currentColor"></circle>
+                        <circle cx="10" cy="6" r="1.1" fill="currentColor"></circle>
+                      </svg>
+                    </button>
                   </span>
-                  <span class="config-ui-chip" data-chip-name="Mobile" data-chip-index="2" draggable="true">
+                  <span class="config-ui-chip" data-chip-name="Mobile" data-chip-index="2">
                     <span class="config-ui-chip-label" role="button" title="Click to rename — the mode keeps its values and bindings">Mobile</span>
-                    <button type="button" class="config-ui-chip-remove" aria-label="Remove mode Mobile">—</button>
+                    <button type="button" class="config-ui-chip-menu-btn" aria-label="Actions for mode Mobile" aria-haspopup="menu">
+                      <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                        <circle cx="2" cy="6" r="1.1" fill="currentColor"></circle>
+                        <circle cx="6" cy="6" r="1.1" fill="currentColor"></circle>
+                        <circle cx="10" cy="6" r="1.1" fill="currentColor"></circle>
+                      </svg>
+                    </button>
                   </span>
                   <button type="button" class="config-ui-chip-add" aria-label="Add a mode">+</button>
                 </div>
@@ -647,7 +665,7 @@ This is a paragraph — `{ type: &quot;paragraph&quot;, text: &quot;…&quot; }`
         </div>
         <div class="config-ui-row config-ui-row--paragraph" data-row-index="24">
           <div class="docs-rendered">
-            The chips read their names from the modes field below, so the two cannot disagree. Click a chip to<br>rename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run.
+            The chips read their names from the modes field below, so the two cannot disagree. Click a chip to<br>rename it. The three-dot button, or a right-click, opens Duplicate, Rename and Delete mode. A new or duplicated mode goes at<br>the end, because Figma cannot reorder modes; reorder them in the Variables editor. Nothing reaches the document until Run.
           </div>
         </div>
         <div class="config-ui-row config-ui-row--field config-ui-row--fullwidth" data-row-index="25">

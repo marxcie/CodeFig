@@ -2480,7 +2480,7 @@
       }
 
       /* Collection modes, as chips. A 1:1 view of the collection's modes: the label renames in
-         place, the dash removes, the plus opens an inline input where the chip will appear. */
+         place, the ellipsis opens a menu, the plus opens an inline input where the chip will appear. */
       .config-ui-chips {
         display: flex;
         flex-wrap: wrap;
@@ -2493,7 +2493,8 @@
          chip is not typed into until you click its label, and the frames show grey. */
       /* A grey pill **with a stroke** — the design has both. Not the input border, because a chip is
          not typed into until its label is clicked. */
-      .config-ui-chip {
+      .config-ui-chip,
+      .config-ui-chip-pending {
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -2515,11 +2516,21 @@
         cursor: text;
       }
 
+      /* A mode that will be deleted at Run: still there, plainly on its way out. */
+      .config-ui-chip-pending {
+        opacity: 0.55;
+      }
+
+      .config-ui-chip-pending .config-ui-chip-label {
+        text-decoration: line-through;
+        cursor: default;
+      }
+
       .config-ui-chip--placeholder .config-ui-chip-label {
         cursor: default;
       }
 
-      .config-ui-chip-remove,
+      .config-ui-chip-menu-btn,
       /* **The same grey as the header's icons** (`.icon-btn`, #666), not body text at 55%. Inheriting the
          text colour and fading it landed near #7c7c7e — lighter than every other affordance on the panel,
          which read as disabled rather than quiet. Its own colour, so it cannot drift with the text again. */
@@ -2538,20 +2549,20 @@
         color: #333;
       }
 
-      .config-ui-chip-remove:hover,
+      .config-ui-chip-menu-btn:hover,
       .config-ui-chip-add:hover {
         opacity: 1;
       }
 
-      .config-ui-chip-add {
-        padding: 6px 8px;
+      /* The three-dot icon is an SVG, so the button is a flex box that centres it on the chip's text. */
+      .config-ui-chip-menu-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
 
-      /* A pending mode removal, under the chips. Deliberately the same note style as a field's
-         helper: it explains the control above it, and it is not an error — it is a decision that has
-         been taken and will be carried out at Run. */
-      .config-ui-chips-removal {
-        grid-column: 1 / -1;
+      .config-ui-chip-add {
+        padding: 6px 8px;
       }
 
       /* Locked until a collection exists: there is nowhere for a mode to be created, so there is no
@@ -2569,12 +2580,41 @@
         width: 140px;
       }
 
-      .config-ui-chip.is-dragging {
-        opacity: 0.4;
+      /* The chip's action menu. Fixed to the viewport and appended to the body, so nothing in the panel
+         can clip it. */
+      .config-ui-chip-menu {
+        position: fixed;
+        z-index: 1000;
+        min-width: 140px;
+        padding: 4px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
       }
 
-      .config-ui-chip.is-drop-target {
-        border-color: var(--active-bg, #0a84ff);
+      .config-ui-chip-menu-item {
+        display: block;
+        width: 100%;
+        padding: 6px 8px;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: none;
+        font: inherit;
+        font-size: var(--font-size-body);
+        color: var(--text-primary);
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .config-ui-chip-menu-item:hover,
+      .config-ui-chip-menu-item:focus-visible {
+        background: var(--bg-tertiary);
+        outline: none;
+      }
+
+      .config-ui-chip-menu-item--danger {
+        color: #c0392b;
       }
 
       /* A tab shows one row at a time, so its fields read as a form: one labelled field per line,

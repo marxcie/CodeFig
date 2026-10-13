@@ -542,7 +542,7 @@ var __codefigPanel = {
     { key: "collectionMode", type: "mode", label: "Mode", helper: "{ key: \"collectionMode\", type: \"mode\", collection: \"collectionName\" }", collection: "collectionName" },
     { type: "chips", label: "Collection modes", from: "modes" },
     { type: "paragraph", attachTo: "next",
-      text: "The chips read their names from the modes field below, so the two cannot disagree. Click a chip to\nrename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run." },
+      text: "The chips read their names from the modes field below, so the two cannot disagree. Click a chip to\nrename it. The three-dot button, or a right-click, opens Duplicate, Rename and Delete mode. A new or duplicated mode goes at\nthe end, because Figma cannot reorder modes; reorder them in the Variables editor. Nothing reaches the document until Run." },
     { key: "modes", type: "rows", label: "Modes", layout: "tabs", columns: [
         { key: "name", type: "text", label: "Mode" },
         { key: "width", type: "number", label: "Width" },

@@ -126,10 +126,19 @@ test('renaming twice does not turn into an add', () => {
   assert.deepEqual(intents.removals, []);
 });
 
-test('the dash removes the mode it was clicked on, and only because it was clicked', () => {
+/** Open a chip's menu and click one of its items — the menu lives on the document body. */
+function chooseFromMenu(chips, index, label) {
+  const chip = chips.querySelectorAll('.config-ui-chip')[index];
+  chip.querySelector('.config-ui-chip-menu-btn').dispatch('click');
+  const item = document.querySelectorAll('.config-ui-chip-menu-item')
+    .filter((el) => el.textContent === label)[0];
+  assert.ok(item, label + ' is in the menu');
+  item.dispatch('click');
+}
+
+test('Delete mode removes the mode it was chosen for, and only because it was chosen', () => {
   const { chips, entries, ids } = renderForm();
-  const chip = chips.querySelectorAll('.config-ui-chip')[2];
-  chip.querySelector('.config-ui-chip-remove').dispatch('click');
+  chooseFromMenu(chips, 2, 'Delete mode');
 
   assert.deepEqual(chipNames(chips), ['Desktop', 'Tablet']);
   const op = R.readChipOp(chips);
@@ -255,21 +264,67 @@ test('Escape leaves everything as it was', () => {
   assert.ok(chips.querySelector('.config-ui-chip-add'), 'and the + is back');
 });
 
-test('reordering carries each mode and its id to the new position', () => {
+test('a mode pending delete is drawn as a struck-through ghost that is not one of the live chips', () => {
+  const { chips, entries, ids } = renderForm();
+  chooseFromMenu(chips, 1, 'Delete mode');
+  const next = P.applyChipOp(entries, ids, R.readChipOp(chips));
+  R.populateChipsControl(chips, next.ids);
+  R.populatePendingDeletes(chips, [{ modeId: '1:1', name: 'Tablet', before: 1 }]);
+
+  assert.deepEqual(chipNames(chips), ['Desktop', 'Mobile'], 'live chips are the config entries only');
+  const ghost = chips.querySelector('.config-ui-chip-pending');
+  assert.ok(ghost, 'the deleted mode is still shown');
+  assert.equal(ghost.getAttribute('data-pending-delete'), '1:1');
+  const order = [].map.call(chips.children, (el) => el.getAttribute('data-chip-name') || el.getAttribute('data-pending-delete'))
+    .filter(Boolean);
+  assert.deepEqual(order, ['Desktop', '1:1', 'Mobile'], 'and it sits where its mode sits in the file');
+
+  // Its menu has one action, and it asks the panel to restore.
+  ghost.querySelector('.config-ui-chip-menu-btn').dispatch('click');
+  const labels = document.querySelectorAll('.config-ui-chip-menu-item').map((el) => el.textContent);
+  assert.deepEqual(labels, ['Cancel delete']);
+  document.querySelectorAll('.config-ui-chip-menu-item')[0].dispatch('click');
+  assert.deepEqual(R.readChipOp(chips), { op: 'restore', modeId: '1:1' });
+});
+
+test('restore brings an entry back with its id and settings, at the given position', () => {
   const { entries, ids } = renderForm();
+  const gone = P.applyChipOp(entries, ids, { op: 'remove', index: 1, name: 'Tablet' });
+  const back = P.applyChipOp(gone.entries, gone.ids, { op: 'restore', index: 1, modeId: '1:1', entry: entries[1] });
+  assert.deepEqual(back.entries, entries);
+  assert.deepEqual(back.ids, ids);
+});
+
+test('chips cannot be dragged or reordered, because Figma cannot reorder modes', () => {
+  const { chips, entries, ids } = renderForm();
+  chips.querySelectorAll('.config-ui-chip').forEach((chip) => {
+    assert.equal(chip.getAttribute('draggable'), null);
+  });
   const next = P.applyChipOp(entries, ids, { op: 'reorder', from: 2, to: 0 });
-  assert.deepEqual(next.entries.map((e) => e.name), ['Mobile', 'Desktop', 'Tablet']);
-  assert.deepEqual(next.ids, ['1:2', '1:0', '1:1']);
-  // Nothing to do to the document: order is order.
-  const intents = P.modeIntents('Responsive System', next.entries, next.ids, FILE_MODES, []);
-  assert.deepEqual(intents, { collection: 'Responsive System', renames: [], removals: [], additions: [] });
+  assert.deepEqual(next.entries.map((e) => e.name), ['Desktop', 'Tablet', 'Mobile'], 'the op is gone');
+});
+
+test('Duplicate mode appends a copy of the source with no id, and says nothing else', () => {
+  const { chips, entries, ids } = renderForm();
+  chooseFromMenu(chips, 1, 'Duplicate mode');
+  assert.deepEqual(chipNames(chips), ['Desktop', 'Tablet', 'Mobile', 'Tablet copy']);
+  const op = R.readChipOp(chips);
+  assert.deepEqual(op, { op: 'duplicate', index: 1, name: 'Tablet copy', from: 'Tablet' });
+
+  const next = P.applyChipOp(entries, ids, op);
+  assert.deepEqual(next.entries.map((e) => e.name), ['Desktop', 'Tablet', 'Mobile', 'Tablet copy']);
+  assert.deepEqual(next.ids, ['1:0', '1:1', '1:2', null], 'a new mode has no id until a run creates it');
+  assert.equal(next.added, 'Tablet copy');
+  const tablet = Object.assign({}, entries[1]);
+  delete tablet.name;
+  const copy = Object.assign({}, next.entries[3]);
+  delete copy.name;
+  assert.deepEqual(copy, tablet, 'the settings are the source mode\'s, not the last mode\'s');
 });
 
 test('an operation is consumed as it is read, so it cannot be applied twice', () => {
   // `getValues` is called again by every visibility pass. An op left lying around would add two modes.
   const { chips } = renderForm();
-  chips.querySelector('.config-ui-chip-remove') // Desktop's
-    ? null : null;
   renameChip(chips, 0, 'Wide');
   assert.ok(R.readChipOp(chips), 'the first read has it');
   assert.equal(R.readChipOp(chips), null, 'the second does not');
@@ -305,10 +360,6 @@ test('remove then add the same name is a replacement, and the order makes it one
     grid.indexOf('setupModes(collection, modes)'),
     'and the whole of it runs before setupModes, or a replacement is a deletion');
 
-  // And the panel says which of the two it is about to do, because the outcomes differ.
-  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
-  assert.match(ui, /Replacing mode ' \+ mode\.name \+ ' at Run/);
-  assert.match(ui, /it is recreated empty/);
 });
 
 test('chips carry the mode ids by position, never by name', () => {
@@ -332,13 +383,15 @@ test('chips carry the mode ids by position, never by name', () => {
   assert.equal(chip.getAttribute('data-mode-id'), '1:1', 'and by position, not by name');
 });
 
-test('the last mode has no dash, because a collection cannot have none', () => {
+test('the last mode has no Delete, because a collection cannot have none', () => {
   const one = renderForm(BLOCK.replace(
     /modes: \[[\s\S]*?\], \/\//,
     'modes: [{ name: "Desktop", containerWidth: 1440, columns: 12 }], //'
   ));
   const chip = one.chips.querySelectorAll('.config-ui-chip')[0];
-  assert.equal(chip.querySelector('.config-ui-chip-remove'), null);
+  chip.querySelector('.config-ui-chip-menu-btn').dispatch('click');
+  const labels = document.querySelectorAll('.config-ui-chip-menu-item').map((el) => el.textContent);
+  assert.deepEqual(labels, ['Duplicate mode', 'Rename mode']);
   assert.ok(one.chips.querySelector('.config-ui-chip-add'), 'but a mode can still be added');
 });
 
@@ -417,18 +470,12 @@ test('a key no column claims survives too, not just name', () => {
   assert.equal(values.modes[0].columns, 16);
 });
 
-test('the note calls a replacement a replacement, whatever the casing', () => {
-  // Found in the plugin. The config writes `mobile`, the file holds `Mobile` (the generator
-  // capitalises), so a case-sensitive check read the re-added chip as a different mode and the note
-  // said "Removing" for a replacement — understating the outcome in the one place that exists to
-  // state it. One definition of "the same mode name", used by both the intents and the wording.
+test('mode names match whatever the casing', () => {
+  // The config writes `mobile`, the file holds `Mobile` (the generator capitalises), so a
+  // case-sensitive check would read a re-added chip as a different mode.
   assert.equal(P.sameModeName('mobile', 'Mobile'), true);
   assert.equal(P.sameModeName(' Mobile ', 'mobile'), true);
   assert.equal(P.sameModeName('Mobile', 'Desktop'), false);
-
-  const ui = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.html'), 'utf8');
-  assert.match(ui, /sameModeName\(chipName, mode\.name\)/,
-    'the note is comparing names some other way again');
 });
 
 // ---------------------------------------------------------------------------

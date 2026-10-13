@@ -19,7 +19,14 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
-Nothing yet. Add entries here as changes land, then rename this heading to the version at release.
+### Added
+
+- Mode chips have a three-dot menu (also on right-click) with **Duplicate mode**, **Rename mode** and **Delete mode**. A duplicate starts with the source mode's settings. Delete mode asks first, then leaves the chip in place, dimmed and struck through, until Run; **Cancel delete** in its menu undoes it and brings its settings back.
+
+### Changed
+
+- Renaming or deleting a mode chip now takes effect at Run in every Design System Foundations script. Before, only Grid applied it, so in Spacing, Corner radius, Typography and Colors the chip changed and the mode did not.
+- New and duplicated modes are added at the end, and a notice says to reorder them in the Variables editor. Chips can no longer be dragged, because Figma cannot reorder the modes of a collection that has variables.
 
 ---
 

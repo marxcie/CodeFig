@@ -2440,10 +2440,23 @@
       return result;
     }
 
-    if (op.op === "reorder") {
-      if (op.from < 0 || op.from >= list.length || op.to < 0 || op.to >= list.length) return result;
-      list.splice(op.to, 0, list.splice(op.from, 1)[0]);
-      idList.splice(op.to, 0, idList.splice(op.from, 1)[0]);
+    if (op.op === "restore") {
+      // Undoes a pending delete: the entry comes back with the id it had, at the position its mode
+      // holds in the file.
+      var at = Math.max(0, Math.min(Number(op.index) || 0, list.length));
+      list.splice(at, 0, cloneModeValue(op.entry));
+      idList.splice(at, 0, op.modeId || null);
+      return result;
+    }
+
+    if (op.op === "duplicate") {
+      // Appended, never inserted. Figma can only add a mode at the end of a collection, so a copy
+      // placed anywhere else would show an order the file does not have and snap back on the next read.
+      // The copy is cloned from the source entry, so a run writes the source's settings into it.
+      if (op.index < 0 || op.index >= list.length) return result;
+      list.push(freshModeEntry(op.name, list[op.index]));
+      idList.push(null);
+      result.added = op.name;
       return result;
     }
 

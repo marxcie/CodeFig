@@ -676,6 +676,11 @@ function planModes(state, modeNames) {
  */
 function setupModes(collection, modeNames) {
   var wanted = modeNames || [];
+
+  // What the panel's chips asked for lands here, so every script that sets up modes honors it the
+  // same way. Null for a CLI run or a script opened without a panel, and then nothing happens.
+  applyModeIntents(collection, typeof window !== 'undefined' ? window.codefigModeIntents : null);
+
   var state = {
     name: collection.name,
     modes: collection.modes.map(function(m) { return { modeId: m.modeId, name: m.name }; }),
@@ -835,6 +840,11 @@ function removeModes(collection, modeNames) {
 function applyModeIntents(collection, intents) {
   var report = { renamed: [], removed: [], skipped: [], applied: false };
   if (!collection || !intents) return report;
+
+  // Applied once per run. `setupModes` calls this itself, and a script may call it first or call
+  // `setupModes` more than once.
+  if (intents.__applied) return report;
+  intents.__applied = true;
 
   if (intents.collection && intents.collection !== collection.name) {
     report.skipped.push({

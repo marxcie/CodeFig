@@ -251,7 +251,7 @@
   },
   {
     "type": "paragraph",
-    "text": "The chips read their names from the modes field below, so the two cannot disagree. Click a chip to rename it, drag to reorder, and the dash removes one. Nothing reaches the document until Run."
+    "text": "The chips read their names from the modes field below, so the two cannot disagree. Click a chip to rename it. The three-dot button, or a right-click, opens Duplicate, Rename and Delete mode. A new or duplicated mode goes at\nthe end, because Figma cannot reorder modes; reorder them in the Variables editor. Nothing reaches the document until Run."
   },
   {
     "type": "field",

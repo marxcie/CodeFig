@@ -26,7 +26,7 @@ function loadModeFunctions() {
   const ctx = { console: { log() {}, warn() {}, error() {} }, Math, String, Array, Object, JSON };
   vm.createContext(ctx);
   const map = resolver.extractFunctionMap(fs.readFileSync(VARIABLES, 'utf8'));
-  for (const name of ['planModes', 'setupModes', 'removeModes', 'modeOrderWarning', 'reportPublishedCost']) {
+  for (const name of ['planModes', 'setupModes', 'removeModes', 'applyModeIntents', 'modeOrderWarning', 'reportPublishedCost']) {
     const code = map.get(name);
     assert.ok(code, `${name} is not extractable from @variables.js`);
     vm.runInContext(code, ctx);
@@ -159,6 +159,27 @@ test('an empty wanted list plans nothing and reports everything as extra', () =>
 // ---------------------------------------------------------------------------
 // setupModes
 // ---------------------------------------------------------------------------
+
+test('setupModes applies the panel\'s chip intents itself, once, so every script behaves the same', () => {
+  const collection = fakeCollection(['Desktop', 'Tablet', 'Mobile'], { hasVariables: true });
+  const intents = {
+    collection: 'Responsive System',
+    renames: [{ modeId: 'm1', from: 'Tablet', to: 'Pad' }],
+    removals: [{ modeId: 'm2', name: 'Mobile' }],
+    additions: []
+  };
+  lib.window = { codefigModeIntents: intents };
+  try {
+    setupModes(collection, ['Desktop', 'Pad']);
+    assert.deepEqual(names(collection), ['Desktop', 'Pad']);
+    assert.deepEqual(collection.removed, ['Mobile']);
+    // A second call in the same run (Typography does this) changes nothing and warns about nothing.
+    setupModes(collection, ['Desktop', 'Pad']);
+    assert.deepEqual(collection.removed, ['Mobile']);
+  } finally {
+    delete lib.window;
+  }
+});
 
 test('setupModes never removes a mode it was not asked about', () => {
   const collection = fakeCollection(['Mobile', 'Tablet', 'Desktop', 'Wide'], { hasVariables: true });

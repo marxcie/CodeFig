@@ -986,8 +986,10 @@
    *   **a mode never exists unnamed**;
    * - clicking a label edits in place and that is a **rename** — the mode keeps its `modeId`, so values
    *   and bindings survive, and this is the only rename affordance;
-   * - `—` removes, and the **last remaining mode has none**;
-   * - chips are draggable, and drag owns the config order, the tab order and the creation order.
+   * - `…` (or a right-click on the chip) opens a menu with Duplicate, Rename and Delete mode; the last
+   *   remaining mode has no Delete;
+   * - chips are not draggable. Figma cannot reorder modes, and a chip order the file does not have
+   *   would be undone on the next read, so new and duplicated modes go at the end.
    */
   function buildChipsControl(row, schema) {
     var wrap = document.createElement("div");
@@ -1056,6 +1058,60 @@
     });
   }
 
+  /**
+   * Chips for modes that will be deleted at Run: shown struck through and dimmed, in the file's order,
+   * with one menu action, Cancel delete.
+   *
+   * They are not `.config-ui-chip` elements. Those are matched to the config's entries by position, and a
+   * mode that is leaving the config must not take a place in that list. `pending` is
+   * `[{ modeId, name, before }]`, where `before` is how many live chips come ahead of it.
+   */
+  function populatePendingDeletes(wrap, pending) {
+    wrap.querySelectorAll(".config-ui-chip-pending").forEach(function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    var list = Array.isArray(pending) ? pending : [];
+    if (!list.length) return;
+    var live = wrap.querySelectorAll(".config-ui-chip");
+    list.forEach(function (mode) {
+      var chip = document.createElement("span");
+      chip.className = "config-ui-chip-pending";
+      chip.setAttribute("data-pending-delete", mode.modeId);
+
+      var label = document.createElement("span");
+      label.className = "config-ui-chip-label";
+      label.textContent = mode.name;
+      chip.appendChild(label);
+
+      var more = document.createElement("button");
+      more.type = "button";
+      more.className = "config-ui-chip-menu-btn";
+      more.setAttribute("aria-label", "Actions for mode " + mode.name);
+      more.setAttribute("aria-haspopup", "menu");
+      more.appendChild(moreIcon());
+      function openMenu(x, y) {
+        showChipMenu([{ label: "Cancel delete", action: function () {
+          wrap.setAttribute("data-chip-op", JSON.stringify({ op: "restore", modeId: mode.modeId }));
+          wrap.dispatchEvent(new Event("change", { bubbles: true }));
+        } }], x, y);
+      }
+      more.addEventListener("click", function () {
+        var box = more.getBoundingClientRect();
+        openMenu(box.left, box.bottom + 4);
+      });
+      chip.addEventListener("contextmenu", function (e) {
+        e.preventDefault();
+        openMenu(e.clientX, e.clientY);
+      });
+      chip.appendChild(more);
+
+      var anchor = live[Math.max(0, Number(mode.before) || 0)] || wrap.querySelector(".config-ui-chip-add") ||
+        wrap.querySelector(".config-ui-chip-input") || null;
+      if (anchor && anchor.parentNode === wrap) wrap.insertBefore(chip, anchor);
+      else wrap.appendChild(chip);
+    });
+  }
+
   /** The last operation, consumed: read once and cleared, so it can never be applied twice. */
   function readChipOp(wrap) {
     var raw = wrap.getAttribute("data-chip-op");
@@ -1111,7 +1167,6 @@
       chip.className = "config-ui-chip" + (placeholder ? " config-ui-chip--placeholder" : "");
       chip.setAttribute("data-chip-name", name);
       chip.setAttribute("data-chip-index", String(index));
-      if (!placeholder) chip.setAttribute("draggable", "true");
 
       var label = document.createElement("span");
       label.className = "config-ui-chip-label";
@@ -1126,22 +1181,24 @@
       }
       chip.appendChild(label);
 
-      // The last remaining mode has no remove: a collection cannot have zero modes.
-      if (!placeholder && names.length > 1) {
-        var minus = document.createElement("button");
-        minus.type = "button";
-        minus.className = "config-ui-chip-remove";
-        minus.setAttribute("aria-label", "Remove mode " + name);
-        minus.textContent = "\u2014";
-        minus.addEventListener("click", function () {
-          var next = names.slice();
-          next.splice(index, 1);
-          commit(next, { op: "remove", index: index, name: name });
+      if (!placeholder) {
+        var more = document.createElement("button");
+        more.type = "button";
+        more.className = "config-ui-chip-menu-btn";
+        more.setAttribute("aria-label", "Actions for mode " + name);
+        more.setAttribute("aria-haspopup", "menu");
+        more.appendChild(moreIcon());
+        more.addEventListener("click", function () {
+          var box = more.getBoundingClientRect();
+          openChipMenu(wrap, names, index, commit, box.left, box.bottom + 4);
         });
-        chip.appendChild(minus);
+        chip.appendChild(more);
+        chip.addEventListener("contextmenu", function (e) {
+          e.preventDefault();
+          openChipMenu(wrap, names, index, commit, e.clientX, e.clientY);
+        });
       }
 
-      if (!placeholder) attachChipDrag(chip, wrap, names, index, commit);
       wrap.appendChild(chip);
     });
 
@@ -1252,40 +1309,122 @@
     input.select();
   }
 
-  /**
-   * Drag to reorder. Drag owns the config order, the tab order, and the creation order of a new
-   * collection — it cannot reorder the modes of a collection that already has variables, because the
-   * plugin API has no way to. That is reported when it happens rather than silently ignored.
-   */
-  function attachChipDrag(chip, wrap, names, index, commit) {
-    chip.addEventListener("dragstart", function (e) {
-      if (e.dataTransfer) {
-        e.dataTransfer.setData("text/plain", String(index));
-        e.dataTransfer.effectAllowed = "move";
-      }
-      chip.classList.add("is-dragging");
+  /** Three dots in a row, as an SVG so they centre on the chip's text instead of sitting on the baseline. */
+  function moreIcon() {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 12 12");
+    svg.setAttribute("width", "12");
+    svg.setAttribute("height", "12");
+    svg.setAttribute("aria-hidden", "true");
+    [2, 6, 10].forEach(function (cx) {
+      var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", String(cx));
+      dot.setAttribute("cy", "6");
+      dot.setAttribute("r", "1.1");
+      dot.setAttribute("fill", "currentColor");
+      svg.appendChild(dot);
     });
-    chip.addEventListener("dragend", function () {
-      chip.classList.remove("is-dragging");
-    });
-    chip.addEventListener("dragover", function (e) {
-      e.preventDefault();
-      chip.classList.add("is-drop-target");
-    });
-    chip.addEventListener("dragleave", function () {
-      chip.classList.remove("is-drop-target");
-    });
-    chip.addEventListener("drop", function (e) {
-      e.preventDefault();
-      chip.classList.remove("is-drop-target");
-      var from = e.dataTransfer ? Number(e.dataTransfer.getData("text/plain")) : NaN;
-      if (isNaN(from) || from === index) return;
-      var next = names.slice();
-      var moved = next.splice(from, 1)[0];
-      next.splice(index, 0, moved);
-      commit(next, { op: "reorder", from: from, to: index });
-    });
+    return svg;
   }
+
+  /** `Tablet` → `Tablet copy` → `Tablet copy 2`, skipping any name a chip already has. */
+  function copyName(names, name) {
+    var taken = names.map(function (n) { return String(n).toLowerCase(); });
+    var candidate = name + " copy";
+    var n = 2;
+    while (taken.indexOf(candidate.toLowerCase()) !== -1) candidate = name + " copy " + n++;
+    return candidate;
+  }
+
+  /**
+   * The chip's action menu, opened by the `…` button or a right-click.
+   *
+   * Lives on `document.body` at a fixed position, so no scroll container in the panel can clip it, and
+   * it is closed before any action runs because the action redraws the chips.
+   */
+  function openChipMenu(wrap, names, index, commit, x, y) {
+    var name = names[index];
+    var items = [
+      { label: "Duplicate mode", action: function () {
+        var copy = copyName(names, name);
+        commit(names.concat([copy]), { op: "duplicate", index: index, name: copy, from: name });
+      } },
+      { label: "Rename mode", action: function () {
+        editChipName(wrap, names, index, commit);
+      } }
+    ];
+    // A collection cannot have zero modes.
+    if (names.length > 1) {
+      items.push({ label: "Delete mode", danger: true, action: function () {
+        // Nothing reaches the file until Run, and the sentence says so. The same native confirm the
+        // copy-values link uses.
+        var msg = "Delete mode " + name + "? It is removed when you run the script, its values go with " +
+          "it, and any binding to it is lost.";
+        var ask = (typeof globalThis !== "undefined" && globalThis.confirm)
+          || (typeof window !== "undefined" && window.confirm)
+          || null;
+        if (typeof ask === "function" && !ask(msg)) return;
+        var next = names.slice();
+        next.splice(index, 1);
+        commit(next, { op: "remove", index: index, name: name });
+      } });
+    }
+    showChipMenu(items, x, y);
+  }
+
+  function showChipMenu(items, x, y) {
+    closeChipMenu();
+    var menu = document.createElement("div");
+    menu.className = "config-ui-chip-menu";
+    menu.setAttribute("role", "menu");
+
+    items.forEach(function (it) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "config-ui-chip-menu-item" + (it.danger ? " config-ui-chip-menu-item--danger" : "");
+      btn.setAttribute("role", "menuitem");
+      btn.textContent = it.label;
+      btn.addEventListener("click", function () {
+        closeChipMenu();
+        it.action();
+      });
+      menu.appendChild(btn);
+    });
+
+    menu.style.left = x + "px";
+    menu.style.top = y + "px";
+    document.body.appendChild(menu);
+
+    // Keep it on screen.
+    var box = menu.getBoundingClientRect();
+    if (box.right > window.innerWidth) menu.style.left = Math.max(0, window.innerWidth - box.width - 4) + "px";
+    if (box.bottom > window.innerHeight) menu.style.top = Math.max(0, window.innerHeight - box.height - 4) + "px";
+
+    function onDown(e) {
+      if (!menu.contains(e.target)) closeChipMenu();
+    }
+    function onKey(e) {
+      if (e.key === "Escape") closeChipMenu();
+    }
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("blur", closeChipMenu);
+    menu._cleanup = function () {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("blur", closeChipMenu);
+    };
+    var first = menu.querySelector("button");
+    if (first) first.focus();
+  }
+
+  function closeChipMenu() {
+    var open = document.querySelector(".config-ui-chip-menu");
+    if (!open) return;
+    if (open._cleanup) open._cleanup();
+    if (open.parentNode) open.parentNode.removeChild(open);
+  }
+
 
   /**
    * The collection picker: one field, two ways to fill it.
@@ -6156,6 +6295,7 @@
     // A `modeId` is file-specific and never travels in a config, so the panel holds the list and
     // hangs it back on the chips after every redraw.
     populateChipsControl: populateChipsControl,
+    populatePendingDeletes: populatePendingDeletes,
     readChipOp: readChipOp,
     // The read-back for one `@rows` control. Published so a test can *run* it: every other renderer test
     // here reads this file as source, which is how a function with an out-of-scope variable shipped and

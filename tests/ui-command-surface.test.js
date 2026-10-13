@@ -145,7 +145,7 @@ test('both commands wait for the change to land before answering', () => {
 test('an index is coerced, and a bad one is refused rather than becoming zero', () => {
   // `index=1` reaches the plugin as the string "1". `typeof index === 'number' ? index : 0` sent it to
   // index 0, so a bridge-driven rename edited the *first* chip and reported success — a verification
-  // that passes while doing the wrong thing is worse than one that fails. On `chip-remove` the same
+  // that passes while doing the wrong thing is worse than one that fails. On `chip-menu-delete` the same
   // slip would remove the wrong mode, and removals reach the document.
   const fn = UI.match(/function uiControlTarget\(name, part, index\)[\s\S]*?\n      \}/)[0];
   assert.equal(/typeof index === 'number' \? index : 0/.test(fn), false,
@@ -156,14 +156,14 @@ test('an index is coerced, and a bad one is refused rather than becoming zero', 
 });
 
 test('clickControl still cannot reach anything but a config control', () => {
-  // The allow-list gained `chip-remove` when the mode chips became drivable. It must stay an
+  // The allow-list gained `chip-menu` when the mode chips became drivable. It must stay an
   // allow-list: the moment a part name is accepted because it is not recognised, this channel can
   // press things the UI does not regard as config — Run included.
   const body = commandBody('clickControl');
   const list = body.match(/\[([^\]]*)\]\.indexOf\(a\.part\) === -1/);
   assert.ok(list, 'the allow-list is gone — clickControl is accepting any part');
   const parts = list[1].split(',').map((p) => p.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(parts.slice().sort(), ['add', 'card', 'chip-remove', 'remove', 'tab'],
+  assert.deepEqual(parts.slice().sort(), ['add', 'card', 'chip-menu', 'chip-menu-delete', 'chip-menu-duplicate', 'chip-menu-rename', 'remove', 'tab'],
     'a part was added to the allow-list without being considered here');
   // `card` is a suggestion card. It applies margin and gap to the mode on screen — a config edit, the
   // same class as typing in the fields — and it cannot reach a run.
@@ -180,7 +180,7 @@ test('dragControl is an allow-list of exactly the curve editor\'s own draggable 
   // Nothing that is not one of the curve editor's own pieces — the same reason `clickControl`'s
   // allow-list stays one: a part accepted because it was not recognised is a part that can eventually
   // reach Run.
-  ['add', 'remove', 'tab', 'chip-remove', 'card', 'shape', 'middle', 'handle', 'handle-'].forEach((bad) => {
+  ['add', 'remove', 'tab', 'chip-menu', 'card', 'shape', 'middle', 'handle', 'handle-'].forEach((bad) => {
     assert.ok(!re.test('curve:' + bad), '"' + bad + '" should not be draggable but the allow-list accepts it');
   });
 });
