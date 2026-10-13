@@ -1,7 +1,7 @@
 {
   "name": "codefig",
   "version": "2.1.0",
-  "description": "CodeFig - A Figma plugin for running TypeScript/JavaScript scripts with advanced variable management",
+  "description": "CodeFig - A Figma plugin for running JavaScript scripts, built for Variables, Styles and design-system automation",
   "main": "code.js",
   "scripts": {
     "validate": "node validate-scripts.js",
@@ -43,8 +43,10 @@
   "keywords": [
     "figma",
     "plugin",
-    "typescript",
+    "javascript",
     "variables",
+    "styles",
+    "design-system",
     "scripting"
   ],
   "author": "Marton Lakatos",

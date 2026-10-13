@@ -8,202 +8,52 @@
 
 ## What is CodeFig?
 
-CodeFig is a script runner for Figma, inspired by the [Scripter plugin](https://www.figma.com/community/plugin/757836922707087381/Scripter) by **@rsms**. It comes with a curated set of utility scripts covering framing and auto-layout, style and variable batch operations, design-system foundations (colors, grid, typography, spacing, corner radius), and smaller workflow helpers like generating annotations from comments.
+CodeFig is a script runner for Figma, inspired by the [Scripter plugin](https://www.figma.com/community/plugin/757836922707087381/Scripter) by **@rsms**. It ships a curated set of scripts for framing and auto-layout, style and variable batch operations, design-system foundations (colors, grid, typography, spacing, corner radius), and smaller workflow helpers.
 
-Variables are supported as a first-class use case, but CodeFig is intentionally broader than variable tooling. Scripts run as plain JavaScript in the Figma plugin sandbox.
+Variables are a first-class use case, but CodeFig is broader than variable tooling. Scripts are plain JavaScript (ES2017) running in the Figma plugin sandbox.
 
-### Why CodeFig instead of the original Scripter?
+**Why not Scripter?** Scripter introduced script-based automation in Figma and remains an excellent minimal tool. CodeFig adds scale, structure and reuse: a broader script set, a configuration form for each script, categories and search, `@import` between scripts, and no external dependencies.
 
-Scripter introduced script-based automation in Figma and remains an excellent minimal tool. CodeFig builds on that idea with a focus on scale, structure, and reuse:
-
-- **A broader example set** — layout, styles, variables, and design-system scripts
-- **JavaScript scripts** — plain `.js` files; the runtime is ES2017-style JS that the Figma sandbox accepts
-- **Script organization** — categories, search, import/export
-- **No external dependencies** — no CDNs or third-party services; the Figma API is only used where scripts specifically need it (e.g. comments-to-annotations)
+**Perfect for** designers and engineers who want repeatable automation for layout, styles and variables, and design-system setup scripts in a self-contained plugin.
 
 
 ## Features
 
-**Core**
-- Built-in code editor
-- Script categories, search, import/export
-- Keyboard shortcuts
-- Prebuilt utility scripts and libraries
-- User scripts with autosave (see note below)
-- Configuration UI — a script's settings become a form (fields, tabs, collection and mode pickers, curve editor, live preview) defined by a `@PANEL_START` recipe next to the script's values
+- Built-in code editor with keyboard shortcuts
+- Script categories, search, import and export
+- Prebuilt scripts and libraries, plus your own scripts with autosave
+- **Configuration UI.** A script's settings become a form with fields, tabs, collection and mode pickers, a curve editor and a live preview. A `@PANEL_START` recipe next to the script's values defines it.
 - `@import` for sharing functions between scripts and libraries
 - Real-time console logging in dev mode
 
 **Script storage and sharing**
-- Scripts are stored in a `CodeFig Scripts` Variables collection, so they travel with the file and its published library, with LocalStorage kept as a personal backup. The settings gear turns each store on or off.
+- Scripts live in a `CodeFig Scripts` Variables collection, so they travel with the file and its published library. LocalStorage is kept as a personal backup. The settings gear turns each store on or off.
 - Scripts from enabled remote libraries that publish `CodeFig Scripts` appear in their own sidebar folder.
-- **Render on canvas** builds a page of script cards; paste one into another file and the script appears in CodeFig there.
+- **Render on canvas** builds a page of script cards. Paste one into another file and the script appears in CodeFig there.
 - Footer menus export to JSON or sync one script or all scripts to Variables.
 
-> **Notes:**
-> - Only user scripts are auto-saved. Prebuilt scripts are read-only by default — duplicate them to edit and keep your changes.
-> - In dev mode, logs are written in real time to `figma-console.log`, so you can debug without copying errors out of Figma.
-
-**Bundled script examples**
-- **Layout & frames:** frame or auto-layout selections, scale or resize, remove unnecessary nesting, 3D transform, duplicate components, change case
-- **Styles:** batch rename and replace, duplicate collections, text-to-styles, render a styles overview, relink
-- **Variables:** find/replace bindings, batch rename, copy or move between collections, duplicate and export/import collections, selection to variables, inspector
-- **Styles & variables:** check, detach, replace and select by bindings
-- **Design-system foundations:** colors, grid, typography, spacing, corner radius (responsive token variables with curve editors and previews)
-- **Other:** annotations generated from Figma comments (API-based)
+> Only user scripts autosave. Prebuilt scripts are read-only, so duplicate one to edit it.
 
 
-## Perfect For
+## Install
 
-Designers and engineers who want repeatable automation for layout, styles, and variables; design-system setup scripts; and a self-contained plugin with no external dependencies.
+**From the Figma Community.** Install the plugin and open it in any Figma file.
 
+**From GitHub.** Open the [latest release](https://github.com/marxcie/codefig/releases/latest) and download `codefig-vX.Y.Z-plugin.zip`. Unzip it, then in Figma choose **Plugins → Development → Import plugin from manifest…** and select the `manifest.json` next to `code.js` and `ui.html`.
 
-## Quick Start
-
-1. Install from the Figma Community, or open the [**latest GitHub release**](https://github.com/marxcie/codefig/releases/latest) and download **`codefig-vX.Y.Z-plugin.zip`** (the version in the filename matches the release tag, e.g. `codefig-v2.0.0-plugin.zip`).
-2. Open the plugin in any Figma file.
-3. Browse the bundled scripts in the sidebar.
-4. Run a script with the Run button or `Cmd/Ctrl + R`.
-5. Create or extend scripts using **JavaScript** (syntax must be valid JS at run time).
-
-
-## Installing from GitHub
-
-On each [release](https://github.com/marxcie/codefig/releases), download **`codefig-vX.Y.Z-plugin.zip`** (same version as the tag, e.g. v2.0.0 → `codefig-v2.0.0-plugin.zip`). Unzip it, then in Figma go to **Plugins → Development → Import plugin from manifest…** and select the **`manifest.json`** in the unzipped folder, next to `code.js` and `ui.html`.
-
-That `manifest.json` is generated by the build, not committed: `npm run build:production` reads the `src/manifest.json` template, applies production network settings, and writes the result to `dist/manifest.json` alongside `code.js` and `ui.html`. There is no separate “latest.zip” filename; pick the versioned asset on the release you want.
-
-### Shipping a new release (for maintainers)
-
-Run:
-
-```
-npm run build:release -- patch
-```
-
-Use `minor` or `major` instead of `patch` as appropriate. This command:
-- Requires a **clean git working tree** before it starts
-- Runs a production build (which writes `dist/manifest.json` with production network settings; no tracked file is touched)
-- Writes `codefig-plugin.zip` locally
-- Bumps the version in `package.json`, syncs `package-lock.json`, makes **one commit** with those files, and creates the **`v*`** tag
-- **Does not `git push` by default** — push from GitHub Desktop or the CLI when you're ready
-
-Additional flags:
-- `--push` — also pushes the branch and tag, which starts CI on GitHub
-- `--dry-run` — build and pack only, no version bump or tag
-
-**You do not commit or push the zip.** Local `npm run pack` writes `codefig-plugin.zip` at the repo root (gitignored), only for convenience. `dist/` is gitignored. When you push the tag, GitHub Actions builds **`codefig-vX.Y.Z-plugin.zip`** from the committed tree and attaches it to the release.
-
-### Selective commits before a release
-
-The script only checks for a clean tree **before** the build. If you have unfinished work you're not ready to ship, use `git stash` to hold it back temporarily, then commit what you want included before running `build:release`.
-
-**Example: ship one script change while keeping other edits local**
-
-1. **Stash** the files you're not shipping yet (nothing is lost — they're saved locally):
-
-   ```
-   git stash push -m "wip plugin ui" -- src/ui.html src/ui.css src/code.ts
-   ```
-
-2. **Commit** what you do want in this release:
-
-   ```
-   git add scripts/EXAMPLE_SCRIPTS/my-change.js && git commit -m "fix: …"
-   ```
-
-3. Run `npm run build:release -- patch`. The production build uses the last committed versions of any stashed files.
-
-4. **Pop your stash** when you want your WIP back:
-
-   ```
-   git stash pop
-   ```
-
-5. Push the branch and tag from GitHub Desktop, or add `--push` to the release command.
-
-If the release script fails with **tag already exists**, a previous run may have created the tag without finishing. Remove it and retry:
-
-```
-git tag -d v1.0.1
-```
-
-Use the exact tag name from the error message.
-
-**Local zip only (same contents as CI):** `npm run pack` (or use `--dry-run`).
-
-
-## Development
-
-**Local setup:**
-
-```
-npm install
-npm run dev
-```
-
-This watches `src/` (the sandbox code, the UI, `ui.css`, the config UI) and `scripts/`, starts the local console log server (writing to `figma-console.log`), and rebuilds on change. Reload the plugin in Figma to test.
-
-To load your local build, import **`dist/manifest.json`** in Figma (**Plugins → Development → Import plugin from manifest…**). Run a build first — the file is generated, so it does not exist in a fresh clone. *If you set up CodeFig for development before the manifest moved into `dist/`, you must re-import once: the old entry points at a repo-root `manifest.json` that no longer exists. Remove it and import `dist/manifest.json`.*
-
-**Production build:** `npm run build:production` — runs `tsc` on `src/code.ts`, embeds script sources into `dist/ui.html`, and writes a `dist/manifest.json` free of `localhost` (safe for enterprise submission and publishing).
-
-**One-off dev build:** `npm run build:dev` — same as production, but adds `http://localhost:8765` to `dist/manifest.json` so the console log bridge can run locally.
-
-Both read the tracked template at `src/manifest.json` and never write to it, so builds leave the git tree clean.
-
-### Script reference
-
-| Command | Description |
-|---------|-------------|
-| `npm run build:production` | Validation (**blocking** — a validation error fails the build), `tsc`, then `build-scripts.js` without `--dev` — writes `dist/manifest.json` without localhost. Use before publishing. |
-| `npm run build:dev` | Same as above, with `--dev` — adds localhost to `dist/manifest.json` for local console forwarding to `figma-console.log`. Validation only **warns** here, so a half-written script does not stop the build. |
-| `npm run dev` | Runs `build:dev`, then watches `src/` and `scripts/`, rebuilds on change, and starts the console log server. |
-| `npm run validate` | Validates that scripts parse the way the sandbox parses them, that `@import`s resolve, and that the scale fixtures hold. Prints `N error(s), M warning(s)`; the exit code tracks errors only. See `scripts/README.md` → Validation. |
-| `npm run validate:soft` | Same report, always exits 0. Used by `build:dev`. |
-| `npm run test:figma` | Runs the in-Figma specs in `scripts/_TESTS/` against the open plugin and exits non-zero on failure. Add a filter (`-- find-replace`) or `--verbose`. Cases that create styles, variables or pages only run in a file whose name contains `codefig-test`, so pointing it at real work is a no-op. |
-| `npm run figma:run -- <script>` | Runs a bundled script **inside the open plugin** from the terminal and exits non-zero if the run logs an error. Requires `npm run dev` and the plugin open on a dev build — it cannot launch Figma. Use `--code "<js>"` or `--file <path>` to run something that is not a bundled script. |
-| `npm test` | Node fixture tests — import resolver, matching, config UI, panel specs, dev bridge, colour maths. No Figma needed. |
-| `npm run figma:sync` | Waits until the open plugin reports the current dev build, so you know the reload took before you verify anything. |
-| `npm run figma:ui -- <command>` | Drives the plugin UI from the terminal (`selectScript`, `readConfig`, `setField`, `clickControl`, …). Dev builds only. |
-| `npm run bench:colors` | Measures how closely Colors reproduces real colour scales from a file. Fails above a threshold. |
-| `npm run build:style-reference` | Regenerates `artifacts/style-reference.html`, the Style & UI reference, from the real renderer and CSS. |
-| `npm run preview:panel -- "<script>"` | Renders a script's whole Configuration UI in a browser against the real CSS. |
-| `npm run clean` | Removes `dist/`. |
-| `npm run pack` | Runs `clean` and `build:production`, then writes `codefig-plugin.zip` — the contents of `dist/` (`manifest.json`, `code.js`, `ui.html`) at the archive root. Cleaning first keeps stale files from earlier builds out of the zip. Same layout as the GitHub Release asset; requires the `zip` CLI. |
-| `npm run build:release` | See **Shipping a new release** above. Build + pack + version bump + commit (`package.json`, lockfile) + tag. Optional `--push`; default is no push. `--dry-run` builds and packs only. |
-
-**Driving a real run from the terminal.** Figma has no headless mode, so nothing can run a script without a Figma client open. What the dev bridge adds is the other direction: with `npm run dev` going and the plugin open, `npm run figma:run -- rename-styles` hands the job to the plugin, waits for it, prints the run's console output and exits 0 or 1. Handy for checking a change without clicking through the UI each time. The queue is in-memory, unauthenticated, and reachable **only** from a dev build — a production build has no localhost entry in its manifest, and the UI's single localhost call site is gated on the build flag (enforced by `tests/ui-dev-guard.test.js`).
-
-**Console logging:** During `dev`, plugin and script logs are written to `figma-console.log`. The file is un-ignored so it can be read directly. The `prepare` script adds it to `.git/info/exclude` to prevent it from being committed. Because the localhost entry only ever lands in the generated `dist/manifest.json`, a dev build cannot leak it into a commit or a release.
-
-### Project structure
-
-- `src/` — plugin code, UI, and the `manifest.json` template
-- `scripts/` — utility scripts and shared libraries
-- `dist/` — build output (`manifest.json`, `code.js`, `ui.html` with embedded script bundle)
-
-**Shipped vs. dev-only scripts:** The build skips any script file or folder whose name starts with `_` (e.g. `_auto-layout-all-selected.js` or `_DEBUG_SCRIPTS/`). Those files stay in the repo for experiments and local debugging but are never included in the published plugin.
-
-
-## Network & Privacy
-
-CodeFig is fully self-contained:
-- No CDNs or third-party services
-- Uses the Figma API only when a script requires it
-- No telemetry or data collection
-- Runs entirely in the Figma plugin sandbox
-
-`http://localhost:8765` appears only in dev mode builds, for console log forwarding.
+**Quick start**
+1. Open the plugin and pick a script in the sidebar.
+2. Adjust its settings in the Configuration tab.
+3. Run it with the Run button or `Cmd/Ctrl + R`.
 
 
 ## Bundled Scripts
 
-These are the utility and help scripts included in the build (see **Shipped vs. dev-only scripts** above). Display names in the plugin come from each file's title comment.
+Every script ships in the plugin, grouped in the sidebar as listed here.
 
 ### Utility Scripts
 
-General tools (layout, selection, API). Style, variable, and cross-cutting utilities live in their own sidebar groups (**Styles**, **Variables**, **Styles & Variables**).
+General tools for layout, selection and the Figma API.
 
 | Script | Description |
 |--------|-------------|
@@ -249,8 +99,6 @@ General tools (layout, selection, API). Style, variable, and cross-cutting utili
 | **Replace variables in local styles** | Batch find and replaces variable bindings inside style definitions. |
 | **Select by styles or variables** | Selects all nodes that use a specific style or variable. |
 
----
-
 ### Design System Foundations
 
 These scripts let you build a highly configurable design system foundation with as many breakpoints as needed, and tune colors, spacing, grid, typography, and corner radius per breakpoint. Each panel stays empty until you pick a collection, then loads what the file already holds, previews the result before you run, and writes tokens in place so existing bindings survive.
@@ -263,9 +111,9 @@ These scripts let you build a highly configurable design system foundation with 
 | **Spacing** | Creates or updates spacing variables across breakpoint modes and sets their respective scopes. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed. |
 | **Typography** | Creates or updates typography variables across breakpoint modes with their respective scopes, and optionally matching text styles. Highly configurable: set min–max values per breakpoint and define as many steps, increment types, and naming conventions as needed. |
 
----
-
 ### Importable Libraries
+
+Libraries are `@`-prefixed scripts that other scripts pull functions from with `@import`. They are not run directly.
 
 | Library | Description |
 |---------|-------------|
@@ -283,9 +131,7 @@ These scripts let you build a highly configurable design system foundation with 
 | **@Foundation**, **@Foundation overview** | Design System Foundations manifests, set identity, and Overview frames. |
 | **@Test Harness** | Runs in-Figma specs against the real API (development). |
 
-**User libraries:** Create a script and name it with an `@` prefix (e.g. `@My Utils`) to treat it as a library. Libraries are imported by other scripts rather than run directly.
-
-**User scripts:** Create a script and run it. :)
+**Your own scripts:** create a script and run it. Name one with an `@` prefix (for example `@My Utils`) and it becomes a library other scripts can import.
 
 
 ## Keyboard Shortcuts
@@ -301,6 +147,73 @@ These scripts let you build a highly configurable design system foundation with 
 User scripts autosave after you pause typing — there's no separate Save shortcut.
 
 
+## Network & Privacy
+
+CodeFig is self-contained.
+- No CDNs, third-party services or telemetry
+- Uses the Figma API only when a script requires it (for example Comments to annotations)
+- Runs entirely in the Figma plugin sandbox
+
+`http://localhost:8765` appears only in dev builds, for console log forwarding.
+
+
+## Development
+
+```
+npm install
+npm run dev
+```
+
+`npm run dev` builds, watches `src/` and `scripts/`, and starts the console log server, which writes to `figma-console.log`. Import `dist/manifest.json` in Figma (**Plugins → Development → Import plugin from manifest…**) and reload the plugin after each rebuild. The manifest is generated, so it does not exist until the first build.
+
+### Project structure
+
+| Path | Contents |
+|------|----------|
+| `src/` | Sandbox code (`code.ts`, the only TypeScript), UI (`ui.html`, `ui.css`), config UI, import resolver, and the `manifest.json` template |
+| `scripts/EXAMPLE_SCRIPTS/` | Bundled scripts. Subfolders become sidebar groups |
+| `scripts/CODEFIG_LIBRARIES/` | Importable `@` libraries |
+| `scripts/HELP/` | Help and documentation script |
+| `scripts/_TESTS/` | In-Figma specs, never shipped |
+| `tests/` | Node fixture tests |
+| `dist/` | Build output (`manifest.json`, `code.js`, `ui.html`), gitignored |
+
+Files and folders whose names start with `_` or `.` are never shipped. See [scripts/README.md](scripts/README.md) for script conventions and the `@import` system.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Dev build, watch, and console log server |
+| `npm run build:dev` | Dev build. Validation only warns, so half-written scripts still build |
+| `npm run build:production` | Production build. A validation error fails it. No `localhost` in the manifest |
+| `npm run validate` | Parses every script as the sandbox does and checks that `@import`s resolve |
+| `npm test` | Node fixture tests, no Figma needed |
+| `npm run test:figma` | Runs the in-Figma specs against the open plugin |
+| `npm run figma:run -- <script>` | Runs a script inside the open plugin from the terminal |
+| `npm run figma:sync` | Waits until the open plugin reports the current dev build |
+| `npm run figma:ui -- <command>` | Drives the plugin UI from the terminal (dev builds only) |
+| `npm run bench:colors` | Measures how closely Colors reproduces real colour scales |
+| `npm run build:style-reference` | Regenerates `artifacts/style-reference.html` |
+| `npm run preview:panel -- "<script>"` | Renders a script's Configuration UI in a browser |
+| `npm run pack` | Production build plus `codefig-plugin.zip` |
+| `npm run build:release -- patch\|minor\|major` | Release build, version bump, commit and tag |
+
+The full command notes and architecture live in [CLAUDE.md](CLAUDE.md). Open work is tracked in [ROADMAP.md](ROADMAP.md) and [DEFERRED.md](DEFERRED.md), and user-facing changes in [CHANGELOG.md](CHANGELOG.md).
+
+### Releasing
+
+```
+npm run build:release -- patch
+```
+
+Use `minor` or `major` as needed. The command requires a clean working tree, runs a production build and pack, bumps the version, and makes one commit and a `v*` tag. It does not push unless you pass `--push`. `--dry-run` builds and packs only.
+
+Pushing the tag starts `.github/workflows/release.yml`. It validates, tests and builds, then attaches `codefig-vX.Y.Z-plugin.zip` to the GitHub release. The zip is never committed.
+
+If the release script fails with *tag already exists*, a previous run created the tag without finishing. Delete it with `git tag -d <tag>` and retry.
+
+
 ## Contributing
 
 - Open issues for bugs or proposals
@@ -310,8 +223,4 @@ User scripts autosave after you pause typing — there's no separate Save shortc
 
 ## License
 
-MIT — free for commercial and non-commercial use.
-
----
-
-Built for the Figma community.
+MIT, free for commercial and non-commercial use.
