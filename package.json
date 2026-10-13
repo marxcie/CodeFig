@@ -16,6 +16,7 @@
     "devtools:rebuild-count": "node devtools/rebuild-count.js",
     "build:style-reference": "node build-style-reference.js",
     "preview:panel": "node build-panel-preview.js",
+    "build:ui-static": "node build-ui-static.js",
     "build:production": "npm run validate && tsc && node build-scripts.js",
     "build:dev": "npm run validate:soft && tsc && node build-scripts.js --dev",
     "dev": "npm run build:dev && concurrently \"tsc --watch --preserveWatchOutput\" \"chokidar 'dist/code.js' -d 300 -c 'node build-scripts.js --dev --shim-only'\" \"chokidar 'src/ui.html' 'src/ui.css' 'src/config-ui/**/*.js' 'src/import-resolver.js' 'src/foundation-maintain.js' 'scripts/**/*.js' -d 300 -c 'node build-scripts.js --dev'\" \"node figma-console-server.js\"",
