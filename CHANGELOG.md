@@ -19,6 +19,12 @@ a plain statement of the new default.
 
 ## [Unreleased]
 
+Nothing yet. Add entries here as changes land, then rename this heading to the version at release.
+
+---
+
+## [2.2.0] - 2026-10-17
+
 ### Added
 
 - **Edit variable scopes** is a new script that changes the scopes of many variables at once and sets **Hide from publishing** on them. It filters by collection, group and name (plain text, `*` wildcards or a regular expression) and optionally by variable type. Scopes are a checkbox list that follows the chosen Type, with two rows above it, Show in all supported properties and Disable all supported properties, that override the list. Each variable ends up with exactly the ticked scopes, and a scope that does not exist for a variable's type is skipped for that variable. Hide from publishing is a toggle that hides every matching variable.
