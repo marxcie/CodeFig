@@ -9,7 +9,9 @@
 // text, paint, and effect styles).
 //
 // Bindings that use variables from **Source collection** are swapped to the same-named variable
-// in **Target collection** (types must match). Text fields use bound variables; fills and effects
+// in **Target collection** (types must match). With a **Group** on each side, the source group
+// prefix is swapped for the target group prefix, so `Typography/size/body` in group `Typography`
+// finds `Inter/size/body` in target group `Inter`. Only the part of the name after the group has to match. Text fields use bound variables; fills and effects
 // update variable alias ids on cloned paints and effects. Matching is case-sensitive.
 //
 // ### Search patterns
@@ -32,7 +34,9 @@
 // | **Search in**<br>`searchIn` | Only styles whose name contains this. Empty means every local text, paint, and effect style. |
 // | **Use regular expression**<br>`useRegex` | Treat Search in as a regular expression rather than plain text with `*` wildcards. |
 // | **Source collection**<br>`sourceCollection` | Bindings pointing at this collection are the ones that move. |
+// | **Group**<br>`sourceGroup` | Only bindings to variables under this path. Empty means the whole collection. |
 // | **Target collection**<br>`targetCollection` | Each binding moves to the same-named variable in this collection. |
+// | **Group**<br>`targetGroup` | Path the source group is swapped for in the target. Empty keeps the path as it is. |
 // | **Break unmatched bindings**<br>`breakUnmatchedBindings` | When on, remove a binding if the target has no variable of that name (raw value remains). Off leaves the binding as it is. |
 // @DOC_END
 
@@ -43,7 +47,9 @@
 var searchIn = "";
 var useRegex = false;
 var sourceCollection = "";
+var sourceGroup = "";
 var targetCollection = "";
+var targetGroup = "";
 var breakUnmatchedBindings = false;
 // @UI_CONFIG_END
 
@@ -59,9 +65,15 @@ var __codefigPanel = {
     { key: "sourceCollection", type: "select", options: "variableCollections" },
     { type: "paragraph", attachTo: "previous",
       text: "Bindings pointing at this collection are the ones that move. Pick a real collection — *(all\ncollections)* does nothing here." },
+    { key: "sourceGroup", type: "string", label: "Group", placeholder: "Typography" },
+    { type: "paragraph", attachTo: "previous",
+      text: "Only bindings to variables under this path move. Empty means the whole collection." },
     { key: "targetCollection", type: "select", options: "variableCollections" },
     { type: "paragraph", attachTo: "previous",
       text: "Each binding moves to the same-named variable in this collection." },
+    { key: "targetGroup", type: "string", label: "Group", placeholder: "Inter" },
+    { type: "paragraph", attachTo: "previous",
+      text: "The source group is swapped for this path in the target. Empty keeps the path as it is." },
     { type: "divider" },
     { key: "breakUnmatchedBindings", type: "boolean" },
     { type: "paragraph", attachTo: "previous",
@@ -137,7 +149,11 @@ async function main() {
     var breakUnmatched = typeof breakUnmatchedBindings !== "undefined" && breakUnmatchedBindings === true;
     console.log("breakUnmatchedBindings:", breakUnmatched);
 
-    var lookup = await buildTargetVariableLookup(targetName);
+    var groups = {
+      sourceGroup: typeof sourceGroup !== "undefined" ? sourceGroup : "",
+      targetGroup: typeof targetGroup !== "undefined" ? targetGroup : ""
+    };
+    var lookup = await buildTargetVariableLookup(targetName, groups);
     if (lookup.map.size === 0 && !breakUnmatched) {
       figma.notify("❌ No variables found in target collection: " + targetName);
       return;

@@ -185,6 +185,7 @@
 // | Script | What it does |
 // |---|---|
 // | Duplicate variable collection | Clones a local variable collection including modes, values, metadata, and Design System Foundations sets |
+// | Edit variable scopes | Adds or removes scopes and toggles Hide from publishing on many variables at once, filtered by collection, group and name |
 // | Export/import variables | Copies local variable collections between files as JSON (export to clipboard or import from paste) |
 // | Match colors to collection variables | Binds raw paint colors in the selection to COLOR variables from chosen collections |
 // | Copy or move variables | Copies or moves variable definitions from a source collection into a target collection |

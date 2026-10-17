@@ -2396,7 +2396,11 @@ async function stampGeneratedTokens(collection, domain, group, names, setId) {
     var variable = byName[names[n]];
     if (!variable || variable.remote) continue;
     try {
-      stampToken(variable, domain, foundationTokenKey(group, names[n]), 1, setId);
+      // setSharedPluginData is a document write even when the value is unchanged.
+      var wanted = stampValue(domain, foundationTokenKey(group, names[n]), 1, setId);
+      if (variable.getSharedPluginData(foundationNamespace(), 'stamp') !== wanted) {
+        stampToken(variable, domain, foundationTokenKey(group, names[n]), 1, setId);
+      }
       report.stamped++;
     } catch (e) {
       report.warnings.push(foundationWarning(

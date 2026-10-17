@@ -20,7 +20,7 @@
 // |----------|-----------|
 // | Collections | getAllCollections, getCollection, getOrCreateCollection |
 // | Modes | planModes, setupModes, removeModes, getOrCreateMode, getDefaultMode, modeOrderWarning |
-// | Variables | getVariable, getCollectionVariables, getVariableValue, setVariableValue, createOrUpdateVariable |
+// | Variables | getVariable, buildVariableIndex, getCollectionVariables, getVariableValue, setVariableValue, createOrUpdateVariable |
 // | Batch | extractModes, resolveModeValues, processVariables |
 // @DOC_END
 
@@ -103,9 +103,13 @@ async function getCollection(name) {
 /**
  * Get variable by name from a collection (async for getVariableByIdAsync)
  */
-async function getVariable(collection, variableName) {
+async function getVariable(collection, variableName, index) {
   if (!collection) return null;
-  
+
+  // With an index the lookup is a property read. Without one it scans the collection, which is
+  // linear per call and quadratic across a run.
+  if (index) return index[variableName] || null;
+
   for (var i = 0; i < collection.variableIds.length; i++) {
     var variableId = collection.variableIds[i];
     var variable = await figma.variables.getVariableByIdAsync(variableId);
@@ -114,6 +118,20 @@ async function getVariable(collection, variableName) {
     }
   }
   return null;
+}
+
+/**
+ * Reads a collection once into `{ name: Variable }`, for passing as `getVariable`'s third argument.
+ * A caller that creates or renames variables mid-run keeps the index current by assigning into it.
+ */
+async function buildVariableIndex(collection) {
+  var index = {};
+  var ids = (collection && collection.variableIds) || [];
+  for (var i = 0; i < ids.length; i++) {
+    var variable = await figma.variables.getVariableByIdAsync(ids[i]);
+    if (variable) index[variable.name] = variable;
+  }
+  return index;
 }
 
 /**
@@ -942,7 +960,7 @@ async function setVariableValueLoadingFonts(variable, modeId, value) {
   variable.setValueForMode(modeId, value);
 }
 
-async function createOrUpdateVariable(collection, name, config, modes) {
+async function createOrUpdateVariable(collection, name, config, modes, index) {
   // Handle both old signature (type, values) and new signature (config, modes)
   var actualConfig, actualModes;
   
@@ -957,7 +975,7 @@ async function createOrUpdateVariable(collection, name, config, modes) {
   }
   
   name = normalizeVariableName(name);
-  var existing = await getVariable(collection, name);
+  var existing = await getVariable(collection, name, index);
 
   if (existing && existing.remote) {
     console.warn('Skipping remote/library variable (cannot update locally): ' + name);
@@ -985,9 +1003,11 @@ async function createOrUpdateVariable(collection, name, config, modes) {
 
   var action = existing ? 'updated' : 'created';
   var isNew = !existing;
+  var changed = isNew;
 
   if (!existing) {
     existing = figma.variables.createVariable(name, collection, actualConfig.type);
+    if (index) index[name] = existing;
   }
 
   // Scopes must be set before values on new typography variables (FONT_WEIGHT etc.)
@@ -1002,6 +1022,7 @@ async function createOrUpdateVariable(collection, name, config, modes) {
     var haveDesc = String(existing.description || '').trim();
     if (wantDesc && !haveDesc) {
       existing.description = wantDesc;
+      changed = true;
     }
   }
 
@@ -1031,7 +1052,7 @@ async function createOrUpdateVariable(collection, name, config, modes) {
         // Falls back to the plain RGBA when the base is missing, or is itself translucent (Figma
         // ignores the opacity on a translucent source).
         if (actualConfig.type === 'COLOR' && actualConfig.opacityOf && typeof actualConfig.opacity === 'number') {
-          var linkBase = await getVariable(collection, actualConfig.opacityOf);
+          var linkBase = await getVariable(collection, actualConfig.opacityOf, index);
           var baseCell = linkBase && linkBase.valuesByMode ? linkBase.valuesByMode[mode.modeId] : undefined;
           var baseOpaque = baseCell && (baseCell.type === 'VARIABLE_ALIAS' || typeof baseCell.a !== 'number' || baseCell.a >= 1);
           if (linkBase && baseOpaque) {
@@ -1061,6 +1082,7 @@ async function createOrUpdateVariable(collection, name, config, modes) {
         }
         
         await setVariableValueLoadingFonts(existing, mode.modeId, value);
+        changed = true;
         wroteMode[modeName] = true;
         if (firstWrittenValue === null && typeof value === 'number') firstWrittenValue = value;
         console.log('  ' + modeName + ': ' + (actualConfig.type === 'COLOR' && typeof value.r === 'number' ? rgbToHex(value.r, value.g, value.b) : (actualConfig.type === 'COLOR' ? 'linked at ' + value.opacity + '%' : value)));
@@ -1090,6 +1112,7 @@ async function createOrUpdateVariable(collection, name, config, modes) {
       if (cur === undefined || cur === null || cur === 0) {
         try {
           await setVariableValueLoadingFonts(existing, sibling.modeId, firstWrittenValue);
+          changed = true;
           console.log('  ' + sibling.name + ': ' + firstWrittenValue + ' (from first mode)');
         } catch (seedErr) {
           console.warn('Could not seed mode ' + sibling.name + ': ' +
@@ -1105,7 +1128,7 @@ async function createOrUpdateVariable(collection, name, config, modes) {
     return 'skipped';
   }
 
-  return action;
+  return changed ? action : 'unchanged';
 }
 
 /**
@@ -1152,7 +1175,8 @@ function resolveModeValues(varConfig, modes, configValues) {
  * Process multiple variables
  */
 async function processVariables(collection, variables, configValues, modes) {
-  var stats = { created: 0, updated: 0, skipped: 0 };
+  var stats = { created: 0, updated: 0, unchanged: 0, skipped: 0 };
+  var index = await buildVariableIndex(collection);
   
   console.log('Processing ' + Object.keys(variables).length + ' variables...');
   
@@ -1178,7 +1202,7 @@ async function processVariables(collection, variables, configValues, modes) {
         calculatedConfig.opacity = varConfig.opacity;
       }
 
-      var result = await createOrUpdateVariable(collection, varName, calculatedConfig, modes);
+      var result = await createOrUpdateVariable(collection, varName, calculatedConfig, modes, index);
       if (result === 'skipped') {
         stats.skipped++;
       } else {
@@ -1388,6 +1412,7 @@ if (typeof module !== 'undefined' && module.exports) {
     getAllCollections,
     getCollection,
     getVariable,
+    buildVariableIndex,
     getVariableValue,
     setVariableValue,
     getCollectionVariables,

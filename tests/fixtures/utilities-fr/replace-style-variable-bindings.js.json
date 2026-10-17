@@ -42,6 +42,20 @@
   },
   {
     "type": "field",
+    "name": "sourceGroup",
+    "value": "",
+    "label": "Group",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "Typography"
+  },
+  {
+    "type": "paragraph",
+    "text": "Only bindings to variables under this path move. Empty means the whole collection."
+  },
+  {
+    "type": "field",
     "name": "targetCollection",
     "value": "",
     "label": "Target collection",
@@ -53,6 +67,20 @@
   {
     "type": "paragraph",
     "text": "Each binding moves to the same-named variable in this collection."
+  },
+  {
+    "type": "field",
+    "name": "targetGroup",
+    "value": "",
+    "label": "Group",
+    "labelSpelled": true,
+    "tooltip": "",
+    "inputType": "string",
+    "placeholder": "Inter"
+  },
+  {
+    "type": "paragraph",
+    "text": "The source group is swapped for this path in the target. Empty keeps the path as it is."
   },
   {
     "type": "divider",

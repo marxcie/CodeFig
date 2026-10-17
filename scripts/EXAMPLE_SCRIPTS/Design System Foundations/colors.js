@@ -131,7 +131,7 @@
 // do not bring cross-script dependencies — `npm run validate` makes a missing one a build error.
 
 @import { displayResults, createResult } from "@InfoPanel"
-@import { getOrCreateCollection, setupModes, processVariables, getVariable } from "@Variables"
+@import { getOrCreateCollection, setupModes, processVariables, getVariable, buildVariableIndex } from "@Variables"
 @import { foundationCreateColorsOverview } from "@Foundation overview"
 @import { namePrefix, resolveCollectionName, resolveGroup, expandTokenList, tokenListHasSeries, writeManifest, findFoundationSet, foundationModeIds, alignStampedTokens, stampGeneratedTokens, describeStampAlignment, foundationColorsAutoImport } from "@Foundation"
 @import { colorsParseSteps, colorsPreviewHtml, colorsBuildVariableMap, colorsManifestSlice, colorsApplySeedScale, colorsSyncLockedSeedMiddles } from "@Color Ramp"
@@ -313,10 +313,11 @@ async function colorsApplyWriteGuards(collection, built, group) {
   var variables = {};
   var names = Object.keys(built.variables);
   var prefix = namePrefix(group);
+  var index = await buildVariableIndex(collection);
   for (var i = 0; i < names.length; i++) {
     var name = names[i];
     var entry = built.variables[name];
-    var existing = await getVariable(collection, name);
+    var existing = await getVariable(collection, name, index);
     var values = {};
     var modeNames = Object.keys(entry.values || {});
     var tail = prefix && name.indexOf(prefix) === 0 ? name.slice(prefix.length) : name;
@@ -541,7 +542,7 @@ async function runColors(config) {
 
   results = colorsPlanLines(built, guards, orphans);
   results.push(createResult(
-    stats.created + ' created, ' + stats.updated + ' updated, ' + stats.skipped + ' skipped',
+    stats.created + ' created, ' + stats.updated + ' updated, ' + stats.unchanged + ' unchanged, ' + stats.skipped + ' skipped',
     'Collection: ' + collection.name +
       (manifest && manifest.ok ? '; set recorded' : ''),
     'success'

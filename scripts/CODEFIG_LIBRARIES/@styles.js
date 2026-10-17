@@ -579,6 +579,10 @@ function uniqueBy(array, property) {
 // Remap VARIABLE_ALIAS bindings on **local** styles to same-named variables in a target collection.
 // Pass non-empty sourceCollectionName to only touch bindings whose variable lives in that collection; pass "" to consider every binding.
 
+function rebindTrimGroup(g) {
+  return String(g == null ? "" : g).trim().replace(/^\/+|\/+$/g, "");
+}
+
 function bindingMatchesSourceCollectionFilter(colName, sourceCollectionName) {
   var s = sourceCollectionName != null ? String(sourceCollectionName).trim() : "";
   if (!s) return true;
@@ -617,9 +621,11 @@ async function collectionNameForVariableForStyleRebind(variable) {
 /**
  * Build lookup: variableName + tab + resolvedType -> replacement Variable (local or imported from library).
  */
-async function buildTargetVariableLookup(targetCollectionName) {
+async function buildTargetVariableLookup(targetCollectionName, groups) {
   var name = String(targetCollectionName || "").trim();
   var map = new Map();
+  var sourceGroup = rebindTrimGroup(groups && groups.sourceGroup);
+  var targetGroup = rebindTrimGroup(groups && groups.targetGroup);
 
   var localCols = await figma.variables.getLocalVariableCollectionsAsync();
   for (var i = 0; i < localCols.length; i++) {
@@ -651,8 +657,15 @@ async function buildTargetVariableLookup(targetCollectionName) {
   }
 
   var imported = new Map();
+  // True when a variable sits under the source group (always true with no source group).
+  function inScope(variableName) {
+    return !sourceGroup || variableName.indexOf(sourceGroup + "/") === 0;
+  }
+
   async function getReplacement(variableName, resolvedType) {
-    var key = variableName + "\t" + resolvedType;
+    var relative = sourceGroup && inScope(variableName) ? variableName.slice(sourceGroup.length + 1) : variableName;
+    if (targetGroup) relative = targetGroup + "/" + relative;
+    var key = relative + "\t" + resolvedType;
     var entry = map.get(key);
     if (!entry) return null;
     if (entry.variable) return entry.variable;
@@ -669,7 +682,7 @@ async function buildTargetVariableLookup(targetCollectionName) {
     return null;
   }
 
-  return { map: map, getReplacement: getReplacement };
+  return { map: map, getReplacement: getReplacement, inScope: inScope };
 }
 
 /**
@@ -704,6 +717,7 @@ async function rebindProcessTextStyle(style, sourceName, lookup, breakUnmatched,
     if (!current) continue;
     var colName = await collectionNameForVariableForStyleRebind(current);
     if (!bindingMatchesSourceCollectionFilter(colName, sourceName)) continue;
+    if (!lookup.inScope(current.name)) continue;
     var repl = await lookup.getReplacement(current.name, current.resolvedType);
     if (repl && repl.id !== current.id) {
       rebindRecordPlan(options, {
@@ -758,6 +772,7 @@ async function rebindProcessPaintStyle(style, sourceName, lookup, breakUnmatched
     if (!current) continue;
     var colName = await collectionNameForVariableForStyleRebind(current);
     if (!bindingMatchesSourceCollectionFilter(colName, sourceName)) continue;
+    if (!lookup.inScope(current.name)) continue;
     if (current.resolvedType !== "COLOR") continue;
     var repl = await lookup.getReplacement(current.name, current.resolvedType);
     if (repl && repl.id !== current.id) {
@@ -810,7 +825,7 @@ async function rebindProcessEffectStyle(style, sourceName, lookup, breakUnmatche
       var current = await resolveVariableFromAliasForStyleRebind(ebv[j]);
       if (current) {
         var colName = await collectionNameForVariableForStyleRebind(current);
-        if (bindingMatchesSourceCollectionFilter(colName, sourceName)) {
+        if (bindingMatchesSourceCollectionFilter(colName, sourceName) && lookup.inScope(current.name)) {
           var repl = await lookup.getReplacement(current.name, current.resolvedType);
           if (repl && repl.id !== current.id) {
             var eff = effects[j];
@@ -870,6 +885,7 @@ async function rebindProcessEffectStyle(style, sourceName, lookup, breakUnmatche
       if (!cur2) continue;
       var cn2 = await collectionNameForVariableForStyleRebind(cur2);
       if (!bindingMatchesSourceCollectionFilter(cn2, sourceName)) continue;
+      if (!lookup.inScope(cur2.name)) continue;
       var rep2 = await lookup.getReplacement(cur2.name, cur2.resolvedType);
       if (rep2 && rep2.id !== cur2.id) {
         effects[j].boundVariables[key] = { type: "VARIABLE_ALIAS", id: rep2.id };
